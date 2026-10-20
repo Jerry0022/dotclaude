@@ -148,8 +148,8 @@ loud completion-card gate. (#243)
 2. **Otherwise (no handler, or a deploy failed)** — raise the deploy gate. This
    is mandatory: the completion card MUST NOT read as "all done" while merged
    infra is undeployed. Carry into Step 6:
-   - `state.deployPending: true` — flips the ship-successful CTA from
-     "Alles ERLEDIGT" to "🚨 DEPLOY erforderlich (noch nicht live)".
+   - `state.deployPending: true` — flips the ship-successful decision heading to
+     `👉 ⚠️ Not deployed — Gemergt, aber nicht live — Migration jetzt deployen?`.
    - `deployGate: [...]` — one item per detected artifact, each
      `{ artifact: "<path>", kind: "<migration|function|infra>", action: "<the concrete deploy step still required>" }`.
      Derive `artifact`/`kind` from `outOfBandDeploys.matched`; write `action` as

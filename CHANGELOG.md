@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.280.0] — 2026-10-20
+
+The follow-ups decided on the backlog night run's concept page, a set of token levers measured over the last 50 sessions, and three issues.
+
+### Added
+- **Completion card `answer` field.** The answer to the user's question renders above the card. The stop hook re-requests it when the prompt asked for an explanation ("erklär", "zeig mir", "explain") and the card came without one (#757).
+- **ship_build reuses a green full-suite result** for the same tree hash for 24 h, retries EPERM/EBUSY temp cleanup, reports a `failureKind`, keeps failing-test names untruncated and records a load signal. The qa agent records its runs with `test-record-cli.js` (`do-ship/deep-knowledge/build-reuse.md`) (#762, partial).
+- **`scripts/session-grader.js`** — a weekly guard count plus a Haiku rule check over recent sessions (`deep-knowledge/session-grader.md`).
+- **Run contract `items` verb**, and a do-run resume keeps its ship mode (`autonomous-resume-state.js` save/rearm).
+- **POSIX CI workflow** runs the tests that only assert on Linux.
+
+### Changed
+- **Implementers default to Sonnet.** Opus only for design, architecture or ambiguous work, and only in budget class `free` (never on Pro).
+- **Hook diet.** The completion-card hook block shows once per prompt and the delegation line once per session (about 1,000 tokens per prompt); the Desktop card tool-result instruction is 49 % shorter.
+- **Concept pages run without the 15-min backstop cron.** The waker heartbeat and the pulser's WAKER_MISSING backup cover it; SessionStart drops a legacy `cron_id`.
+- **do-ship SKILL.md 1,103 → 490 lines.** The special cases moved to eight deep-knowledge files; all 123 normative sentences are kept.
+- **Skill overrides live in `reference.md` only.** A legacy project `SKILL.md` is still read.
+- **Ship CI quota.** The decision on exhausted Actions minutes is stored per repo for 7 days (`interactive`, `ciQuotaDecisionNeeded`). `bump: none` creates no tag (`tagSkipReason`), steps report `stepTimeoutSec`/`timeoutHit`, the promote version regex is strict, and the checkpoint stores the channel. The offline ship CLI falls back to a last-result file.
+- **Codex gate** depends on the codex CLI, not on the codex plugin.
+
+### Fixed
+- **Stop guard.** No card is owed on an intermediate agent notification while other background work runs and the turn made no edits (`notification-work-running`). Open-task detection scans the whole transcript, not only the tail.
+- **Main guard** handles PowerShell, and `git checkout -- <file>` is blocked on main. A "ja" ships only after a card that asked to ship unshipped work. Archive negations ("nicht archivieren") are recognised; archive locks on user validation and concept close-out.
+- **Concept bridge** detects a foreign bridge on its port (`/identity`, `FOREIGN_BRIDGE`), writes a shutdown owner marker, merges the permission-audit allow list and unescapes `parseEnvFile` values.
+- **local-llm** accepts only a loopback project `baseUrl`, encodes the slug and prunes models via `/api/ps`.
+- **`claude-ignore migrate`** drops comments that only described removed lines (#775).
+- **Detached scripts hide their child windows** (`windowsHide`: orphan scan, post-merge watcher, headless usage refresh, MCP reaper; static test) (#777).
+
 ## [0.279.2] — 2026-10-20
 
 A full audit of the plugin found these bugs. Each finding was verified in the code before it was fixed, and each fix was reviewed again before shipping.

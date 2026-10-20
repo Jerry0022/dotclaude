@@ -136,6 +136,32 @@ render_completion_card({
 })
 ```
 
-The renderer flips the CTA from `All DONE` / `Alles ERLEDIGT` to
-`KEEP CODING in <branch>` / `WEITER in <branch>` when `state.kept: true`, and
-names the kept branch on the Delivery ship line (`· \`feat/x (kept locally)\``).
+With `state.kept: true` the decision heading asks `<version> — weiter in <branch>?`
+(the branch in code formatting) instead of the plain merge heading. The pipeline
+line still names the merge target (`state.merged`); there is no separate
+"kept locally" marker.
+
+## Deploy gate heading
+
+When Step 4d raised the gate, pass `state.deployPending: true` and the `deployGate`
+array (§ deployGate example). This is stronger than a `userFinalTest` item: the decision heading itself flips to
+`👉 ⚠️ Not deployed — Gemergt, aber nicht live — Migration jetzt deployen?` and a
+gate block names each undeployed artifact — so a merged-but-undeployed ship is never mistaken for done.
+
+## Delivery rules
+
+`delivery` rules — `ship.version` is the semver from the bump, never a commit SHA; `promote`
+**only for ring-model projects**; `ship.components` when Step 1's `components` hint is non-empty
+(multi-app repo): § Delivery track.
+
+## Session archive conditions
+
+For the `[SESSION ARCHIVE]` block of a merged card in the Desktop app:
+The renderer leaves the block out for an explicit keep (`state.kept` — `--keep` or a Step 5a signal),
+`pending` work (check `TaskList`, agents and workflows — declare what still
+runs), `open` points or `userTest` items on the card, a dirty work tree
+(untracked files too; ignored files are fine), a missing `cwd`, a concept or batch mode, an autonomous run / lockout or ship queue
+(intermediate ships of a run never archive), and the devops setting
+`ship.archiveAfterShip false`. Background:
+`{PLUGIN_ROOT}/deep-knowledge/claude-desktop-app-setup.md` § Session archiving
+after ship.

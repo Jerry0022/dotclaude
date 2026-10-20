@@ -5,20 +5,46 @@ import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 // chainable stub suffices to load the module.
 vi.mock("zod", () => {
   const node = new Proxy(() => node, { get: () => () => node });
-  return { z: { object: () => node, string: () => node, boolean: () => node } };
+  return { z: { object: () => node, string: () => node, boolean: () => node, number: () => node } };
 });
 
-vi.mock("node:child_process", () => ({ execSync: vi.fn(() => "") }));
+vi.mock("node:child_process", () => ({
+  execSync: vi.fn(() => ""),
+  execFileSync: vi.fn(() => ""),
+  spawnSync: vi.fn(() => ({ status: 0, stdout: "", stderr: "" })),
+}));
 
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(() => false),
   readFileSync: vi.fn(() => "{}"),
   readdirSync: vi.fn(() => []),
+  copyFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  renameSync: vi.fn(),
+  unlinkSync: vi.fn(),
+  writeFileSync: vi.fn(),
+}));
+
+// Green-result store (#762) — covered for real in lib/test-results.test.js.
+vi.mock("../lib/test-results.js", () => ({
+  treeKey: vi.fn(() => null),
+  findGreen: vi.fn(() => null),
+  recordResult: vi.fn(() => null),
+  usualDurationMs: vi.fn(() => null),
+}));
+
+// Real parsers; only the machine probes are stubbed (no 500 ms CPU sample, no live lock file).
+vi.mock("../lib/test-step.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  sampleCpu: vi.fn(async () => ({ busyPct: 10, cores: 8 })),
+  readLockHolder: vi.fn(() => null),
 }));
 
 import { handler, latestCacheVersion } from "./build.js";
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { treeKey, findGreen, recordResult, usualDurationMs } from "../lib/test-results.js";
+import { sampleCpu, readLockHolder } from "../lib/test-step.js";
 
 const PLUGIN_ROOT = "/plugin-root";
 const CWD = "/consumer-repo";
@@ -46,6 +72,13 @@ beforeEach(() => {
   });
   execSync.mockReturnValue(""); // every generator + build-id succeeds by default
   readFileSync.mockImplementation(() => "{}"); // clearAllMocks keeps per-test implementations
+  spawnSync.mockImplementation(() => ({ status: 0, stdout: "", stderr: "" }));
+  treeKey.mockImplementation(() => null);
+  findGreen.mockImplementation(() => null);
+  recordResult.mockImplementation(() => null);
+  usualDurationMs.mockImplementation(() => null);
+  sampleCpu.mockImplementation(async () => ({ busyPct: 10, cores: 8 }));
+  readLockHolder.mockImplementation(() => null);
 });
 
 afterEach(() => {
@@ -207,23 +240,163 @@ describe("latestCacheVersion (AUD-C047)", () => {
   });
 });
 
+const TEST = "npm run test";
+const testCall = () => spawnSync.mock.calls.find((c) => String(c[0]).includes(TEST));
+const buildWithTests = (extra = {}) => handler({ cwd: CWD, buildCmd: null, lintCmd: null, testCmd: TEST, buildIdOnly: false, ...extra });
+const red = (stdout, stderr = "") => ({ status: 1, stdout, stderr });
+
 describe("ship_build — harness-side failures are named, not read as red tests", () => {
   test("passes a large maxBuffer so chatty green output is not ENOBUFS-killed", async () => {
-    await handler({ cwd: CWD, buildCmd: null, lintCmd: null, testCmd: "npm run test", buildIdOnly: false });
-    const call = execSync.mock.calls.find((c) => String(c[0]).includes("npm run test"));
-    expect(call[1].maxBuffer).toBeGreaterThanOrEqual(32 * 1024 * 1024);
+    await buildWithTests();
+    expect(testCall()[1].maxBuffer).toBeGreaterThanOrEqual(32 * 1024 * 1024);
   });
 
   test("ENOBUFS is reported as failure kind output-overflow", async () => {
-    execSync.mockImplementation((cmd) => {
-      if (String(cmd).includes("npm run test")) { const e = new Error("spawnSync ENOBUFS"); e.code = "ENOBUFS"; throw e; }
-      return "";
-    });
-    const res = await handler({ cwd: CWD, buildCmd: null, lintCmd: null, testCmd: "npm run test", buildIdOnly: false });
+    const e = new Error("spawnSync ENOBUFS"); e.code = "ENOBUFS";
+    spawnSync.mockImplementation(() => ({ status: null, stdout: "", stderr: "", error: e }));
+    const res = await buildWithTests();
     expect(res.success).toBe(false);
     expect(res.failedAt).toBe("test");
     const step = res.steps.find((s) => s.step === "test");
     expect(step.failure).toBe("output-overflow");
     expect(step.output).toMatch(/not by a failing test/);
+    expect(res.failureKind).toBeUndefined();
+  });
+
+  test("I2: the step limit defaults to 300 s and is configurable", async () => {
+    await buildWithTests();
+    expect(testCall()[1].timeout).toBe(300_000);
+    spawnSync.mockClear();
+    await buildWithTests({ stepTimeoutSec: 600 });
+    expect(testCall()[1].timeout).toBe(600_000);
+  });
+
+  test("I2: a timed-out step names the limit in the result (timeoutHit)", async () => {
+    const e = new Error("spawnSync ETIMEDOUT"); e.code = "ETIMEDOUT";
+    spawnSync.mockImplementation(() => ({ status: null, signal: "SIGTERM", stdout: "", stderr: "", error: e }));
+    const res = await buildWithTests();
+    expect(res.failedAt).toBe("test");
+    expect(res.timeoutHit).toMatchObject({ step: "test", limitSec: 300 });
+    expect(res.timeoutHit.note).toMatch(/300 s step limit.*stepTimeoutSec/);
+    const step = res.steps.find((s) => s.step === "test");
+    expect(step.failure).toBe("timeout");
+    expect(step.output).toMatch(/300 s limit/);
+  });
+
+  test("I2: a red test carries no timeoutHit", async () => {
+    spawnSync.mockImplementation(() => red(" FAIL  a.test.js > x\n"));
+    const res = await buildWithTests();
+    expect(res.failedAt).toBe("test");
+    expect(res.timeoutHit).toBeUndefined();
   });
 });
+
+describe("ship_build — green-result reuse by tree hash (#762)", () => {
+  const KEY = { treeHash: "a".repeat(40), method: "worktree" };
+
+  test("a matching green record skips the test run and reports testsReused", async () => {
+    treeKey.mockImplementation(() => KEY);
+    findGreen.mockImplementation(() => ({ treeHash: KEY.treeHash, testCmd: TEST, passed: true, at: "2026-10-20T10:00:00.000Z", source: "agent" }));
+    const res = await buildWithTests();
+    expect(res.success).toBe(true);
+    expect(testCall()).toBeUndefined();
+    expect(res.testsReused).toEqual({ treeHash: KEY.treeHash, at: "2026-10-20T10:00:00.000Z", source: "agent", testCmd: TEST });
+    expect(res.steps.find((s) => s.step === "test")).toMatchObject({ success: true, reused: true });
+    expect(findGreen).toHaveBeenCalledWith(CWD, { treeHash: KEY.treeHash, testCmd: TEST });
+  });
+
+  test("no record → runs, and a green run on an unchanged tree is recorded", async () => {
+    treeKey.mockImplementation(() => KEY);
+    const res = await buildWithTests();
+    expect(testCall()).toBeDefined();
+    expect(res.testsReused).toBeUndefined();
+    expect(recordResult).toHaveBeenCalledWith(CWD, expect.objectContaining({ treeHash: KEY.treeHash, testCmd: TEST, passed: true, source: "ship_build" }));
+  });
+
+  test("tree changed during the run → not recorded", async () => {
+    let n = 0;
+    treeKey.mockImplementation(() => (n++ === 0 ? KEY : { treeHash: "b".repeat(40), method: "worktree" }));
+    await buildWithTests();
+    expect(recordResult).not.toHaveBeenCalled();
+  });
+
+  test("reuseGreen:false always runs", async () => {
+    treeKey.mockImplementation(() => KEY);
+    findGreen.mockImplementation(() => ({ treeHash: KEY.treeHash, testCmd: TEST, passed: true, at: "x", source: "agent" }));
+    const res = await buildWithTests({ reuseGreen: false });
+    expect(testCall()).toBeDefined();
+    expect(res.testsReused).toBeUndefined();
+  });
+
+  test("a red run is never recorded", async () => {
+    treeKey.mockImplementation(() => KEY);
+    spawnSync.mockImplementation(() => red(" FAIL  a.test.js > x\n"));
+    await buildWithTests();
+    expect(recordResult).not.toHaveBeenCalled();
+  });
+});
+
+describe("ship_build — red test step: retry, classification, names (#762)", () => {
+  const EPERM = "Error: EPERM, operation not permitted, rmdir 'C:\\Users\\x\\AppData\\Local\\Temp\\vitest-iso-123'";
+
+  test("EPERM temp-cleanup red → one retry; green retry passes the step", async () => {
+    let n = 0;
+    spawnSync.mockImplementation(() => (n++ === 0 ? red("Unhandled Errors\n", EPERM) : { status: 0, stdout: "ok", stderr: "" }));
+    const res = await buildWithTests();
+    expect(res.success).toBe(true);
+    expect(spawnSync).toHaveBeenCalledTimes(2);
+    expect(res.steps.find((s) => s.step === "test").retried).toMatchObject({ secondPassed: true });
+  });
+
+  test("EPERM twice and no failing test → failureKind environment", async () => {
+    spawnSync.mockImplementation(() => red("Unhandled Errors\n", EPERM));
+    const res = await buildWithTests();
+    expect(spawnSync).toHaveBeenCalledTimes(2);
+    expect(res.failureKind).toBe("environment");
+    expect(res.failingTests).toEqual([]);
+  });
+
+  test("a plain red run is not retried, failureKind test, every failing name returned past the output tail", async () => {
+    const names = Array.from({ length: 300 }, (_, i) => `plugins/f${i}.test.js > suite > case number ${i}`);
+    spawnSync.mockImplementation(() => red(names.map((n) => ` FAIL  ${n}\n${"x".repeat(200)}`).join("\n")));
+    const res = await buildWithTests();
+    expect(spawnSync).toHaveBeenCalledTimes(1);
+    expect(res.failureKind).toBe("test");
+    expect(res.failingTests).toEqual(names);
+    expect(res.steps.find((s) => s.step === "test").output.length).toBeLessThanOrEqual(4000);
+  });
+
+  test("stdout and stderr both reach the output (stderr no longer hides the vitest summary)", async () => {
+    spawnSync.mockImplementation(() => red(" FAIL  a.test.js > x\n", "[suite-lock] acquired after 2 s\n"));
+    const res = await buildWithTests();
+    const out = res.steps.find((s) => s.step === "test").output;
+    expect(out).toContain("FAIL  a.test.js > x");
+    expect(out).toContain("[suite-lock]");
+  });
+});
+
+describe("ship_build — load signal (#762)", () => {
+  test("a lock wait from the suite-lock stderr lines is returned as load", async () => {
+    spawnSync.mockImplementation(() => ({
+      status: 0, stdout: "",
+      stderr: "[suite-lock] another full test run is active (pid 4242, C:/other) — waiting for it to finish\n[suite-lock] acquired after 312 s\n",
+    }));
+    const res = await buildWithTests();
+    expect(res.success).toBe(true);
+    expect(res.load).toMatchObject({ lockWaitMs: 312_000, holder: { pid: 4242, cwd: "C:/other" } });
+    expect(res.load.note).toMatch(/312 s on the machine-wide test lock/);
+  });
+
+  test("a live lock holder at start or a busy CPU is reported", async () => {
+    readLockHolder.mockImplementation(() => ({ pid: 7, cwd: "C:/x", heldMs: 1000 }));
+    sampleCpu.mockImplementation(async () => ({ busyPct: 97, cores: 8 }));
+    const res = await buildWithTests();
+    expect(res.load).toMatchObject({ holder: { pid: 7 }, cpuBusyPct: 97 });
+  });
+
+  test("an unloaded run carries no load field", async () => {
+    const res = await buildWithTests();
+    expect(res.load).toBeUndefined();
+  });
+});
+

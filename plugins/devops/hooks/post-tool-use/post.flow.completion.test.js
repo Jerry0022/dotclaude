@@ -432,6 +432,47 @@ describe("post.flow.completion — reaches the model, and only when it changes s
     cleanup(dir);
   });
 
+  describe("at most once per user prompt, again after a compaction", () => {
+    const entry = (uuid, text) => JSON.stringify({ type: "user", uuid, message: { role: "user", content: text } });
+    const withTranscript = (dir, ...lines) => {
+      const p = path.join(dir, "t.jsonl");
+      fs.writeFileSync(p, lines.join("\n") + "\n");
+      return { transcript_path: p };
+    };
+
+    test("a Stop run that cleared the work flag mid-turn does not bring the contract back for the same prompt", () => {
+      const dir = project();
+      const sid = "s-once-prompt";
+      const tr = withTranscript(dir, entry("u1", "do the thing"));
+      expect(runHook(dir, sid, "Read", tr)).toContain("COMPLETION CARD");
+      fs.rmSync(flag(dir, "work-happened", sid)); // mid-turn Stop reset
+      expect(runHookRaw(dir, sid, "Read", tr)).toBe("");
+      cleanup(dir);
+    });
+
+    test("the next user prompt gets the contract again", () => {
+      const dir = project();
+      const sid = "s-once-next";
+      runHook(dir, sid, "Read", withTranscript(dir, entry("u1", "first")));
+      fs.rmSync(flag(dir, "work-happened", sid));
+      const tr = withTranscript(dir, entry("u1", "first"), entry("u2", "second"));
+      expect(runHook(dir, sid, "Read", tr)).toContain("COMPLETION CARD");
+      cleanup(dir);
+    });
+
+    test("a compaction (marker removed) brings the contract on the next call, first of the turn or not", () => {
+      const dir = project();
+      const sid = "s-once-compact";
+      const tr = withTranscript(dir, entry("u1", "do the thing"));
+      runHook(dir, sid, "Read", tr);
+      expect(runHookRaw(dir, sid, "Read", tr)).toBe("");
+      fs.rmSync(flag(dir, "card-contract-sent", sid)); // what ss.knowledge.index does on source=compact
+      expect(runHook(dir, sid, "Read", tr)).toContain("COMPLETION CARD");
+      expect(runHookRaw(dir, sid, "Read", tr)).toBe("");
+      cleanup(dir);
+    });
+  });
+
   test("a background launch later in the turn sends [pending] without repeating the contract", () => {
     const dir = project();
     const sid = "s-gate-launch";
@@ -547,6 +588,7 @@ describe("post.flow.completion — reaches the model, and only when it changes s
     const sid = "s-gate-after";
     fs.writeFileSync(flag(dir, "work-happened", sid), "render");
     fs.writeFileSync(flag(dir, "card-rendered", sid), "t");
+    fs.writeFileSync(flag(dir, "card-contract-sent", sid), "u1"); // the turn's first call already carried it
     const out = runHook(dir, sid, "mcp__ccd_session_mgmt__set_session_title");
     expect(out).toContain("already rendered this turn");
     expect(out).not.toContain("COMPLETION CARD");

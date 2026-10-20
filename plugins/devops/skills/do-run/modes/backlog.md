@@ -21,9 +21,10 @@ under its original name):
 ## Step 0 — Load Extensions
 
 Silently check (do not surface "not found"):
-1. `~/.claude/skills/do-run/SKILL.md` + `reference.md` — the do-run extension (already loaded by do-run Step 0)
-2. `{project}/.claude/skills/do-run/SKILL.md` + `reference.md` — same
-   Pre-PR-2 fallback: also read `~/.claude/skills/run-backlog/` and `{project}/.claude/skills/run-backlog/` (`SKILL.md` + `reference.md`) when present — an extension written for the old `run-backlog` skill applies to this mode unchanged.
+1. `~/.claude/skills/do-run/reference.md` — the do-run extension (already loaded by do-run Step 0)
+2. `{project}/.claude/skills/do-run/reference.md` — same
+   Pre-PR-2 fallback: also read `~/.claude/skills/run-backlog/` and `{project}/.claude/skills/run-backlog/` (`reference.md`) when present — an extension written for the old `run-backlog` skill applies to this mode unchanged.
+   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
 3. Merge: project > global > plugin defaults
 
 ## Step 0.1 — Auto-Start / Resume Re-entry
@@ -181,6 +182,16 @@ is still on screen, apply the Step 0.1 pending-question guard (re-arm + wait).
    flat, ordered **work queue**, plus a per-milestone tracking set (which issue
    numbers belong to which milestone) so Step 4 can auto-close a milestone once
    all its issues are done. Track the queue via `TodoWrite`.
+   **Record the queue in the run contract** right after building it — a
+   milestones-only selection stores only the milestone titles, so without this
+   call the contract's `items` stays empty and the card gate's per-item
+   `refine` check walks an empty list. `items` patches only the item list (the
+   contract's events stay, nothing is archived — unlike `arm --replace`):
+   ```bash
+   node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" items <n,n,...>
+   ```
+   Call it again whenever the queue changes later (Step 2 sub-issues, a
+   dropped item).
 
 `$ARGUMENTS`, if present, is a filter (e.g. `only bugs`, a milestone name) —
 apply it when listing before presenting choices.
@@ -425,7 +436,7 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
    It runs right after `render_completion_card` and before the card is
    delivered (Desktop `show_widget` / terminal markdown), so no tool row lands
    under the card; the extension's step names that position. Read
-   `{project}/.claude/skills/do-ship/SKILL.md` (pre-PR-2 fallback: `ship/`; if present) for a post-ship
+   `{project}/.claude/skills/do-ship/reference.md` (legacy name `SKILL.md`, pre-PR-2 fallback: `ship/`; if present) for a post-ship
    self-update / finalizer step that the extension skips while a
    `backlog-runner` lockout is active (the dotclaude plugin-source repo has one:
    its Step 8 runs `ss.plugin.update.js --force`, which marks the MCP servers

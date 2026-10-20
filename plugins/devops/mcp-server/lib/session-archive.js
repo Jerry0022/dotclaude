@@ -18,8 +18,11 @@
  * Qualifies only: Desktop app, a `ship-successful` / `released` card (after
  * the variant guard) with a real merge (`state.merged`, and pushed or a local
  * merge in a repo without a remote). Never with an explicit keep
- * (`state.kept`), pending background work, open points, user tests or a
- * pending deploy the card still hands the user, a concept or batch mode in play, an orchestrator
+ * (`state.kept`), pending background work, open points, user tests, a
+ * requirement waiting on the user or a pending deploy the card still hands
+ * the user (`userFinalTest` does not block — ship parks leftover harden
+ * findings there), a concept (or one that only waits for its close-out) or
+ * batch mode in play, an orchestrator
  * hold (autonomous lockout, ship queue, autonomous run — they ship several
  * items from one session), a missing `cwd`, a dirty work tree (tracked
  * changes or untracked files; ignored files are fine), or the
@@ -43,6 +46,7 @@ const SHIP_VARIANTS = new Set(["ship-successful", "released"]);
  *
  * @param {object} params normalized card params (variant already guarded)
  * @param {{ desktop: boolean, hasPending: Function, hasConcept: Function,
+ *   closeoutOnly?: (cwd: string) => boolean,
  *   batchActive: (cwd: string) => boolean, holdReason: (cwd: string) => string,
  *   enabled: (cwd: string) => boolean, treeClean: (cwd: string) => boolean }} deps
  * @returns {{ archive: boolean, reason: string }}
@@ -60,15 +64,27 @@ export function archiveDecision(params, deps) {
   if (hasItems(params.userTest)) return no("user-test");
   // A deploy the user still has to run or gate-check is their step too.
   if (s.deployPending || hasItems(params.deployGate)) return no("deploy");
+  // A requirement only the user can confirm is still open. `userFinalTest`
+  // deliberately does NOT block: ship routes leftover harden findings there,
+  // so blocking on it would stop nearly every ship from archiving.
+  if (waitsOnUser(params.validation)) return no("user-validation");
   if (deps.hasConcept(params.concept)) return no("concept");
   const cwd = typeof params.cwd === "string" ? params.cwd.trim() : "";
   if (!cwd) return no("no-cwd");
+  // A concept page that only waits for its close-out still asks the user.
+  if (typeof deps.closeoutOnly === "function" && deps.closeoutOnly(cwd)) return no("concept-closeout");
   if (deps.batchActive(cwd)) return no("batch");
   const hold = deps.holdReason(cwd);
   if (hold) return no(`hold:${hold}`);
   if (!deps.enabled(cwd)) return no("switched-off");
   if (!deps.treeClean(cwd)) return no("dirty-tree");
   return { archive: true, reason: "" };
+}
+
+/** A validation requirement (unmet / partial) that waits on the user. */
+function waitsOnUser(validation) {
+  if (!Array.isArray(validation)) return false;
+  return validation.some((v) => v && typeof v === "object" && v.waitsOn === "user" && v.status !== "met");
 }
 
 /** A non-empty list (or object) of items still waiting on the user. */

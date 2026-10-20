@@ -1,6 +1,6 @@
 /**
  * @module ship-guard-match
- * @version 0.1.0
+ * @version 0.2.0
  * @description Pure matcher for pre.ship.guard — decides whether a Bash command
  *   is a REAL manual PR create/merge invocation that must go through /do-ship.
  *
@@ -54,6 +54,49 @@ function maskQuoted(s) {
   return replaceQuoted(s, (m) => ' '.repeat(m.length));
 }
 
+/**
+ * Like maskQuoted, but each removed span becomes underscores, so a quoted
+ * argument (`git -C "my dir" commit`) stays one non-space token and the git
+ * option matcher can step over it. Offsets are preserved.
+ * @param {string} s
+ * @returns {string}
+ */
+function maskQuotedToken(s) {
+  return replaceQuoted(s, (m) => '_'.repeat(m.length));
+}
+
+// The global options git takes before its subcommand: `-C <dir>`, `-c k=v`,
+// `--git-dir[=]<p>`, `--work-tree[=]<p>`, `--no-pager` and friends. Leading
+// `VAR=value` assignments are a command prefix as well.
+const ENV_PREFIX = String.raw`(?:[A-Za-z_]\w*=\S*\s+)*`;
+const GIT_GLOBAL_OPTS = String.raw`(?:\s+(?:-C\s+\S+|-c\s+\S+|--(?:git-dir|work-tree|namespace)(?:=\S+|\s+\S+)|--no-pager|--paginate|-p|--bare|--no-replace-objects|--literal-pathspecs))*`;
+/** The end of a subcommand word: whitespace, a separator, or the end. */
+const WORD_END = String.raw`(?=[\s;&|(){}]|$)`;
+
+/**
+ * A regex for a real `git … <subcommand…>` invocation at a command position —
+ * chained (`a && git commit`), with global options (`git -C . commit`,
+ * `git -c k=v commit`) or env prefixes. Run it on maskQuotedToken() output.
+ * @param {string} rest regex source for the subcommand and what follows
+ * @returns {RegExp}
+ */
+function gitCommandRe(rest) {
+  return new RegExp(BOUNDARY + ENV_PREFIX + String.raw`git(?:\.exe)?` + GIT_GLOBAL_OPTS + String.raw`\s+` + rest, 'm');
+}
+
+/**
+ * Does `cmd` invoke git with one of the subcommand patterns? Quoted text,
+ * heredoc bodies and here-strings never match.
+ * @param {string} cmd
+ * @param {RegExp[]} res built by gitCommandRe
+ * @returns {boolean}
+ */
+function matchesGitCommand(cmd, res) {
+  if (!cmd || typeof cmd !== 'string') return false;
+  const masked = maskQuotedToken(cmd);
+  return res.some((re) => re.test(masked));
+}
+
 function replaceQuoted(s, fill) {
   let out = s;
   // PowerShell here-strings: @"..."@ and @'...'@ (may span lines)
@@ -77,4 +120,7 @@ function isManualShipCommand(cmd) {
   return PATTERNS.some((re) => re.test(stripped));
 }
 
-module.exports = { isManualShipCommand, stripQuoted, maskQuoted };
+module.exports = {
+  isManualShipCommand, stripQuoted, maskQuoted, maskQuotedToken,
+  BOUNDARY, WORD_END, gitCommandRe, matchesGitCommand,
+};

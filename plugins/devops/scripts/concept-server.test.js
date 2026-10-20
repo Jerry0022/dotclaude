@@ -443,3 +443,40 @@ describe.skipIf(!PY)("concept-server hardening — origin on every POST, Host ch
     }
   });
 });
+
+describe.skipIf(!PY)("concept-server reports its html_path (C1 — foreign bridge on a reused port)", () => {
+  test("GET/POST /heartbeat, GET /pending and GET /identity name the served concept", async () => {
+    const ID_PORT = PORT + 40;
+    const htmlDir = fs.mkdtempSync(path.join(os.tmpdir(), "concept-identity-"));
+    const html = path.join(htmlDir, "my-concept.html");
+    fs.writeFileSync(html, "<html></html>");
+    const proc = spawn(PY, [SERVER, String(ID_PORT), "--store", storeFor(ID_PORT), "--html", html], { stdio: ["ignore", "pipe", "pipe"] });
+    const url = (p) => `http://127.0.0.1:${ID_PORT}${p}`;
+    try {
+      const deadline = Date.now() + 10000;
+      let up = false;
+      while (Date.now() < deadline && !up) {
+        try { up = (await fetch(url("/reload"))).ok; } catch { /* not up yet */ }
+        if (!up) await new Promise(r => setTimeout(r, 150));
+      }
+      expect(up).toBe(true);
+      const hbGet = await (await fetch(url("/heartbeat"))).json();
+      const hbPost = await (await fetch(url("/heartbeat"), { method: "POST" })).json();
+      const pending = await (await fetch(url("/pending"))).json();
+      const id = await (await fetch(url("/identity"))).json();
+      expect(path.isAbsolute(id.html_path)).toBe(true);
+      expect(path.basename(id.html_path)).toBe("my-concept.html");
+      for (const body of [hbGet, hbPost, pending]) expect(body.html_path).toBe(id.html_path);
+      // /identity has no side effects: the browser poll stamp does not move.
+      await new Promise(r => setTimeout(r, 20));
+      await fetch(url("/identity"));
+      const after = await (await fetch(url("/pending"))).json();
+      expect(after.browser_ts).toBe(pending.browser_ts);
+      const evil = await fetch(url("/identity"), { headers: { Origin: "http://evil.example" } });
+      expect(evil.status).toBe(403);
+    } finally {
+      await stopServer(proc);
+      fs.rmSync(htmlDir, { recursive: true, force: true });
+    }
+  });
+});

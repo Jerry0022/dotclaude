@@ -125,8 +125,7 @@ window — there is no usable degraded mode.
 Start the bridge server (`scripts/concept-server.py`) on a port chosen via the
 cross-session registry (`node scripts/concept-port-registry.js pick "<project-root>"`
 — skips ports owned by another live concept session; see bridge-server.md
-§ port selection), arm the sparse backstop cron (fires every 15 minutes —
-each fire is a model turn, so it is a last resort, never the monitor), write
+§ port selection), do NOT arm a polling cron (the pulser backs up the waker), write
 `.claude/concept-active.json` — in the **session cwd**, with a fresh `owner`
 token (`deep-knowledge/bridge-server.md` § step 4; two sessions in sibling
 worktrees must never share one file, #417) — so a future SessionStart can
@@ -154,10 +153,9 @@ launched via the Bash tool with `run_in_background: true` (exact invocations in
    #397) — token-free, see
    `deep-knowledge/bridge-server.md` § step 3 (#363).
 
-The cron alone is NOT sufficient for either job: it fires only while the REPL
-is idle and has multi-minute gaps in practice (observed: 638 s with the cron
-registered and the session idle). It stays armed as a sparse backstop (every
-15 min), never as the primary path — every fire costs a model turn.
+There is no cron: it fired only while the REPL was idle, had multi-minute gaps
+(observed: 638 s) and cost a model turn per fire. The pulser exits
+`WAKER_MISSING` (a wake) if the waker died with a submission pending.
 
 **Neither task — nor the bridge server — is pending work.** They run for the
 whole concept and never yield a result; they are the waiting itself.

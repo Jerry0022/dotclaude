@@ -821,6 +821,24 @@ describe("CLI", () => {
     expect(R.readContract(cwd)).toBeNull();
   });
 
+  test("items patches only the contract's items — events stay, no archive (do-run row 4)", () => {
+    expect(run("items", "12,13")).toMatchObject({ code: 1, out: { ok: false, error: "no active run contract" } });
+    const a = run("arm", "--mode", "backlog", "--flow", "autonomous", "--ship", "manual", "--passes", "harden");
+    expect(a.out.contract.items).toEqual([]);
+    run("skip", "polish", "--reason", "keine UI");
+    const r = run("items", "#12,13");
+    expect(r).toMatchObject({ code: 0, out: { ok: true, id: a.out.contract.id, items: ["12", "13"] } });
+    const c = R.readContract(cwd);
+    expect(c).toMatchObject({ id: a.out.contract.id, armedAt: a.out.contract.armedAt, mode: "backlog", ship: "manual", items: ["12", "13"] });
+    expect(R.events(cwd).map(e => e.ob)).toEqual(["polish"]);
+    expect(fs.existsSync(path.join(cwd, ".claude", "run-contract.prev.json"))).toBe(false);
+    // space-separated works too; invalid / empty lists are refused and change nothing
+    expect(run("items", "14", "15").out.items).toEqual(["14", "15"]);
+    expect(run("items", "12),13").code).toBe(1);
+    expect(run("items").code).toBe(1);
+    expect(R.readContract(cwd).items).toEqual(["14", "15"]);
+  });
+
   test("done, --cwd, usage errors", () => {
     const other = repo();
     try {

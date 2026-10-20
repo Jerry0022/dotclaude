@@ -42,7 +42,7 @@ const GIT_TIMEOUT = 15_000;
 
 function gitOut(args, cwd, timeout = GIT_TIMEOUT) {
   try {
-    return execFileSync('git', args, { cwd, encoding: 'utf8', timeout, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    return execFileSync('git', args, { cwd, encoding: 'utf8', timeout, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
   } catch {
     return null;
   }
@@ -86,7 +86,7 @@ function findRepos(root) {
 function fetchPrune(repo) {
   try {
     execFileSync('git', ['fetch', '--prune', '--quiet'], {
-      cwd: repo, timeout: FETCH_TIMEOUT, stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: repo, timeout: FETCH_TIMEOUT, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
     });
     return true;

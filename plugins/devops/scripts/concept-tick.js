@@ -169,6 +169,8 @@ function request(port, pathname, method, timeoutSec) {
 // instruction is printed exactly once after RELAUNCH_AFTER_FAILURES misses,
 // and the next successful heartbeat re-arms the edge. One transient miss
 // (a slow /heartbeat under load) never fires it.
+const { isForeignBridge } = require('./concept-watch.js');
+
 const RELAUNCH_AFTER_FAILURES = 2;
 const CLEANUP_RECHECKS = 2;
 const CLEANUP_RECHECK_MS = 5000;
@@ -265,6 +267,23 @@ function cleanupInstruction(port, reason, cronId) {
 }
 
 /**
+ * A foreign bridge answers on our port (C1): ours died and another session's
+ * bridge reused the port. The tick leaves it alone — no /shutdown, no pending
+ * branch for a submission that is not ours — and tells Claude to report it and
+ * restart the concept on a fresh port.
+ */
+function foreignInstruction(port, ourHtml, theirHtml, cronId) {
+  return (
+    `FOREIGN_BRIDGE: the bridge answering on port ${port} serves ${theirHtml}, not this concept's ${ourHtml} — ` +
+    `our bridge is gone and another session's bridge reused the port. Do NOT POST /shutdown to it and do NOT ` +
+    `process its /pending or /decisions. ` +
+    (cronId ? `CronDelete the cron with id ${cronId}, ` : `CronList and delete every cron whose prompt mentions \`port ${port}\`, `) +
+    `tell the user, then restart this concept's bridge on a FRESH port (Step 3: pick a new port via ` +
+    `concept-port-registry.js, rewrite the state file, re-arm both watchers and the cron) and give the user the new URL.`
+  );
+}
+
+/**
  * The pending-branch procedure, verbatim from `bridge-server.md` § step 3 (2).
  * It reaches Claude once per submission instead of once per minute.
  */
@@ -309,7 +328,25 @@ async function tick(opts, deps = {}) {
     await io.sleep(opts.recheckMs === undefined ? CLEANUP_RECHECK_MS : opts.recheckMs);
     state = io.inspectState(opts.state, opts.port, io.exists, opts.owner);
   }
+  // Our concept's html_path, for the foreign-bridge check (C1). Unknown when
+  // the state file is gone — then the legacy behaviour applies.
+  const stateNow = readStateJson(opts.state);
+  const ourHtml = stateNow && typeof stateNow.html_path === 'string' ? stateNow.html_path : '';
+  const foreignBody = (raw) => {
+    let body = null;
+    try { body = JSON.parse(raw); } catch { return null; }
+    return body && isForeignBridge(body.html_path, opts.state, ourHtml) ? body : null;
+  };
   if (state.cleanup) {
+    // Never /shutdown a bridge that is not ours: probe the side-effect-free
+    // /identity first when we know whose bridge to expect. An older server
+    // answers 404 and keeps the legacy shutdown.
+    if (ourHtml) {
+      const id = await io.request(opts.port, '/identity', 'GET', opts.timeout);
+      if (id.ok && foreignBody(id.body)) {
+        return { stdout: cleanupInstruction(opts.port, state.reason, state.cronId).replace('its server has been shut down', 'the bridge now on the port belongs to another session and was left running'), stderr: '' };
+      }
+    }
     await io.request(opts.port, '/shutdown', 'POST', opts.timeout);
     return { stdout: cleanupInstruction(opts.port, state.reason, state.cronId), stderr: '' };
   }
@@ -332,6 +369,10 @@ async function tick(opts, deps = {}) {
     }
     return { stdout: '', stderr: `concept-tick: bridge on port ${opts.port} did not answer /heartbeat${foreign ? ` (${state.reason})` : ''}\n` };
   }
+  const beatForeign = foreignBody(beat.body);
+  if (beatForeign) {
+    return { stdout: foreignInstruction(opts.port, ourHtml, beatForeign.html_path, state.cronId || (stateNow && stateNow.cron_id) || null), stderr: '' };
+  }
   if (!foreign) io.noteHeartbeat(opts.state, true);
 
   // (2) Pending check via /pending — a strict `{"pending": bool, "version": N}`,
@@ -347,6 +388,9 @@ async function tick(opts, deps = {}) {
   } catch {
     return { stdout: '', stderr: `concept-tick: /pending returned unparseable JSON\n` };
   }
+  if (body && isForeignBridge(body.html_path, opts.state, ourHtml)) {
+    return { stdout: foreignInstruction(opts.port, ourHtml, body.html_path, (stateNow && stateNow.cron_id) || null), stderr: '' };
+  }
   if (!body || body.pending !== true) return { stdout: '', stderr: '' };
 
   const version = typeof body.version === 'number' ? body.version : null;
@@ -359,6 +403,7 @@ module.exports = {
   inspectState,
   noteHeartbeat,
   cleanupInstruction,
+  foreignInstruction,
   pendingInstruction,
   relaunchInstruction,
   tick,

@@ -1,4 +1,7 @@
 import { describe, test, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   CHANNELS,
   parseChannelTag,
@@ -102,5 +105,19 @@ describe("latestVisible", () => {
 
   test("CHANNELS constant order", () => {
     expect(CHANNELS).toEqual(["alpha", "beta", "stable"]);
+  });
+});
+
+// I3: ship_promote's zod `version` must accept exactly what the channel tag
+// grammar parses. zod is not resolvable in tests, so the regex is read from
+// the tool source and checked against parseChannelTag on the same samples.
+describe("I3: promote version schema == channel grammar", () => {
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "tools", "promote.js"), "utf8");
+  const m = src.match(/version: z\.string\(\)\.regex\(\/(.+?)\/,/);
+  const re = new RegExp(m[1]);
+  test.each([
+    "0.113.0", "1.0.0", "10.20.30", "1.0.0-beta.1", "1.0.0+build.5", "v1.0.0", "1.0", "1.0.0.0", "a.b.c", "", "1.0.0 ",
+  ])("%j", (v) => {
+    expect(re.test(v)).toBe(parseChannelTag(`alpha/v${v}`) !== null && !/\s/.test(v));
   });
 });

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   repoKey, nextMonthResetUtc, readRecord, recordBlock, setDecision,
-  revokeDecision, clearRecord, storePath,
+  revokeDecision, clearRecord, storePath, describeRecord, DECISION_TTL_MS,
 } from "./ci-quota.js";
 
 let dir, file;
@@ -69,5 +69,35 @@ describe("store lifecycle", () => {
     expect(readRecord("o/r", { now: NOW, file })).toBeNull();
     recordBlock("o/r", { now: NOW, file });
     expect(readRecord("o/r", { now: NOW, file })).not.toBeNull();
+  });
+});
+
+describe("A2: the user's answer is valid 7 days per project, across sessions", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  test("decision applies within 7 days and is gone after (ask again)", () => {
+    recordBlock("o/r", { now: NOW, file });
+    const set = setDecision("o/r", "skip-checks", { now: NOW, file });
+    expect(set.decision.expiresAt).toBe(new Date(NOW + DECISION_TTL_MS).toISOString());
+    expect(readRecord("o/r", { now: NOW + 6 * DAY, file }).decision.value).toBe("skip-checks");
+    const later = readRecord("o/r", { now: NOW + 7 * DAY + 1, file });
+    expect(later).not.toBeNull(); // the block itself is still active (resets Nov 1)
+    expect(later.decision).toBeUndefined();
+    expect(describeRecord(later).decision).toBeNull();
+  });
+  test("the answer survives the block clearing and a new block within 7 days", () => {
+    recordBlock("o/r", { now: NOW, file });
+    setDecision("o/r", "wait", { now: NOW, file });
+    clearRecord("o/r", { file });
+    expect(readRecord("o/r", { now: NOW + DAY, file })).toBeNull();
+    expect(recordBlock("o/r", { now: NOW + 2 * DAY, file }).decision.value).toBe("wait");
+    expect(recordBlock("o/x", { now: NOW + 2 * DAY, file }).decision).toBeUndefined(); // per project
+  });
+  test("a pre-TTL store with the decision inside the record is migrated, its age counted", () => {
+    writeFileSync(file, JSON.stringify({ version: 1, repos: { "o/r": {
+      detectedAt: new Date(NOW).toISOString(), resetAt: "2026-11-01T00:00:00.000Z",
+      decision: { value: "skip-checks", decidedAt: new Date(NOW).toISOString() },
+    } } }));
+    expect(readRecord("o/r", { now: NOW + DAY, file }).decision.value).toBe("skip-checks");
+    expect(readRecord("o/r", { now: NOW + 8 * DAY, file }).decision).toBeUndefined();
   });
 });

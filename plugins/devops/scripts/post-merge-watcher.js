@@ -263,7 +263,7 @@ async function runVerify({ config, version }) {
       result.lastError = probe.error;
     } else {
       const cmd = String(config.command || "");
-      const res = spawnSync(cmd, { shell: true, encoding: "utf8", timeout: 30_000 });
+      const res = spawnSync(cmd, { shell: true, encoding: "utf8", timeout: 30_000, windowsHide: true });
       if (res.status === 0) {
         result.status = "success";
         return result;

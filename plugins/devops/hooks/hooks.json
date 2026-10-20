@@ -44,7 +44,7 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.main.guard.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.worktree.split-guard.js" }
         ],
-        "matcher": "Bash"
+        "matcher": "Bash|PowerShell"
       },
       {
         "hooks": [

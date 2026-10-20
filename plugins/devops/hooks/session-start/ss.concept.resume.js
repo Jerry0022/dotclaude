@@ -7,8 +7,9 @@
  * @description Recover an open concept session after a Claude restart.
  *   Reads `.claude/concept-active.json` (written by /auto-concept Step 3),
  *   probes the bridge server to confirm it is still running, and instructs
- *   Claude to re-arm everything that watches it — the backup cron AND the two
- *   detached background tasks (keepalive pulser, pickup waker) — plus pick up
+ *   Claude to re-arm everything that watches it — the two detached background
+ *   tasks (keepalive pulser, pickup waker; no backstop cron since it woke the
+ *   model every 15 min for nothing) — plus pick up
  *   any unprocessed submission immediately. All three are session-scoped and
  *   die with the prior session; re-arming only the cron left the resumed
  *   session watching on a path that fires just while the REPL is idle, so a
@@ -456,15 +457,19 @@ function buildResumeInstructions(state, pendingState, statePath = STATE_PATH, st
     `An open /auto-concept session was found in this project ` +
     `(port ${state.port}, html_path ${state.html_path}, slug ${state.slug || '?'}). ` +
     `The bridge server is alive, but everything that watched it is gone — background Bash tasks ` +
-    `are session-scoped just like crons. Re-arm all three now.`
+    `are session-scoped just like crons. Re-arm both now. There is NO polling cron any more (every cron fire ` +
+    `was a model turn that found nothing to do): the waker wakes you on a submission, and the pulser wakes you ` +
+    `(PULSER_EXIT reason=WAKER_MISSING) if the waker died while a submission was pending.`
   );
-  lines.push(
-    `(a) BACKSTOP cron (sparse — every fire is a model turn) — CronCreate with cron "*/15 * * * *" (recurring: true) and prompt: ` +
-    `'${buildCronBody(state.port, statePath, state.owner || '')}'.`
-  );
+  if (state.cron_id) {
+    lines.push(
+      `(a) LEGACY cron: the state file still names cron_id ${state.cron_id} from an older version — CronDelete it ` +
+      `(ignore "not found"), then remove \`cron_id\` from the state file. Do NOT create a new cron.`
+    );
+  }
   lines.push(
     `(b) Keepalive pulser — launch as a background Bash task (run_in_background: true). Without it ` +
-    `the page's connection indicator goes red within 90s: ${bg.pulser}`
+    `the page's connection indicator goes red within 90s and nothing backs up the waker: ${bg.pulser}`
   );
   lines.push(
     `(c) PRIMARY pickup path, the pickup waker — launch as a background Bash task ` +
@@ -555,11 +560,10 @@ function buildDeadBridgeRelaunch(state, statePath = STATE_PATH) {
     `bound, another session brought the bridge back — skip the relaunch and only re-arm the watchers.`,
     `Then verify the heartbeat round-trips (POST /heartbeat, then GET /heartbeat must return a non-zero ` +
     `claude_ts), re-arm the keepalive pulser (${bg.pulser}) and the pickup waker (${bg.waker}) as background ` +
-    `Bash tasks (run_in_background: true), and re-arm the backstop cron: CronCreate with cron "*/15 * * * *" ` +
-    `(recurring: true) and prompt: '${buildCronBody(state.port, statePath, state.owner || '')}'. The page reconnects on its own ` +
+    `Bash tasks (run_in_background: true) — no backstop cron${state.cron_id ? `; CronDelete the legacy cron ${state.cron_id} if it is still listed` : ''}. The page reconnects on its own ` +
     `once the heartbeat is back — the user does not have to reload.`,
     `Finally rewrite ${statePath} in place (read-modify-write, keep every other field): \`started_at\` = now ` +
-    `(ISO), \`server_pid\` = the relaunched bridge's PID, \`cron_id\` = the new backstop cron's id. Until then ` +
+    `(ISO), \`server_pid\` = the relaunched bridge's PID, and drop \`cron_id\` if present. Until then ` +
     `the file still describes the dead bridge, and a state opened more than 24 h ago reads as abandoned (#563).`,
   ].join(' ');
 }

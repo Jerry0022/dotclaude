@@ -109,7 +109,10 @@ git ls-remote --tags origin | grep "alpha/v<X.Y.Z>"
 If tag is missing → create it. This is the most commonly forgotten step.
 The `pre-flight.md` Post-Ship Verification catches this automatically.
 
-Skip tag only if bump type is "none" (internal-only change).
+Skip tag only if bump type is "none" (internal-only change). `ship_release`
+enforces this: with `bump: "none"` (param or this ship's checkpoint) it creates
+no ring tag and returns `tagSkipped: true` + `tagSkipReason` — see
+`release-results.md` § bump "none".
 
 **beta/stable tags and the bare `v<X.Y.Z>` alias are NEVER created at ship
 time** — they are produced by `/do-ship promote` (`ship_promote`) when a

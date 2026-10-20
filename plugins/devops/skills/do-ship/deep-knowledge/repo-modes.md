@@ -1,7 +1,8 @@
 # Ship — Repo modes
 
 Referenced by `/do-ship` Step 1a-ii. The mode table and the fork decision
-stay in SKILL.md; this is the execution detail of the `file-only` mode.
+stay in SKILL.md; this is the execution detail of the `file-only` and
+`git-no-remote` modes.
 
 ## file-only
 
@@ -29,3 +30,7 @@ Concretely, in `file-only`:
 
 Report the outcome in plain terms: what was built, what the tests said, what
 changed on disk — and that there is no repo, so nothing was pushed.
+
+## git-no-remote
+
+Local repo, no origin. The pipeline runs as usual, but everything that needs GitHub happens **locally**: `ship_release` commits, merges the branch into its local base (main, or the parent of a sub-branch; squash/merge/rebase as passed) and creates the `alpha/v…` tag locally. Only push and PR are skipped. A base that moved ahead returns `rebaseRequired` → `git rebase <base>` (local, no fetch) and retry. The card is `ship-successful` with `state: { mode: "git-no-remote", merged, pushed: false, delivered: "local-merge" }`. Skip Step 4b (no CI) and Step 5d (no remote to promote on).

@@ -200,3 +200,29 @@ describe("sessionLine — the SessionStart [api-credit] line", () => {
     expect(line).not.toContain("sk-test");
   });
 });
+
+describe("parseEnvFile unescapes double-quoted values (H4)", () => {
+  const { quoteValue } = require("./web-guide.js");
+
+  test("\\\" and \\\\ inside double quotes are unescaped", () => {
+    const env = api.parseEnvFile('A="a\\"b"\nB="c\\\\d"\nC="e\\\\\\"f"\n');
+    expect(env.A).toBe('a"b');
+    expect(env.B).toBe("c\\d");
+    expect(env.C).toBe('e\\"f');
+  });
+
+  test("single-quoted values stay literal", () => {
+    expect(api.parseEnvFile("A='a\\\\b\\\"c'\n").A).toBe('a\\\\b\\"c');
+  });
+
+  test.each([
+    `it's "quoted"`,
+    `back\\slash and it's`,
+    `trail\\`,
+    `mix \\" of 'both' \\\\`,
+    `plain-value`,
+    `has space`,
+  ])("round-trips through web-guide quoteValue: %s", (value) => {
+    expect(api.parseEnvFile(`KEY=${quoteValue(value)}\n`).KEY).toBe(value);
+  });
+});

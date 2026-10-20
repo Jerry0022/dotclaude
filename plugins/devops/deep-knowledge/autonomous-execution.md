@@ -160,9 +160,14 @@ If during autonomous execution a permission is needed that wasn't primed in Step
      "remaining": "<what couldn't be done>",
      "shutdownRequested": true,
      "branch": "<current-branch-name>",
-     "timestamp": "<ISO-8601>"
+     "timestamp": "<ISO-8601>",
+     "run": { "ship": "<s>", "strict": false, "flow": "<f>", "mode": "<m>", "passes": ["harden"], "items": [12, 13] }
    }
    ```
+   The `run` block is the live run contract's do-run answers, merged in by
+   `scripts/autonomous-resume-state.js save` (Step 7a, before
+   `run-contract.js abort`); Step 0.5 `rearm` re-arms the contract from it.
+   A file without `run` re-arms with CLI defaults and reports `legacy: true`.
 6. Proceed to Step 7 (Report) with status **INTERRUPTED**.
 7. Proceed to Step 8 (Shutdown) — **shutdown IS executed** if the user chose it.
    The resume file ensures continuity on next boot.
@@ -235,9 +240,11 @@ After 3 failed attempts on the same operation, or immediately on a hard signal
      "remaining": "<what couldn't be done>",
      "shutdownRequested": <true|false>,
      "branch": "<current-branch-name>",
-     "timestamp": "<ISO-8601>"
+     "timestamp": "<ISO-8601>",
+     "run": { "ship": "<s>", "strict": false, "flow": "<f>", "mode": "<m>", "passes": ["harden"], "items": [12, 13] }
    }
    ```
+   `run` is added by `autonomous-resume-state.js save` as above.
 5. Generate the report (Step 7) with status **INTERRUPTED**.
 6. Proceed to Step 8 (Shutdown) normally if the user chose it. Step 8c writes
    the done-flag only if Step 8b succeeded — so a failed in-session shutdown

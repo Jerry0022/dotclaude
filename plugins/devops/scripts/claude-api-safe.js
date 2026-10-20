@@ -101,14 +101,19 @@ function claudeDir(home) {
   return path.join(home || os.homedir(), '.claude');
 }
 
-/** Parse KEY=value lines of a dotenv-style file (quotes stripped). */
+/**
+ * Parse KEY=value lines of a dotenv-style file (quotes stripped). Single-quoted
+ * values are literal; inside double quotes `\"` and `\\` are unescaped — the
+ * inverse of `quoteValue` in web-guide.js, which writes those escapes.
+ */
 function parseEnvFile(text) {
   const out = {};
   for (const line of String(text).split(/\r?\n/)) {
     const m = line.match(/^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
     if (!m) continue;
     let v = m[2];
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+    if (v.length >= 2 && v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1).replace(/\\(["\\])/g, '$1');
+    else if (v.length >= 2 && v.startsWith("'") && v.endsWith("'")) v = v.slice(1, -1);
     out[m[1]] = v;
   }
   return out;

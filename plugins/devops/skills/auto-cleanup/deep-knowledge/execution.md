@@ -116,7 +116,7 @@ present, every `/do-ship` gate stays interactive.
 **After the last PR:**
 
 1. Run the project ship-extension finalizer exactly once if ≥1 PR merged —
-   read `{project}/.claude/skills/do-ship/SKILL.md` (pre-PR-2 fallback: `ship/`) for the step the extension
+   read `{project}/.claude/skills/do-ship/reference.md` (legacy name `SKILL.md`; pre-PR-2 fallback: `ship/`) for the step the extension
    deferred while `.claude/.ship-queue` existed, run it, capture its output.
 2. Delete `.claude/.ship-queue`.
 3. Update the concept page via browser eval: ✅ per merged PR (with merge

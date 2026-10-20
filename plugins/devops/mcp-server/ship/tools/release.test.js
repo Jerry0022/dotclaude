@@ -58,7 +58,7 @@ vi.mock("../lib/github.js", () => ({
 // #752: repo key is test-controlled; the store is a temp file (DEVOPS_CI_QUOTA_FILE).
 vi.mock("../lib/ci-quota.js", async (importOriginal) => {
   const orig = await importOriginal();
-  return { ...orig, repoKey: vi.fn(() => null), clearRecord: vi.fn(orig.clearRecord) };
+  return { ...orig, repoKey: vi.fn(() => null), clearRecord: vi.fn(orig.clearRecord), setDecision: vi.fn(orig.setDecision) };
 });
 
 vi.mock("../lib/ci-account-limits.js", () => ({
@@ -616,6 +616,30 @@ describe("ship_release — tag default from the version file (#372)", () => {
       "tag", "-a", "alpha/v2.3.4", "origin/main", "-m",
       expect.stringContaining('"version":"2.3.4"'),
     ]);
+  });
+
+  test("I1: bump none → no ring tag, tagSkipped + tagSkipReason the card shows", async () => {
+    const p = params({ bump: "none" }); delete p.tag;
+    const res = await handler(p);
+    expect(res.success).toBe(true);
+    expect(res.tag).toBeNull();
+    expect(res.tagSkipped).toBe(true);
+    expect(res.tagSkipReason).toMatch(/bump: none — version unchanged \(v2\.3\.4\)/);
+    expect(res.tagWarning).toMatch(/No ring tag created — bump: none/);
+    const { execFileSync } = await import("node:child_process");
+    expect(execFileSync.mock.calls.find((c) => c[0] === "git" && c[1][0] === "tag")).toBeUndefined();
+  });
+
+  test("I1: bump none from this ship's checkpoint applies without the param, even over an explicit tag", async () => {
+    const cpDir = mkdtempSync(join(tmpdir(), "rel-bump-"));
+    try {
+      const cp = createRequire(import.meta.url)("../../../hooks/lib/ship-checkpoint.js");
+      cp.recordShipStep("ship_preflight", { cwd: cpDir }, { ready: true, branch: "feat/x", base: "main" });
+      cp.recordShipStep("ship_version_bump", { cwd: cpDir, bump: "none" }, { success: true, bump: "none", vOld: "2.3.4", vNew: "2.3.4" });
+      const res = await handler(params({ cwd: cpDir, tag: "v2.3.4" }));
+      expect(res.tagSkipped).toBe(true);
+      expect(res.tagSkipReason).toMatch(/bump: none/);
+    } finally { rmSync(cpDir, { recursive: true, force: true }); }
   });
 
   test("explicit tag wins over the version file and is not flagged as defaulted", async () => {
@@ -1372,6 +1396,51 @@ describe("ship_release — #752 shared CI-quota block (on top of the #768 detect
     expect(res.checks.quota.repo).toBe("o/r");
     expect(ghLib.mergePR).not.toHaveBeenCalled();
     expect(quotaLib.readRecord("o/r")).not.toBeNull();
+  });
+
+  describe("A2: interactive first ship asks before any skipChecks merge", () => {
+    test("interactive + no stored answer → ciQuotaDecisionNeeded, no merge, no skipChecks advice", async () => {
+      const res = await handler(params({ interactive: true }));
+      expect(res.success).toBe(false);
+      expect(res.checks.status).toBe("quota-decision-needed");
+      expect(res.ciQuotaDecisionNeeded).toMatchObject({ repo: "o/r", options: ["skip-checks", "wait"], validForDays: 7 });
+      expect(res.error).toMatch(/Ask the user/);
+      expect(res.error).toMatch(/do NOT retry with skipChecks/);
+      expect(ghLib.mergePR).not.toHaveBeenCalled();
+    });
+
+    test("autonomous (interactive omitted) keeps the account-limited → skipChecks fallback", async () => {
+      const res = await handler(params());
+      expect(res.ciQuotaDecisionNeeded).toBeUndefined();
+      expect(res.checks.status).toBe("account-limited");
+      expect(res.error).toMatch(/retry with skipChecks:true/);
+    });
+
+    test("a live lockout marker counts as autonomous even with interactive:true", async () => {
+      const { writeMarker } = createRequire(import.meta.url)("../../../hooks/lib/ship-lockout-marker.js");
+      writeMarker(dir);
+      const res = await handler(params({ interactive: true, cwd: dir }));
+      expect(res.ciQuotaDecisionNeeded).toBeUndefined();
+      expect(res.checks.status).toBe("account-limited");
+    });
+
+    test("the answer (passed after asking) merges now and is reused without asking again", async () => {
+      await handler(params({ interactive: true }));
+      const res = await handler(params({ interactive: true, quotaDecision: "skip-checks" }));
+      expect(res.success).toBe(true);
+      expect(res.checks.storedDecisionApplied).toBe(true);
+      expect(ghLib.mergePR).toHaveBeenCalled();
+      const again = await handler(params({ interactive: true }));
+      expect(again.ciQuotaDecisionNeeded).toBeUndefined();
+      expect(again.checks.storedDecisionApplied).toBe(true);
+    });
+
+    test("an unwritable store still honours this call's explicit answer", async () => {
+      quotaLib.setDecision.mockImplementationOnce(() => { throw new Error("EACCES"); });
+      const res = await handler(params({ interactive: true, quotaDecision: "skip-checks" }));
+      expect(res.success).toBe(true);
+      expect(res.ciQuotaDecisionNeeded).toBeUndefined();
+    });
   });
 
   test("an artifact-quota block is not recorded", async () => {

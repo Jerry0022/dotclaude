@@ -2,7 +2,7 @@ import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { parseArgs, validate, checkState, run, DEFAULTS, BYE_GRACE_MS } from "./concept-watch.js";
+import { parseArgs, validate, checkState, run, isForeignBridge, DEFAULTS, BYE_GRACE_MS } from "./concept-watch.js";
 
 function stateFile(contents) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "concept-watch-"));
@@ -18,7 +18,7 @@ function stateFile(contents) {
  *  seconds) is testable. `stopAfter` ends an otherwise endless loop — the
  *  pulser never gives up on request failures any more — by reporting the
  *  state file gone from that poll on (STATE_GONE after `confirm` polls). */
-function harness({ mode = "watch", port = 8883, state, responses = [], exists = true, grace = 60, interval, stopAfter = Infinity, confirm }) {
+function harness({ mode = "watch", port = 8883, state, responses = [], exists = true, grace = 60, interval, stopAfter = Infinity, confirm, beat, beats }) {
   const calls = [];
   let reason = null;
   let clock = 1_000_000;
@@ -32,6 +32,10 @@ function harness({ mode = "watch", port = 8883, state, responses = [], exists = 
     exists: () => (typeof exists === "function" ? exists() : exists),
     sleep: async (ms) => { calls.push({ sleep: ms }); clock += ms; },
     now: () => clock,
+    // Beat file IO is faked: default is a fresh beat, so the pulser's orphan
+    // check stays inert unless a test hands in `beat`.
+    readBeat: () => (beat === undefined ? { ts: clock, woke_version: null } : (typeof beat === "function" ? beat(clock) : beat)),
+    writeBeat: (_s, _p, b) => { if (beats) beats.push(b); },
     // `state` here is the verdict checkState should return, not a path.
     checkState: () => (++polls > stopAfter ? "gone" : (typeof state === "function" ? state(polls) : state)),
     request: async (_port, reqPath, method) => {
@@ -404,7 +408,7 @@ describe("run — waker owns cleanup, liveness and the structured exit (#363)", 
     const calls = [];
     let reason = null;
     await run({ mode: "pulse", port: 8883, state: "/proj/.claude/concept-active.json", ...DEFAULTS }, {
-      exists: () => true, sleep: async () => {}, checkState: () => "gone",
+      exists: () => true, sleep: async () => {}, checkState: () => "gone", now: () => 5, readBeat: () => ({ ts: 5 }), writeBeat: () => {},
       request: async (_p, reqPath, method) => { calls.push({ reqPath: reqPath.replace(/\?.*$/, ""), method }); return { ok: true, body: "" }; },
       emit: (r) => { reason = r; return r; },
     });
@@ -629,5 +633,120 @@ describe("checkState — a foreign owner's file is left alone (#417)", () => {
 
   test("parseArgs reads --owner", () => {
     expect(parseArgs(["--mode", "pulse", "--port", "8883", "--state", "/s", "--owner", "aaaa1111"]).owner).toBe("aaaa1111");
+  });
+});
+
+describe("run — a foreign bridge on a reused port (C1)", () => {
+  const STATE = path.join(os.tmpdir(), "c1-proj", ".claude", "concept-active.json");
+  const OURS = path.join(os.tmpdir(), "c1-proj", "docs", "concepts", "x.html");
+  const THEIRS = path.join(os.tmpdir(), "other-proj", "docs", "concepts", "y.html");
+  function watcher({ mode = "watch", responses = [], state = "ok" }) {
+    const calls = [];
+    let clock = 1_000_000;
+    let exit = null;
+    const opts = { mode, port: 8883, state: STATE, ...DEFAULTS, liveness: 0 };
+    const p = run(opts, {
+      exists: () => true,
+      sleep: async (ms) => { clock += ms; },
+      now: () => clock,
+      checkState: () => state,
+      readState: () => ({ port: 8883, html_path: "docs/concepts/x.html" }),
+      reopen: () => {},
+      request: async (_port, reqPath, method) => {
+        calls.push({ reqPath: reqPath.replace(/\?.*$/, ""), method });
+        return responses.shift() ?? { ok: false, body: "" };
+      },
+      emit: (reason, detail = "") => { exit = reason + detail; return reason; },
+    });
+    return { done: p.then(() => exit), calls };
+  }
+
+  test("isForeignBridge: only positive evidence of a different concept counts", () => {
+    expect(isForeignBridge(THEIRS, STATE, "docs/concepts/x.html")).toBe(true);
+    expect(isForeignBridge(OURS, STATE, "docs/concepts/x.html")).toBe(false);
+    expect(isForeignBridge(undefined, STATE, "docs/concepts/x.html")).toBe(false);   // older server
+    expect(isForeignBridge(null, STATE, "docs/concepts/x.html")).toBe(false);
+    expect(isForeignBridge(THEIRS, STATE, "")).toBe(false);                          // no html in state
+  });
+
+  test("waker: a foreign PENDING is not a wake — FOREIGN_BRIDGE, no /shutdown", async () => {
+    const w = watcher({ responses: [{ ok: true, body: JSON.stringify({ pending: true, version: 5, html_path: THEIRS }) }] });
+    await expect(w.done).resolves.toBe("FOREIGN_BRIDGE port=8883");
+    expect(w.calls.some(c => c.reqPath === "/shutdown")).toBe(false);
+  });
+
+  test("waker: our own bridge still wakes PENDING_SUBMISSION", async () => {
+    const w = watcher({ responses: [{ ok: true, body: JSON.stringify({ pending: true, version: 5, html_path: OURS }) }] });
+    await expect(w.done).resolves.toBe("PENDING_SUBMISSION version=5");
+  });
+
+  test("pulser: stops heartbeating a foreign bridge", async () => {
+    const w = watcher({ mode: "pulse", responses: [{ ok: true, body: JSON.stringify({ ok: true, html_path: THEIRS }) }] });
+    await expect(w.done).resolves.toBe("FOREIGN_BRIDGE port=8883");
+    expect(w.calls.filter(c => c.reqPath === "/heartbeat")).toHaveLength(1);
+  });
+
+  test("waker cleanup exit skips /shutdown when /identity names another concept", async () => {
+    const w = watcher({
+      state: "port-changed",
+      responses: [
+        { ok: false, body: "" }, { ok: false, body: "" },
+        { ok: true, body: JSON.stringify({ html_path: THEIRS }) },
+      ],
+    });
+    await expect(w.done).resolves.toBe("PORT_CHANGED bridge=foreign");
+    expect(w.calls.map(c => c.reqPath)).toContain("/identity");
+    expect(w.calls.some(c => c.reqPath === "/shutdown")).toBe(false);
+  });
+
+  test("waker cleanup exit still shuts down our own bridge", async () => {
+    const w = watcher({
+      state: "html-gone",
+      responses: [
+        { ok: false, body: "" }, { ok: false, body: "" },
+        { ok: true, body: JSON.stringify({ html_path: OURS }) },
+      ],
+    });
+    await expect(w.done).resolves.toBe("HTML_GONE");
+    expect(w.calls.some(c => c.reqPath === "/shutdown")).toBe(true);
+  });
+});
+
+describe("pulser as the waker's safety net (no backstop cron)", () => {
+  const pending = (v = 3) => ({ ok: true, body: JSON.stringify({ pending: true, version: v, action: "iterate" }) });
+  const beatOk = { ok: true, body: "{}" };
+  // pulser poll order per iteration: POST /heartbeat, then (stale beat) GET /pending
+  test("stale beat + pending on two polls => WAKER_MISSING exit with version and action", async () => {
+    const h = harness({ mode: "pulse", state: "ok", beat: () => null, responses: [beatOk, pending(), beatOk, pending()] });
+    await expect(h.done).resolves.toBe("WAKER_MISSING");
+    expect(h.requests().filter(c => c.reqPath === "/pending")).toHaveLength(2);
+  });
+  test("one pending poll alone does not wake (confirm = 2)", async () => {
+    const h = harness({ mode: "pulse", state: "ok", beat: () => null, stopAfter: 2, confirm: 1,
+      responses: [beatOk, pending(), beatOk, { ok: true, body: JSON.stringify({ pending: false }) }] });
+    await expect(h.done).resolves.toBe("STATE_GONE");
+  });
+  test("fresh waker beat => the pulser never polls /pending", async () => {
+    const h = harness({ mode: "pulse", state: "ok", stopAfter: 3, confirm: 1, responses: () => beatOk });
+    await h.done;
+    expect(h.requests().some(c => c.reqPath === "/pending")).toBe(false);
+  });
+  test("waker already woke the session for this version => no second wake", async () => {
+    const h = harness({ mode: "pulse", state: "ok", stopAfter: 3, confirm: 1,
+      beat: () => ({ ts: 0, woke_version: 3 }),
+      responses: () => pending(3) });
+    await expect(h.done).resolves.toBe("STATE_GONE");
+  });
+  test("a newer version than the one the waker woke for still wakes", async () => {
+    const h = harness({ mode: "pulse", state: "ok", beat: () => ({ ts: 0, woke_version: 3 }),
+      responses: [beatOk, pending(4), beatOk, pending(4)] });
+    await expect(h.done).resolves.toBe("WAKER_MISSING");
+  });
+  test("waker stamps its beat every poll and records the version it woke for", async () => {
+    const beats = [];
+    const h = harness({ mode: "watch", state: "ok", beats, responses: [{ ok: true, body: JSON.stringify({ pending: true, version: 7, action: "iterate" }) }] });
+    await expect(h.done).resolves.toBe("PENDING_SUBMISSION");
+    expect(beats[0]).toMatchObject({ woke_version: null });
+    expect(beats[beats.length - 1].woke_version).toBe(7);
   });
 });

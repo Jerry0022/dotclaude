@@ -140,12 +140,25 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    A tighter watchdog can pass a lower value explicitly (e.g.
    `--heartbeat-timeout-ms 300000` for 5 min).
 
-3. Set up the **sparse backstop cron** (every 15 minutes). Since #363 the two
-   token-free watchers below own the whole monitoring duty — heartbeat,
-   self-cleanup, page liveness, pickup — and the cron is a last-resort
-   backstop only (**every cron fire is a model turn**). It only matters if
-   BOTH watchers died without a session restart (a restart re-arms them via
-   `ss.concept.resume`).
+3. **No polling cron.** The two token-free watchers below own the whole
+   monitoring duty - heartbeat, self-cleanup, page liveness, pickup - and the
+   old 15-minute backstop cron is gone: measured, 113 of 126 fires woke the
+   model (a full context re-read) for nothing. Redundancy now lives between
+   the watchers: the waker stamps a beat file (`concept-waker-{port}.json`,
+   next to the state file) on every poll, and the pulser - an independent
+   long-lived task - exits `PULSER_EXIT reason=WAKER_MISSING version=N` (a
+   wake) when a submission sits unattended for two polls while that beat is
+   stale and the waker never woke the session for that version. A pending
+   submission therefore always yields exactly one wake. A session restart
+   kills both tasks; `ss.concept.resume` re-arms them. Do NOT call
+   `CronCreate` in step 3. If a cron is ever reinstated for a case this
+   design cannot cover, it must be hourly with an off-minute (`17 * * * *`)
+   and the tick stays silent when nothing is pending.
+
+   **Legacy cron (state file with `cron_id`, sessions started before this
+   change).** Such a cron keeps working: it runs `concept-tick.js` below and is
+   silent when idle. On resume the hook tells the model to `CronDelete` it and
+   drop `cron_id`. The documented tick prompt is kept for that case:
 
    **The prompt is two sentences — the procedure is a script.** Claude Code
    renders a cron's entire prompt as its background-task card;
@@ -162,9 +175,9 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    literal path, which is the form shown below.
 
    ```
-   CronCreate(cron: "*/15 * * * *", recurring: true, prompt: <<EOF
+   legacy prompt of the retired */15 cron, <<EOF
    Silently run via Bash: node "{plugin-root}/scripts/concept-tick.js" --port {port} --state "{session-cwd}/.claude/concept-active.json" --owner {owner} — this services the concept bridge on port {port}. No output → produce NO output (silent tick). Any output IS your instruction for this tick: follow it exactly.
-   EOF)
+   EOF
    ```
 
    **Two phrasings in that prompt are load-bearing — do not tidy them up.**
@@ -374,6 +387,19 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
      root) ⇒ the waker POSTs `/shutdown` itself and exits `STATE_GONE` /
      `PORT_CHANGED` / `HTML_GONE`. No cron is needed for a dead concept to
      take its server down.
+   - **Foreign-bridge guard (C1).** The bridge reports the absolute `--html`
+     path as `html_path` on GET/POST `/heartbeat`, GET `/pending` and the
+     side-effect-free GET `/identity`. When it differs from the state file's
+     `html_path` (resolved against the project root), another session's
+     bridge reused the port after ours died: both watchers exit
+     `FOREIGN_BRIDGE port=N` without `/shutdown` and without waking as
+     pending, and the concept-tick prints a `FOREIGN_BRIDGE:` instruction
+     instead of the pending branch. Before a cleanup `/shutdown` the waker and
+     the tick probe `/identity` and skip the shutdown for a foreign bridge
+     (exit suffix ` bridge=foreign`). Unknown on either side (an older server,
+     no `html_path` in the state file) is never foreign. The response to
+     `FOREIGN_BRIDGE` is a restart on a **fresh** port — the same-port
+     relaunch rule applies only to our own dead bridge.
    - **Page liveness.** The server keeps a per-tab registry: every browser
      poll (GET `/heartbeat`, GET `/reload`) carries the page's `?tab=<id>`,
      and a real unload beacons `POST /bye` (`pagehide`, persisted=false).
@@ -397,11 +423,8 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    step 7), not at the end of the round. The pulser is still running and must
    not be duplicated (a second pulser on the same port is harmless but
    wasteful; if unsure, the pulser's `STATE_GONE`/`PORT_CHANGED` guards make a
-   stale one exit on its own). Keep the cron too — but as a **sparse
-   backstop** only (every 15 min): it fires solely while the REPL is idle, so
-   it cannot cover the window between the waker exiting and being re-launched,
-   because during a processing round the REPL is busy. That window is closed
-   by re-launching early, not by the cron.
+   stale one exit on its own). No cron backs this up: re-launch
+   early (the pulser's `WAKER_MISSING` wake covers a waker that died instead).
 
    **None of the three is pending work.** The server, the pulser and the waker
    run for the whole concept and never yield a result — they are the waiting
@@ -439,9 +462,9 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
      verify the concept file still exists.
    - `slug` — kebab-case topic from the filename, used in resume messaging.
    - `server_pid` — captured via `echo $!` after the `python … &` launch.
-   - `cron_id` — the ID `CronCreate` returned in step 3. A new session
-     refreshes the polling cron, the old ID is just informational (the old
-     session-only cron died with the prior session and cannot be reaped).
+   - `cron_id` - OPTIONAL, legacy: present only in files written by older
+     versions (their backstop cron). New files omit it; absent is valid.
+     The resume hook deletes a listed legacy cron and drops the field.
    - `owner` — a random token minted when this file is written
      (`node -e "process.stdout.write(require('crypto').randomBytes(4).toString('hex'))"`),
      passed as `--owner {owner}` to the tick, the pulser and the waker.
@@ -882,7 +905,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    # since — compare the owner token before deleting.
    node -e "const f='.claude/concept-active.json',fs=require('fs');try{const s=JSON.parse(fs.readFileSync(f,'utf8'));if(!s.owner||s.owner===process.argv[1])fs.unlinkSync(f)}catch{}" "$OWNER"
    ```
-   Also delete the polling cron via `CronDelete <cron_id>`. The state file
+   If the state file names a legacy `cron_id`, `CronDelete` it too. The state file
    MUST be removed when the concept session is intentionally ended,
    otherwise the next SessionStart will surface a phantom resume hint for a
    server that no longer exists.

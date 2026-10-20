@@ -1,10 +1,10 @@
 'use strict';
 /**
  * @module run-contract-cli
- * @version 0.5.0
+ * @version 0.6.0
  * @plugin devops
  * @description Run-contract CLI: `status | skip | park | done | abort |
- *   batch-clear | arm`. Split out of run-contract.js (AUD-016) —
+ *   batch-clear | arm | items`. Split out of run-contract.js (AUD-016) —
  *   run-contract.js stays the facade and the CLI entry point (its
  *   `require.main` guard still calls this module's `cli()`).
  *
@@ -17,10 +17,13 @@
  *   AUD-022: `--items` takes issue numbers only (`12,13` / `#12,#13`).
  *   AUD-023: `status` / `done` measure qa from the work-tree root
  *   (projectRoot(cwd)) like the gate, not from the raw --cwd.
+ *   `items <n,n,...>` patches only the live contract's `items` (backlog
+ *   Step 1.3 records its queue after the selection): header id, armedAt and
+ *   the events stay; no archive, unlike `arm --replace`.
  */
 
 const {
-  LIB_PATH, disabled, contractPath, batchHandoffPath, readContract, arm, record, close,
+  LIB_PATH, disabled, contractPath, batchHandoffPath, readContract, arm, update, record, close,
   clearBatchHandoff, eventsOf, readJson, nowOf,
 } = require('./run-contract-store');
 const { projectRoot, samePath } = require('./project-root');
@@ -35,6 +38,18 @@ const { measureChanges } = require('./run-contract-qa');
 const { TOTAL_GIT_BUDGET_MS } = require('./git-timeout');
 
 const OBLIGATIONS = Object.freeze(['auto-agents', 'harden', 'polish', 'qa', 'do-ship', 'refine', 'triage']);
+
+/**
+ * AUD-022: issue numbers only — a free-form item (`12),13`) used to be
+ * stored and later crash a RegExp built from it.
+ * @returns {string[]|null} normalised numbers, or null when any is invalid
+ */
+function parseItems(raw) {
+  if (typeof raw !== 'string') return null;
+  const list = raw.split(',').map(s => s.trim()).filter(Boolean);
+  if (list.some(s => !/^#?\d+$/.test(s))) return null;
+  return list.map(s => s.replace(/^#/, ''));
+}
 
 function parseArgv(argv) {
   const pos = [];
@@ -74,7 +89,7 @@ function liveContract(cwd, now) {
 
 /**
  * CLI entry. Commands: status · skip <ob> [--item N] --reason "<why>" ·
- * done [--reason] · abort --reason · arm --mode --flow --ship --passes [--strict] [--items] [--replace].
+ * done [--reason] · abort --reason · arm --mode --flow --ship --passes [--strict] [--items] [--replace] · items <n,n,...>.
  * @returns {number} 0 success, 1 usage error / nothing to act on
  */
 // H-D14: one small handler per command. Each gets the parsed call
@@ -162,6 +177,16 @@ const CLI_COMMANDS = {
     write({ ok: true, cleared: had, reason: short(reason, 200) });
     return 0;
   },
+  items({ pos, cwd, now, write, fail }) {
+    const items = parseItems(pos.slice(1).join(','));
+    if (!items || !items.length) return fail('usage: items <n,n,...> — issue numbers: 12,13 (or #12,#13)');
+    const c = readContract(cwd, { now });
+    if (!c) return fail('no active run contract');
+    const h = update(cwd, { items }, { now });
+    if (!h) return fail('could not patch the contract items');
+    write({ ok: true, id: h.id, items: h.items });
+    return 0;
+  },
   arm({ flags, cwd, now, write, fail }) {
     const mode = flags.mode === undefined ? 'prompt' : flags.mode;
     const flow = flags.flow === undefined ? 'interactive' : flags.flow;
@@ -175,11 +200,8 @@ const CLI_COMMANDS = {
       passes = /^(none|keine|)$/i.test(raw) ? [] : raw.split(',').map(s => s.trim().toLowerCase());
       if (passes.some(p => p !== 'harden' && p !== 'polish')) return fail('--passes harden,polish|none');
     }
-    // AUD-022: issue numbers only — a free-form item (`12),13`) used to be
-    // stored and later crash a RegExp built from it.
-    const rawItems = typeof flags.items === 'string' ? flags.items.split(',').map(s => s.trim()).filter(Boolean) : [];
-    if (flags.items === true || rawItems.some(s => !/^#?\d+$/.test(s))) return fail('--items takes issue numbers: 12,13 (or #12,#13)');
-    const items = rawItems.map(s => s.replace(/^#/, ''));
+    const items = flags.items === undefined ? [] : parseItems(flags.items);
+    if (!items) return fail('--items takes issue numbers: 12,13 (or #12,#13)');
     const sessionId = typeof flags.session === 'string' ? flags.session : null;
     // R16: replacing a live run is explicit — `--replace` keeps the old
     // behaviour (archive it with its events, arm fresh).
@@ -201,7 +223,7 @@ const CLI_COMMANDS = {
   },
 };
 
-const CLI_USAGE = 'usage: run-contract.js status | skip <ob> [--item N] --reason "<why>" | park <item> --reason "<why>" | done [--reason "<why>"] | abort --reason "<why>" | batch-clear --reason "<why>" | arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>] [--replace]';
+const CLI_USAGE = 'usage: run-contract.js status | skip <ob> [--item N] --reason "<why>" | park <item> --reason "<why>" | done [--reason "<why>"] | abort --reason "<why>" | batch-clear --reason "<why>" | arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>] [--replace] | items <n,n,...>';
 
 function cli(argv, opts = {}) {
   const { pos, flags } = parseArgv(Array.isArray(argv) ? argv : []);

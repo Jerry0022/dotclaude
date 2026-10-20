@@ -12,6 +12,7 @@ import {
   widgetCardTitle,
   lastUserEntryIsNotification,
   showWidgetCalledThisTurn,
+  editsThisTurn,
   decideAction,
   buildBlockReason,
   buildGuideLoopReason,
@@ -1055,6 +1056,66 @@ describe("decideAction — notification turn", () => {
     expect(d.action).toBe("pass");
     expect(d.resetFlags).toBe(true);
     expect(d.exempt).toBe("notification-no-change");
+  });
+
+  test("intermediate agent notification with work still running → no card owed (dirty tree)", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: false,
+      stopHookActive: false,
+      substantial: true,
+      notificationTurn: true,
+      treeClean: false,
+      turnEdits: 0,
+      shipped: false,
+      openTasksKnown: true,
+      openTaskNames: ["devops:core"],
+    });
+    expect(d.action).toBe("pass");
+    expect(d.exempt).toBe("notification-work-running");
+  });
+
+  test("last notification (nothing open any more) on a dirty tree still owes the card", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: false,
+      stopHookActive: false,
+      substantial: true,
+      notificationTurn: true,
+      treeClean: false,
+      turnEdits: 0,
+      shipped: false,
+      openTasksKnown: true,
+      openTaskNames: [],
+    });
+    expect(d.action).toBe("block");
+  });
+
+  test("notification turn that edited files owes the card even while work runs", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: false,
+      stopHookActive: false,
+      substantial: true,
+      notificationTurn: true,
+      treeClean: false,
+      turnEdits: 2,
+      shipped: false,
+      openTasksKnown: true,
+      openTaskNames: ["devops:core"],
+    });
+    expect(d.action).toBe("block");
+  });
+
+  test("editsThisTurn counts Edit/Write since the last prompt entry only", () => {
+    const L = (o) => JSON.stringify(o);
+    const t = [
+      L({ type: "assistant", message: { content: [{ type: "tool_use", name: "Edit" }] } }),
+      L({ type: "user", message: { role: "user", content: "next prompt" } }),
+      L({ type: "assistant", message: { content: [{ type: "tool_use", name: "Bash" }, { type: "tool_use", name: "Write" }] } }),
+    ].join("\n");
+    expect(editsThisTurn(t)).toBe(1);
+    expect(editsThisTurn("")).toBe(null);
   });
 
   test("something shipped on a notification turn still owes the card gate", () => {

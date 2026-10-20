@@ -452,6 +452,15 @@ export function cardWidgetData(model, repoUrl = "") {
   };
 }
 
+/**
+ * The answer above the card body (#757): pre-rendered, escaped HTML from
+ * lib/answer-markdown.js, outside the client-rendered `#dc-card` so the CDN
+ * client needs no change. '' without an answer.
+ */
+function answerBlock(model) {
+  return model && typeof model.answerHtml === "string" ? model.answerHtml : "";
+}
+
 /** The sr-only summary heading every widget starts with. */
 function summaryHtml(lang) {
   const summary = lang === "en"
@@ -477,7 +486,7 @@ function summaryHtml(lang) {
 export function cardWidgetHtml(model, repoUrl) {
   if (!model) return "";
   const d = cardWidgetData(model, repoUrl);
-  return [summaryHtml(d.l), CLIENT.render(d), `<script>`, cardWidgetScript(d.l), `</script>`].join("\n");
+  return [summaryHtml(d.l), answerBlock(model), CLIENT.render(d), `<script>`, cardWidgetScript(d.l), `</script>`].filter(Boolean).join("\n");
 }
 
 /**
@@ -563,7 +572,7 @@ export function cardWidgetTemplate(model, repoUrl, env = process.env) {
   const h3 = d.ti ? `<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(d.ti)}</h3>` : "";
   return [
     summaryHtml(d.l),
-    `<div id="dc-card">${h3}</div>`,
+    `${answerBlock(model)}<div id="dc-card">${h3}</div>`,
     `<script type="application/json" id="dc-card-data">${json}</script>`,
     `<script src="${escapeHtml(cardClientUrl(env))}" onerror="${TEMPLATE_FALLBACK_JS}"></script>`,
   ].join("\n");
@@ -608,18 +617,13 @@ export function cardWidgetInstruction(model, repoUrl, env = process.env, { widge
   if (!html) return "";
   return (
     "[CARD WIDGET — DO NOT OUTPUT THIS BLOCK]\n" +
-    "Desktop app: this widget IS the whole card — there is no card markdown to output. Once, " +
-    "as the LAST action of the turn, call mcp__visualize__show_widget with title " +
-    `"completion_card_body", loading_messages ["Card wird geladen"] and widget_code = EXACTLY ` +
-    "the block below (verbatim, no read_me). Output NO text after the call. " +
-    NO_OUTPUT_NUDGE_REPLY + " Never show this card a second time.\n" +
-    "Text before the widget: the full answer to the user's question (the card never carries it, " +
-    "#642), a report the running skill requires (e.g. auto-fix: root cause with file:line) " +
-    "included, but no prose that restates the card.\n" +
-    "The call is mandatory, never optional. ONLY when the call itself fails, or the tool does not " +
-    `exist: no retry, no note — output the visible title line \`### **✨✨✨ ${model.title || ""} ✨✨✨**\` ` +
-    "(error path, never a shortcut).\n" +
-    (widgetFile ? `Copy: ${widgetFile} — if the block below reached you cut off, Read it and pass its content.\n` : "") +
+    "Desktop app: this widget IS the whole card (no markdown). Once, as the LAST action of the turn, " +
+    "call mcp__visualize__show_widget with title \"completion_card_body\", " +
+    "loading_messages [\"Card wird geladen\"], widget_code = EXACTLY the block below (verbatim). " +
+    "No text after it; reply nothing to the app's one \"no visible output\" nudge.\n" +
+    "Before the widget: the full answer to the user's question (the card never carries it, #642), no recap of the card.\n" +
+    `Only if the call fails or the tool is missing (no retry): output \`### **✨✨✨ ${model.title || ""} ✨✨✨**\`.\n` +
+    (widgetFile ? `Copy: ${widgetFile} — if the block below is cut off, Read it.\n` : "") +
     "----- widget_code -----\n" +
     html + "\n" +
     "----- end widget_code -----"

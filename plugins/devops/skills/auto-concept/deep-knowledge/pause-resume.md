@@ -12,7 +12,7 @@ goes before the bridge:
 
 1. `TaskStop` the keepalive pulser and the pickup waker (their background task
    ids from Step 3 / the last resume).
-2. `CronDelete <cron_id>` — the backstop cron.
+2. `CronDelete <cron_id>` - only if the state file names a legacy cron.
 3. Mark the state file, read-modify-write so owner, `baseline_sha` and every
    other field stay:
    ```bash
@@ -37,8 +37,8 @@ other prompt leaves the pause alone — the hint is information, not a mandate.
 1. Relaunch the bridge on the **same** port with the recorded `--html`
    (bridge-server.md step 4 — the command `buildDeadBridgeRelaunch` prints),
    verify the heartbeat round-trips, and re-arm the pulser, the waker and the
-   backstop cron.
-2. Rewrite the state file: delete `paused_at`, set `started_at` = now and the
-   new `server_pid` and `cron_id`.
+   no cron.
+2. Rewrite the state file: delete `paused_at` and any legacy `cron_id`, set
+   `started_at` = now and the new `server_pid`.
 3. The earlier decisions come back from the durable store. End the turn with
    the `concept: { phase: "waiting" }` card; the compass returns.

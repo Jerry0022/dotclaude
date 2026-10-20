@@ -210,19 +210,29 @@ describe("buildBackgroundTasks — what a restart must bring back", () => {
 });
 
 describe("buildResumeInstructions", () => {
-  test("re-arms all three watchers, not just the cron", () => {
+  test("re-arms pulser and waker, and creates no cron", () => {
     const out = buildResumeInstructions(STATE, "idle");
-    expect(out).toContain("CronCreate");
+    expect(out).not.toContain("CronCreate");
+    expect(out).not.toContain("BACKSTOP");
+    expect(out).not.toContain("*/15");
     expect(out).toContain("Keepalive pulser");
     expect(out).toContain("pickup waker");
     expect(out).toMatch(/run_in_background: true/);
   });
 
-  test("names the waker primary and the cron a sparse backstop (#363)", () => {
+  test("names the waker primary and the pulser its backup (no cron)", () => {
     const out = buildResumeInstructions(STATE, "idle");
-    expect(out).toMatch(/BACKSTOP cron[\s\S]*CronCreate with cron "\*\/15 \* \* \* \*"/);
-    expect(out).not.toContain('cron "* * * * *"');                 // the per-minute cadence must not come back
     expect(out).toContain("PRIMARY pickup path");
+    expect(out).toContain("WAKER_MISSING");
+    expect(out).not.toContain("LEGACY cron");
+  });
+
+  test("a state file that still has a cron_id gets it deleted, not re-created", () => {
+    const out = buildResumeInstructions({ ...STATE, cron_id: "ab12cd34" }, "idle");
+    expect(out).toContain("LEGACY cron");
+    expect(out).toMatch(/CronDelete it/);
+    expect(out).toContain("ab12cd34");
+    expect(out).not.toContain("CronCreate");
   });
 
   test("the idle branch no longer promises the cron will pick it up", () => {
@@ -246,8 +256,8 @@ describe("buildResumeInstructions", () => {
   test("a slug-less state file still produces usable instructions", () => {
     const out = buildResumeInstructions({ port: 9001, html_path: "docs/concepts/y.html" }, "idle");
     expect(out).toContain("slug ?");
-    // The port has to reach all three re-armed watchers, slug or no slug.
-    expect(out.match(/--port 9001/g)).toHaveLength(3);
+    // The port has to reach both re-armed watchers, slug or no slug.
+    expect(out.match(/--port 9001/g)).toHaveLength(2);
   });
 });
 

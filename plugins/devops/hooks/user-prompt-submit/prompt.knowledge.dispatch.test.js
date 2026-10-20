@@ -102,6 +102,30 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
     }
   });
 
+  test("within one session the nudge text goes out once; the budget suffix stays; a compaction brings the nudge back", () => {
+    const h = proHome();
+    const cwd = h;
+    const sid = `vitest-once-${process.pid}-${Math.random()}`;
+    const env = { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT, HOME: h, USERPROFILE: h, TMP: h, TEMP: h, TMPDIR: h };
+    const send = (prompt) => {
+      const r = spawnSync(process.execPath, [HOOK], { input: JSON.stringify({ session_id: sid, prompt, cwd }), cwd, env, encoding: "utf8" });
+      return JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+    };
+    const first = send("should we upgrade to postgres 17 this quarter, for and against?");
+    expect(first).toContain(nudge);
+    const second = send("compare vite and webpack for our typescript spa, please");
+    expect(second).not.toContain("Classify before the first tool call");
+    expect(second).toContain("budget: ask-before-parallel"); // the per-prompt suffix is kept
+    // compaction start: ss.knowledge.index hands the marker back
+    const { releaseOnce } = createRequire(import.meta.url)("../lib/run-once.js");
+    const prev = { TMPDIR: process.env.TMPDIR, TMP: process.env.TMP, TEMP: process.env.TEMP };
+    process.env.TMPDIR = h; process.env.TMP = h; process.env.TEMP = h;
+    try { expect(releaseOnce("prompt-delegation-nudge", sid)).toBe(true); } finally {
+      for (const [k, v] of Object.entries(prev)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    }
+    expect(send("fix the typo in the readme heading please, it says recieve")).toContain(nudge);
+  });
+
   test("a Pro plan at 0 % carries the ask-before-parallel suffix — the question is asked even on a fresh window", () => {
     // cwd = the fake home: the suffix is dropped whenever the cwd carries an
     // AUTONOMOUS-LOCKOUT sentinel, so running from this repo while a backlog /

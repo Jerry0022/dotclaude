@@ -28,7 +28,11 @@ describe("ship SKILL.md — session title prefix", () => {
   });
 
   test("Pre-Step C sets the shipping prefix and strips every ship prefix first", () => {
-    const mark = section("## Pre-Step C — Mark the session in the sidebar", "## Step 0 — Load Extensions");
+    // The fallback steps and the Desktop-only rule live in
+    // deep-knowledge/session-title.md; Pre-Step C points there.
+    const pre = section("## Pre-Step C — Mark the session in the sidebar", "## Step 0 — Load Extensions");
+    expect(pre).toContain("deep-knowledge/session-title.md` § Fallback");
+    const mark = pre + fs.readFileSync(path.join(__dirname, "deep-knowledge", "session-title.md"), "utf8");
     expect(mark).toContain("`" + SESSION_PREFIX.shipping + "`");
     expect(mark).toContain("`" + SESSION_PREFIX["released-alpha"] + "`");
     expect(mark).toContain("`" + SESSION_PREFIX.test + "`");

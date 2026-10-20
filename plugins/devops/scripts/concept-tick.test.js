@@ -210,7 +210,8 @@ describe("tick", () => {
     let sleeps = 0;
     const res = await tick({ port: PORT, state: statePath, timeout: 8 }, { request, sleep: async () => { sleeps++; } });
     expect(sleeps).toBe(0);
-    expect(calls).toEqual(["/shutdown"]);
+    // The /identity probe (C1) answers without html_path here, so it is ours.
+    expect(calls).toEqual(["/identity", "/shutdown"]);
     expect(res.stdout).toContain("is over");
   });
 
@@ -441,5 +442,63 @@ describe("inspectState / tick — a state file owned by another session (#417)",
     for (let i = 0; i < 4 && !out; i++) out = (await tick({ port: PORT, state: statePath, timeout: 8, owner: "aaaa1111" }, { request })).stdout;
     expect(out).toContain('--mode pulse --port 8883 --state');
     expect(out).toContain('--owner "aaaa1111"');
+  });
+});
+
+describe("tick — a foreign bridge on a reused port (C1)", () => {
+  const foreignHtml = () => path.join(root, "docs/concepts/someone-else.html");
+  const ourHtml = () => path.join(root, LIVE.html_path);
+  function spy(routes) {
+    const calls = [];
+    return { calls, request: async (_p, pathname) => { calls.push(pathname); return routes[pathname] || { ok: false, body: "" }; } };
+  }
+
+  test("a heartbeat from a foreign bridge: no /pending, no wake, FOREIGN_BRIDGE instruction", async () => {
+    writeState(LIVE);
+    writeHtml(LIVE.html_path);
+    const s = spy({
+      "/heartbeat": { ok: true, body: JSON.stringify({ ok: true, html_path: foreignHtml() }) },
+      "/pending": { ok: true, body: JSON.stringify({ pending: true, version: 9, html_path: foreignHtml() }) },
+    });
+    const res = await tick({ port: PORT, state: statePath, timeout: 8 }, { request: s.request });
+    expect(res.stdout).toContain("FOREIGN_BRIDGE");
+    expect(res.stdout).toContain("FRESH port");
+    expect(res.stdout).toContain("ab12cd34");
+    expect(res.stdout).not.toContain("/reset");
+    expect(s.calls).toEqual(["/heartbeat"]);
+  });
+
+  test("a foreign /pending is never processed as ours", async () => {
+    writeState(LIVE);
+    writeHtml(LIVE.html_path);
+    const s = spy({
+      "/heartbeat": { ok: true, body: "" },
+      "/pending": { ok: true, body: JSON.stringify({ pending: true, version: 9, html_path: foreignHtml() }) },
+    });
+    const res = await tick({ port: PORT, state: statePath, timeout: 8 }, { request: s.request });
+    expect(res.stdout).toContain("FOREIGN_BRIDGE");
+    expect(res.stdout).not.toContain("version 9");
+  });
+
+  test("our own bridge (same html_path) still wakes as pending", async () => {
+    writeState(LIVE);
+    writeHtml(LIVE.html_path);
+    const s = spy({
+      "/heartbeat": { ok: true, body: JSON.stringify({ ok: true, html_path: ourHtml() }) },
+      "/pending": { ok: true, body: JSON.stringify({ pending: true, version: 4, html_path: ourHtml() }) },
+    });
+    const res = await tick({ port: PORT, state: statePath, timeout: 8 }, { request: s.request });
+    expect(res.stdout).toContain("version 4");
+    expect(res.stdout).not.toContain("FOREIGN_BRIDGE");
+  });
+
+  test("cleanup never POSTs /shutdown to a foreign bridge", async () => {
+    writeState({ ...LIVE, port: 9001 });
+    writeHtml(LIVE.html_path);
+    const s = spy({ "/identity": { ok: true, body: JSON.stringify({ html_path: foreignHtml() }) } });
+    const res = await tick({ port: PORT, state: statePath, timeout: 8 }, { request: s.request });
+    expect(s.calls).toEqual(["/identity"]);
+    expect(res.stdout).toContain("left running");
+    expect(res.stdout).toContain("CronDelete");
   });
 });

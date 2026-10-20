@@ -301,6 +301,26 @@ function showWidgetCalledThisTurn(transcriptContent) {
   return false;
 }
 
+/** File-edit tool calls (Edit / Write / NotebookEdit) since the turn's last
+ *  prompt entry; null when there is no transcript to read. */
+function editsThisTurn(transcriptContent) {
+  if (!transcriptContent) return null;
+  const lines = transcriptContent.split('\n');
+  let n = 0;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const raw = lines[i].trim();
+    if (!raw) continue;
+    let entry;
+    try { entry = JSON.parse(raw); } catch { continue; }
+    if (entry.type === 'user' && isPromptEntry(entry)) return n;
+    if (entry.type !== 'assistant') continue;
+    const content = entry.message && entry.message.content;
+    if (!Array.isArray(content)) continue;
+    n += content.filter(b => b && b.type === 'tool_use' && /^(Edit|Write|NotebookEdit)$/.test(b.name)).length;
+  }
+  return n;
+}
+
 // ---------------------------------------------------------------------------
 // Card content gates (design § 5.1 - § 5.4)
 // ---------------------------------------------------------------------------
@@ -479,6 +499,7 @@ function lastUserEntryIsNotification(transcriptContent) {
  *                                     the offline renderer path for this install
  * @param {boolean} [s.scheduledTask] — the turn's prompt was a `<scheduled-task …>` wrapper
  * @param {boolean} [s.treeClean]     — no file changed this turn (git status empty / zero edits)
+ * @param {number|null} [s.turnEdits] — file edits made this turn (null = unknown)
  * @param {boolean} [s.shipped]       — ship_release merged something this turn
  * @param {boolean} [s.completionMcpDown] — the completion MCP heartbeat is dead, so the
  *                                     offline renderer is the FIRST instruction, not the third
@@ -514,7 +535,7 @@ function lastUserEntryIsNotification(transcriptContent) {
 function decideAction({
   workHappened, cardRendered, stopHookActive, substantial, silent,
   validationPending, validationAttested, validationOpen, openTasksKnown, openTaskNames, pendingAttested, pluginRoot,
-  scheduledTask, treeClean, shipped, completionMcpDown,
+  scheduledTask, treeClean, turnEdits, shipped, completionMcpDown,
   notificationTurn, cardText, prevCardSignature, desktopClient, cardRelayed,
   widgetFile, widgetCalled, guideActive, guideLoopLive, foreignWidgetTitle: foreignTitle,
 }) {
@@ -546,6 +567,16 @@ function decideAction({
   // carries no card obligation at all when nothing changed.
   if (notificationTurn && !cardRendered && treeClean === true && !shipped) {
     return { action: 'pass', resetFlags: true, exempt: 'notification-no-change' };
+  }
+  // Intermediate notification of a multi-agent run: one agent stopped, others
+  // are still open, and this turn edited nothing. The tree is dirty by design
+  // (the agents' uncommitted work), so the clean-tree exemption above never
+  // applies — and forcing a card per finished agent stacked 5+ cards (and their
+  // re-read context) into one run. The last notification, with no task left
+  // open, still owes the card that reports the whole run.
+  if (notificationTurn && !cardRendered && !shipped && turnEdits === 0
+      && openTasksKnown && Array.isArray(openTaskNames) && openTaskNames.length > 0) {
+    return { action: 'pass', resetFlags: true, exempt: 'notification-work-running' };
   }
 
   // Guide-active exemption (#526): a running /auto-guide loop lives entirely
@@ -1106,6 +1137,7 @@ module.exports = {
   buildNotRelayedReason,
   buildWidgetSkippedReason,
   showWidgetCalledThisTurn,
+  editsThisTurn,
   foreignWidgetTitle,
   isCardWidgetCall,
   CARD_WIDGET_TITLE,

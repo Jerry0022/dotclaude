@@ -1,5 +1,43 @@
 import { describe, test, expect } from "vitest";
-import { isManualShipCommand, stripQuoted } from "./ship-guard-match.js";
+import { isManualShipCommand, stripQuoted, maskQuotedToken, gitCommandRe, matchesGitCommand, WORD_END } from "./ship-guard-match.js";
+
+// Audit row 1: the git matcher behind pre.main.guard / pre.worktree.split-guard.
+describe("matchesGitCommand — real git invocations at any command position", () => {
+  const COMMIT = [gitCommandRe("commit" + WORD_END)];
+  test.each([
+    "git commit -m x",
+    "git add -A && git commit -m x",
+    "true | git commit -F -",
+    "(git commit -m x)",
+    "git -C /tmp/x commit",
+    'git -C "a b" commit',
+    "git -c a=b -c c=d commit",
+    "git --git-dir=.git --work-tree . commit",
+    "FOO=1 git commit",
+    "git.exe commit",
+  ])("%j matches", (cmd) => {
+    expect(matchesGitCommand(cmd, COMMIT)).toBe(true);
+  });
+  test.each([
+    'echo "git commit -m x"',
+    "echo 'a && git commit'",
+    "git log --grep 'git commit'",
+    "git commit-tree abc",
+    "mygit commit",
+    "git status",
+    "",
+  ])("%j does not match", (cmd) => {
+    expect(matchesGitCommand(cmd, COMMIT)).toBe(false);
+  });
+  test("non-string input", () => {
+    expect(matchesGitCommand(undefined, COMMIT)).toBe(false);
+  });
+  test("maskQuotedToken keeps offsets and a quoted span as one token", () => {
+    const s = 'git -C "a b" commit';
+    expect(maskQuotedToken(s)).toHaveLength(s.length);
+    expect(maskQuotedToken(s)).toBe("git -C _____ commit");
+  });
+});
 
 // ---------------------------------------------------------------------------
 // isManualShipCommand — real invocations match, quoted/prose text does not

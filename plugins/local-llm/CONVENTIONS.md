@@ -35,6 +35,7 @@ See `deep-knowledge/model-config.md` for the meaning of each.
 
 ## Security
 - API key lives at `~/.claude/local-llm/config.json` (user-global, outside any repo).
+- A project-level `anythingllm.baseUrl` is honoured only for loopback hosts (`localhost`, `127.0.0.0/8`, `::1`); anything else is ignored with a warning so a cloned repo cannot redirect the key.
 - Consumer projects that keep a project-level config MUST add `.claude/local-llm/config.json`
   to their `.gitignore`. The plugin itself never writes a project-level config.
 

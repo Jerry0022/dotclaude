@@ -170,10 +170,10 @@ describe("--render-card CLI fallback", () => {
     expect(terminal.stdout).toMatch(/^## 👉 📦 Ready — Shippen\?$/m);
     expect(terminal.stdout).toMatch(/^### \*\*✨✨✨ CTA-Test ✨✨✨\*\*/m);
     expect(desktop.stdout.trim()).toBe("");
-    expect(desktop.stderr).toContain("no markdown to relay");
+    expect(desktop.stderr).toContain("IS the whole card");
     // 2026-09-24: "answer with ONE short line" put a stray line under the card
     // on every widget turn — the app's nudge now gets an empty reply.
-    expect(desktop.stderr).toMatch(/reply to it with nothing — no text, no tool call/);
+    expect(desktop.stderr).toMatch(/reply nothing to the app/);
     expect(desktop.stderr).not.toMatch(/ONE short line/);
     // The failed-call fallback line names the title.
     expect(desktop.stderr).toContain("`### **✨✨✨ CTA-Test ✨✨✨**`");
@@ -198,7 +198,7 @@ describe("--render-card CLI fallback", () => {
       // The file carries exactly the inline widget_code.
       expect(desktop.stderr).toContain("----- widget_code -----\n" + html + "\n----- end widget_code -----");
       expect(desktop.stderr).toContain(file.replace(/\\/g, "/"));
-      expect(desktop.stderr).toMatch(/never a shortcut/);
+      expect(desktop.stderr).toMatch(/Only if the call fails/);
     } finally {
       try { unlinkSync(file); } catch { /* best effort */ }
     }

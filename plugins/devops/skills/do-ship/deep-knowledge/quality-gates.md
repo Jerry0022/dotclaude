@@ -33,6 +33,14 @@ Run the full test suite only if:
 If the full suite already passed on the **same build-ID** earlier in the
 session → skip. Log: `Tests skipped — already passed on build <hash>`.
 
+### Step time limit
+
+`ship_build` stops each step (build, lint, test) after `stepTimeoutSec`
+(default **300 s**, 30–1800). A stopped step fails with `failure: "timeout"`
+and the result carries `timeoutHit: { step, limitSec, note }` — a harness stop,
+not a red test. Re-run with a higher `stepTimeoutSec`, or run the full suite
+separately and pass a narrower `testCmd`; name the limit on the card.
+
 ## Deploy-Parity Build (Step 2.5)
 
 The gates above run in the warm working copy. The deploy host does not: it

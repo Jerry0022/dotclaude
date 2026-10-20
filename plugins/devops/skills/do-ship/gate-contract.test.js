@@ -300,9 +300,13 @@ describe("do-ship gate contract — keep / queued / delegated", () => {
   test("queued ships skip ship_hygiene; the queue marker defers install-mutating extension steps", () => {
     const composed = section("## Composed ships", "## Pre-Step 0");
     expect(composed).toMatch(/`--queued`.*Step 6 skips `ship_hygiene`/);
-    expect(composed).toMatch(/Project ship extensions MUST skip any post-ship step that mutates this install/);
-    expect(composed).toMatch(/older than 6 h/);
-    expect(composed).toMatch(/Not a lockout/);
+    // The marker row lives in deep-knowledge/composed-ships.md; SKILL.md names
+    // the moment to read it (marker present) and that it binds extensions.
+    expect(composed).toMatch(/When the marker exists in the target repo root.*read `deep-knowledge\/composed-ships\.md`/);
+    const marker = flat(fs.readFileSync(path.join(__dirname, "deep-knowledge", "composed-ships.md"), "utf8"));
+    expect(marker).toMatch(/Project ship extensions MUST skip any post-ship step that mutates this install/);
+    expect(marker).toMatch(/older than 6 h/);
+    expect(marker).toMatch(/Not a lockout/);
     expect(section("### Post-ship hygiene", "## Reference files")).toMatch(/Skip it for `--queued` ships.*and for every blocked or aborted run/);
   });
 

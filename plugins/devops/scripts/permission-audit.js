@@ -7,6 +7,12 @@
  *   for tool calls that are NOT covered by the current ~/.claude/settings.json
  *   allow-list, and suggests safe additions to reduce mid-run prompts.
  *
+ *   Project scopes count too: a tool call is covered when the global allow-list
+ *   OR the allow-list of the project it ran in allows it. The project is the
+ *   transcript entry's `cwd`; its `.claude/settings.json` and
+ *   `.claude/settings.local.json` are merged in. So a namespace a project
+ *   already allows is never suggested (and never written globally by --apply).
+ *
  *   Used by /do-run autonomous (Step 0.7) and /auto-agents (Step 1.5).
  *
  *   Output: JSON to stdout for skill consumption.
@@ -25,6 +31,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { projectClaudeDir } = require('../hooks/lib/project-root');
 
 const args = process.argv.slice(2);
 const daysArg = args.find((a) => a.startsWith('--days=')) || '--days=7';
@@ -43,15 +50,35 @@ const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
 const SETTINGS_FILE = path.join(os.homedir(), '.claude', 'settings.json');
 const CUTOFF = Date.now() - days * 24 * 60 * 60 * 1000;
 
-let allowList = [];
-try {
-  const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
-  const raw = settings && settings.permissions && settings.permissions.allow;
-  allowList = Array.isArray(raw) ? raw.filter((r) => typeof r === 'string') : [];
-} catch {}
+/** The `permissions.allow` strings of one settings file; [] when absent or unreadable. */
+function readAllow(file) {
+  try {
+    const settings = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const raw = settings && settings.permissions && settings.permissions.allow;
+    return Array.isArray(raw) ? raw.filter((r) => typeof r === 'string') : [];
+  } catch {
+    return [];
+  }
+}
 
-function isMcpAllowed(toolName) {
-  for (const rule of allowList) {
+const allowList = readAllow(SETTINGS_FILE);
+
+// cwd -> merged allow-list of that project's .claude/settings{,.local}.json.
+const projectAllowCache = new Map();
+function projectAllow(cwd) {
+  if (typeof cwd !== 'string' || !cwd) return [];
+  if (!projectAllowCache.has(cwd)) {
+    const dir = projectClaudeDir(cwd);
+    projectAllowCache.set(cwd, [
+      ...readAllow(path.join(dir, 'settings.json')),
+      ...readAllow(path.join(dir, 'settings.local.json')),
+    ]);
+  }
+  return projectAllowCache.get(cwd);
+}
+
+function isMcpAllowed(toolName, rules = allowList) {
+  for (const rule of rules) {
     if (rule === toolName) return true;
     if (rule.endsWith('*')) {
       const prefix = rule.slice(0, -1);
@@ -97,7 +124,7 @@ function bump(map, key) {
   map.set(key, (map.get(key) || 0) + 1);
 }
 
-function processEvent(evt) {
+function processEvent(evt, cwd) {
   const msg = evt.message;
   if (!msg || msg.role !== 'assistant') return;
   const content = msg.content;
@@ -111,7 +138,9 @@ function processEvent(evt) {
 
     if (tool && tool.startsWith('mcp__')) {
       const baseNs = mcpNamespace(tool);
-      if (!isMcpAllowed(tool) && !isMcpAllowed(baseNs)) {
+      const scoped = projectAllow(cwd);
+      const covered = (name) => isMcpAllowed(name) || isMcpAllowed(name, scoped);
+      if (!covered(tool) && !covered(baseNs)) {
         bump(stats.unallowedMcp, baseNs);
       }
     }
@@ -155,6 +184,8 @@ for (const f of files) {
   } catch {
     continue;
   }
+  // Entries carry their own `cwd`; one without it inherits the last seen.
+  let cwd = '';
   for (const line of content.split('\n')) {
     if (!line.trim()) continue;
     let evt;
@@ -164,8 +195,9 @@ for (const f of files) {
       continue;
     }
     const ts = evt.timestamp ? new Date(evt.timestamp).getTime() : 0;
+    if (evt && typeof evt.cwd === 'string' && evt.cwd) cwd = evt.cwd;
     if (ts && ts < CUTOFF) continue;
-    processEvent(evt);
+    processEvent(evt, cwd);
   }
 }
 

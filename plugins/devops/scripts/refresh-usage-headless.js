@@ -93,7 +93,7 @@ function findEdgeExecutable() {
   try {
     const reg = execSync(
       'reg query "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\msedge.exe" /ve',
-      { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }
+      { encoding: 'utf8', timeout: 5000, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }
     );
     const match = reg.match(/REG_SZ\s+(.+)/);
     if (match) {
@@ -339,7 +339,7 @@ function classifyScraperPid(pid, { exec = execSync, needle = path.basename(SCRAP
   let out;
   try {
     out = exec(`powershell -NoProfile -NonInteractive -Command "${ps}"`, {
-      encoding: 'utf8', timeout: 8000, stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8', timeout: 8000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'],
     });
   } catch {
     return 'unknown';
@@ -370,7 +370,7 @@ function killScraperInstance({ exec = execSync, pidFile = SCRAPER_PID_FILE, reap
   if (pid > 0) {
     const owner = classify(pid, { exec });
     if (owner === 'ours') {
-      try { exec(`taskkill /F /PID ${pid}`, { stdio: 'ignore', timeout: 5000 }); } catch {}
+      try { exec(`taskkill /F /PID ${pid}`, { stdio: 'ignore', timeout: 5000, windowsHide: true }); } catch {}
     } else {
       log(`Scraper PID file is stale (pid ${pid} is ${owner}) — not killing, dropping the file`);
     }
@@ -588,7 +588,7 @@ async function launchScraperInstance({ visible = false, url = USAGE_URL } = {}) 
   const args = buildScraperArgs({ visible, url });
 
   log(`Launching dedicated scraper instance (${visible ? 'visible' : 'headless'})...`);
-  const child = spawn(EDGE_EXE, args, { detached: true, stdio: 'ignore' });
+  const child = spawn(EDGE_EXE, args, { detached: true, stdio: 'ignore', windowsHide: !visible });
   // Without a listener, an async spawn error (missing/blocked Edge exe) after
   // unref() becomes an uncaught exception → node exits 1, bypassing every
   // cache fallback. Swallow it — the CDP-ready poll below fails cleanly instead.

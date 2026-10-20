@@ -46,4 +46,26 @@ describe('local-llm governor gate', () => {
     await G.during(async () => 'ok', list);
     expect(JSON.parse(fs.readFileSync(file, 'utf8')).models).toEqual(['coder:14b']);
   });
+  it('keeps a recorded model while Ollama still has it loaded', async () => {
+    const file = path.join(dir, 'inflight', 'local-llm', `${process.pid}.json`);
+    await G.during(async () => 'ok', async () => ['resident:7b', 'coder:14b']);
+    expect(G.recordedModels()).toEqual(['coder:14b']);
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).models).toEqual(['coder:14b']);
+  });
+  it('drops a recorded model once it no longer appears in /api/ps (G3)', async () => {
+    const file = path.join(dir, 'inflight', 'local-llm', `${process.pid}.json`);
+    expect(G.recordedModels()).toEqual(['coder:14b']);
+    // coder:14b was unloaded between requests: it is gone from /api/ps before this one
+    await G.during(async () => 'ok', async () => ['resident:7b']);
+    expect(G.recordedModels()).toEqual([]);
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).models).toBeUndefined();
+  });
+  it('drops a model that was unloaded during the request itself', async () => {
+    let calls = 0;
+    await G.during(async () => 'ok', async () => (calls++ === 0 ? [] : ['a:1b', 'b:3b']));
+    expect(G.recordedModels()).toEqual(['a:1b', 'b:3b']);
+    calls = 0;
+    await G.during(async () => 'ok', async () => (calls++ === 0 ? ['a:1b', 'b:3b'] : ['b:3b']));
+    expect(G.recordedModels()).toEqual(['b:3b']);
+  });
 });

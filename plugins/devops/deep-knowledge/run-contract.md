@@ -68,7 +68,10 @@ node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" abort --reason "<why>"
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" done [--reason "<why>"]
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" batch-clear --reason "<why>"
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>] [--replace]
+node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" items <n,n,...>
 ```
+
+`items <n,n,...>` patches only the live contract's `items` (backlog Step 1.3 records its queue after the selection): header id, `armedAt` and events stay, nothing is archived — unlike `arm --replace`. Issue numbers only (`12,13` or `#12,#13`); exits 1 when there is no active contract.
 
 `status` and `done` measure `qa` the same way the release/card gate does (`run-contract-qa.js#measureQa`, the shared 15 s git budget) instead of against an empty context — `done` refuses to close while `qa` is still owed (unless `--reason` closes it as aborted), and exits 1, not 0, when nothing actually closed (`closed: false`), so a caller reading only the exit code cannot mistake it for success.
 

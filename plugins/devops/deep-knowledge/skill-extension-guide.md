@@ -16,14 +16,17 @@ Layer 3: Project overrides      ← {project}/.claude/skills/{name}/
 
 ## What you can create
 
-In each layer, you can create two files:
+In each layer, the override file is `reference.md`:
 
 | File | Purpose | Example |
 |---|---|---|
-| `SKILL.md` | Override or add steps to the skill | Add a deploy step to /do-ship |
-| `reference.md` | Add context the skill reads before executing | List version files, deploy targets |
+| `reference.md` | Add context the skill reads before executing, or override / add steps | List version files, deploy targets; "Before the PR: run ng build --prod" |
 
-Both are optional. Create only what you need.
+**Legacy `SKILL.md` overrides are deprecated.** A `SKILL.md` in an extension
+folder is still read as a fallback so nothing breaks, but rename it to
+`reference.md` (merge the text when both exist): Claude Code loads every
+`SKILL.md` under `~/.claude/skills/` or `{project}/.claude/skills/` as a user
+skill of its own — a bare `/do-ship` next to the plugin's `devops:do-ship`.
 
 ## Layer 2: User Global Extensions
 
@@ -48,8 +51,7 @@ my-angular-app/
 └── .claude/
     └── skills/
         ├── do-ship/
-        │   ├── SKILL.md        ← "Before PR: run ng build --prod"
-        │   └── reference.md    ← "Deploy via SSH to 192.168.178.32"
+        │   └── reference.md    ← "Before PR: run ng build --prod · deploy via SSH to 192.168.178.32"
         ├── do-run/
         │   └── reference.md    ← "Backlog mode: also trust @our-release-bot as an author"
         └── auto-fix/
@@ -76,8 +78,9 @@ go under the new name.
 Every plugin skill starts with Step 0:
 
 ```
-1. Read ~/.claude/skills/{name}/SKILL.md + reference.md      → global
-2. Read {project}/.claude/skills/{name}/SKILL.md + reference.md → project
+1. Read ~/.claude/skills/{name}/reference.md      → global
+2. Read {project}/.claude/skills/{name}/reference.md → project
+   (legacy SKILL.md in either folder: read as deprecated fallback)
 3. Merge all layers: project rules > global rules > plugin defaults
 4. Proceed with merged ruleset
 ```
@@ -279,6 +282,6 @@ project, and either scaffolds new files or opens the existing ones for editing.
 
 - Never edit plugin files directly — always extend via Layer 2 or 3
 - Extensions are additive by default — they add to the plugin behavior
-- To override a specific step, redefine it in your SKILL.md
-- To add context, use reference.md (no step redefinition needed)
+- To override a specific step or add context, write it in reference.md
+- Never create a SKILL.md in an extension folder — Claude Code loads it as a separate skill
 - Plugin updates (via Claude Code marketplace) never overwrite your extensions

@@ -80,14 +80,42 @@ the reset. The quota resets on its own (artifact usage is recalculated every
 a ship. Prevention runs on every ship: `ship_preflight.workflowHygiene`
 (Step 1e) makes uploads non-fatal and short-lived in each repo it touches.
 
+### In the ship (Step 4)
+
+- **`checks.status: "account-limited"`** (`ciAccountLimited.kinds`: `actions-minutes`, `artifact-quota`): every red check failed only on a GitHub account limit, not on the code. Do not retry into the limit and do not render `ship-blocked` for it: run the full local gate (`ship_build` WITH tests — never `buildIdOnly`), and only when it is green call `ship_release` again with `skipChecks: true`. The card then gets a `tests` line `{ method: "CI", result: "nicht gelaufen — GitHub-Limit (<kind>), lokaler Gate grün" }` and an `open` item to re-run CI after the reset (`gh run rerun <id> --failed`). A red local gate → `ship-blocked` as usual. Also under `$SHIP_LOCKOUT`: the fallback needs no judgment.
+- **Recorded minutes block** (#752): an `actions-minutes` verdict is stored machine-wide per owner/repo (`ciQuota` in `ship_preflight`; `checks.quota` in the result). First ship, interactive: the result is `checks.status: "quota-decision-needed"` + `ciQuotaDecisionNeeded` — ask the user (skip-checks | wait), run the full local gate on skip-checks, then call `ship_release` again with `quotaDecision` = the answer (`skip-checks` | `wait` | `revoke`), never on your own judgement; never fall back to `skipChecks: true` there. Autonomous / `$SHIP_LOCKOUT`: the account-limited path above, no question. The answer is stored per repo for 7 days across sessions. A stored `skip-checks` is applied by later ships (`checks.status: "skipped"`, `checks.storedDecisionApplied: true`; the local gate still runs and the card names the stored decision via `checks.reason`); a stored `wait` blocks with `quotaBlocked: true`. A real red check is never skipped.
+
 ### Shared minutes block and the user's decision (#752)
 
 `ci-account-limits.js` stays the single detector. When it reports kind `actions-minutes` for the red checks (never `artifact-quota`, never a mixed real failure), `ship_release` records the block machine-wide in `~/.claude/devops-ci-quota.json` (key `owner/repo`; override the path with env `DEVOPS_CI_QUOTA_FILE`). Every later ship in any session or worktree sees it: `ship_preflight` returns `ciQuota` plus a `ci-quota` warning, and `ship_release` probes for at most 60 s instead of waiting for CI.
 
-- No stored decision: the result is the account-limited one above (`checks.quota` names the record). Ask the user once, then call `ship_release` with `quotaDecision: "skip-checks"` or `"wait"` (pass it ONLY after an explicit answer).
+- No stored decision, **interactive ship** (`ship_release` called with `interactive: true` and no live `.claude/.ship-lockout` marker): `success: false`, `checks.status: "quota-decision-needed"` and `ciQuotaDecisionNeeded: { repo, resetAt, options: ["skip-checks", "wait"], validForDays: 7, question }`. Nothing is merged and the result does NOT advise `skipChecks`. Ask the user (AskUserQuestion, the two options), run the full local gate when the answer is `skip-checks`, then call `ship_release` again with `quotaDecision` set to the answer. Never answer it yourself and never fall back to `skipChecks: true` here.
+- No stored decision, **autonomous / lockout run** (`interactive` omitted or false, or the lockout marker is live): unchanged — the account-limited result above (`checks.quota` names the record); local gate green → retry with `skipChecks: true`, no question.
+- The answer is stored per project (`owner/repo` of `origin`) for **7 days** from the answer (`checks.quota.decisionExpiresAt`), valid in every session and worktree. It survives the block clearing and a new block inside that window; after 7 days the next minutes block asks again. A store write that fails still applies the answer to the call that carried it.
 - Stored `skip-checks`: the ship merges without CI, `checks.status: "skipped"`, `checks.storedDecisionApplied: true`, `checks.reason` names the block and its reset date. **The card must say that a stored CI-quota decision was applied** — the user did not re-confirm this ship. The local gate (`ship_build` with tests) still runs.
 - Stored `wait`: `success: false`, `quotaBlocked: true`, `checks.status: "quota-blocked"`; `quotaDecision: "revoke"` forgets the answer.
-- Expiry: at the reset date (unknown: 1st of next month 00:00 UTC) or as soon as a check on the repo runs again without a minutes verdict (`checks.quotaCleared: true`). A real red check is never skipped, stored decision or not.
+- Expiry: the block at the reset date (unknown: 1st of next month 00:00 UTC) or as soon as a check on the repo runs again without a minutes verdict (`checks.quotaCleared: true`); the answer 7 days after it was given. A real red check is never skipped, stored decision or not.
+
+## bump "none" — no ring tag
+
+A ship whose `ship_version_bump` ran with `bump: "none"` keeps the version, and
+`alpha/v<version>` already marks the previous ship's commit. `ship_release`
+then creates **no** ring tag — whether the bump comes from the `bump` param or
+from this ship's checkpoint, and even over an explicit `tag`. The result
+carries `tag: null`, `tagSkipped: true`, `tagSkipReason` ("bump: none — version
+unchanged (vX.Y.Z), so no new ring tag; nothing to promote for this ship") and
+the same text in `tagWarning`. The card shows `tagSkipReason` as an info line;
+it is a deliberate skip, not the `tag: null` gap below, so it needs no
+`userFinalTest` item, and Step 5d (promotion) is skipped.
+
+## Offline CLI result file
+
+The offline CLI (`mcp-server/ship/cli.js`) writes every tool result to
+`<repo root>/.claude/.ship-cli-last.json` (`{ tool, at, root, result }`,
+runtime state, git-ignored). When a `ship_release` CLI call's stdout was
+redirected to a file, the run-contract post hook reads this file instead: only
+a `ship_release` entry ≤ 10 min old, of the same repo root, with a merged result
+counts as the do-ship release. JSON on stdout still wins.
 
 ## Post-merge tree verification
 
@@ -133,3 +161,25 @@ skips the ring tag, and even then the result says so: `tagSkipped: true` +
 `tagWarning` (main is ahead of every ring, a promotion has nothing to promote) —
 surface that warning as a `userFinalTest` item, never render an all-green card
 over it (#372). See `docs/superpowers/specs/2026-07-11-tag-channel-system-design.md`.
+
+In the ship (SKILL.md Step 4): **Ring model (channels):** the tag is `alpha/vX.Y.Z` — a ship always tags the earliest
+channel; beta/stable and GitHub Releases come only from a promotion (Step 5d). Pass the
+bare `tag: "vX.Y.Z"` or omit `tag` (derived from the bumped version, `tagDefaulted: true`).
+An explicit `tag: null` returns `tagSkipped` + `tagWarning` → a `userFinalTest` item, never
+an all-green card (#372). `tagSkipReason` (bump none) is a deliberate skip: show it as an
+info line, no `userFinalTest` item, and skip Step 5d.
+
+## Result fields
+
+See `call-examples.md` for the three reference payloads (final ship to main,
+intermediate ship, overlap-with-merge-commit). For intermediate merges: no tag,
+no release notes, no version commit — the tool automatically skips tag/release
+creation when `base` is not `main`.
+
+The tool handles: commit (optional), rebase verification, push (explicit force-with-lease after rebase), PR create (or reuse with mergeability check), **pre-merge CI checks gate (waits for green)**, **pre-merge rebase re-check (closes the checks-window race)**, merge (squash or merge commit), **post-merge tree guard**, **alpha channel tag** (main only), GitHub release deferred to promotion.
+
+Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status, passed, failed, pending}, merged, mergeSha, mergeVerified?, mergeWarning?, mergeStrategy, intermediate, tag, channel, tagVerified, releaseDeferred, postMergeTreeMatch, postMergeWarning, postMergeError?, titleClamped }`.
+
+## autoRebased
+
+**`autoRebased` set** (with `rebaseRequired` + `retestRequired`): only version files collided, so `ship_release` already rebased and bumped again (`autoRebased.to`; the CHANGELOG header follows). Skip the manual rebase: push the branch (`git push --force-with-lease`), run `ship_build`, re-run preflight, then call `ship_release` again — the release commit exists, a `commitMessage` on the clean tree is skipped. Use `autoRebased.to` as `vNew` on the card. `autoRebaseRefused` names why the tool left it to Step 1b.

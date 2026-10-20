@@ -132,6 +132,10 @@ Parse the JSON:
 - `ok:false` → log `⚠ Fail-safe-Timer konnte nicht gesetzt werden — 8h-Watchdog ist
   alleinige Absicherung` and continue. Never abort the run over it.
 - `skipped:true` (non-Windows) → silent, continue.
+- `kept:true` (`armed:false`, with `fireAt` and `owner`) → another session's
+  shutdown is already pending and fires at or after ours; Windows holds only one
+  pending shutdown, so it stays in place (the later fire time wins, no run is cut
+  short). Log `fail-safe kept: {owner}'s shutdown at {fireAt}` and continue.
 
 ### Timer length — "remaining 5h-period + floor"
 
@@ -175,7 +179,11 @@ node "{PLUGIN_ROOT}/scripts/autonomous-shutdown-timer.js" cancel
 ```
 
 `cancel` runs `shutdown /a`; a "nothing scheduled" result (error 1116) is treated as
-success. This is what lets a **BLOCKED** run stay powered on (the fail-safe would
+success. It only aborts a shutdown the owner marker
+(`~/.claude/autonomous-shutdown-owner.json`, written by every `arm`) attributes to
+this session: `cancelled:false, foreign:true, owner` means the pending shutdown is
+another session's and was left alone — log it; that session's own Step 8 cancels
+it. A missing, unreadable or already-past marker keeps the plain `shutdown /a`. This is what lets a **BLOCKED** run stay powered on (the fail-safe would
 otherwise force it off) and lets the graceful 60 s shutdown replace the longer
 fail-safe window on the happy path.
 

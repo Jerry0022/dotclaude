@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * @hook pre.worktree.split-guard
- * @version 0.1.0
+ * @version 0.2.0
  * @event PreToolUse
  * @plugin devops
- * @matcher Bash
+ * @matcher Bash|PowerShell
  * @description WARN (never block) on git-mutating work driven from the main
  *   repo root while an agent session worktree is active.
  *
@@ -33,17 +33,16 @@ require('../lib/plugin-guard');
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 const { isActive: sentinelActive } = require('../lib/ship-sentinel');
+const { gitCommandRe, matchesGitCommand, WORD_END } = require('../lib/ship-guard-match');
 
 // Mutating commands that create the limbo state when run from the main root.
 // Conservative set per spec: commit, checkout -b, merge.
+// Matched at every command position of the quote-masked command (chained,
+// `git -C <dir>`, `git -c k=v`), never inside quoted text.
 const SPLIT_PATTERNS = [
-  /^\s*git\s+commit(\s|$)/,
-  /^\s*git\s+merge(\s|$)/,
-  /^\s*git\s+checkout\s+-b(\s|$)/,
-  /^\s*git\s+checkout\s+-B(\s|$)/,
-  /^\s*git\s+switch\s+-c(\s|$)/,
-  /^\s*git\s+switch\s+-C(\s|$)/,
-];
+  'commit', 'merge', String.raw`checkout\s+-b`, String.raw`checkout\s+-B`,
+  String.raw`switch\s+-c`, String.raw`switch\s+-C`,
+].map(rest => gitCommandRe(rest + WORD_END));
 
 const SESSION_WORKTREE_MARKER = '/.claude/worktrees/';
 
@@ -91,11 +90,12 @@ process.stdin.on('end', () => {
   let hook;
   try { hook = JSON.parse(inputData); } catch { process.exit(0); }
 
-  if ((hook.tool_name || '') !== 'Bash') process.exit(0);
+  const tool = hook.tool_name || '';
+  if (tool !== 'Bash' && tool !== 'PowerShell') process.exit(0);
 
   const cmd = (hook.tool_input || {}).command || '';
   if (!cmd) process.exit(0);
-  if (!SPLIT_PATTERNS.some(re => re.test(cmd))) process.exit(0);
+  if (!matchesGitCommand(cmd, SPLIT_PATTERNS)) process.exit(0);
 
   const cwd = hook.cwd || process.cwd();
 

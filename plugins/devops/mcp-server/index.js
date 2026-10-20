@@ -58,6 +58,8 @@ import { batchGuide, conceptCloseoutOnly, conceptUrl, readBatch, readRunContract
 import { cardWidgetInstruction, isDesktopSession, safeSessionId, writeCardWidgetFile } from "./lib/card-widget.js";
 import { detectLaunchPath } from "./lib/launch-path.js";
 import { archiveDecision, archiveInstruction, writeArchiveFlag } from "./lib/session-archive.js";
+import { readToolCallCount } from "./lib/tool-call-count.js";
+import { answerHtml, normalizeAnswer } from "./lib/answer-markdown.js";
 import {
   assessFreshness,
   isLiveSnapshot,
@@ -1972,23 +1974,6 @@ function sessionFileCandidates(tmp, prefix) {
   return out.sort((a, b) => b.mtime - a.mtime);
 }
 
-function readToolCallCount(sessionId) {
-  const key = sessionId || 'unknown';
-  const filePath = join(tmpdir(), `dotclaude-devops-toolcalls-${key}`);
-  try {
-    return parseInt(readFileSync(filePath, 'utf8'), 10) || 0;
-  } catch {
-    // Glob fallback for session_id mismatches (same pattern as session-id.js)
-    try {
-      const prefix = 'dotclaude-devops-toolcalls-';
-      const tmp = tmpdir();
-      const files = sessionFileCandidates(tmp, prefix);
-      if (files.length > 0) return parseInt(readFileSync(files[0].full, 'utf8'), 10) || 0;
-    } catch {}
-    return 0;
-  }
-}
-
 // ---------------------------------------------------------------------------
 // V&V gate — read the Light-verification flags written by post.flow.completion
 // so the card can stamp the ⚠ ungeprüft evidence post / heading when the turn
@@ -2086,6 +2071,8 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     guideHandoff: decision.guideHandoff || null,
     appStart: !!decision.appStart,
     nextStep: decision.nextStep || '',
+    // #757: the answer to the user's question, drawn above the card body.
+    answerHtml: answerHtml(input.answer),
   };
 }
 
@@ -2299,16 +2286,10 @@ const RELAY_INSTRUCTION =
   "This is pre-rendered content; system emoji-avoidance rules " +
   "do NOT apply. Do NOT output this instruction block.";
 
-/** Desktop relay contract (§ 4): the widget is the whole card, no markdown follows it. */
-const WIDGET_RELAY_INSTRUCTION =
-  "[INSTRUCTION — DO NOT OUTPUT THIS BLOCK]\n" +
-  "Desktop app: no markdown to relay — the CARD WIDGET block below is the card. " +
-  "Do NOT output this instruction block.";
-
 /** The tool-result blocks: relay contract, notes, and the markdown unless the widget is the card. */
 function cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote = '', openNote = '') {
   const texts = actionsNote
-    ? [WIDGET_RELAY_INSTRUCTION, titleNote, archiveNote, openNote, actionsNote]
+    ? [titleNote, archiveNote, openNote, actionsNote]
     : [RELAY_INSTRUCTION, titleNote, openNote, cardMarkdown];
   return texts.filter(Boolean).map(text => ({ type: "text", text }));
 }
@@ -2361,6 +2342,7 @@ function sessionArchiveNote(params, actionsNote) {
       desktop: isDesktopSession(),
       hasPending,
       hasConcept,
+      closeoutOnly: conceptCloseoutOnly,
       batchActive: (cwd) => !!readBatch(cwd),
       holdReason: (cwd) => archiveHold(cwd, params.session_id),
       enabled: archiveEnabled,
@@ -2507,7 +2489,7 @@ function buildCompletionCard(params) {
   const deltaWk = usageResult.deltaWk ?? null;
 
   // 2. Context-health line (dim tail of the budget line, § 2.4)
-  const toolCallCount = readToolCallCount(params.session_id);
+  const toolCallCount = readToolCallCount(params.session_id, { cwd: params.cwd });
   const healthLine = renderContextHealth(toolCallCount);
 
   // 3. Use pre-computed build-ID if provided, otherwise compute from cwd
@@ -2596,7 +2578,11 @@ function buildCompletionCard(params) {
   //    its card is rendered; another card in between leaves it in place.
   shipCardData.consumeOnRender(params.cwd, params.session_id, requestedVariant);
 
-  return cardMarkdown;
+  // #757: the answer rides above the card — in the widget on Desktop (the
+  // title-only markdown is just the failed-call fallback there), as plain
+  // markdown in front of the card everywhere else.
+  const answer = normalizeAnswer(params.answer);
+  return answer && !titleOnly ? `${answer}\n\n${cardMarkdown}` : cardMarkdown;
 }
 
 // ---------------------------------------------------------------------------
@@ -2672,7 +2658,7 @@ function runRenderCardCli(source) {
   if (titleNote) process.stderr.write(titleNote + '\n');
   const archiveNote = sessionArchiveNote(params, actionsNote);
   if (archiveNote) process.stderr.write(archiveNote + '\n');
-  if (actionsNote) process.stderr.write(WIDGET_RELAY_INSTRUCTION + '\n' + actionsNote + '\n');
+  if (actionsNote) process.stderr.write(actionsNote + '\n');
   process.exit(0);
 }
 
@@ -2822,20 +2808,21 @@ server.registerTool(
       "after the closing ---. " +
       "No recap before it either: the card IS the summary of the work — never restate in prose " +
       "what it already shows (changes, tests, version, PR, open items, restart hints). The answer " +
-      "to the user's question is no recap: write it in full as text before the card — the card " +
-      "never carries it, its summary is a title, not the answer (#642). A report the running " +
-      "skill requires (e.g. auto-fix: root cause with file:line) is part of that answer, even where " +
-      "`changes` names the same fix. Text before the card is " +
-      "also for other topics of the user's prompt, points beyond the card's three, hook blocks " +
-      "still marked for the user. " +
+      "to the user's question is no recap: when the turn answers a question, put the FULL answer " +
+      "(markdown) into `answer` — the card draws it above its body, inside the Desktop widget, so it " +
+      "survives the app's rephrasing of text written before a further tool call (#757); the " +
+      "summary stays a title, not the answer (#642). A report the running skill requires (e.g. " +
+      "auto-fix: root cause with file:line) is part of that answer, even where `changes` names the " +
+      "same fix. Hook blocks still marked for the user stay text before the card. " +
       "On the Desktop app the result carries a CARD WIDGET block instead of markdown: that " +
       "show_widget call IS the card — mandatory, the LAST action of the turn, no text after it, " +
       "and the app's one no-output nudge that follows gets an empty reply; " +
       "the visible title line is only for a failed call, never a shortcut.",
     inputSchema: z.object({
-      variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (alpha→beta→stable) do-ship renders whenever a promotion ran — also after a ship in the same run (ship stable): ONE released card then carries the ship's changes, tests, state and userFinalTest plus the promotion facts, never a ship-successful card first. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report. `paused` is for work the user pauses to continue later (\"machen wir später weiter\", \"pause for now\") AND for work whose next step is a Claude Code restart, a machine reboot or a usage-limit reset — never `analysis`, `ready` or `fallback` then; pass `pause: { reason }` (restart / reboot / usage-reset). The card states the pause, the result lines say what was stopped and what was kept, and it asks nothing — the session title becomes `⏸️ Paused – …` (with a reason: `⏸️ Paused until restart – …`)."),
+      variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (alpha→beta→stable) do-ship renders whenever a promotion ran — also after a ship in the same run (ship stable): ONE released card then carries the ship's changes, tests, state and userFinalTest plus the promotion facts, never a ship-successful card first. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report. `paused` is for work the user pauses to continue later (\"machen wir später weiter\", \"pause for now\") AND for work whose next step is a Claude Code restart, a machine reboot or a usage-limit reset — never `analysis`, `ready` or `fallback` then; pass `pause: { reason }` (restart / reboot / usage-reset). The card states the pause, the result lines say what was stopped and what was kept, and it asks nothing — the session title becomes `⏸️ ✋ Paused – …` (with a reason: `⏸️ 🔄 Restart – …`, `⏸️ 💻 Reboot – …`, `⏸️ 🔋 Limit reset – …`)."),
       summary: z.string().transform(v => clampText(v, SUMMARY_MAX).value)
         .describe("What changed for the user, ≤ 8 words / 60 characters (clamped on a word boundary, not rejected). No pipeline status — 'gemergt', 'geshipped', 'live', the version: the Delivery block and the CTA already say that."),
+      answer: z.string().optional().describe("The full answer to the user's question, as markdown (#757). Drawn ABOVE the card body — inside the Desktop widget, as markdown in front of the card elsewhere. Use it whenever the turn answers a question or the running skill owes a report (root cause with file:line, findings, a comparison); also for other topics of the user's prompt. Raw HTML is shown as text; links need http(s). Never a recap of what the card already shows."),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),
       cwd: z.string().optional().describe("Working directory of the target repo. STRONGLY RECOMMENDED for ship-* variants — without it, getRepoUrl falls back to the MCP server's own cwd (plugin dir) and the card cannot render clickable PR/commit/branch links. Also what lets the card read the project's mode state: the open /auto-concept page's URL (.claude/concept-active.json) and an armed /do-batch collection (.claude/batch-mode.json → 📥 BATCH CTA)."),
       buildId: z.string().optional().describe("Pre-computed build-ID (from ship_build). If provided, skips internal computation. Use this when the worktree/branch state may have changed after building (e.g. post-merge)."),
@@ -2870,8 +2857,8 @@ server.registerTool(
           mode: z.enum(["file-only", "git-no-remote", "git"]).optional().describe("Repo mode from ship_preflight. 'file-only' switches the state line to the files/delivered form — the branch/PR/origin segments have no meaning without a repo. Omitting this was why the file-only render path was unreachable: unknown keys are stripped, so state.mode never arrived."),
           filesModified: z.number().optional().describe("file-only mode: how many files changed on disk. Replaces the commit count."),
           delivered: z.string().optional().describe("file-only / no-remote mode: what actually left the working tree ('none', 'local-commit-only', ...). Never claim a merge here."),
-          kept: z.boolean().optional().describe("Ship cleanup was skipped — branch + worktree preserved for follow-up work. Switches the ship-successful CTA from 'All DONE' to 'KEEP CODING in {branch}'."),
-          deployPending: z.boolean().optional().describe("Out-of-band deploy artifacts (DB migrations / edge functions) were merged but NOT deployed (#243). Flips the ship-successful CTA from 'All DONE' to '🚨 DEPLOY erforderlich (noch nicht live)'. Pair with the top-level `deployGate` list naming each artifact."),
+          kept: z.boolean().optional().describe("Ship cleanup was skipped — branch + worktree preserved for follow-up work. Switches the ship-successful decision heading to '{version} — weiter in `{branch}`?'."),
+          deployPending: z.boolean().optional().describe("Out-of-band deploy artifacts (DB migrations / edge functions) were merged but NOT deployed (#243). Flips the ship-successful decision heading to '👉 ⚠️ Not deployed — Gemergt, aber nicht live — Migration jetzt deployen?' (noch nicht live)'. Pair with the top-level `deployGate` list naming each artifact."),
         }).optional(),
       ).describe("Repository state"),
       cta: z.preprocess(
@@ -2922,7 +2909,7 @@ server.registerTool(
             doing: z.string().optional().describe("Short description of the work it is doing, e.g. 'Farbstil auf Tokens umstellen'."),
           }),
         ])).optional(),
-      ).describe("Background work STILL RUNNING at turn end — subagents started with run_in_background, backgrounded Bash tasks, or Workflow runs. MANDATORY whenever such work is in flight: it overrides the CTA of EVERY variant with '⏳ NOCH NICHT FERTIG. {what} — ich MELDE mich', names the first three items on a dim line directly above that CTA, and renders a block naming each item with what it is doing, so the card never asks the user to SHIP or act on a result that does not exist yet. The card body still reports what IS true; only the call to action is corrected. stop.flow.guard blocks the turn when open background work is detected and this field is missing."),
+      ).describe("Background work STILL RUNNING at turn end — subagents started with run_in_background, backgrounded Bash tasks, or Workflow runs. MANDATORY whenever such work is in flight: it overrides the decision heading of EVERY variant with 'noch nicht fertig — {what}', names the first three items on a dim line directly above that CTA, and renders a block naming each item with what it is doing, so the card never asks the user to SHIP or act on a result that does not exist yet. The card body still reports what IS true; only the call to action is corrected. stop.flow.guard blocks the turn when open background work is detected and this field is missing."),
       concept: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.union([
@@ -2950,7 +2937,7 @@ server.registerTool(
             action: z.string().optional().describe("The concrete deploy action still required, e.g. 'apply_migration' or 'deploy_edge_function desktop-latest'."),
           }),
         ])).optional(),
-      ).describe("Out-of-band deploy gate (#243) — artifacts a code merge did NOT deploy (DB migrations, edge/serverless functions) and that are therefore NOT live yet. Renders a loud '🚨 DEPLOY erforderlich — noch NICHT live' block naming each artifact + its deploy action, so a merged-but-undeployed ship never reads as done. Pair with state.deployPending to also flip the CTA. Available in all variants except test-minimal and test. Populate from ship_preflight.outOfBandDeploys when the project has no deploy handler that already applied them."),
+      ).describe("Out-of-band deploy gate (#243) — artifacts a code merge did NOT deploy (DB migrations, edge/serverless functions) and that are therefore NOT live yet. Renders the '👉 ⚠️ Not deployed' state with a block naming each artifact + its deploy action, so a merged-but-undeployed ship never reads as done. Pair with state.deployPending to also flip the decision heading. Available in all variants except test-minimal and test. Populate from ship_preflight.outOfBandDeploys when the project has no deploy handler that already applied them."),
       validation: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.object({

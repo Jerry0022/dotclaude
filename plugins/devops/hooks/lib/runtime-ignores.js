@@ -95,6 +95,8 @@ const PLUGIN_STATE = Object.freeze([
   '.claude/batch-handoff.json',
   '.claude/.ship-in-progress',
   '.claude/.ship-checkpoint.json',
+  // D3: the offline ship CLI's last result (mcp-server/ship/lib/cli-last-result.js).
+  '.claude/.ship-cli-last.json',
   // #712 R6: a delegated --card-data ship's card input (hooks/lib/ship-carddata.js).
   '.claude/.ship-carddata-*.json',
   '.claude/.ship-lockout',
@@ -226,10 +228,12 @@ const CLAUDE_COMMENT = /claude|\bai\b|devops|plugin|session|runtime/i;
  * Remove `isClaudeLine` lines. A paragraph (lines between blank lines) whose
  * every pattern line goes loses its Claude-ish comments too (CLAUDE_COMMENT),
  * so no orphaned "# AI tooling" header stays behind; other comments stay.
- * The first removed line becomes PLACEHOLDER.
+ * With `headComments` (migrate of a `.gitignore`), a comment block directly
+ * above removed lines goes too unless a kept entry follows it before the next
+ * comment or blank line. The first removed line becomes PLACEHOLDER.
  * @returns {{kept:string[], removed:string[]}}
  */
-function dropLines(lines, isClaudeLine) {
+function dropLines(lines, isClaudeLine, { headComments = false } = {}) {
   const removed = [];
   const drop = new Set();
   let first = -1;
@@ -252,7 +256,24 @@ function dropLines(lines, isClaudeLine) {
         const isComment = lines[k].trim().startsWith('#');
         if (hits.includes(k) || (whole && isComment && CLAUDE_COMMENT.test(lines[k]))) drop.add(k);
       }
-      if (first === -1) first = whole ? i : hits[0];
+      // A comment block heads the pattern lines below it (up to the next
+      // comment or blank line); when every one of them goes, it goes too.
+      let g = headComments ? i : j;
+      while (g < j) {
+        const cs = g;
+        while (g < j && (lines[g] === PLACEHOLDER || lines[g].trim().startsWith('#'))) g++;
+        const ps = g;
+        while (g < j && lines[g] !== PLACEHOLDER && !lines[g].trim().startsWith('#')) g++;
+        if (ps === g || ps === cs) continue;
+        let all = true;
+        for (let k = ps; k < g; k++) if (!hits.includes(k)) all = false;
+        if (all) for (let k = cs; k < ps; k++) if (lines[k] !== PLACEHOLDER) drop.add(k);
+      }
+      if (first === -1) {
+        let m = whole ? i : hits[0];
+        for (let k = i; k < m; k++) if (drop.has(k)) { m = k; break; }
+        first = m;
+      }
       for (const k of hits) removed.push(lines[k].trim());
     }
     i = j;
@@ -416,7 +437,7 @@ function migrateGitignore(text) {
     if (!inRange.has(i)) marked.push(l);
     else if (starts.has(i)) marked.push(PLACEHOLDER);
   });
-  const dropped = dropLines(marked, isBlockEntry);
+  const dropped = dropLines(marked, isBlockEntry, { headComments: true });
   removed.push(...dropped.removed);
   const out = [];
   let placed = false;

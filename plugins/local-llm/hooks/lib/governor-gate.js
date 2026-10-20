@@ -88,16 +88,29 @@ function begin(now = Date.now()) { count += 1; write({ count, updatedAt: now });
 function end(now = Date.now()) { count = Math.max(0, count - 1); write(count > 0 ? { count, updatedAt: now } : { count: 0, endedAt: now }); }
 
 /**
+ * Drop recorded models that Ollama no longer has loaded: once a model left
+ * /api/ps it is no longer Claude's to unload, and a later load of the same
+ * name by the user is not Claude's either.
+ */
+function prune(current) {
+  for (const m of [...models]) if (!current.has(m)) models.delete(m);
+}
+
+/**
  * Wrap an async body with begin/end even on throw; models that newly appear in
- * Ollama during it are recorded as Claude-loaded. `list` is a test seam.
+ * Ollama during it are recorded as Claude-loaded, and recorded models that
+ * left /api/ps (checked before and after) are dropped. `list` is a test seam.
  */
 async function during(fn, list = loadedModels) {
   const before = new Set(await list());
+  prune(before);
   begin();
   try { return await fn(); } finally {
-    for (const m of await list()) if (!before.has(m)) models.add(m);
+    const after = new Set(await list());
+    prune(after);
+    for (const m of after) if (!before.has(m)) models.add(m);
     end();
   }
 }
 
-module.exports = { check, begin, end, during, loadedModels, logEvent, home };
+module.exports = { check, begin, end, during, loadedModels, logEvent, home, recordedModels: () => [...models] };

@@ -98,6 +98,30 @@ describe("agent-orchestration.md § Model & Effort Defaults stays the source of 
     expect(defaults).toMatch(/`fable`/);
   });
 
+  it("keeps implementers on sonnet; upgrades only design-heavy work in class free, burn exempt", () => {
+    expect(defaults).toMatch(/\*\*Implementers stay on sonnet\*\*/);
+    expect(defaults).toMatch(/only in budget class `free`/);
+    expect(defaults).toMatch(/Pro always lands there/);
+    expect(defaults).toMatch(/`\/do-run burn`, which\s+upgrades on purpose/);
+    for (const name of ["core", "frontend", "ai", "designer", "qa"]) {
+      const fm = readFileSync(join(PLUGIN_ROOT, "agents", `${name}.md`), "utf8");
+      expect(fm.match(/^model:\s*(\S+)/m)?.[1], `${name}: model`).toBe("sonnet");
+    }
+    const step22 = section(skill, "### 2.2 Agent selection", "### 2.3");
+    expect(step22).toMatch(/\*\*Implementers spawn on `model: sonnet`\*\*/);
+    expect(step22).toMatch(/class `free` \(never on Pro/);
+    expect(step22).toMatch(/\*\*Fewer wake-ups:\*\*/);
+    const policy = readFileSync(join(PLUGIN_ROOT, "deep-knowledge", "agent-proactivity.md"), "utf8");
+    expect(policy).toMatch(/domain agent on `sonnet`; opus only for design-heavy\/ambiguous work in class\s+`free`/);
+  });
+
+  it("caps background wake-ups in the wave rules", () => {
+    const waves = section(orchestration, "### Parallel implementers per wave", "\n## ");
+    expect(waves).toMatch(/\*\*Fewer wake-ups\*\*/);
+    expect(waves).toMatch(/≤ ~5 tool calls is done inline/);
+    expect(waves).toMatch(/< ~2 min[\s\S]*in the foreground, not with `run_in_background`/);
+  });
+
   it("matches every roster row to the agent's frontmatter", () => {
     const rows = defaults.split("\n").filter((l) => /^\| \*\*[a-z]+\*\* \|/.test(l));
     expect(rows.length).toBeGreaterThan(5);

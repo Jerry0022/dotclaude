@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * @hook pre.main.guard
- * @version 0.2.0
+ * @version 0.3.0
  * @event PreToolUse
  * @plugin devops
- * @matcher Bash
+ * @matcher Bash|PowerShell
  * @description Prevent accidental writes on local main/master.
  *
  *   Blocks Bash commands that would mutate main when HEAD is on main/master:
@@ -35,9 +35,10 @@
 // A lib that fails to load (half-written during a plugin update, version skew)
 // makes this hook a silent no-op instead of a hook error on every Bash call
 // (AUD-028).
-let gitOut, sentinelActive, isLinkedWorktree, branchFix, BYPASS;
+let gitOut, sentinelActive, isLinkedWorktree, branchFix, BYPASS, gitCommandRe, matchesGitCommand, WORD_END;
 try {
   require('../lib/plugin-guard');
+  ({ gitCommandRe, matchesGitCommand, WORD_END } = require('../lib/ship-guard-match'));
   ({ gitOut } = require('../lib/git-timeout'));
   ({ isActive: sentinelActive } = require('../lib/ship-sentinel'));
   ({ isLinkedWorktree } = require('../lib/project-root'));
@@ -49,23 +50,16 @@ try {
   process.exit(0);
 }
 
+// Matched at every command position of the (quote-masked) command, so a
+// chained `git add -A && git commit`, `git -C <dir> commit` and
+// `git -c k=v commit` are caught; a commit message or echo that merely
+// mentions "git commit" is not (lib/ship-guard-match.js).
 const WRITE_PATTERNS = [
-  /^\s*git\s+commit(\s|$)/,
-  /^\s*git\s+merge(\s|$)/,
-  /^\s*git\s+rebase(\s|$)/,
-  /^\s*git\s+cherry-pick(\s|$)/,
-  /^\s*git\s+revert(\s|$)/,
-  /^\s*git\s+reset\s+--hard(\s|$)/,
-  /^\s*git\s+apply(\s|$)/,
-  /^\s*git\s+am(\s|$)/,
-  /^\s*git\s+push(\s|$)/,
-  /^\s*git\s+restore(\s|$)/,
-  /^\s*git\s+checkout\s+(--ours|--theirs|--patch|-p)(\s|$)/,
-  /^\s*git\s+checkout\s+.*\s--\s/,
-  /^\s*git\s+clean(\s|$)/,
-  /^\s*git\s+stash\s+(pop|drop|apply|clear)(\s|$)/,
-  /^\s*git\s+update-ref(\s|$)/,
-];
+  'commit', 'merge', 'rebase', 'cherry-pick', 'revert', String.raw`reset\s+--hard`,
+  'apply', 'am', 'push', 'restore', String.raw`checkout\s+(?:--ours|--theirs|--patch|-p)`,
+  'clean', String.raw`stash\s+(?:pop|drop|apply|clear)`, 'update-ref',
+].map(rest => gitCommandRe(rest + WORD_END));
+WRITE_PATTERNS.push(gitCommandRe(String.raw`checkout(?:\s+[^\n;&|]*)?\s--(?=\s)`));
 
 function currentBranch(cwd) {
   return gitOut(cwd, ['symbolic-ref', '--quiet', '--short', 'HEAD']);
@@ -96,12 +90,13 @@ process.stdin.on('end', () => {
   let hook;
   try { hook = JSON.parse(inputData); } catch { process.exit(0); }
 
-  if ((hook.tool_name || '') !== 'Bash') process.exit(0);
+  const tool = hook.tool_name || '';
+  if (tool !== 'Bash' && tool !== 'PowerShell') process.exit(0);
 
   const cmd = (hook.tool_input || {}).command || '';
   if (!cmd) process.exit(0);
 
-  if (!WRITE_PATTERNS.some(re => re.test(cmd))) process.exit(0);
+  if (!matchesGitCommand(cmd, WRITE_PATTERNS)) process.exit(0);
 
   const cwd = hook.cwd || process.cwd();
 

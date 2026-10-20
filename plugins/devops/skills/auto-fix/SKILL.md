@@ -28,9 +28,10 @@ Diagnose and fix the issue: `$ARGUMENTS`
 Check for optional overrides. Use **Glob** to verify each path exists before reading.
 Do NOT call Read on files that may not exist — skip missing files silently (no output).
 
-1. Global: `~/.claude/skills/auto-fix/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/auto-fix/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/auto-fix/reference.md`
+2. Project: `{project}/.claude/skills/auto-fix/reference.md`
    Fallback (pre-PR-2 name): where `auto-fix/` does not exist, read `~/.claude/skills/fix/` / `{project}/.claude/skills/fix/` instead — an extension written before the rename keeps working.
+   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
 3. Merge: project > global > plugin defaults
 
 Project extensions define framework-specific log paths (e.g., Electron logs in

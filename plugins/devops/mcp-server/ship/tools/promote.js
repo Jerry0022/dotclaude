@@ -23,7 +23,9 @@ export const schema = z.object({
   // Constrained on purpose: `version` is interpolated into shell-executed git
   // command strings (git()/gitStrict() run through cmd.exe on Windows), so an
   // unvalidated string is a command-injection surface. Semver-shaped only.
-  version: z.string().regex(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/, "version must be semver-shaped, e.g. 0.113.0").describe("Bare version to promote, e.g. 0.113.0 (no v prefix, no channel)"),
+  // Exactly the channel grammar (lib/channels.js TAG_RE: strict x.y.z): a
+  // prerelease like 1.0.0-beta.1 would be pushed as a tag no consumer parses.
+  version: z.string().regex(/^\d+\.\d+\.\d+$/, "version must be strict x.y.z (the channel tag grammar has no prerelease/build suffix), e.g. 0.113.0").describe("Bare version to promote, e.g. 0.113.0 (no v prefix, no channel)"),
   from: z.enum(["alpha", "beta"]).describe("Source channel the version currently lives in"),
   to: z.enum(["beta", "stable"]).describe("Target channel (must be more stable than source)"),
   releaseNotes: z.string().nullable().default(null).describe("CHANGELOG entry for the stable GitHub Release fallback — ignored for beta"),

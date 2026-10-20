@@ -122,7 +122,7 @@ async function createWorkspace(baseUrl, apiKey, name) {
 }
 
 async function getWorkspace(baseUrl, apiKey, slug) {
-  const res = await requestJson({ baseUrl, path: `/api/v1/workspace/${slug}`, apiKey });
+  const res = await requestJson({ baseUrl, path: `/api/v1/workspace/${encodeURIComponent(slug)}`, apiKey });
   if (!res.ok) return { ok: false, errorType: res.errorType || 'unknown', error: res.error, status: res.status };
   const ws = Array.isArray(res.data?.workspace) ? res.data.workspace[0] : res.data?.workspace;
   return { ok: true, workspace: ws || null };
@@ -131,7 +131,7 @@ async function getWorkspace(baseUrl, apiKey, slug) {
 async function updateWorkspace(baseUrl, apiKey, slug, settings) {
   const res = await requestJson({
     baseUrl,
-    path: `/api/v1/workspace/${slug}/update`,
+    path: `/api/v1/workspace/${encodeURIComponent(slug)}/update`,
     method: 'POST',
     apiKey,
     body: settings,

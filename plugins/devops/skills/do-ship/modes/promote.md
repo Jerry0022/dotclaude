@@ -39,6 +39,10 @@ Parse tag names (`alpha/vX.Y.Z`, `beta/vX.Y.Z`, `stable/vX.Y.Z`, bare
 **numeric** version comparison — never lexicographic, never
 `--sort=v:refname` across channel prefixes.
 
+`ship_promote` accepts exactly this grammar: `version` is strict `x.y.z` (no
+`v`, no prerelease or build suffix like `1.0.0-beta.1`) — a suffixed version
+would become a channel tag no consumer parses, so the schema refuses it.
+
 Render ONE line:
 
 ```
@@ -167,3 +171,33 @@ outputting the card; Desktop app only, skip silently elsewhere.
 There is deliberately NO demote operation (immutable tags + latest-wins
 resolution). A bad promotion is corrected by fixing on a branch, shipping a
 new version (alpha), and fast-track promoting the fix.
+
+## Skipped after a ship (do-ship Step 5d)
+
+Step 5d runs only when the target channel is beta or stable, it came from the
+user, this was a final ship to main that merged, and `ship_release` tagged
+`alpha/v<vNew>`. When a channel WAS requested but Step 5d is skipped, say why
+on the card as an `open` item:
+
+| Reason to skip | `open` item |
+|---|---|
+| `$SHIP_LOCKOUT` / orchestrator arguments | "Promotion auf <channel> ausgesetzt — unbeaufsichtigter Lauf, bitte selbst anstoßen" |
+| Step 4d raised the deploy gate | "Promotion auf <channel> ausgesetzt — erst deployen, dann `promote <channel>`" |
+| intermediate ship (feature branch) | "Promotion erst nach dem Ship auf main" |
+| `tagSkipped` / `tagError` (no alpha tag) | "Promotion ausgesetzt — alpha-Tag fehlt (siehe Test-Punkt)"; with `tagHandoff` the owner-action item from `release-results.md` comes first |
+| no channel tags in the repo (no ring model) | "Kein Ring-Modell (keine Channel-Tags) — nichts zu promoten" |
+
+## Inputs after a ship (do-ship Step 5d)
+
+Follow Steps 0–4 above with these fixed inputs — the Step 2 question is already
+answered by the channel the user named:
+- **Version** = `vNew` of this ship (or the version the user named).
+- **cwd** = this session's cwd; after Step 5b removed the worktree, the
+  captured `$MAIN_REPO_ROOT`.
+- **beta** → `ship_promote({ version, from: "alpha", to: "beta", cwd })`.
+- **stable** → fast-track, ONE call:
+  `ship_promote({ version, from: "alpha", to: "stable", releaseNotes, cwd })`
+  with `releaseNotes` = this version's CHANGELOG entry (the tool skips beta
+  itself; a two-call alpha→beta→stable run fails the monotonicity guard when
+  beta already holds a newer version). Version already on beta — use
+  `from: "beta"`.

@@ -191,10 +191,11 @@ function onShell({ hook, cwd, root, roots, sessionId, s, RC, C }) {
   // merge as the MCP tool, so it records the same `release` — ok/merged from
   // the CLI's JSON result. An interrupted call or an unreadable result records
   // nothing; a blocked one records ok:false (never satisfies the gate).
-  // (A blocked release still exits 0 — cli.js exits 1 only on a throw.) Limit:
-  // stdout redirected to a file leaves no JSON in r.text → nothing recorded.
+  // (A blocked release still exits 0 — cli.js exits 1 only on a throw.)
+  // stdout redirected to a file leaves no JSON in r.text: then the CLI's own
+  // `.claude/.ship-cli-last.json` speaks (fresh, same root, merged only).
   if (f.release && !failed) {
-    const res = C.releaseResult(r.text);
+    const res = C.releaseResult(r.text) || cliLastRelease(hook, cwd, root, C);
     if (res) {
       const r2 = contractRootOf(roots, RC, sessionId);
       RC.record(r2, { k: 'release', ok: res.ok, merged: res.merged, closes: C.closesOf(cliReleaseBody(hook, cwd, C)) }, s);
@@ -204,18 +205,55 @@ function onShell({ hook, cwd, root, roots, sessionId, s, RC, C }) {
   }
 }
 
-/** Best effort: the `body` of the params file the ship CLI was given (for `Closes #N`). */
-function cliReleaseBody(hook, cwd, C) {
+/** Best effort: the params object of the ship CLI call (null when unreadable). */
+function cliReleaseParams(hook, cwd, C) {
   try {
     const cmd = String(C.toolInput(hook).command || '');
     const m = cmd.match(/ship_release\s+("[^"]+"|'[^']+'|[^\s;&|]+)/);
-    if (!m) return '';
+    if (!m) return null;
     const file = m[1].replace(/^["']|["']$/g, '');
     let text = require('fs').readFileSync(require('path').resolve(cwd, file), 'utf8');
     if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
     const p = JSON.parse(text);
-    return p && typeof p.body === 'string' ? p.body : '';
-  } catch { return ''; }
+    return p && typeof p === 'object' ? p : null;
+  } catch { return null; }
+}
+
+/** Best effort: the `body` of the params file the ship CLI was given (for `Closes #N`). */
+function cliReleaseBody(hook, cwd, C) {
+  const p = cliReleaseParams(hook, cwd, C);
+  return p && typeof p.body === 'string' ? p.body : '';
+}
+
+/** How old a `.ship-cli-last.json` entry may be and still stand for this Bash call. */
+const CLI_LAST_MAX_AGE_MS = 10 * 60 * 1000;
+
+/**
+ * D3: the CLI's last result on disk (mcp-server/ship/lib/cli-last-result.js),
+ * for a ship_release whose stdout went to a file. Only a fresh (≤ 10 min)
+ * ship_release entry of the same repo root that merged counts — a stale or
+ * foreign entry, or a blocked release, records nothing.
+ */
+function cliLastRelease(hook, cwd, root, C, { now = Date.now() } = {}) {
+  const fs = require('fs');
+  const path = require('path');
+  const { projectRoot, samePath } = require('../lib/project-root');
+  const params = cliReleaseParams(hook, cwd, C);
+  const candidates = [];
+  if (params && typeof params.cwd === 'string' && params.cwd.trim()) candidates.push(projectRoot(params.cwd));
+  candidates.push(root);
+  for (const dir of candidates) {
+    try {
+      const entry = JSON.parse(fs.readFileSync(path.join(dir, '.claude', '.ship-cli-last.json'), 'utf8'));
+      if (!entry || entry.tool !== 'ship_release' || !entry.result || typeof entry.result !== 'object') continue;
+      const at = Date.parse(entry.at);
+      if (!(at <= now + 60_000 && now - at <= CLI_LAST_MAX_AGE_MS)) continue;
+      if (typeof entry.root !== 'string' || !samePath(entry.root, dir)) continue;
+      if (!entry.result.merged) continue;
+      return { ok: entry.result.success === true, merged: true };
+    } catch { /* missing / unreadable — next candidate */ }
+  }
+  return null;
 }
 
 /** `release` in the contract's root (ship_release acts on tool_input.cwd); a finished backlog closes. */

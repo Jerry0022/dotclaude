@@ -20,6 +20,35 @@ each file where it belongs, inside this ship:
   add it to that list), or delete it when
   it is a stray hook artifact (e.g. a `.claude/` created in a subdirectory).
 
+## Rebase loop
+
+Step 1b, only when `needsRebase: true`:
+
+1. **Set diff3** (if `config-conflictstyle` warning): `git config merge.conflictstyle diff3`
+
+2. **Rebase onto base**:
+   ```bash
+   git fetch origin <base>
+   git rebase origin/<base>
+   ```
+
+3. **If rebase succeeds** (no conflicts): push and re-check (go to 1c).
+
+4. **If rebase has conflicts** — resolve them autonomously (do NOT ask user):
+   follow § Rebase conflict resolution below, steps a–d (resolve both intents
+   semantically, remove **all four** marker lines incl. `|||||||`, `git add`,
+   `git rebase --continue`, repeat).
+   e. **Truly ambiguous conflicts** (both sides change the same logic in contradictory ways and the correct resolution is not determinable from code context): abort the rebase (`git rebase --abort`) and ask the user via AskUserQuestion with a clear, developer-readable explanation:
+      - Show the conflicting snippet (both sides + base)
+      - Explain what each side intended
+      - Ask which intent should win, or whether both need manual reconciliation
+
+      Under `$SHIP_LOCKOUT` the skill's Step 1b BLOCK applies instead of the question.
+
+5. **Push**: `git push --force-with-lease` to update the remote branch.
+
+6. **Verification test**: Run the full test suite to confirm nothing broke. If tests fail, diagnose and fix before proceeding.
+
 ## Rebase conflict resolution
 
    a. `git diff --name-only --diff-filter=U` to list conflicting files.
@@ -41,3 +70,19 @@ The tool **auto-detects** the correct base branch:
 - If on a sub-branch like `feat/42-video-filters-core`, it detects `feat/42-video-filters` as the parent and uses it as base.
 - Otherwise it uses the repository's default branch (resolves `origin/HEAD` — typically `main`, but `master` or any other name works too). Falls back to `main` if `origin/HEAD` is not set.
 - You can override by passing an explicit base: `ship_preflight({ base: "feat/42", cwd: "<cwd>" })`.
+
+## Carried-forward fields
+
+If Step 0 captured an `outOfBandDeploy:` glob list from the extension, pass it:
+`ship_preflight({ cwd: "<cwd>", outOfBandGlobs: ["**/migrations/**", ...] })`.
+Otherwise omit it — the tool uses stack-agnostic defaults.
+
+The result carries `outOfBandDeploys: { detected, files, kinds, globs }` — artifacts
+this diff touches that a code merge will NOT deploy (#243). **Carry this value
+forward to Step 4d.** It is informational, never a hard gate (`ready` is unaffected).
+Its `components` (sub-app manifests whose version the diff changed, #695) feed
+Step 6's `delivery.ship.components` — carry them forward.
+
+## Marker check scopes
+
+The marker check has two scopes. A marker in the files **this ship would land** is a hard error — `ship_release` re-scans immediately before committing, so one left behind by the rebase in 1b is caught there too. A marker anywhere else in the repo is a **warning**: it predates this branch, so report it and open a separate fix rather than holding an unrelated release hostage.

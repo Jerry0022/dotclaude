@@ -1,14 +1,15 @@
 # Codex Integration
 
-Cross-cutting reference for all points where `codex-plugin-cc` skills are
-integrated into devops workflows. All integrations are **optional** —
-they activate only when codex-plugin-cc is installed.
+Cross-cutting reference for all points where Codex is integrated into devops
+workflows. All integrations are **optional** — they activate when the `codex`
+CLI is on PATH (`scripts/codex-safe.sh` checks it). The codex-plugin-cc
+Claude Code plugin is NOT required: the gates never call `/codex:*` skills.
 
 ## Detection & Behavior
 
-Before calling any `/codex:*` skill, check availability. The simplest method:
-attempt to invoke the skill and handle graceful failure. Do NOT block workflows
-if Codex is unavailable.
+Availability = the `codex` CLI: `codex-safe.sh` exits 127 when it is missing
+and skips while a stored usage limit is active. Do NOT block workflows if
+Codex is unavailable.
 
 ## Hard Timeout & Failure-Tolerance (MANDATORY)
 
@@ -73,8 +74,8 @@ bash "{PLUGIN_ROOT}/scripts/codex-safe.sh" --limit-status   # show it
 **Pattern used across all integration points:**
 
 ```
-If codex-plugin-cc is installed → run the Codex step AUTOMATICALLY (no user prompt)
-If not installed → skip silently, proceed with normal workflow
+If the codex CLI is available → run the Codex step AUTOMATICALLY via codex-safe.sh (no user prompt)
+If not (rc 127, limit stored) → skip silently, proceed with normal workflow
 ```
 
 ### Claude API fallback (opt-in)

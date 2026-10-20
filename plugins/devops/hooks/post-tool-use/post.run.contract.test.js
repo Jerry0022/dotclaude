@@ -118,6 +118,42 @@ describe("recording", () => {
       run("Bash", { command: 'echo "node ship/cli.js ship_release p.json"' }, out({ success: true, merged: true }));
       expect(kinds()).toEqual([]);
     });
+
+    describe("D3: stdout redirected → .claude/.ship-cli-last.json speaks", () => {
+      const REDIRECTED = `${CLI} > out.json`;
+      const last = (o) => fs.writeFileSync(path.join(dir, ".claude", ".ship-cli-last.json"),
+        JSON.stringify({ tool: "ship_release", at: new Date().toISOString(), root: dir, ...o }));
+      const releases = () => RC.events(dir).filter(e => e.k === "release");
+
+      test("a fresh merged entry of this root records the release (with closes from params)", () => {
+        fs.writeFileSync(path.join(dir, "params.json"), JSON.stringify({ body: "Closes #9", cwd: dir }));
+        last({ result: { success: true, merged: "main" } });
+        run("Bash", { command: REDIRECTED }, { stdout: "", stderr: "" });
+        expect(releases()).toEqual([expect.objectContaining({ ok: true, merged: true, closes: ["9"] })]);
+      });
+
+      test("a stale entry (> 10 min) records nothing", () => {
+        last({ at: new Date(Date.now() - 11 * 60 * 1000).toISOString(), result: { success: true, merged: "main" } });
+        run("Bash", { command: REDIRECTED }, { stdout: "", stderr: "" });
+        expect(releases()).toEqual([]);
+      });
+
+      test("an entry of another root, another tool, or an unmerged result records nothing", () => {
+        last({ root: path.join(os.tmpdir(), "other-repo"), result: { success: true, merged: "main" } });
+        run("Bash", { command: REDIRECTED }, { stdout: "", stderr: "" });
+        last({ tool: "ship_build", result: { success: true, merged: "main" } });
+        run("Bash", { command: REDIRECTED }, { stdout: "", stderr: "" });
+        last({ result: { success: false, merged: null } });
+        run("Bash", { command: REDIRECTED }, { stdout: "", stderr: "" });
+        expect(releases()).toEqual([]);
+      });
+
+      test("JSON on stdout still wins over the file", () => {
+        last({ result: { success: true, merged: "main" } });
+        run("Bash", { command: CLI }, out({ success: false, merged: false }));
+        expect(releases().every(e => e.ok !== true)).toBe(true);
+      });
+    });
   });
 
   test("ship_release result and closes are recorded", () => {

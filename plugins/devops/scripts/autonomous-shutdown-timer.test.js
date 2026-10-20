@@ -1,5 +1,13 @@
 import { describe, test, expect } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
+  planArm,
+  planCancel,
+  readMarker,
+  writeMarker,
+  clearMarker,
   computeShutdownDelaySeconds,
   isCacheFresh,
   FIVE_HOURS_SEC,
@@ -133,5 +141,48 @@ describe("child-process bounds (audit 2026-10-20)", () => {
     const calls = src.match(/spawnSync\([^;]*;/gs).filter((c) => /exe|shutdownExe/.test(c));
     expect(calls.length).toBeGreaterThanOrEqual(3);
     for (const c of calls) expect(c).toMatch(/timeout:/);
+  });
+});
+
+describe("owner marker — several sessions share ONE Windows shutdown (H1)", () => {
+  const T = Date.parse("2026-10-20T12:00:00.000Z");
+  const H = 60 * 60 * 1000;
+
+  test("arm keeps another session's LATER pending shutdown", () => {
+    expect(planArm({ sessionId: "s1", fireAt: T + 4 * H }, "s2", T + 2 * H, T).action).toBe("keep");
+    expect(planArm({ sessionId: "s1", fireAt: T + 2 * H }, "s2", T + 2 * H, T).action).toBe("keep");
+  });
+
+  test("arm replaces another session's shutdown only when ours fires later", () => {
+    expect(planArm({ sessionId: "s1", fireAt: T + 2 * H }, "s2", T + 4 * H, T).action).toBe("arm");
+  });
+
+  test("arm re-arms freely over our own, a stale, or a missing marker", () => {
+    expect(planArm({ sessionId: "s2", fireAt: T + 4 * H }, "s2", T + 2 * H, T).action).toBe("arm");
+    expect(planArm({ sessionId: "s1", fireAt: T - 1 }, "s2", T + 2 * H, T).action).toBe("arm");
+    expect(planArm(null, "s2", T + 2 * H, T).action).toBe("arm");
+  });
+
+  test("cancel only when the marker names our session (or is stale / missing)", () => {
+    expect(planCancel({ sessionId: "s1", fireAt: T + H }, "s2", T).action).toBe("leave");
+    expect(planCancel({ sessionId: "s2", fireAt: T + H }, "s2", T).action).toBe("cancel");
+    expect(planCancel({ sessionId: "s1", fireAt: T - 1 }, "s2", T).action).toBe("cancel");
+    expect(planCancel(null, "s2", T).action).toBe("cancel");
+  });
+
+  test("marker round-trips through a file; garbage reads as no marker", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "shutdown-marker-"));
+    const file = path.join(dir, "sub", "owner.json");
+    try {
+      writeMarker({ sessionId: "s1", fireAt: T + H }, file);
+      expect(readMarker(file)).toEqual({ sessionId: "s1", fireAt: T + H });
+      fs.writeFileSync(file, "{not json");
+      expect(readMarker(file)).toBe(null);
+      clearMarker(file);
+      expect(readMarker(file)).toBe(null);
+      clearMarker(file); // idempotent
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -52,7 +52,7 @@ export const CARD_VARIANTS = [
  * vanish without a trace (#406).
  */
 export const CARD_KNOWN_KEYS = [
-  "variant", "summary", "lang", "cwd", "buildId", "session_id", "changes", "tests", "nextStep",
+  "variant", "summary", "answer", "lang", "cwd", "buildId", "session_id", "changes", "tests", "nextStep",
   "state", "cta", "userTest", "userFinalTest", "open", "pending", "concept",
   "deployGate", "validation", "verification", "delivery", "promotion", "pause",
 ];
@@ -156,6 +156,7 @@ export function validateCardInput(params) {
   if (!isStr(params.variant)) issues.push({ path: "variant", message: `must be one of ${CARD_VARIANTS.join("|")}` });
   else if (!CARD_VARIANTS.includes(params.variant)) issues.push({ path: "variant", message: `"${params.variant}" is not a card variant — must be one of ${CARD_VARIANTS.join("|")}` });
   if (!isStr(params.summary)) issues.push({ path: "summary", message: "must be a string" });
+  if (params.answer !== undefined && !isStr(params.answer)) issues.push({ path: "answer", message: "must be a markdown string" });
 
   // ship-successful asserts "merged to remote" and the MCP path polices it
   // (variant-guard: no pushed+merged → downgraded to `ready`). On the CLI a

@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.ship.detect
- * @version 0.8.2
+ * @version 0.9.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect ship intent in user prompts and inject Skill('devops:do-ship') instruction.
  *   Triggers on keywords like "ship", "shippen", "ab damit", "mach nen PR",
- *   "merge it", "das kann rein", "fertig", and affirmations after a completion
- *   card ("ja", "yes", "mach", "go", "do it"). The keyword list lives in
+ *   "merge it", "das kann rein", "fertig", and bare affirmations ("ja",
+ *   "yes", "ok", "passt", "mach", "go", "do it") — those ONLY when the turn
+ *   right before ended on a completion card whose decision asks to ship
+ *   (ready / test with the ship question; never analysis, concept, question,
+ *   blocked, or an already-shipped ship-successful / released card — read
+ *   from the transcript via lib/card-guard) AND the branch still has
+ *   unshipped work (lib/ship-unshipped.js). The keyword list lives in
  *   lib/ship-intent.js, shared with prompt.flow.title-work so a ship prompt
  *   is marked `⏳ 🚀 Shipping – ` in the sidebar, never the bare `⏳ `.
  *   Above a context threshold the mandate becomes the delegate instruction
@@ -33,12 +38,14 @@
 // A lib that fails to load (half-written during a plugin update, version skew)
 // makes this hook a silent no-op instead of a hook error on every prompt
 // (AUD-028).
-let gitOut, readSessionFile, parseShipRequest,
+let gitOut, parseShipRequest, cardDelivered, deliveredCardText, lastAssistantText, isCardWidgetCall,
+  safeReadTranscript, CARD_MARKER, isPromptEntry, lastUserPromptText,
   hasUnshippedWork, currentContextTokens, shouldDelegate, shipDelegateInstruction, shipResumeInstruction, shipResumeFor;
 try {
   require('../lib/plugin-guard');
   ({ gitOut } = require('../lib/git-timeout'));
-  ({ readSessionFile } = require('../lib/session-id'));
+  ({ cardDelivered, deliveredCardText, lastAssistantText, isCardWidgetCall, safeReadTranscript, CARD_MARKER } = require('../lib/card-guard'));
+  ({ isPromptEntry, lastUserPromptText } = require('../lib/skill-invocations'));
   ({ parseShipRequest } = require('../lib/ship-intent'));
   ({ hasUnshippedWork } = require('../lib/ship-unshipped'));
   ({ currentContextTokens } = require('../lib/context-size'));
@@ -63,6 +70,83 @@ const PLUGIN_ROOT = path.resolve(__dirname, '..', '..');
  */
 function isGitRepo(cwd) {
   return gitOut(cwd, ['rev-parse', '--is-inside-work-tree']) !== null;
+}
+
+/**
+ * The transcript as it stood before this prompt: when the harness already
+ * appended the prompt being submitted, that last entry is cut off, so the
+ * card scan reads the previous turn and not the new, card-less one.
+ * @param {string} content
+ * @param {string} prompt
+ */
+function priorTurnTranscript(content, prompt) {
+  const lines = content.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const raw = lines[i].trim();
+    if (!raw) continue;
+    let entry;
+    try { entry = JSON.parse(raw); } catch { return content; }
+    if (entry && entry.type === 'user' && isPromptEntry(entry)
+      && lastUserPromptText(raw).trim() === String(prompt || '').trim()) {
+      return lines.slice(0, i).join('\n');
+    }
+    return content;
+  }
+  return content;
+}
+
+/** A decision that asks to ship: "Shippen?", "Trotzdem shippen", "push and merge". */
+const SHIP_QUESTION_RE = /\bship(?:pen|t)?\b|\bpush\s+(?:and|und)\s+merge/i;
+/** Cards whose question is not "ship this work": already shipped, promoted, or a gate bypass. */
+const NOT_A_SHIP_QUESTION_RE = /released|promoted|blocked|⛔|\u{1F680}|\u{1F38A}/iu;
+
+/** The decision (heading + button prompts) of the last card widget of the turn, '' when none. */
+function widgetDecision(transcript) {
+  const lines = transcript.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const raw = lines[i].trim();
+    if (!raw) continue;
+    let entry;
+    try { entry = JSON.parse(raw); } catch { continue; }
+    if (entry.type === 'user' && isPromptEntry(entry)) return '';
+    const content = entry.type === 'assistant' && entry.message && entry.message.content;
+    if (!Array.isArray(content)) continue;
+    for (let b = content.length - 1; b >= 0; b--) {
+      const block = content[b];
+      if (!block || block.type !== 'tool_use' || !isCardWidgetCall(block.name, block.input)) continue;
+      const code = String(block.input.widget_code || '');
+      const m = code.match(/id=["']dc-card-data["'][^>]*>([\s\S]*?)<\/script>/);
+      if (!m) return '';
+      try {
+        const d = JSON.parse(m[1]);
+        const prompts = Array.isArray(d.bt) ? d.bt.map(x => (x && x.p) || '') : [];
+        return { heading: String(d.h || ''), prompts };
+      } catch {
+        return '';
+      }
+    }
+  }
+  return '';
+}
+
+/**
+ * Did the turn right before this prompt end on a completion card whose
+ * decision asks to ship (ready / test with the ship question)? Not an
+ * analysis, a concept waiting, a question card, or an already-shipped
+ * ship-successful / released card — and not when the turn went on to ask a
+ * question of its own after the card. Unreadable → false (no ship).
+ * @param {string} transcript the transcript up to (not including) this prompt
+ */
+function cardAsksToShip(transcript) {
+  if (!transcript || !cardDelivered(transcript)) return false;
+  const tail = (lastAssistantText(transcript) || '').trim();
+  if (tail && !tail.includes(CARD_MARKER) && /\?\s*$/.test(tail)) return false;
+  const text = deliveredCardText(transcript);
+  const heading = (text.match(/^##\s+(.+)$/m) || [])[1];
+  if (heading) return SHIP_QUESTION_RE.test(heading) && !NOT_A_SHIP_QUESTION_RE.test(heading);
+  const w = widgetDecision(transcript);
+  if (!w || NOT_A_SHIP_QUESTION_RE.test(w.heading)) return false;
+  return SHIP_QUESTION_RE.test(w.heading) || w.prompts.some(p => /^\s*ship\b/i.test(p));
 }
 
 let inputData = '';
@@ -94,19 +178,22 @@ process.stdin.on('end', () => {
     /^sicher[.,!]?$/,
     /^auf\s+jeden[.,!]?$/,
     /^ship\s+it[.,!]?$/,
+    /^ok(?:ay)?[.,!]?$/,
+    /^passt[.,!]?$/,
+    /^(?:ja|yes|ok(?:ay)?)[,.!]?\s+passt[.,!]?$/,
   ];
 
+  // An affirmation starts a ship, which pushes and merges — so it counts only
+  // as the answer to a card that ASKED to ship, in the turn right before this
+  // prompt, while the branch still carries unshipped work (audit row 2: an
+  // edit counter that only ever grew turned every later "ja" into a ship).
   let isAffirmationAfterCompletion = false;
   if (affirmations.some(re => re.test(userMessage))) {
-    // Exact read: an affirmation starts a ship, which pushes and merges — only
-    // THIS session's edits may arm it, never the newest counter of another
-    // session (what the glob fallback returns when this session has none).
-    const counterResult = readSessionFile('dotclaude-devops-edits', hook.session_id, { exact: true });
-    if (counterResult) {
-      const editCount = parseInt(counterResult.content, 10) || 0;
-      if (editCount >= 1) {
-        isAffirmationAfterCompletion = true;
-      }
+    let transcript = '';
+    try { transcript = safeReadTranscript(hook.transcript_path); } catch { transcript = ''; }
+    const prior = priorTurnTranscript(transcript || '', hook.prompt || hook.user_message || hook.message || '');
+    if (cardAsksToShip(prior) && hasUnshippedWork(hook.cwd || process.cwd())) {
+      isAffirmationAfterCompletion = true;
     }
   }
 

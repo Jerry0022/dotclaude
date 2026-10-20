@@ -7,9 +7,10 @@ User is leaving the PC. Collect the task, prime permissions, start (a start gate
 ## Step 0 — Load Extensions
 
 Silently check (do not surface "not found"):
-1. `~/.claude/skills/do-run/SKILL.md` + `reference.md` — the do-run extension (already loaded by do-run Step 0)
-2. `{project}/.claude/skills/do-run/SKILL.md` + `reference.md` — same
-   Pre-PR-2 fallback: also read `~/.claude/skills/run-autonomous/` and `{project}/.claude/skills/run-autonomous/` (`SKILL.md` + `reference.md`) when present — an extension written for the old `run-autonomous` skill applies to this mode unchanged.
+1. `~/.claude/skills/do-run/reference.md` — the do-run extension (already loaded by do-run Step 0)
+2. `{project}/.claude/skills/do-run/reference.md` — same
+   Pre-PR-2 fallback: also read `~/.claude/skills/run-autonomous/` and `{project}/.claude/skills/run-autonomous/` (`reference.md`) when present — an extension written for the old `run-autonomous` skill applies to this mode unchanged.
+   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
 3. Merge: project > global > plugin defaults
 
 ## Step 0.1 — Auto-Start Prompt Detection
@@ -67,13 +68,23 @@ Before Task Intake, check for `AUTONOMOUS-RESUME.json` in the project root.
 If not found → proceed to Step 1.
 
 If found:
-1. Read the resume file (contains: task, mode, progress, missing permission, shutdown pref, branch) — and `.claude/run-task.md`, the task verbatim, when present
+1. Read the resume file (contains: task, mode, progress, missing permission, shutdown pref, branch, and `run` — the run's do-run answers: ship, strict, flow, mode, passes, items) — and `.claude/run-task.md`, the task verbatim, when present
 2. The do-run router already asked "Run fortsetzen" / "Run neu starten" before
    its base call (`../SKILL.md` Step 2, naming the task and the missing
    permission). Take that answer — never ask again.
 
 **If resuming:**
 - Re-prime ALL permissions including the previously missing one (run Step 3 again)
+- **Re-arm the run contract with the run's own answers** — Step 7a closed the
+  old one as aborted, and a bare `run-contract.js arm` would fall back to
+  `Ship manuell`, not strict:
+  ```bash
+  node "{PLUGIN_ROOT}/scripts/autonomous-resume-state.js" rearm --session <session-id>
+  ```
+  It arms from the file's `run` block (ship, strict, flow, mode, passes,
+  items). `legacy: true` in its output means the file predates that block:
+  the run continues under the defaults — name that on the card as an open
+  point instead of shipping silently under another mode.
 - Ask via `AskUserQuestion`:
    > header: "Abschluss"
    > question: "Was soll beim nächsten Abschluss passieren?"
@@ -628,7 +639,12 @@ as an open point; those parts are never counted as done.
 the card**, so the card gate does not park on a run that is not coming back
 this session:
 
+For INTERRUPTED, first save the run's do-run answers into the resume file —
+the resume path re-arms from them (Step 0.5), and they are gone once the
+contract is closed:
+
 ```bash
+node "{PLUGIN_ROOT}/scripts/autonomous-resume-state.js" save
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" abort --reason "<status>: <why>"
 ```
 
