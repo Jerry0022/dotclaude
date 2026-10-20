@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.278.0] — 2026-10-20
+
+### Added
+- **Batch card: the blocked-panel warning stands out in red (#741).** The collect point of the `/do-batch` activation card now marks its clause as `**⚠ das rote „Eingabe blockiert"-Panel ist normal**` (en: `**⚠ the red "input blocked" panel is expected**`). The card widget draws an inline `**⚠ …**` span in a point as a red bold `<b class="card-warn">` in the host's `--text-danger` colour. Red, not the yellow of the result-line ⚠ labels, because it announces the red hook panel. The terminal card shows the same clause bold with ⚠. Other points are unchanged and stay escaped. The span never crosses a tag: a URL that swallows the closing `**` leaves the marker literal and its link intact.
+
 ## [0.277.1] — 2026-10-20
 
 ### Fixed

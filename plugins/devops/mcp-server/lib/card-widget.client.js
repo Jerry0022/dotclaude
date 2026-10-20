@@ -82,6 +82,15 @@
       '</span>';
   }
 
+  /** A point's inline `**⚠ …**` span (already escaped) as a red bold warning.
+   *  The span never crosses a tag: a URL that swallowed the closing `**` (URL_SPLIT
+   *  allows `*`) leaves the marker literal instead of breaking the link's href. */
+  function warnMarks(html) {
+    return html.replace(/\*\*(⚠[^*<>]*)\*\*/g, function (m, t) {
+      return '<b class="card-warn" style="font-weight:600;color:' + COLOR.red + '">' + t + "</b>";
+    });
+  }
+
   /** Escape a text line and make every http(s) URL clickable. */
   function linkify(s, tx) {
     return String(s == null ? "" : s).split(URL_SPLIT).map(function (part, i) {
@@ -238,7 +247,7 @@
       d.h ? '<h3 class="card-heading" style="margin:0 0 4px;font-size:16px;font-weight:500">' + esc(d.h) + "</h3>" : "",
       d.cx ? glyphLineHtml("card-context", linkify(String(d.cx).replace(/^›\s*/, ""), d.tx), 13, "0 0 4px") : "",
       Array.isArray(d.pt) && d.pt.length
-        ? '<div class="card-points" style="margin:2px 0 8px">' + d.pt.map(function (p) { return glyphLineHtml("card-point", linkify(p, d.tx)); }).join("") + "</div>"
+        ? '<div class="card-points" style="margin:2px 0 8px">' + d.pt.map(function (p) { return glyphLineHtml("card-point", warnMarks(linkify(p, d.tx))); }).join("") + "</div>"
         : "",
       buttonsRowHtml(d.bt),
       "</div>",

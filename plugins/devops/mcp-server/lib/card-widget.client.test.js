@@ -12,6 +12,7 @@ import {
   cardWidgetTemplate,
   pluginVersion,
 } from "./card-widget.js";
+import { batchGuide } from "./mode-state.js";
 
 const desktop = { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" };
 
@@ -57,6 +58,38 @@ function mountTemplate(model, repoUrl, { mutate = (s) => s } = {}) {
   const html = tpl.replace(/<script src="[^"]*"( onerror="[^"]*")><\/script>/, (_, onerror) => `<script${onerror}>${CARD_CLIENT_SOURCE}</script>`);
   return new JSDOM(`<body>${html}</body>`, { runScripts: "dangerously" });
 }
+
+describe("batch collect point — blocked-panel warning in red (#741)", () => {
+  for (const lang of ["de", "en"]) {
+    test(`${lang}: batchGuide marks the clause as **⚠ …** and keeps the input-blocked wording`, () => {
+      const [collect, ...rest] = batchGuide({ notes: 0, marker: ">>" }, lang).points;
+      expect(collect).toMatch(/\*\*⚠ [^*]*\*\*$/);
+      expect(collect.toLowerCase()).toContain(lang === "de" ? "eingabe blockiert" : "input blocked");
+      expect(rest.join("")).not.toContain("**");
+    });
+
+    test(`${lang}: the widget renders the marked clause red, other points unchanged`, () => {
+      const points = [...batchGuide({ notes: 0, marker: ">>" }, lang).points, "Plain & <b> point"];
+      const dom = mountTemplate({ ...base, lang, points }, "");
+      const rows = [...dom.window.document.querySelectorAll(".card-point")];
+      const warn = rows[0].querySelector("b.card-warn");
+      expect(warn.getAttribute("style")).toContain("--text-danger");
+      expect(warn.textContent.startsWith("⚠")).toBe(true);
+      expect(rows[0].textContent).not.toContain("**");
+      expect(rows[1].querySelector("b")).toBeNull();
+      expect(rows[3].innerHTML).toContain("Plain &amp; &lt;b&gt; point");
+    });
+  }
+
+  test("a URL that swallows the closing ** keeps its link intact (no <b> inside href)", () => {
+    const dom = mountTemplate({ ...base, points: ["**⚠ see https://example.com/x**"] }, "");
+    const row = dom.window.document.querySelector(".card-point");
+    expect(row.querySelector("b.card-warn")).toBeNull();
+    const a = row.querySelector("a");
+    expect(a.getAttribute("href")).not.toContain("<");
+    expect(a.querySelector("b")).toBeNull();
+  });
+});
 
 describe("card-widget.client — template + data", () => {
   for (const [name, model] of Object.entries(CARDS)) {
