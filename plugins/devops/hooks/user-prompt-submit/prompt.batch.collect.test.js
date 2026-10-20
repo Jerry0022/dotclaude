@@ -258,6 +258,10 @@ describe("mode on — an attachment prompt is filed, not executed", () => {
     // the note text goes via a quoted heredoc on stdin, never inside shell quotes
     expect(r.stdout).toContain("<<'NOTE'");
     expect(r.stdout).toContain("readFileSync(0");
+    // a quoted heredoc only ends on a line that is exactly NOTE — no indentation
+    expect(r.stdout).not.toMatch(/ +NOTE(?:\n|\\n|"|$)/);
+    expect(r.stdout).toMatch(/(?:\n|\\n)NOTE(?:\n|\\n|"|$)/);
+    expect(r.stdout).toMatch(/(?:\n|\\n)node -e /);
   });
 
   test("known attachment paths are named so the note can point at them", () => {

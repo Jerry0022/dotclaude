@@ -263,7 +263,8 @@ describe("upsertEnv", () => {
   });
 
   test("falls back to escaped double quotes only when the value holds a single quote", () => {
-    expect(upsertEnv("", "FOO", "it's $x \"y\"")).toBe('FOO="it\'s \\$x \\"y\\""\n');
+    // `$` is not escaped: plain dotenv neither expands nor unescapes `\$`.
+    expect(upsertEnv("", "FOO", "it's $x \"y\"")).toBe('FOO="it\'s $x \\"y\\""\n');
   });
 
   test("single-quotes a value containing #, $, or = (no $VAR expansion)", () => {

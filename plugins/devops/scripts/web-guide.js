@@ -541,8 +541,10 @@ function quoteValue(value) {
   if (!NEEDS_QUOTE_RE.test(value)) return value;
   // Single quotes are literal in every dotenv loader (no $VAR expansion, no
   // escapes) - prefer them; only a value holding a ' needs escaped double quotes.
+  // `$` stays unescaped there: plain dotenv (no dotenv-expand) does no $VAR
+  // expansion and does not unescape `\$`, so escaping it would corrupt the value.
   if (!value.includes("'")) return `'${value}'`;
-  const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$');
+  const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   return `"${escaped}"`;
 }
 

@@ -167,6 +167,20 @@ function runOne({ caseDef, variant, run, opts, bin, bash, graders, runDir }) {
   return result;
 }
 
+// Windows STATUS_CONTROL_C_EXIT (0xC000013A), unsigned and signed.
+const CTRL_C_EXIT_CODES = new Set([130, 0xC000013A, 0xC000013A - 0x100000000]);
+
+/**
+ * True when a run's child was ended by Ctrl-C / SIGINT (or a SIGTERM aimed at
+ * the group). A --timeout-min kill is also SIGTERM (spawnSync's default
+ * killSignal) but is a normal, recorded outcome, not an abort.
+ */
+function wasInterrupted(r) {
+  if (!r || r.timedOut) return false;
+  if (r.signal === "SIGINT" || r.signal === "SIGTERM") return true;
+  return r.exitCode !== null && r.exitCode !== undefined && CTRL_C_EXIT_CODES.has(r.exitCode);
+}
+
 function readResults(dir) {
   return fs.readdirSync(dir)
     .filter((f) => f.endsWith(".json") && f !== "summary.json")
@@ -221,13 +235,17 @@ function main(argv) {
 
   const runDir = path.join(opts.out, `ab-${new Date().toISOString().replace(/[:.]/g, "-")}`);
   const results = [];
-  // Ctrl-C during a (synchronous) run would otherwise skip `finally` and leave
-  // the --a-ref worktree registered.
+  // The run loop is synchronous (spawnSync), so a SIGINT listener only fires
+  // once the loop is over. Ctrl-C reaches the child (same console/process
+  // group) and ends it; wasInterrupted(r) turns that into an abort so the
+  // remaining runs are not launched and `finally` removes the worktree. The
+  // listener still covers a signal that lands outside a child run.
   const onSigint = () => { for (const fn of cleanups) { try { fn(); } catch { /* best effort */ } } process.exit(130); };
   process.once("SIGINT", onSigint);
+  let interrupted = false;
   try {
     fs.mkdirSync(runDir, { recursive: true });
-    for (const c of cases) {
+    outer: for (const c of cases) {
       const graders = loadGraders(c);
       for (let run = 1; run <= opts.runs; run++) {
         for (const v of variants) {
@@ -235,17 +253,22 @@ function main(argv) {
           const r = runOne({ caseDef: c, variant: v, run, opts, bin, bash, graders, runDir });
           console.error(`[ab-run]   exit=${r.exitCode}${r.timedOut ? " TIMEOUT" : ""} ${Math.round(r.durationMs / 1000)}s grades=${JSON.stringify(r.grades)}`);
           results.push(r);
+          if (wasInterrupted(r)) { interrupted = true; break outer; }
         }
       }
     }
   } finally {
     process.removeListener("SIGINT", onSigint);
-    for (const fn of cleanups) fn();
+    for (const fn of cleanups) { try { fn(); } catch (err) { console.error(`[ab-run] cleanup failed: ${err.message}`); } }
   }
   const summary = summarize(results);
   fs.writeFileSync(path.join(runDir, "summary.json"), JSON.stringify(summary, null, 2));
   console.log(formatSummary(summary));
   console.log(`\nresults: ${runDir}`);
+  if (interrupted) {
+    console.error("[ab-run] interrupted (Ctrl-C) - remaining runs skipped, partial results above");
+    return 130;
+  }
   return results.some((r) => r.exitCode !== 0) ? 1 : 0;
 }
 
@@ -258,4 +281,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseArgs, childEnv, resolveApiCredit, gradeOrUndecided, main };
+module.exports = { parseArgs, childEnv, resolveApiCredit, gradeOrUndecided, wasInterrupted, main };
