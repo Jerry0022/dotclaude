@@ -422,13 +422,18 @@ describe.skipIf(!PY)("concept-server hardening — origin on every POST, Host ch
 
       // Host header cannot be set through fetch — use a raw http request (DNS rebinding shape).
       const http = await import("node:http");
-      const rawStatus = (reqPath, host) => new Promise((resolve, reject) => {
-        const req = http.request({ host: "127.0.0.1", port: PORT, path: reqPath, method: "GET", headers: { Host: host } },
+      const rawStatus = (reqPath, host, method = "GET") => new Promise((resolve, reject) => {
+        const req = http.request({ host: "127.0.0.1", port: PORT, path: reqPath, method, headers: { Host: host } },
           (res) => { res.resume(); resolve(res.statusCode); });
         req.on("error", reject); req.end();
       });
       expect(await rawStatus("/heartbeat", `evil.example:${PORT}`)).toBe(403);
       expect(await rawStatus("/heartbeat", `localhost:${PORT}`)).toBe(200);
+      // HEAD and OPTIONS carry the same guard — HEAD would otherwise leak file existence/size.
+      expect(await rawStatus("/package.json", `evil.example:${PORT}`, "HEAD")).toBe(403);
+      expect(await rawStatus("/package.json", `localhost:${PORT}`, "HEAD")).toBe(200);
+      expect(await rawStatus("/decisions", `evil.example:${PORT}`, "OPTIONS")).toBe(403);
+      expect(await rawStatus("/decisions", `localhost:${PORT}`, "OPTIONS")).toBe(204);
 
       expect((await fetch(url("/.claude/concepts/x/attachments/a.html"))).status).toBe(404);
       expect((await fetch(url("/.git"))).status).toBe(404);

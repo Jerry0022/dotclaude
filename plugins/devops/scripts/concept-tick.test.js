@@ -202,6 +202,18 @@ describe("tick", () => {
     expect(res.stdout).toContain("is over");
   });
 
+  test("a port mismatch is not transient — /shutdown without re-checks", async () => {
+    writeState({ ...LIVE, port: 9001 });
+    writeHtml(LIVE.html_path);
+    const calls = [];
+    const request = async (port, pathname) => { calls.push(pathname); return { ok: true, body: "" }; };
+    let sleeps = 0;
+    const res = await tick({ port: PORT, state: statePath, timeout: 8 }, { request, sleep: async () => { sleeps++; } });
+    expect(sleeps).toBe(0);
+    expect(calls).toEqual(["/shutdown"]);
+    expect(res.stdout).toContain("is over");
+  });
+
   test("an unset html_path is ok, like the watcher", () => {
     writeState({ port: PORT, cron_id: "ab12cd34" });
     expect(inspectState(statePath, PORT).cleanup).toBe(false);
@@ -234,7 +246,9 @@ describe("tick", () => {
   test("the gate runs FIRST — no bridge traffic beyond /shutdown", async () => {
     // No state file at all.
     const spy = spyRequest({ "/shutdown": ok("") });
-    const res = await tick({ port: PORT, state: statePath, timeout: 8 }, { request: spy.request });
+    let sleeps = 0;
+    const res = await tick({ port: PORT, state: statePath, timeout: 8 }, { request: spy.request, sleep: async () => { sleeps++; } });
+    expect(sleeps).toBe(2); // a missing state file can be a rewrite window
     expect(spy.calls).toEqual(["/shutdown"]);
     expect(res.stdout).toContain("CronList");
   });

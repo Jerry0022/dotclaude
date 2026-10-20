@@ -92,7 +92,7 @@ function validate(opts) {
  * down a live session. Only ENOENT and a parsed-but-wrong state file are
  * terminal, matching `concept-watch.js` § checkState.
  *
- * @returns {{cleanup:boolean, reason?:string, cronId?:string|null, stateReadable:boolean}}
+ * @returns {{cleanup:boolean, transient?:boolean, reason?:string, cronId?:string|null, stateReadable:boolean}}
  */
 function inspectState(statePath, port, exists = fs.existsSync, owner = '') {
   let raw;
@@ -100,7 +100,7 @@ function inspectState(statePath, port, exists = fs.existsSync, owner = '') {
     raw = fs.readFileSync(statePath, 'utf8');
   } catch (err) {
     if (err && err.code === 'ENOENT') {
-      return { cleanup: true, reason: 'state file is gone', cronId: null, stateReadable: false };
+      return { cleanup: true, transient: true, reason: 'state file is gone', cronId: null, stateReadable: false };
     }
     return { cleanup: false, stateReadable: false };
   }
@@ -139,7 +139,7 @@ function inspectState(statePath, port, exists = fs.existsSync, owner = '') {
   // An unset html_path is "ok", like `concept-watch.js` § checkState: a state
   // file mid-write or from an older launch must not tear the session down.
   if (html && !exists(path.join(root, html))) {
-    return { cleanup: true, reason: `concept HTML ${html} no longer exists`, cronId, stateReadable: true };
+    return { cleanup: true, transient: true, reason: `concept HTML ${html} no longer exists`, cronId, stateReadable: true };
   }
 
   return { cleanup: false, stateReadable: true };
@@ -303,8 +303,9 @@ async function tick(opts, deps = {}) {
   let state = io.inspectState(opts.state, opts.port, io.exists, opts.owner);
   // A single ENOENT / missing HTML can be an in-flight rewrite. Like the
   // watcher's 3-polls-in-a-row rule, re-check before tearing the bridge down;
-  // any non-cleanup verdict in between wins.
-  for (let i = 0; state.cleanup && i < CLEANUP_RECHECKS; i++) {
+  // any non-cleanup verdict in between wins. A port mismatch is a deliberate
+  // rewrite, not a rewrite window, so it tears down without waiting.
+  for (let i = 0; state.cleanup && state.transient && i < CLEANUP_RECHECKS; i++) {
     await io.sleep(opts.recheckMs === undefined ? CLEANUP_RECHECK_MS : opts.recheckMs);
     state = io.inspectState(opts.state, opts.port, io.exists, opts.owner);
   }
