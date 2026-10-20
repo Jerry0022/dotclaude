@@ -107,9 +107,6 @@ Persist to `.claude/audit/<YYYY-MM-DD>-<slug>/requirements.md`.
 For `$SCOPE=all` the catalog covers the 48 h window; the rest of the app is
 audited against implicit requirements (README, docs, visible UI promises).
 
-Honest coverage: Step 4 states `n/a` / `blocked` with a reason, Step 6 requires
-evidence for every finding and every pass.
-
 ## Step 4 — Surface Detection & Dimension Plan
 
 1. Pin the test profile per `{PLUGIN_ROOT}/deep-knowledge/test-plan.md`
@@ -270,6 +267,10 @@ owns the card once its page is open.
 
 ## Rules
 
+- **Evidence or it didn't happen** — every finding and every "pass" names
+  its proof; unproven claims are open questions. `n/a` and `blocked`
+  dimensions show their reason; the scorecard never implies a check that
+  did not run.
 - **Requirements come from the user's words**, not from Claude's taste. Taste
   findings (visual, audio, motion) are `low` unless they break a rule in
   `dimensions.md` or `{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md`.

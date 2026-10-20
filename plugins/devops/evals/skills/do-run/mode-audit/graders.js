@@ -13,9 +13,7 @@ module.exports = (g) => ({
   "mode-file-read": g.toolUsed(/^(Read|Bash|Grep)$/, { inputMatch: /modes[\\/]+audit\.md/ }),
   "requirements-persisted": g.toolUsed("Write", { inputMatch: /\.claude[\\/]+audit[\\/][^"]*requirements\.md/ }),
   "findings-persisted": g.toolUsed("Write", { inputMatch: /\.claude[\\/]+audit[\\/][^"]*findings\.json/ }),
-  "concept-branch": (ctx) =>
-    g.toolUsed("Skill", { inputMatch: /auto-concept/ })(ctx) === true ||
-    g.toolUsed("Bash", { inputMatch: /concept-build\.js/ })(ctx) === true,
-  "source-untouched": g.toolUsed(/^(Edit|Write)$/, { inputMatch: /src[\\/]+(notes|cli)\.js"/, min: 0, max: 0 }),
+  "concept-branch": g.toolUsed("Skill", { inputMatch: /auto-concept/ }),
+  "source-untouched": g.toolUsed(/^(Edit|Write)$/, { inputMatch: /src[\\/]+(notes|cli)\.js\b/, min: 0, max: 0 }),
   "no-direct-ship-tools": g.toolUsed(/dotclaude-ship__ship_/, { min: 0, max: 0 }),
 });

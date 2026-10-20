@@ -59,7 +59,7 @@ node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" batch-clear --reason "<why>"
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>] [--replace]
 ```
 
-`status` prints what is still open for the current segment. `skip` is one
+`status` prints the header and what is still open for the current segment. `skip` is one
 conscious skip (card: ⚠). `park` (backlog) records a blocked /
 `⏸ Rückfrage` item once — it satisfies every open obligation of that item and
 ends its segment. `abort` closes a run that is over with open steps (card:
@@ -67,7 +67,9 @@ ends its segment. `abort` closes a run that is over with open steps (card:
 (`prompt` / `audit`: the final card closes it anyway; `backlog`: once every
 queued item shipped, was skipped or parked); with open obligations it
 refuses unless `--reason` is given, and then closes as aborted. `batch-clear`
-drops a stale do-batch hand-off marker. The contract belongs to the session that armed it.
+drops a stale do-batch hand-off marker. The contract, its markers and the
+card line belong to the session that armed them — a `.claude/` copied into a
+new worktree never gates another session.
 
 ## auto-agents hand-off
 
@@ -113,8 +115,8 @@ exit of this step**, before anything else is reported:
   `modes/autonomous.md` Step 7.
 After a compaction or a resumed session, run `… autonomous-lockout.js
 check` first; `active:true` with `owner:"do-run"` and no ship running
-→ clear it. A lockout left by a crash goes stale after 6 h and every
-reader ignores and removes it.
+→ clear it. A `do-run` lockout left by a crash goes stale after 6 h and
+every reader ignores and removes it.
 
 ## Mode files
 
