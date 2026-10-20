@@ -26,11 +26,12 @@ the suite run inline again and again (→ `qa`, background), 10+ files touched
 
 Every spawn gets an agent card (`pre.agent.announce`) — show it verbatim as
 the next text, also under Quiet; spawns in one message → only the last card.
-Every spawn names its `model` (`opus`, `sonnet`, `fable` — family aliases,
-never a pinned version), even when it equals the session's: an inheriting
-spawn is refused once (`pre.agent.model`). Effort is not a spawn parameter —
-it comes from the agent file. Locating → `scout` (haiku · medium), not
-`Explore`; implementing → a domain agent. `haiku` only for `scout`.
+Every spawn names its `model` (family alias, never a pinned version), even
+when it equals the session's: an inheriting spawn is refused once
+(`pre.agent.model`). Effort comes from the agent file. Locating → `scout`
+(haiku · medium), not `Explore`; `haiku` only for `scout`. Implementing → a
+domain agent on `sonnet`; opus only for design-heavy/ambiguous work in class
+`free`.
 
 ## Precedence: explicit run skill > hard stop > hard go > switch > escalation > tier table
 
@@ -92,8 +93,8 @@ tool-call ceiling in the agent prompt. Class names say what they do.
   all → `get_usage` once, read `budget.cls`; on error keep the last line,
   with none treat it as ask-before-parallel.
 
-Details: `agent-orchestration.md` (roster, waves, QA, budget item in the
-spawn template), `agent-collaboration.md` (handoffs), auto-agents skill.
+Details: `agent-orchestration.md` (roster, models, waves, QA, budget),
+`agent-collaboration.md` (handoffs), auto-agents skill.
 
 ## Proactive `auto-guide` for web hand-offs
 

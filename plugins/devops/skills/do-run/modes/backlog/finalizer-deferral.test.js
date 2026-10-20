@@ -1,7 +1,7 @@
 /**
  * Static-text regression tests for the multi-ship finalizer deferral.
  *
- * The dotclaude project ship extension (`.claude/skills/do-ship/SKILL.md`, this
+ * The dotclaude project ship extension (`.claude/skills/do-ship/reference.md`, this
  * repo's own extension) ends every ship to main with a plugin self-sync that
  * marks the MCP servers stale. `/do-run backlog` composes `/do-ship` once per queued
  * issue from ONE session, so a finalizer run after the first ship blocks the
@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const runner = readFileSync(join(here, "..", "backlog.md"), "utf8");
-const extension = readFileSync(join(here, "..", "..", "..", "..", "..", "..", ".claude", "skills", "do-ship", "SKILL.md"), "utf8");
+const extension = readFileSync(join(here, "..", "..", "..", "..", "..", "..", ".claude", "skills", "do-ship", "reference.md"), "utf8");
 
 function section(text, startHeading, endHeading) {
   const start = text.indexOf(startHeading);
@@ -68,7 +68,9 @@ describe("do-run backlog mode — Step 5 runs the project finalizer once, before
 
   it("reads the project extension, runs the step exactly once, and only when something shipped", () => {
     const item = section(step5, "4. **Project ship-extension finalizer", "5. **Optional shutdown**");
-    expect(item).toContain("{project}/.claude/skills/do-ship/SKILL.md");
+    // Issues audit row 10: reference.md is the override file; the legacy SKILL.md
+    // name (this repo's own extension, still to be renamed) stays a read fallback.
+    expect(item).toContain("{project}/.claude/skills/do-ship/reference.md` (legacy name `SKILL.md`");
     expect(item).toMatch(/exactly once here, only when ≥1 item shipped/);
     expect(item).toMatch(/\*\*before\*\* the lockout is cleared/);
     expect(item).toMatch(/No extension or no such\s+step → nothing to do/);

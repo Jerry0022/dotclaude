@@ -222,3 +222,18 @@ window.
 - **Asking the user per finding.** One batched question, autonomous-first.
 - **Fabricating purposes from thin sources.** A branch with no recoverable
   intent contributes nothing — skip it.
+
+## Light and full check in the ship (do-ship Step 1d)
+
+- **Light check (every ship, direct + intermediate):** gather the purposes of
+  the last 3–5 merged PRs into `<base>` (Claude-authored bodies preferred;
+  fallback: merge commits / CHANGELOG), extract cross-cutting conventions, and
+  audit **in both directions**: (a) the current diff honors prior conventions —
+  e.g. a prior branch's "all elements get hotkeys" must also cover an element
+  added on THIS branch, even though the hotkey task never belonged to it; and
+  (b) a convention THIS branch introduces is retro-applied to the existing
+  artifacts on `<base>` as part of this ship (reverse propagation).
+- **Full check (a rebase/merge happened in 1b, or re-entry after
+  `baseAdvancedDuringChecks`):** additionally verify the merged content still
+  delivers its purposes in **both directions** — their features intact under
+  our changes, our features intact under theirs.

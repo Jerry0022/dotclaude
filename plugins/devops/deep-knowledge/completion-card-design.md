@@ -196,7 +196,7 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   else `👉` — a step the user does by hand), then manual test steps (`userTest`,
   `userFinalTest`) prefixed `🧪` when the list mixes both, then deploy-gate
   artifacts on a deploy card. More than three → `+N weitere` appended to the
-  heading and the rest written in the answer text above the card.
+  heading and the rest written in the card's `answer` field (drawn above the body).
   **Exception — the `test` card's steps (#750):** its `userTest` steps come
   first and are always shown, never folded and not counted against the three;
   the open points follow and only they fold into `+N weitere`.
@@ -535,7 +535,16 @@ stable?`, `🟩 🎊 Promoted Stable — v0.179.0 — done.`, `⏳ 🤖 Agents �
    payload and call again. The same findings a second time render anyway, and
    the Stop gate still checks every card after the turn — the pre-check only
    saves the second render, it never replaces the gate.
-7. **The answer above the card must stay text.** Claude Code asks Opus 5.5,
+7. **The answer travels in the card (#757).** When the turn answers a
+   question, the full answer (markdown) goes into `render_completion_card`'s
+   `answer` field. The renderer draws it ABOVE the card body: inside the
+   Desktop widget as escaped HTML outside `#dc-card` (`lib/answer-markdown.js`:
+   raw HTML shows as text, links need http(s)), and as markdown in front of
+   the terminal card. Safety net: a turn that ends WITHOUT any card, whose
+   user prompt reads as a question and whose last assistant output carries
+   no text, is blocked once by `stop.flow.guard` to re-emit the answer as
+   plain text (`hooks/lib/card-guard-answer.js`); never for a turn with a card.
+   Background: Claude Code asks Opus 5.5,
    Sonnet 5.5, Fable 5 and Mythos 5 for `thinking.display: "updates"`: text
    followed by another tool call (the answer before the card widget, a
    "show the user … verbatim" relay) comes back as a rephrased progress

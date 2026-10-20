@@ -83,13 +83,15 @@ describe("one interval, stated once", () => {
     expect(MONITORING).not.toMatch(/\*\*Poll interval\*\*:\s*15 seconds/);
   });
 
-  test("it names 20s primary and the 15-min backstop (#363)", () => {
+  test("it names 20s primary and no polling cron", () => {
     // Anchored deliberately: a `.*` across newlines would pass on almost any
     // text and pin nothing.
     expect(MONITORING).toMatch(/20 s, primary/);
-    expect(MONITORING).toMatch(/15 min, backstop only/);
+    expect(MONITORING).not.toMatch(/15 min, backstop only/);
+    expect(MONITORING).toContain("WAKER_MISSING");
     expect(MONITORING).not.toMatch(/60 s, backup only/);         // the per-minute cron was hundreds of model turns per session
-    expect(BRIDGE).toContain('CronCreate(cron: "*/15 * * * *"');
+    expect(BRIDGE).not.toContain('CronCreate(cron: "*/15 * * * *"');
+    expect(BRIDGE).toContain("WAKER_MISSING");
     expect(BRIDGE).not.toContain('CronCreate(cron: "* * * * *"');
   });
 

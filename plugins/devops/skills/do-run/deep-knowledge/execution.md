@@ -57,6 +57,7 @@ node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" abort --reason "<status>: <why>"
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" done
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" batch-clear --reason "<why>"
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>] [--replace]
+node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" items <n,n,...>
 ```
 
 `status` prints the header and what is still open for the current segment. `skip` is one
@@ -67,7 +68,9 @@ ends its segment. `abort` closes a run that is over with open steps (card:
 (`prompt` / `audit`: the final card closes it anyway; `backlog`: once every
 queued item shipped, was skipped or parked); with open obligations it
 refuses unless `--reason` is given, and then closes as aborted. `batch-clear`
-drops a stale do-batch hand-off marker. The contract, its markers and the
+drops a stale do-batch hand-off marker. `items` replaces only the live contract's item list
+(backlog Step 1.3 records its queue with it) — its events stay and nothing is
+archived, unlike `arm --replace`. The contract, its markers and the
 card line belong to the session that armed them — a `.claude/` copied into a
 new worktree never gates another session.
 

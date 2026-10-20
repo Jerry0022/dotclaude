@@ -87,6 +87,23 @@ describe("session-archive — which cards archive the session", () => {
     expect(archiveDecision(shipped({ deployGate: [] }), deps()).archive).toBe(true);
   });
 
+  test("a requirement waiting on the user keeps the session; met or deploy-waiting does not", () => {
+    const v = (status, waitsOn) => shipped({ validation: [{ text: "R", status, waitsOn, evidence: "e" }] });
+    expect(archiveDecision(v("unmet", "user"), deps()).reason).toBe("user-validation");
+    expect(archiveDecision(v("partial", "user"), deps()).reason).toBe("user-validation");
+    expect(archiveDecision(v("met", "user"), deps()).archive).toBe(true);
+    expect(archiveDecision(v("unmet", "deploy"), deps()).reason).not.toBe("user-validation");
+  });
+
+  test("a concept that only waits for its close-out keeps the session", () => {
+    expect(archiveDecision(shipped(), deps({ closeoutOnly: () => true })).reason).toBe("concept-closeout");
+    expect(archiveDecision(shipped(), deps({ closeoutOnly: () => false })).archive).toBe(true);
+  });
+
+  test("userFinalTest alone does not block (ship parks harden findings there)", () => {
+    expect(archiveDecision(shipped({ userFinalTest: [{ step: "smoke" }] }), deps()).archive).toBe(true);
+  });
+
   test("a missing cwd fails closed (R6)", () => {
     expect(archiveDecision(shipped({ cwd: "" }), deps()).reason).toBe("no-cwd");
     expect(archiveDecision({ ...shipped(), cwd: undefined }, deps()).reason).toBe("no-cwd");

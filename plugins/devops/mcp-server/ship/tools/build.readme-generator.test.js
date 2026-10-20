@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 // build.test.js). Everything else here is real: fs, child_process, node.
 vi.mock("zod", () => {
   const node = new Proxy(() => node, { get: () => () => node });
-  return { z: { object: () => node, string: () => node, boolean: () => node } };
+  return { z: { object: () => node, string: () => node, boolean: () => node, number: () => node } };
 });
 
 import { handler } from "./build.js";

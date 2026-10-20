@@ -1,17 +1,17 @@
-// auto-extend: scaffold a project extension for do-ship. Expected: both files
-// under .claude/skills/do-ship/ (the current skill name), and a minimal
-// SKILL.md scaffold — frontmatter plus a comment, no invented steps.
+// auto-extend: scaffold a project extension for do-ship. Expected: reference.md
+// only under .claude/skills/do-ship/ (a SKILL.md there would load as a skill of
+// its own), as a minimal scaffold — a comment, no invented steps.
 const fs = require("fs");
 const path = require("path");
 
-const SKILL = ".claude/skills/do-ship/SKILL.md";
+const REF = ".claude/skills/do-ship/reference.md";
 
 module.exports = (g) => ({
   "extend-skill": g.skillInvoked("auto-extend"),
-  "skill-md-scaffolded": g.fileMatches(SKILL, /name:\s*do-ship/),
-  "reference-md-scaffolded": g.fileExists(".claude/skills/do-ship/reference.md"),
+  "reference-md-scaffolded": g.fileExists(REF),
+  "no-skill-md": (ctx) => !fs.existsSync(path.join(ctx.workdir, ".claude/skills/do-ship/SKILL.md")),
   "scaffold-minimal": (ctx) => {
-    const p = path.join(ctx.workdir, SKILL);
+    const p = path.join(ctx.workdir, REF);
     if (!fs.existsSync(p)) return false;
     return !/^#{2,3} (Step|Schritt)/im.test(fs.readFileSync(p, "utf8"));
   },

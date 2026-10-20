@@ -15,6 +15,12 @@
  * It expires at the reset date (unknown → 1st of next month, UTC) and is dropped
  * as soon as a check on the repo runs for real again. The user's decision is
  * stored only on an explicit answer and can be revoked.
+ *
+ * The decision lives apart from the block (`decisions[key]`) and is valid for
+ * DECISION_TTL_MS (7 days) from the answer, across all sessions: the block can
+ * clear and come back within that window without a new question. After the
+ * window the next minutes block asks again (interactive ships) — see
+ * release-results.md § Account-limited CI.
  */
 
 import { execFileSync } from "node:child_process";
@@ -26,6 +32,9 @@ export const DECISIONS = ["skip-checks", "wait"];
 
 /** The only ci-account-limits kind that is recorded: it stops every job of the account. */
 export const MINUTES_KIND = "actions-minutes";
+
+/** How long a user's answer (skip-checks / wait) stays valid for the project. */
+export const DECISION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function storePath(file) {
   return file || process.env.DEVOPS_CI_QUOTA_FILE || join(homedir(), ".claude", "devops-ci-quota.json");
@@ -52,10 +61,32 @@ export function nextMonthResetUtc(now = Date.now()) {
 }
 
 function load(file) {
-  try {
-    const data = JSON.parse(readFileSync(storePath(file), "utf8"));
-    return data && typeof data.repos === "object" && data.repos ? data : { version: 1, repos: {} };
-  } catch { return { version: 1, repos: {} }; }
+  let data;
+  try { data = JSON.parse(readFileSync(storePath(file), "utf8")); } catch { data = null; }
+  if (!data || typeof data.repos !== "object" || !data.repos) data = { version: 1, repos: {} };
+  if (typeof data.decisions !== "object" || !data.decisions) data.decisions = {};
+  // Pre-TTL stores kept the decision inside the block record — move it out.
+  for (const [key, rec] of Object.entries(data.repos)) {
+    if (rec && rec.decision) {
+      if (!data.decisions[key]) data.decisions[key] = rec.decision;
+      delete rec.decision;
+    }
+  }
+  return data;
+}
+
+/** The decision's expiry; a missing/garbled decidedAt expires at once. */
+function decisionExpiresAt(dec) {
+  const t = Date.parse(dec?.decidedAt);
+  return Number.isFinite(t) ? t + DECISION_TTL_MS : NaN;
+}
+
+/** Active (≤ 7 days) decision for the key, or null. Mutates `data` when expired; returns [decision, changed]. */
+function activeDecision(data, key, now) {
+  const dec = data.decisions[key];
+  if (!dec) return [null, false];
+  if (!(decisionExpiresAt(dec) > now)) { delete data.decisions[key]; return [null, true]; }
+  return [{ ...dec, expiresAt: new Date(decisionExpiresAt(dec)).toISOString() }, false];
 }
 
 function save(data, file) {
@@ -83,10 +114,12 @@ export function readRecord(key, { now = Date.now(), file } = {}) {
     try { save(data, file); } catch { /* read-only home — still report expired */ }
     return null;
   }
-  return { key, ...rec };
+  const [decision, changed] = activeDecision(data, key, now);
+  if (changed) { try { save(data, file); } catch { /* still report it expired */ } }
+  return { key, ...rec, ...(decision ? { decision } : {}) };
 }
 
-/** Record (or refresh) a detected block; an existing decision is kept. */
+/** Record (or refresh) a detected block; a still-valid decision (≤ 7 days) applies to it. */
 export function recordBlock(key, { now = Date.now(), file, resetAt } = {}) {
   if (!key) return null;
   const data = load(file);
@@ -94,10 +127,10 @@ export function recordBlock(key, { now = Date.now(), file, resetAt } = {}) {
   data.repos[key] = {
     detectedAt: prev?.detectedAt || new Date(now).toISOString(),
     resetAt: resetAt || nextMonthResetUtc(now),
-    ...(prev?.decision ? { decision: prev.decision } : {}),
   };
+  const [decision] = activeDecision(data, key, now);
   save(data, file);
-  return { key, ...data.repos[key] };
+  return { key, ...data.repos[key], ...(decision ? { decision } : {}) };
 }
 
 /** Store the user's explicit answer. Only meaningful while a block is recorded; returns null otherwise. */
@@ -107,22 +140,22 @@ export function setDecision(key, value, { now = Date.now(), file } = {}) {
   if (!rec) return null;
   const data = load(file);
   if (!data.repos[key]) return null; // cleared by another session in between
-  data.repos[key].decision = { value, decidedAt: new Date(now).toISOString() };
+  data.decisions[key] = { value, decidedAt: new Date(now).toISOString() };
   save(data, file);
-  return { key, ...data.repos[key] };
+  return { key, ...data.repos[key], decision: { ...data.decisions[key], expiresAt: new Date(now + DECISION_TTL_MS).toISOString() } };
 }
 
 /** Forget the user's decision; the detected block stays until it expires or checks run again. */
 export function revokeDecision(key, { file } = {}) {
   if (!key) return false;
   const data = load(file);
-  if (!data.repos[key]?.decision) return false;
-  delete data.repos[key].decision;
+  if (!data.decisions[key]) return false;
+  delete data.decisions[key];
   save(data, file);
   return true;
 }
 
-/** Drop the whole record (checks ran with steps again). */
+/** Drop the block (checks ran with steps again). The user's answer keeps its 7-day validity. */
 export function clearRecord(key, { file } = {}) {
   if (!key) return false;
   const data = load(file);
@@ -141,5 +174,6 @@ export function describeRecord(rec) {
     resetAt: rec.resetAt,
     decision: rec.decision?.value || null,
     decidedAt: rec.decision?.decidedAt || null,
+    decisionExpiresAt: rec.decision?.expiresAt || null,
   };
 }

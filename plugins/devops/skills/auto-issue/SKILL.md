@@ -58,9 +58,10 @@ the card.
 
 Check for optional overrides; skip missing files silently.
 
-1. Global: `~/.claude/skills/auto-issue/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/auto-issue/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/auto-issue/reference.md`
+2. Project: `{project}/.claude/skills/auto-issue/reference.md`
    Fallback (pre-PR-2 name): where `auto-issue/` does not exist, read `~/.claude/skills/setup-issue/` / `{project}/.claude/skills/setup-issue/` instead — an extension written before the rename keeps working.
+   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
 3. Merge: project > global > plugin defaults
 
 **Project extensions define:**

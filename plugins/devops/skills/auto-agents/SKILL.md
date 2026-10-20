@@ -41,9 +41,10 @@ Spawned agents follow the same rule: they report, they do not start skills.
 
 Check for optional overrides; skip missing files silently.
 
-1. Global: `~/.claude/skills/auto-agents/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/auto-agents/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/auto-agents/reference.md`
+2. Project: `{project}/.claude/skills/auto-agents/reference.md`
    Fallback (pre-PR-2 name): where `auto-agents/` does not exist, read `~/.claude/skills/run-agents/` / `{project}/.claude/skills/run-agents/` instead — an extension written before the rename keeps working.
+   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Inputs: arguments, plan and usage
@@ -142,6 +143,13 @@ here regardless of caller.
 
 Select agents using the roster, criteria, and complexity tiers from
 `deep-knowledge/agent-orchestration.md` § Agent Selection.
+
+**Implementers spawn on `model: sonnet`** — no `sonnet → opus` for a
+well-specified bundle; opus only for design-heavy/ambiguous work and only in
+`[budget]` class `free` (never on Pro, also under `--from=do-run`; `--burn`
+keeps its own overrides). **Fewer wake-ups:** one agent per disjoint bundle,
+≤ ~5 tool calls stay inline, commands under ~2 min run in the foreground.
+Both: same doc § Model override rules and § Parallel implementers, item 6.
 
 ### 2.3 Permission audit (parallel and full ceremony)
 

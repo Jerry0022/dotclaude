@@ -15,12 +15,17 @@
  *   was ready had to wait for a restart. Same tools, same zod validation, same
  *   checkpoint record as the server; the result JSON goes to stdout.
  *
+ *   Each result is also written to <repo root>/.claude/.ship-cli-last.json
+ *   (lib/cli-last-result.js) — the run-contract post hook's fallback when
+ *   stdout was redirected to a file, so a CLI ship_release still counts.
+ *
  *   Exit codes: 0 the handler returned (its result may still say ok:false),
  *   1 the handler threw, 2 unknown tool or invalid params.
  */
 
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { writeLastResult } from "./lib/cli-last-result.js";
 
 import { schema as preflightSchema, handler as preflightHandler } from "./tools/preflight.js";
 import { schema as buildSchema, handler as buildHandler } from "./tools/build.js";
@@ -76,6 +81,7 @@ if (!parsed.success) {
 try {
   const result = await handler(parsed.data);
   recordStep(tool, parsed.data, result);
+  writeLastResult(tool, parsed.data, result);
   process.stdout.write(JSON.stringify(result, null, 2) + "\n"); // stdout-ok — CLI result
   process.exit(0);
 } catch (e) {

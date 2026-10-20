@@ -56,7 +56,7 @@ const {
 } = require('./card-guard');
 const { detectCardHandoff, webGuideInvokedThisTurn } = require('./guide-handoff');
 const validationGaps = require('./validation-gaps');
-const { scanOpenTasks, openTaskNames } = require('./pending-tasks');
+const { scanOpenTasksInFile, openTaskNames } = require('./pending-tasks');
 const { readSessionFile, sessionFile, writeSessionFile } = require('./session-id');
 const {
   BG_RUN_MAX_MS, parseBackgroundRuns, VERIFICATION_EXEMPT_VARIANTS,
@@ -291,7 +291,7 @@ function check(input, { home, tmp } = {}) {
     const validationPending = readSessionFile('dotclaude-devops-validation-pending', sessionId, EXACT) !== null;
     const transcriptPath = findTranscript(sessionId, home, input && input.cwd);
     const transcript = transcriptPath ? safeReadTranscript(transcriptPath, PENDING_TAIL_BYTES) : '';
-    const openTasks = transcript ? openTaskNames(scanOpenTasks(transcript)) : null;
+    const openTasks = transcript ? openTaskNames(scanOpenTasksInFile(transcriptPath, PENDING_TAIL_BYTES)) : null;
     const verificationOwed = readVerificationOwed(sessionId);
     const writeTools = writeToolsThisTurn(transcript);
     // #617: no transcript → whether the guide ran is unknown, so no nudge.

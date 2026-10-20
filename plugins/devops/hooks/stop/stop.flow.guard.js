@@ -87,10 +87,11 @@ const {
   lastUserEntryIsNotification,
   safeReadTranscript,
   showWidgetCalledThisTurn,
+  editsThisTurn,
   foreignWidgetTitle,
   PENDING_TAIL_BYTES,
 } = require('../lib/card-guard');
-const { scanOpenTasks, openTaskNames } = require('../lib/pending-tasks');
+const { scanOpenTasksInFile, openTaskNames } = require('../lib/pending-tasks');
 const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { releaseOnce } = require('../lib/run-once');
 const { isGuideActive, isGuideLoopLive } = require('../../scripts/guide-active-state');
@@ -117,6 +118,7 @@ function interruptReason(title) {
   ].join('\n');
 }
 const { readCardData, renderFromFileInstruction } = require('../lib/ship-carddata');
+const { ANSWER_ASKED_FLAG, shouldAskForAnswer, buildAnswerMissingReason } = require('../lib/card-guard-answer');
 
 /**
  * Did this turn change any file? `git status --porcelain` is the truth when
@@ -192,10 +194,10 @@ process.stdin.on('end', () => {
   //  - did THIS turn start from a task-notification rather than a user prompt
   //    (design § 5.5) — the last user-role transcript entry names it.
   // The wider PENDING slice is used so an agent launched early in a long turn
-  // is still seen; scanOpenTasks short-circuits when no launch marker is there.
+  // is still seen; one older than the slice is found by a full streamed scan.
   const transcript = silent ? '' : safeReadTranscript(hook.transcript_path, PENDING_TAIL_BYTES);
   const substantial = isSubstantialAnswer(transcript);
-  const openTasks = silent ? [] : openTaskNames(scanOpenTasks(transcript));
+  const openTasks = silent ? [] : openTaskNames(scanOpenTasksInFile(hook.transcript_path, PENDING_TAIL_BYTES));
   const notificationTurn = !silent && lastUserEntryIsNotification(transcript);
   // A card shown after the last render proves it was RELAYED, not just
   // rendered (#449). It also backs up a failed flag write: a shown card alone
@@ -245,6 +247,7 @@ process.stdin.on('end', () => {
     pluginRoot: process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..'),
     scheduledTask,
     treeClean,
+    turnEdits: notificationTurn ? editsThisTurn(transcript) : null,
     shipped,
     completionMcpDown,
     notificationTurn,
@@ -303,6 +306,24 @@ process.stdin.on('end', () => {
   // instruction like the card's (exact title, no get_session), delivered as a
   // one-time block; the per-session marker lets the follow-up stop through
   // whatever happens, so this never loops.
+  // #757 safety net: a card-less turn that leaves the user's question without
+  // any visible answer text is blocked once to re-emit it. Never with a card —
+  // the card's `answer` field carries the answer there.
+  const answerAsked = readSessionFile(ANSWER_ASKED_FLAG, sessionId, EXACT);
+  if (answerAsked && decision.action !== 'block') {
+    try { fs.unlinkSync(answerAsked.filePath); } catch { /* already gone */ }
+  } else if (decision.action !== 'block' && shouldAskForAnswer({
+    cardRendered, stopHookActive, alreadyAsked: !!answerAsked, silent,
+    exempt: scheduledTask || guideActive || notificationTurn, transcript,
+  })) {
+    try {
+      writeSessionFile(sessionFile(ANSWER_ASKED_FLAG, sessionId), String(Date.now()));
+      decision.action = 'block';
+      decision.reason = buildAnswerMissingReason();
+      decision.answerBlock = true;
+    } catch { /* unwritable marker → no block, never loop */ }
+  }
+
   let interruptBlock = false;
   if (decision.action !== 'block' && !silent && !scheduledTask && !guideActive) {
     const asked = readSessionFile(INTERRUPT_FLAG, sessionId, EXACT);
@@ -328,7 +349,7 @@ process.stdin.on('end', () => {
     //   { decision: "block", reason: "..." } → blocks stop, feeds reason to Claude
     let reason = decision.reason;
     // The F5 rename asks for no card at all — no card-data pointer on it.
-    const pendingCard = (cardRendered || interruptBlock) ? null : readCardData(hook.cwd, sessionId);
+    const pendingCard = (cardRendered || interruptBlock || decision.answerBlock) ? null : readCardData(hook.cwd, sessionId);
     if (pendingCard) {
       const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
       reason = `${renderFromFileInstruction(pendingCard, { pluginRoot, cwd: hook.cwd, sessionId })}\n\n${reason}`;

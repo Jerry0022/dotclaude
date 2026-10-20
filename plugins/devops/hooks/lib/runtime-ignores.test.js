@@ -137,6 +137,31 @@ describe("canonical .gitignore block — migrate, check, exclude cleanup", () =>
     for (const keep of ["node_modules/", "dist/", ".claude/settings.json", "# Kept local in this repo"]) expect(lines).toContain(keep);
   });
 
+  test("migrate drops a comment that only described removed lines, keeps one that still heads a kept line (#775)", () => {
+    const mixed = [
+      "node_modules/",
+      "# build output",
+      "dist/",
+      "# local scratch notes",
+      ".claude/worktrees/",
+      ".claude/todos/",
+      "# editor leftovers",
+      "*.swp",
+      ".claude/plans/",
+      "# mixed: one goes, one stays",
+      ".claude/sessions/",
+      "keep-me.log",
+      "",
+    ].join("\n");
+    const { text } = ri.migrateGitignore(mixed);
+    expect(text).not.toContain("# local scratch notes");
+    expect(text).toContain("# build output\ndist/");
+    expect(text).toContain("# editor leftovers\n*.swp");
+    expect(text).toContain("# mixed: one goes, one stays\nkeep-me.log");
+    expect(text).not.toMatch(/^\.claude\/(worktrees|todos|plans|sessions)\/$/m);
+    expect(ri.migrateGitignore(text).text).toBe(text);
+  });
+
   test("migrate and applyBlock are idempotent; CRLF input gives the LF result", () => {
     const once = ri.migrateGitignore(handGrown).text;
     expect(ri.migrateGitignore(once).text).toBe(once);

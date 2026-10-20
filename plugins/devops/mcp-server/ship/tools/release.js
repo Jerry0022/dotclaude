@@ -23,6 +23,27 @@ import { createRequire } from "node:module";
 // Same reading of `validation` as the completion card and stop.flow.guard.
 const { classify, readRepoOpen } = createRequire(import.meta.url)("../../../hooks/lib/validation-gaps.js");
 
+/**
+ * The bump of this ship: the param, else the checkpoint's ship_version_bump
+ * step (recorded by the server/CLI after that tool ran). null when unknown.
+ */
+export function shipBump(params) {
+  if (params.bump) return params.bump;
+  try {
+    const { openCheckpoint } = createRequire(import.meta.url)("../../../hooks/lib/ship-checkpoint.js");
+    return openCheckpoint(params.cwd)?.steps?.bump?.bump || null;
+  } catch { return null; }
+}
+
+/** Interactive = the caller says so AND no AFK lockout marker is live for this checkout. */
+export function isInteractiveShip(params) {
+  if (params.interactive !== true) return false;
+  try {
+    const { readMarker } = createRequire(import.meta.url)("../../../hooks/lib/ship-lockout-marker.js");
+    return !readMarker(params.cwd)?.active;
+  } catch { return true; }
+}
+
 /** Soft budget for the PR title — over-long titles are clamped, never rejected. */
 export const PR_TITLE_MAX = 70;
 
@@ -31,12 +52,14 @@ export const schema = z.object({
   title: z.string().describe("PR title (conventional commit format). Aim for ≤70 chars — a longer title is clamped on a word boundary, not rejected."),
   body: z.string().describe("PR body (must start with Closes #N if applicable)"),
   tag: z.string().nullable().optional().describe("Bare version tag (e.g. v0.18.0) — the tool publishes it as alpha/<tag> (ring model). OMIT it to default to v<version> from the project's version file (the value ship_version_bump just wrote); pass null explicitly to ship WITHOUT a ring tag — the result then carries tagSkipped + tagWarning, never a silent gap (#372). Ignored for intermediate merges"),
+  bump: z.enum(["patch", "minor", "major", "none"]).optional().describe("The bump ship_version_bump applied in this ship. \"none\" → no ring tag is created (the version is unchanged, its tag already sits on an earlier commit); the result carries tagSkipped + tagSkipReason. Omitted → read from this ship's checkpoint."),
   releaseNotes: z.string().nullable().default(null).describe("CHANGELOG entry — NOT published at ship time (releases happen at promotion via ship_promote); recorded as releaseDeferred"),
   prerelease: z.boolean().default(false).describe("Deprecated — releases are created at promotion time; kept for caller compatibility"),
   commitMessage: z.string().nullable().default(null).describe("If set, stage all and commit with this message before pushing"),
   mergeStrategy: z.enum(["squash", "merge", "rebase"]).default("squash").describe("PR merge strategy. Use 'merge' for overlapping files to preserve ancestry chain."),
   skipChecks: z.boolean().default(false).describe("Skip the pre-merge CI checks gate. Use only for hot-fixes when CI is broken. Env DEVOPS_SHIP_SKIP_CHECKS=1 also forces skip."),
   quotaDecision: z.enum(["skip-checks", "wait", "revoke"]).optional().describe("The USER's explicit answer to a recorded CI-quota block (#752: Actions minutes / spending limit exhausted, detected by ci-account-limits as kind actions-minutes). skip-checks = merge without checks while the quota is out, wait = do not merge until it resets, revoke = forget the stored answer. Stored machine-wide per owner/repo and applied to every later ship without re-asking until the monthly reset or until a check runs again. Pass it ONLY after the user answered, never on your own judgement. Never applied to a real red check."),
+  interactive: z.boolean().default(false).describe("true when the user is present to answer (an interactive /do-ship). An Actions-minutes block with no stored answer then returns ciQuotaDecisionNeeded instead of the skipChecks fallback — ask the user, pass the answer as quotaDecision. Default false (autonomous / backlog / lockout runs keep the local-gate → skipChecks fallback). A live .claude/.ship-lockout marker always counts as autonomous."),
   checksTimeoutSec: z.number().int().min(30).max(3600).default(600).describe("Max seconds to wait for PR CI checks before merging. Default 10 min."),
   tagVerifyAttempts: z.number().int().min(1).max(20).default(4).describe("How often to re-query the remote before declaring the pushed channel tag unverified"),
   tagRetryDelayMs: z.number().int().min(0).max(60_000).default(1_000).describe("Base delay for the tag-verify backoff (exponential, ×3 per attempt)"),
@@ -192,6 +215,16 @@ export async function handler(params) {
   let tag = normalizeTagParam(params.tag);
   let tagDefaulted = false;
   let tagDefaultSkip = null;
+  let tagSkipReason = null;
+  // I1: bump "none" keeps the version, and its ring tag already marks the
+  // previous ship's commit — tagging again would either fail or promote the
+  // wrong commit. No tag, and the result says why (the card shows it).
+  if (!intermediate && shipBump(params) === "none") {
+    const v = readVersion(cwd);
+    tagSkipReason = `bump: none — version unchanged${v.version ? ` (v${v.version})` : ""}, so no new ring tag; nothing to promote for this ship`;
+    tag = null;
+    tagDefaultSkip = tagSkipReason;
+  }
   if (!intermediate && tag === undefined) {
     const v = readVersion(cwd);
     if (v.version) {
@@ -351,6 +384,7 @@ export async function handler(params) {
       } else if (!intermediate) {
         result.tagSkipped = true;
         result.tagWarning = tagDefaultSkip || "tag: null — shipped without a ring tag";
+        if (tagSkipReason) result.tagSkipReason = tagSkipReason;
       }
       return result;
     }
@@ -463,9 +497,12 @@ export async function handler(params) {
       // quota job that did run) never feeds a stored skip-checks.
       const minutesBlock = limits.limited && limits.kinds.length > 0 && limits.kinds.every((k) => k === MINUTES_KIND);
       let quotaNote = null;
+      let askQuotaDecision = false;
       if (minutesBlock) {
         quota = quotaStore(() => recordBlock(quotaKey));
-        const decision = quota?.decision?.value || null;
+        // This call's explicit answer counts even when the store could not keep it.
+        const decision = quota?.decision?.value ||
+          (DECISIONS.includes(params.quotaDecision) ? params.quotaDecision : null);
         const blockMsg = `GitHub Actions minutes exhausted (account limit on ${limits.checks.map((c) => c.name).join(", ")})` +
           (quota ? ` — recorded for ${quota.key}, resets ${quota.resetAt}` : "");
         quotaNote = { quota: describeRecord(quota), reason: blockMsg };
@@ -484,10 +521,12 @@ export async function handler(params) {
           result.quotaBlocked = true;
           result.ciAccountLimited = { kinds: limits.kinds, checks: limits.checks };
           result.failedChecks = (checkResult.failed || []).map((c) => ({ name: c.name || c.workflow, link: c.link }));
-          result.error = `CI quota exhausted — the stored decision is to wait for the reset (${quota.resetAt}). PR #${pr.number} not merged; pass quotaDecision:"revoke" to choose again.`;
+          result.error = `CI quota exhausted — the stored decision is to wait for the reset (${quota?.resetAt || "unknown"}). PR #${pr.number} not merged; pass quotaDecision:"revoke" to choose again.`;
           return result;
         }
-        // No stored decision → the #768 path below (account-limited, local gate).
+        // No stored decision: interactive ships ask first (A2); autonomous ones
+        // take the #768 path below (account-limited, local gate → skipChecks).
+        if (!decision && isInteractiveShip(params)) askQuotaDecision = true;
       } else if (quota && (checkResult.status === "passed" || checkResult.status === "failed")) {
         // A check ran for real again (not a minutes block) — the block is over.
         if (quotaStore(() => clearRecord(quotaKey), false)) quotaNote = { quotaCleared: true };
@@ -513,6 +552,22 @@ export async function handler(params) {
         if (limits.limited) {
           result.checks.status = "account-limited";
           result.ciAccountLimited = { kinds: limits.kinds, checks: limits.checks };
+          if (askQuotaDecision) {
+            result.checks.status = "quota-decision-needed";
+            result.ciQuotaDecisionNeeded = {
+              repo: quota?.key || quotaKey,
+              resetAt: quota?.resetAt || null,
+              options: [...DECISIONS],
+              validForDays: 7,
+              question: "GitHub Actions minutes are exhausted for this repo. Merge without CI checks while the quota is out (after a green local gate), or wait for the reset?",
+            };
+            result.error =
+              `CI could not give a verdict — GitHub Actions minutes exhausted on ` +
+              `${limits.checks.map((c) => c.name).join(", ")}. PR #${pr.number} not merged. ` +
+              `Ask the user (skip-checks | wait), then call ship_release again with quotaDecision set to the answer — ` +
+              `do NOT retry with skipChecks:true on your own. The answer is stored for this project for 7 days.`;
+            return result;
+          }
           result.error =
             `CI could not give a verdict — GitHub account limit (${limits.kinds.join(", ")}) on ` +
             `${limits.checks.map((c) => c.name).join(", ")}. PR #${pr.number} not merged. ` +
@@ -793,9 +848,14 @@ export async function handler(params) {
       result.tag = null;
       result.channel = null;
       result.tagSkipped = true;
-      result.tagWarning = tagDefaultSkip
-        ? `No ring tag created — ${tagDefaultSkip}; main is ahead of every ring and ship_promote has nothing to promote. Pass tag explicitly.`
-        : "No ring tag created (tag: null) — main is ahead of every ring and ship_promote has nothing to promote. Omit tag to default it from the version file.";
+      if (tagSkipReason) {
+        result.tagSkipReason = tagSkipReason;
+        result.tagWarning = `No ring tag created — ${tagSkipReason}.`;
+      } else {
+        result.tagWarning = tagDefaultSkip
+          ? `No ring tag created — ${tagDefaultSkip}; main is ahead of every ring and ship_promote has nothing to promote. Pass tag explicitly.`
+          : "No ring tag created (tag: null) — main is ahead of every ring and ship_promote has nothing to promote. Omit tag to default it from the version file.";
+      }
     }
 
     result.success = true;

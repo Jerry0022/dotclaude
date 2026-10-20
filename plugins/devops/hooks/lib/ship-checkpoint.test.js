@@ -36,6 +36,12 @@ describe("ship-checkpoint — the ship server records every step", () => {
     expect(cp.readCheckpoint(root)).toBeNull();
   });
 
+  test("I4: a successful promote stores its target channel (params.to) and tag, not null", () => {
+    preflight();
+    cp.recordShipStep("ship_promote", { cwd: root, version: "1.1.0", from: "alpha", to: "stable" }, { success: true, tag: "stable/v1.1.0" });
+    expect(cp.openCheckpoint(root).steps.promote).toEqual({ channel: "stable", tag: "stable/v1.1.0" });
+  });
+
   test("a release that failed after the PR keeps the PR, is not done, and names the error", () => {
     preflight();
     cp.recordShipStep("ship_release", { cwd: root }, { success: false, commit: "abc", pr: { number: 7 }, error: "checks timed out" });

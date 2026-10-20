@@ -54,6 +54,48 @@ beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ship-detect-tmp-"));
 });
 
+/** Append transcript entries. */
+function append(file, ...entries) {
+  fs.appendFileSync(file, entries.map((e) => JSON.stringify(e)).join("\n") + "\n");
+}
+const userPrompt = (text) => ({ type: "user", message: { role: "user", content: text } });
+const assistantText = (text) => ({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] } });
+/** A terminal completion card whose decision heading is `heading`. */
+const textCard = (heading, title = "Fertig") =>
+  assistantText(`&nbsp;\n---\n### **✨✨✨ ${title} ✨✨✨**\n› result\n## ${heading}\n---`);
+/** The Desktop card widget (card-widget.js) with decision heading `h` and button prompts. */
+const widgetCard = (h, prompts = []) => {
+  const data = JSON.stringify({ v: 1, l: "de", ti: "Fertig", h, bt: prompts.map((p) => ({ l: p, p })) });
+  return {
+    type: "assistant",
+    message: {
+      role: "assistant",
+      content: [{
+        type: "tool_use", id: "w1", name: "mcp__visualize__show_widget",
+        input: {
+          title: "completion_card_body",
+          widget_code: `<div id="dc-card"><h3 class="card-title">Fertig</h3></div>\n<script type="application/json" id="dc-card-data">${data}</script>`,
+        },
+      }],
+    },
+  };
+};
+/** A fresh transcript holding one earlier exchange and then `entries`. */
+function cardTranscript(...entries) {
+  const file = path.join(cwd, "card-transcript.jsonl");
+  fs.writeFileSync(file, "");
+  append(file, userPrompt("bau das feature"), ...entries);
+  return file;
+}
+/** Commit everything on main: the branch then has nothing unshipped. */
+function nothingUnshipped() {
+  const g = (args) => execFileSync("git", args, { cwd, stdio: "ignore" });
+  g(["checkout", "-q", "-B", "main"]);
+  fs.writeFileSync(path.join(cwd, "a.txt"), "a\n");
+  g(["add", "a.txt"]);
+  g(["-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-qm", "c1"]);
+}
+
 /** The hook's session file for `prefix` inside the private tmp dir. */
 function privateSessionFile(prefix) {
   return path.join(tmp, `${prefix}-ship-detect-test`);
@@ -90,10 +132,10 @@ describe("prompt.ship.detect — delegated ship on a large context", () => {
     expect(r.stdout).not.toContain("/compact");
   });
 
-  test("an affirmation after edits is a ship too, and is delegated the same way", () => {
-    // the edit counter the affirmation path reads lives in the session file store
-    writeSessionFile(privateSessionFile("dotclaude-devops-edits"), "3");
-    const r = runHook({ prompt: "ja", transcript_path: transcript(500_000) });
+  test("an affirmation to a ship-asking card is a ship too, and is delegated the same way", () => {
+    const t = transcript(500_000);
+    append(t, textCard("👉 📦 Ready — Shippen?"));
+    const r = runHook({ prompt: "ja", transcript_path: t });
     expect(r.stdout).toContain("[ship-delegate]");
   });
 
@@ -137,21 +179,94 @@ describe("prompt.ship.detect — delegated ship on a large context", () => {
   });
 });
 
-// "ja" ships only when THIS session edited: the ship pushes and merges, so the
-// counter it reads must be this session's own. The glob fallback returned the
-// newest counter of any session whenever this one had none.
-describe("prompt.ship.detect — affirmation reads only this session's edits", () => {
-  test("another session's edit counter does not turn 'ja' into a ship", () => {
-    writeSessionFile(path.join(tmp, "dotclaude-devops-edits-other-session"), "3");
-    const r = runHook({ prompt: "ja" });
-    expect(r.stdout).not.toContain('Skill("devops:do-ship")');
+// Audit row 2: "ja" ships only as the answer to a card that ASKED to ship, in
+// the turn right before, while the branch still has unshipped work. The old
+// rule — this session's edit counter ≥ 1, a counter that only ever grew —
+// turned every later "ja" of the session into a push and merge.
+describe("prompt.ship.detect — a bare affirmation ships only after a ship-asking card", () => {
+  const SHIPS = 'Skill("devops:do-ship")';
+
+  test("an edit counter alone no longer turns 'ja' into a ship", () => {
+    writeSessionFile(privateSessionFile("dotclaude-devops-edits"), "3");
+    const r = runHook({ prompt: "ja", transcript_path: cardTranscript(assistantText("Erledigt.")) });
+    expect(r.stdout).not.toContain(SHIPS);
     expect(r.stdout).not.toContain("[ship-delegate]");
   });
 
-  test("this session's own edit counter still does", () => {
-    writeSessionFile(privateSessionFile("dotclaude-devops-edits"), "3");
-    const r = runHook({ prompt: "ja" });
-    expect(r.stdout).toContain('Skill("devops:do-ship")');
+  test.each(["ja", "yes", "ok", "passt", "Ja.", "OK!"])("%j after a ready card that asks to ship → ship", (prompt) => {
+    const r = runHook({ prompt, transcript_path: cardTranscript(textCard("👉 📦 Ready — Shippen?")) });
+    expect(r.stdout).toContain(SHIPS);
+  });
+
+  test("a test card with the ship question counts", () => {
+    const r = runHook({ prompt: "ja", transcript_path: cardTranscript(textCard("👉 🧪 Test — Erst testen, dann shippen?")) });
+    expect(r.stdout).toContain(SHIPS);
+  });
+
+  test("the Desktop widget card with the ship question counts", () => {
+    const r = runHook({ prompt: "ja", transcript_path: cardTranscript(widgetCard("👉 📦 Ready — Shippen?", ["ship", "Ändern"])) });
+    expect(r.stdout).toContain(SHIPS);
+  });
+
+  test("the current prompt already in the transcript does not hide the card", () => {
+    const t = cardTranscript(textCard("👉 📦 Ready — Shippen?"));
+    append(t, userPrompt("ja"));
+    expect(runHook({ prompt: "ja", transcript_path: t }).stdout).toContain(SHIPS);
+  });
+
+  test("real case: a plain text question 'soll ich auch die Tests anpassen?' + ja → no ship", () => {
+    const r = runHook({ prompt: "ja", transcript_path: cardTranscript(assistantText("Die Funktion ist umgebaut. Soll ich auch die Tests anpassen?")) });
+    expect(r.stdout).not.toContain(SHIPS);
+  });
+
+  test("real case: a question asked after the card → no ship", () => {
+    const r = runHook({ prompt: "ja", transcript_path: cardTranscript(textCard("👉 📦 Ready — Shippen?"), assistantText("Soll ich auch die Tests anpassen?")) });
+    expect(r.stdout).not.toContain(SHIPS);
+  });
+
+  test("real case: a ship-successful card + 'ja, passt' → no ship", () => {
+    for (const card of [
+      textCard("🟩 🚀 Released Alpha — v0.212.0 — nach Beta promoten?"),
+      widgetCard("🟩 🚀 Released Alpha — v0.212.0 — nach Beta promoten?", ["promote beta"]),
+      textCard("🟩 🎊 Promoted Beta — v0.212.0 — nach Stable?"),
+    ]) {
+      const r = runHook({ prompt: "ja, passt", transcript_path: cardTranscript(card) });
+      expect(r.stdout).not.toContain(SHIPS);
+    }
+  });
+
+  test("real case: a ship card three messages back → no ship", () => {
+    const t = cardTranscript(
+      textCard("👉 📦 Ready — Shippen?"),
+      userPrompt("erklär mir noch den cache"), assistantText("Der Cache liest …"),
+      userPrompt("und die Hooks?"), assistantText("Die Hooks laufen …"),
+      userPrompt("danke"), assistantText("Gern."),
+    );
+    expect(runHook({ prompt: "ja", transcript_path: t }).stdout).not.toContain(SHIPS);
+  });
+
+  test.each([
+    ["analysis", "🟩 📋 Analysis — gelesen — umsetzen oder Fragen?"],
+    ["concept waiting", "👉 🧭 Concept — Entscheidungen offen — im Konzept entscheiden?"],
+    ["question", "👉 ❓ Question — Wartet auf dich: Port 3000 oder 8080 — wie entscheidest du?"],
+    ["ship-blocked", "👉 ⛔ Blocked — Lint umgehen und trotzdem shippen?"],
+  ])("a %s card + ja → no ship", (_name, heading) => {
+    const r = runHook({ prompt: "ja", transcript_path: cardTranscript(textCard(heading)) });
+    expect(r.stdout).not.toContain(SHIPS);
+  });
+
+  test("no transcript at all → no ship", () => {
+    expect(runHook({ prompt: "ja" }).stdout).not.toContain(SHIPS);
+  });
+
+  test("a ship-asking card but nothing unshipped on the branch → no ship", () => {
+    nothingUnshipped();
+    const r = runHook({ prompt: "ja", transcript_path: cardTranscript(textCard("👉 📦 Ready — Shippen?")) });
+    expect(r.stdout).not.toContain(SHIPS);
+  });
+
+  test.each(["ship", "shippen", "push and merge"])("the explicit %j still ships without any card", (prompt) => {
+    expect(runHook({ prompt }).stdout).toContain(SHIPS);
   });
 });
 

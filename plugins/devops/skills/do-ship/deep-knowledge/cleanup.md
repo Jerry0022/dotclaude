@@ -210,3 +210,44 @@ younger leftovers stay for the page. It flags unlanded work on a
 `[gone]` branch or a detached session worktree, and decides whether the
 cleanup page is worth suggesting (more than 50 leftovers, at most once a
 week).
+
+## Harness-created worktree (Step 5a)
+
+**Harness-created worktree → keep-mode, always (#442).** In a Claude Desktop (Code tab)
+session the worktree is created by the app, not by `EnterWorktree`: `ship_preflight`
+reports `inWorktree: true` and this session never called `EnterWorktree`. There
+`ExitWorktree` is a no-op, `ship_cleanup` refuses ("attached to an active worktree"),
+and the app owns the worktree lifecycle (auto-archive removes worktree + branch). Decide
+this up front — before the signals below — and go straight to Step 5c: `ship_cleanup({
+keep: true })`, normal DONE CTA (no `state.kept`, see 5c). The remote branch was
+already deleted by `ship_release` (`remoteBranchDeleted`); the local branch and
+worktree are the app's to remove.
+
+In Step 6 such a worktree renders the **normal** merge heading — no `state.kept`, no
+cleanup note. The `weiter in <branch>?` heading is
+reserved for expected follow-up work; a worktree kept because nobody else may remove it
+must not read as "keep coding here".
+
+## ship_cleanup calls (Step 5b)
+
+(A harness-created worktree never reaches this substep — Step 5a
+routed it to 5c.) When `ExitWorktree` returns a No-op and the run falls back to
+Step 5c, stay silent about it: the remote branch is gone (`ship_release`), the local
+leftovers are the app's, `ship_hygiene`'s or the auto-cleanup page's job.
+
+Then call `ship_cleanup` MCP tool with the `base` from Step 1 (always pass `cwd`):
+```
+ship_cleanup({ branch: "claude/feature-branch", base: "main", cwd: "<cwd>" })
+```
+
+For intermediate merges:
+```
+ship_cleanup({ branch: "feat/42-video-filters-core", base: "feat/42-video-filters", cwd: "<cwd>" })
+```
+
+The tool deletes the sub-branch but **preserves the feature branch** for further sub-branch merges or final ship to main.
+
+The tool refuses to run inside a worktree — its error names the way out for each worktree kind
+(harness-created → `keep: true`; `EnterWorktree` → `ExitWorktree` first).
+
+Keep-mode returns `{ success: true, kept: true, cleaned: ["sentinel"], warnings: [...] }`.

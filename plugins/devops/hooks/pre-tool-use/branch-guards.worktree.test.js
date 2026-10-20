@@ -251,3 +251,73 @@ describe("pre.main.guard", () => {
     expect(commit(mainDir, {}, { DEVOPS_ALLOW_MAIN: "1" }).status).toBe(0);
   }), TIMEOUT);
 });
+
+// Audit row 1: the guards matched only `^git <sub>`, so a chained commit,
+// `git -C <dir> commit`, `git -c k=v commit` and every PowerShell-tool command
+// slipped through. Quoted text that merely mentions a commit must still pass.
+describe("pre.main.guard — chained, global options, PowerShell", () => {
+  const onMain = (command, tool = "Bash") => run(MAIN, { tool_name: tool, cwd: onMainDir, tool_input: { command } });
+
+  test.each([
+    ["git add -A && git commit -m x"],
+    ["git add -A; git commit -m x"],
+    ["git status || git commit -m x"],
+    ["git -C . commit -m x"],
+    ['git -C "some dir" commit -m x'],
+    ["git -c user.name=x -c user.email=y commit -m x"],
+    ["git --no-pager -C . push origin main"],
+    ["GIT_AUTHOR_NAME=x git commit -m x"],
+    ["echo hi\ngit commit -m x"],
+    ["git checkout -- a.txt"],
+  ])("blocks %j on main", (command) => {
+    expect(onMain(command).status).toBe(2);
+  }, TIMEOUT);
+
+  test("the PowerShell tool is guarded too", () => {
+    const r = onMain("git add -A; git commit -m x", "PowerShell");
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("[pre.main.guard] BLOCKED");
+  }, TIMEOUT);
+
+  test.each([
+    ['echo "then run git add -A && git commit -m x"'],
+    ["git log --grep 'git commit'"],
+    ['gh issue create --body "remember: git -C . commit"'],
+    ["cat <<'EOF'\ngit commit -m x\nEOF"],
+    ["git status && git diff"],
+    ["git -C . log -1"],
+  ])("lets %j pass (a mention, or read-only)", (command) => {
+    expect(onMain(command).status).toBe(0);
+    expect(onMain(command, "PowerShell").status).toBe(0);
+  }, TIMEOUT);
+
+  test("other tools stay out of scope", () => {
+    expect(onMain("git commit -m x", "Read").status).toBe(0);
+  }, TIMEOUT);
+});
+
+describe("pre.worktree.split-guard — chained, global options, PowerShell", () => {
+  const SPLIT = join(HERE, "pre.worktree.split-guard.js");
+  const split = (command, tool = "Bash") => spawnSync(process.execPath, [SPLIT], {
+    input: JSON.stringify({ tool_name: tool, cwd: mainDir, tool_input: { command } }),
+    encoding: "utf8", timeout: 30_000,
+  });
+
+  test.each([
+    ["git add -A && git commit -m x", "Bash"],
+    ["git -C . commit -m x", "Bash"],
+    ["git -c core.hooksPath=x merge feat/x", "Bash"],
+    ["git add -A; git switch -c topic", "PowerShell"],
+  ])("warns on %j (%s)", (command, tool) => {
+    const r = split(command, tool);
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout).hookSpecificOutput.additionalContext).toContain("split-guard");
+  }, TIMEOUT);
+
+  test.each([
+    ['echo "git add -A && git commit -m x"'],
+    ["git log --grep 'git commit'"],
+  ])("stays silent on the mention %j", (command) => {
+    expect(split(command).stdout).toBe("");
+  }, TIMEOUT);
+});

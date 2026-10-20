@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 /**
  * @script concept-watch
- * @version 0.5.0
+ * @version 0.6.0
  * @plugin devops
  * @description The concept bridge's two detached watchers, as a script instead
  *   of a shell loop pasted into three documents.
  *
  *   `--mode pulse`  keepalive pulser — POSTs /heartbeat forever so the page's
  *                   connection indicator stays green. Never exits on a pending
- *                   submission, so `claude_ts` stays warm through a long
- *                   `implement`.
+ *                   submission a live waker handles, so `claude_ts` stays warm
+ *                   through a long `implement`. It is also the waker's safety
+ *                   net (the 15-min backstop cron is gone): when the waker's
+ *                   beat file is stale and a submission sits unattended for two
+ *                   polls, it exits `PULSER_EXIT reason=WAKER_MISSING` — the
+ *                   wake — exactly once per version (see beatPath).
  *   `--mode watch`  pickup waker — polls /pending and exits the instant a
  *                   submission lands. The exit IS the signal: a detached Bash
  *                   task re-invokes Claude when it finishes, so the user never
@@ -52,7 +56,12 @@
  *   plus `STATE_NEVER_APPEARED` for a launch that outran its setup,
  *   `HTML_GONE` for a concept whose page was deleted (#363), and
  *   `DUPLICATE_PULSER` / `DUPLICATE_WAKER` for a watcher that stepped down in
- *   favour of a sibling on the same port.
+ *   favour of a sibling on the same port, and `FOREIGN_BRIDGE port=N` when the
+ *   bridge answering on the port reports a different `html_path` than the
+ *   state file (another session's bridge reused the port after ours died):
+ *   the watcher leaves without /shutdown and without a wake as PENDING. A
+ *   cleanup exit (STATE_GONE / PORT_CHANGED / HTML_GONE) that finds a foreign
+ *   bridge on the port skips the /shutdown and appends ` bridge=foreign`.
  *   A `PENDING_SUBMISSION` line carries `version=N action=<a>` after the reason.
  *
  *   Robustness rules, each one a failure seen on a live bridge (2026-09-20):
@@ -225,6 +234,31 @@ function checkState(statePath, port, exists, owner = '') {
   return 'ok';
 }
 
+/**
+ * Normalize a concept HTML path for comparison: absolute, real path when it
+ * exists (junctions, 8.3 names), case-folded on Windows.
+ */
+function normHtml(p) {
+  let out = path.resolve(p);
+  try { out = fs.realpathSync.native(out); } catch { /* gone or unreadable: keep the resolved path */ }
+  return process.platform === 'win32' ? out.toLowerCase() : out;
+}
+
+/**
+ * Is the bridge that answered someone else's (C1)? `serverHtml` is the
+ * `html_path` the bridge reports on /heartbeat, /pending and /identity
+ * (absolute); `stateHtml` is the state file's `html_path`, relative to the
+ * project root (the state file's grandparent). Unknown on either side — an
+ * older server, a state file without `html_path` — is never foreign: the
+ * check only fires on positive evidence of a different concept.
+ */
+function isForeignBridge(serverHtml, statePath, stateHtml) {
+  if (typeof serverHtml !== 'string' || !serverHtml) return false;
+  if (typeof stateHtml !== 'string' || !stateHtml) return false;
+  const root = path.dirname(path.dirname(statePath));
+  return normHtml(serverHtml) !== normHtml(path.resolve(root, stateHtml));
+}
+
 /** The state file as an object, or null while it is missing / half-written. */
 function readState(statePath) {
   try {
@@ -270,6 +304,32 @@ function request(port, path, method, timeoutSec) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Waker beat file (replaces the 15-min backstop cron). The waker stamps
+ * `{id, ts, woke_version}` next to the state file on every poll; the pulser —
+ * a second, independent long-lived task — reads it. A pending submission with
+ * no live waker (stale beat) and no earlier wake for that version means the
+ * waker died without exiting through its own wake path, so the pulser exits
+ * with a wake instead. `woke_version` is how a waker that DID wake the session
+ * for version V stops the pulser from waking it a second time for V.
+ */
+function beatPath(statePath, port) {
+  return path.join(path.dirname(statePath), `concept-waker-${port}.json`);
+}
+function readBeat(statePath, port) {
+  try {
+    const b = JSON.parse(fs.readFileSync(beatPath(statePath, port), 'utf8'));
+    return b && typeof b === 'object' ? b : null;
+  } catch { return null; }
+}
+function writeBeat(statePath, port, beat) {
+  try { fs.writeFileSync(beatPath(statePath, port), JSON.stringify(beat)); } catch { /* best effort */ }
+}
+/** A beat older than this means the waker is not polling any more. */
+function beatStaleMs(opts) {
+  return Math.max(60_000, opts.interval * 1000 * 3 + opts.timeout * 1000);
+}
+
 function finish(tag, reason, detail = '') {
   // Synchronous write: the reason line IS the payload of the wake, and on
   // POSIX a piped stdout is async — `process.exit` right after an async write
@@ -281,15 +341,36 @@ function finish(tag, reason, detail = '') {
 }
 
 async function run(opts, deps = {}) {
-  const io = { request, sleep, checkState, readState, reopen, now: Date.now, exists: (p) => fs.existsSync(p), ...deps };
+  const io = { request, sleep, checkState, readState, readBeat, writeBeat, reopen, now: Date.now, exists: (p) => fs.existsSync(p), ...deps };
   const tag = opts.mode === 'pulse' ? 'PULSER' : 'WAKER';
   const watch = opts.mode === 'watch';
   const intervalMs = opts.interval * 1000;
   const emit = deps.emit || ((reason, detail) => finish(tag, reason, detail));
   // Cleanup is the waker's job (#363): it shuts the bridge down before it
   // leaves, so a dead concept never keeps a server alive waiting for a cron.
+  // Our concept's html_path, remembered from the last readable state file so
+  // the identity check still works once the file is gone (STATE_GONE).
+  let ourHtml = '';
+  const rememberHtml = () => {
+    const st = io.readState(opts.state);
+    if (st && typeof st.html_path === 'string' && st.html_path) ourHtml = st.html_path;
+  };
+  const foreign = (body) => isForeignBridge(body && body.html_path, opts.state, ourHtml);
   const leave = async (reason) => {
-    if (watch) await io.request(opts.port, '/shutdown', 'POST', opts.timeout);
+    if (watch) {
+      // Never /shutdown a bridge that is not ours (C1): a foreign bridge that
+      // reused the port after ours died is another session's live concept.
+      // The side-effect-free /identity probe runs only when we know whose
+      // bridge to expect; an older server answers 404 and keeps the legacy
+      // behaviour.
+      if (ourHtml) {
+        const id = await io.request(opts.port, '/identity', 'GET', opts.timeout);
+        let body = null;
+        if (id.ok) { try { body = JSON.parse(id.body); } catch { /* legacy */ } }
+        if (foreign(body)) return emit(reason, ' bridge=foreign');
+      }
+      await io.request(opts.port, '/shutdown', 'POST', opts.timeout);
+    }
     return emit(reason);
   };
 
@@ -346,7 +427,16 @@ async function run(opts, deps = {}) {
   // A reopen fires ONCE; the flag re-arms only after a tab is seen again, so
   // a browser closed on purpose gets one reopen, never a storm.
   let reopened = false;
+  // Waker side: version this waker already woke the session for (kept across
+  // a re-arm so a fresh waker does not erase the pulser's "already woken").
+  const prevBeat = watch ? io.readBeat(opts.state, opts.port) : null;
+  let wokeVersion = prevBeat && Number.isInteger(prevBeat.woke_version) ? prevBeat.woke_version : null;
+  const beat = () => io.writeBeat(opts.state, opts.port, { id: myId, ts: io.now(), woke_version: wokeVersion });
+  // Pulser side: consecutive polls that saw an unattended submission.
+  let orphanRuns = 0;
   for (;;) {
+    rememberHtml();
+    if (watch) beat();
     const state = io.checkState(opts.state, opts.port, watch ? io.exists : undefined, opts.owner);
     if (confirmed(state)) {
       if (state === 'gone') return leave('STATE_GONE');
@@ -358,11 +448,38 @@ async function run(opts, deps = {}) {
       ? await io.request(opts.port, '/heartbeat?pulser=' + encodeURIComponent(myId), 'POST', opts.timeout)
       : await io.request(opts.port, '/pending?waker=' + encodeURIComponent(myId), 'GET', opts.timeout);
 
+    // Pulser: wake the session for a submission nobody is waiting for. Only
+    // looks when the waker's beat is stale or missing, so a healthy waker is
+    // the sole /pending poller and the page's "picked up" stamp stays honest.
+    if (!watch && res.ok) {
+      const b = io.readBeat(opts.state, opts.port);
+      const alive = b && Number.isFinite(b.ts) && io.now() - b.ts < beatStaleMs(opts);
+      if (alive) orphanRuns = 0;
+      else {
+        const p = await io.request(opts.port, '/pending', 'GET', opts.timeout);
+        let pb = {};
+        try { pb = JSON.parse(p.body) || {}; } catch { /* legacy */ }
+        const already = b && Number.isInteger(pb.version) && b.woke_version === pb.version;
+        if (p.ok && pb.pending && !already && !foreign(pb)) {
+          orphanRuns += 1;
+          if (orphanRuns >= 2) {
+            const version = Number.isInteger(pb.version) ? ` version=${pb.version}` : '';
+            const action = typeof pb.action === 'string' && /^[a-z-]+$/.test(pb.action) ? ` action=${pb.action}` : '';
+            return emit('WAKER_MISSING', version + action);
+          }
+        } else orphanRuns = 0;
+      }
+    }
+
     if (res.ok) {
       fails = 0;
       failingSince = 0;
       let body = {};
       try { body = JSON.parse(res.body) || {}; } catch { /* legacy server / treat as not pending */ }
+      // A foreign bridge on our port (C1): stay silent — no wake as PENDING,
+      // no /shutdown, no further heartbeats keeping it warm — and let Claude
+      // restart our concept on a fresh port.
+      if (foreign(body)) return emit('FOREIGN_BRIDGE', ` port=${opts.port}`);
       if (!watch) {
         // Duplicate detection (see pulserId): the younger pulser yields.
         if (siblingSeen(body.prev_pulser, 'older')) return emit('DUPLICATE_PULSER');
@@ -377,6 +494,7 @@ async function run(opts, deps = {}) {
         if (body.pending) {
           const version = Number.isInteger(body.version) ? ` version=${body.version}` : '';
           const action = typeof body.action === 'string' && /^[a-z-]+$/.test(body.action) ? ` action=${body.action}` : '';
+          if (Number.isInteger(body.version)) { wokeVersion = body.version; beat(); }
           return emit('PENDING_SUBMISSION', version + action);
         }
         if (opts.liveness > 0) {
@@ -418,7 +536,7 @@ async function run(opts, deps = {}) {
   }
 }
 
-module.exports = { parseArgs, validate, checkState, readState, reopen, run, pulserId, pulserStart, DEFAULTS, BYE_GRACE_MS, DUPLICATE_AFTER };
+module.exports = { beatPath, readBeat, writeBeat, beatStaleMs, parseArgs, validate, checkState, readState, isForeignBridge, reopen, run, pulserId, pulserStart, DEFAULTS, BYE_GRACE_MS, DUPLICATE_AFTER };
 
 if (require.main === module) {
   const opts = parseArgs(process.argv.slice(2));

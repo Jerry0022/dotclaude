@@ -22,9 +22,10 @@ Scaffold or adapt a project-level extension for any devops skill.
 
 Glob each path before reading; skip missing files silently.
 
-1. Global: `~/.claude/skills/auto-extend/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/auto-extend/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/auto-extend/reference.md`
+2. Project: `{project}/.claude/skills/auto-extend/reference.md`
    Fallback (pre-PR-2 name): where `auto-extend/` does not exist, read `~/.claude/skills/claude-extend-skill/` / `{project}/.claude/skills/claude-extend-skill/` instead — an extension written before the rename keeps working.
+   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
 3. Merge: project > global > plugin defaults
 
 `{project}` = the nearest parent with `.git/` or `.claude/`; all extension
@@ -47,11 +48,16 @@ A name that matches nothing → say so and ask again.
 
 ## Step 2 — Check for an existing extension
 
-Look for `SKILL.md` and `reference.md` in `{project}/.claude/skills/{skill-name}/`
+Look for `reference.md` (and a legacy `SKILL.md`) in `{project}/.claude/skills/{skill-name}/`
 and in the skill's pre-PR-2 dir(s) (`ship/` for `do-ship`, the folded skill
 names for `do-run` / `do-ship` modes). An extension found only under the old
 name is reported as existing ("still loaded as fallback"); before editing it,
 offer to `git mv` it to the new name.
+A legacy `SKILL.md` override is reported as deprecated: it is still read as
+a fallback, but Claude Code loads a `SKILL.md` there as a user skill of its
+own (a bare `/{skill-name}` beside the plugin's). Offer to move its content
+into `reference.md` (`git mv` when no `reference.md` exists yet, else merge
+the text into it and delete the old file).
 
 - **Exists** → show which files exist and their content, then ask whether to
   edit one, add the missing one, or abort; apply the requested edits.
@@ -63,30 +69,21 @@ Create `{project}/.claude/skills/{skill-name}/` — always the NEW name, never a
 pre-PR-2 one. Read the plugin's `skills/{skill-name}/SKILL.md` first so the
 guiding comment fits the skill.
 
-`SKILL.md` — minimal: frontmatter plus a guiding comment, no pre-filled steps
-unless the user described what they want:
-
-```markdown
----
-name: {skill-name}
-description: Project-specific {skill-name} extensions for {project-name}
----
-
-# {Skill-Name} Extensions
-
-<!-- Add project-specific overrides or additional steps here.
-     These rules merge with the plugin defaults — your rules win on conflict.
-     See deep-knowledge/skill-extension-guide.md for the full extension model. -->
-```
+Scaffold **`reference.md` only** — never a `SKILL.md`: Claude Code loads
+any `SKILL.md` under `.claude/skills/` as a skill of its own. Step overrides
+and added steps go into `reference.md` too (as prose: "Before Step 4, …").
 
 `reference.md`:
 
 ```markdown
 # {Skill-Name} Reference — {project-name}
 
-<!-- Add project-specific context that this skill should read before executing.
-     Examples: build commands, deploy targets, log paths, version files, conventions.
-     The plugin loads this file automatically in Step 0 of every execution. -->
+<!-- Add project-specific context and rules this skill should apply.
+     Examples: build commands, deploy targets, log paths, version files, conventions,
+     an extra step ("Before the PR: run ng build --prod").
+     These rules merge with the plugin defaults — your rules win on conflict.
+     The plugin loads this file automatically in Step 0 of every execution.
+     See deep-knowledge/skill-extension-guide.md for the full extension model. -->
 ```
 
 `.claude/skills/` must not be gitignored — if it is, warn; do not edit
@@ -94,6 +91,6 @@ description: Project-specific {skill-name} extensions for {project-name}
 
 ## Step 4 — Confirm
 
-Name the created/updated path, what each file is for (`SKILL.md` overrides or
-adds steps, `reference.md` adds context such as build commands, deploy
-targets, paths), and that the plugin reads both before every run of the skill.
+Name the created/updated path, that `reference.md` holds both added context
+(build commands, deploy targets, paths) and step overrides, and that the
+plugin reads it before every run of the skill.

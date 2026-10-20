@@ -17,7 +17,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [claude-desktop-app-setup.md](claude-desktop-app-setup.md) | Claude Desktop App Setup (Windows) | Windows-specific reference for Claude Desktop App launcher configuration and ... |
 | [claude-directory-structure.md](claude-directory-structure.md) | Claude Directory Structure Convention | All Claude Code configuration belongs inside `.claude/`. Nothing Claude-specific |
 | [code-defaults.md](code-defaults.md) | Code Defaults | Standard coding conventions enforced across all projects using the devops plu... |
-| [codex-integration.md](codex-integration.md) | Codex Integration | Cross-cutting reference for all points where `codex-plugin-cc` skills are |
+| [codex-integration.md](codex-integration.md) | Codex Integration | Cross-cutting reference for all points where Codex is integrated into devops |
 | [commit-conventions.md](commit-conventions.md) | Commit Conventions | How commits are written in projects using this plugin. Referenced by `/do-ship`, |
 | [completion-card-design.md](completion-card-design.md) | Completion Card — Design Specification (v2, "one page, three lines, one decision") | Single source of truth for how a completion card looks and reads, on every |
 | [content-conventions.md](content-conventions.md) | Content Conventions — Sizing & Self-Reference | How to size and structure project-persistent content (CLAUDE.md, skills, |
@@ -48,6 +48,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [readme-standards.md](readme-standards.md) | README Standards | How to create, rewrite or substantially update a README.md: a polished, moder... |
 | [responsive-testing.md](responsive-testing.md) | Responsive Testing — Multi-Viewport Verification | Multi-device web apps require verification at phone, tablet, and desktop |
 | [run-contract.md](run-contract.md) | Run Contract — what the user chose in do-run is enforced, not hoped for | A hook records the answers to `do-run`'s questions and refuses the tool call ... |
+| [session-grader.md](session-grader.md) | Session Grader (weekly rule check) | Do recent sessions keep missing the same plugin rules after a skill change? |
 | [session-title-scheme.md](session-title-scheme.md) | Session Title Scheme | The double-icon session-title prefixes the devops plugin sets in the Desktop ... |
 | [skill-extension-guide.md](skill-extension-guide.md) | Skill Extension Guide — For Plugin Integrators | How to customize devops skills and agents for your project. |
 | [strict.md](strict.md) | Strict Mode — Literal Scope, Discretionary Parameters | The deliverable is exactly what the prompt names, nothing wider; attributes t... |

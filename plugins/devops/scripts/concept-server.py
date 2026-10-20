@@ -37,6 +37,10 @@ Replaces `python -m http.server` with a custom server that adds:
   never re-picks it up. The last 500 accepted ids are kept in memory,
   rebuilt from the journal at startup. Payloads without a submission_id
   (older page builds) keep the unconditional-accept behaviour.
+- GET /identity — `{"html_path", "pid"}` with no side effects. `html_path`
+  (the absolute `--html` path, or null) also rides on GET/POST /heartbeat and
+  GET /pending, so the watchers and the tick can recognise a foreign bridge
+  that reused the port after ours died (exit reason FOREIGN_BRIDGE).
 - GET /pending — Deterministic signal for Claude's cron (`?waker=<id>` names the
   polling waker; `prev_waker` in the answer is the previous poller, so a
   superseded waker can step down — see concept-watch.js). Returns
@@ -165,6 +169,13 @@ import atexit
 import urllib.parse
 import uuid
 from datetime import datetime, timezone
+
+# Absolute path of the concept HTML this bridge serves (`--html`), or None.
+# Returned on GET /heartbeat and GET /pending so the pulser, the waker and the
+# tick can tell OUR bridge from a foreign one that reused the port after ours
+# died: on a mismatch they stay silent (no /shutdown, no PENDING wake) and exit
+# FOREIGN_BRIDGE.
+_html_path = None
 
 _server_ts = 0
 _claude_ts = 0
@@ -1241,6 +1252,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 "claude_ts": claude_ts,
                 "browser_ts": browser_ts,
                 "ts": claude_ts,
+                "html_path": _html_path,
             })
         elif self.path == '/decisions':
             # Return the stored decisions payload with the current server
@@ -1342,7 +1354,17 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 "pending": pending, "version": version_seen, "action": action,
                 "browser_ts": browser_ts, "browser_tabs": browser_tabs, "browser_bye_ts": browser_bye_ts,
                 "prev_waker": prev_waker,
+                "html_path": _html_path,
             })
+        elif route == '/identity':
+            # Side-effect-free "whose bridge is this?" probe (C1): no stamp of
+            # browser_ts, claude_ts or _picked_up_at, so a watcher or the tick
+            # can check a possibly-foreign bridge before POSTing /shutdown.
+            # Origin-gated like /pending — html_path is a local filesystem path.
+            if not self._same_origin_ok():
+                self.send_error(403, "forbidden origin")
+                return
+            self._json_response({"html_path": _html_path, "pid": os.getpid()})
         elif route == '/reload':
             with _lock:
                 _stamp_browser_poll(_tab_from_query(query))
@@ -1473,7 +1495,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 prev_pulser = _claude_pulser
                 if pulser is not None:
                     _claude_pulser = pulser
-            self._json_response({"ok": True, "ts": ts, "claude_ts": ts, "prev_pulser": prev_pulser})
+            self._json_response({"ok": True, "ts": ts, "claude_ts": ts, "prev_pulser": prev_pulser, "html_path": _html_path})
         elif self.path == '/decisions':
             if not self._same_origin_ok():
                 self.send_error(403, "forbidden origin")
@@ -2748,6 +2770,7 @@ if __name__ == '__main__':
     # cwd-change (unlikely, but cheap to be defensive) cannot misdirect the
     # existence check.
     html_path = os.path.abspath(args.html) if args.html else None
+    _html_path = html_path
 
     # ---- Durable store (#284) --------------------------------------------
     # Derived from the concept filename so each concept gets its own directory

@@ -3,9 +3,12 @@
  * strings the harness writes for a background Agent launch, a backgrounded Bash
  * call, and the task-notification that reports either one stopping.
  */
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, afterAll } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
-  scanOpenTasks, openTaskNames, labelFor, isConceptInfra, responseTaskId, responseLaunch, taskEnds,
+  scanOpenTasks, scanOpenTasksInFile, openTaskNames, labelFor, isConceptInfra, responseTaskId, responseLaunch, taskEnds,
   AGENT_LAUNCH_MARKER, BASH_LAUNCH_MARKER, WORKFLOW_LAUNCH_MARKER,
 } from './pending-tasks.js';
 
@@ -1046,5 +1049,38 @@ describe('taskEnds — how a background task ended', () => {
     expect(taskEnds(toolResult('toolu_b', BASH_BG_TEXT)).size).toBe(0);
     expect(taskEnds('').size).toBe(0);
     expect(taskEnds(undefined).size).toBe(0);
+  });
+});
+
+describe('scanOpenTasksInFile — a launch older than the tail slice', () => {
+  const TAIL = 4096;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pending-tasks-'));
+  afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const filler = Array.from({ length: 200 }, (_, i) =>
+    JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'filler line ' + i + ' ' + 'x'.repeat(100) }] } }));
+  const write = (name, lines) => {
+    const f = path.join(dir, name);
+    fs.writeFileSync(f, lines.join('\n') + '\n');
+    return f;
+  };
+
+  test('is open while running, closed after its notification', () => {
+    const running = write('running.jsonl', [...AGENT_START, ...filler]);
+    expect(fs.statSync(running).size).toBeGreaterThan(TAIL * 2);
+    // The tail alone cannot see the launch ...
+    expect(scanOpenTasks(fs.readFileSync(running, 'utf8').slice(-TAIL))).toEqual([]);
+    // ... the file scan does.
+    expect(scanOpenTasksInFile(running, TAIL))
+      .toEqual([{ id: 'a75d674f7108dd6c8', kind: 'agent', name: 'devops:frontend' }]);
+
+    const done = write('done.jsonl', [...AGENT_START, ...filler, notification('a75d674f7108dd6c8')]);
+    expect(scanOpenTasksInFile(done, TAIL)).toEqual([]);
+  });
+
+  test('small files, missing files and empty paths', () => {
+    expect(scanOpenTasksInFile(write('small.jsonl', AGENT_START), 1 << 20).map(t => t.id)).toEqual(['a75d674f7108dd6c8']);
+    expect(scanOpenTasksInFile(path.join(dir, 'nope.jsonl'), TAIL)).toEqual([]);
+    expect(scanOpenTasksInFile('', TAIL)).toEqual([]);
   });
 });

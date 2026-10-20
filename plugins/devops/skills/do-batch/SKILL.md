@@ -24,9 +24,10 @@ Spec: `docs/superpowers/specs/2026-08-16-claude-batch-design.md`
 ## Step 0 — Load Extensions
 
 Silently check (do not surface "not found"):
-1. `~/.claude/skills/do-batch/SKILL.md` + `reference.md`
-2. `{project}/.claude/skills/do-batch/SKILL.md` + `reference.md`
+1. `~/.claude/skills/do-batch/reference.md`
+2. `{project}/.claude/skills/do-batch/reference.md`
    Fallback (pre-PR-2 name): where `do-batch/` does not exist, read `~/.claude/skills/claude-batch/` / `{project}/.claude/skills/claude-batch/` instead — an extension written before the rename keeps working.
+   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Route the invocation

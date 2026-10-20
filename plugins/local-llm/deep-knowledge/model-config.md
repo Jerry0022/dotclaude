@@ -92,7 +92,7 @@ The setup skill always writes to the user layer.
 
 | Field | Purpose |
 |-------|---------|
-| `baseUrl` | AnythingLLM API root. Keep default unless the app runs on a different port/host. |
+| `baseUrl` | AnythingLLM API root. Keep default unless the app runs on a different port/host. A project config may only set a loopback host (`localhost`, `127.0.0.0/8`, `::1`) — the API key is sent there; any other project value is ignored with a warning. A remote server goes into `~/.claude/local-llm/config.json`. |
 | `apiKey` | User-global secret. Only read from `~/.claude/local-llm/config.json`. |
 | `workspaceSlug` | Workspace the plugin talks to. Auto-created if missing. |
 | `workspaceName` | Human-readable name used when the workspace is auto-created. |

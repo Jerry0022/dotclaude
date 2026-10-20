@@ -169,7 +169,8 @@ function recordShipStep(tool, params, result, { now = Date.now() } = {}) {
       const facts = releaseFacts(result);
       if (Object.keys(facts).length) steps.release = { ...(steps.release || {}), ...facts };
     } else if (tool === 'ship_promote') {
-      if (result.success) steps.promote = { channel: result.channel || params.channel || null };
+      // ship_promote's target ring is its `to` param (#I4: channel used to be always null).
+      if (result.success) steps.promote = { channel: result.channel || params.to || params.channel || null, ...(result.tag ? { tag: result.tag } : {}) };
     } else {
       return;
     }

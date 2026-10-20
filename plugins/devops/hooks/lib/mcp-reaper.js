@@ -242,7 +242,7 @@ function listProcessesPosix() {
     const out = execFileSync(
       'ps',
       ['-eo', 'pid=,ppid=,rss=,comm=,args='],
-      { encoding: 'utf8', timeout: 15000, maxBuffer: 20 * 1024 * 1024 }
+      { encoding: 'utf8', timeout: 15000, maxBuffer: 20 * 1024 * 1024, windowsHide: true }
     );
     const procs = [];
     for (const rawLine of out.split('\n')) {

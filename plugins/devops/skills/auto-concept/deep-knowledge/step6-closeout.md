@@ -47,7 +47,7 @@ final card (Step 6b) then sets the outcome prefix (`👉 📦 Ready – `, …).
 title without any prefix is left untouched — the user renamed it meanwhile,
 and that name wins.
 
-Then `CronDelete <cron_id>`. `/shutdown` replaces the older `kill $SERVER_PID`:
+Then `CronDelete <cron_id>` if the state file names a legacy one. `/shutdown` replaces the older `kill $SERVER_PID`:
 on Windows the PID could already be reused by an unrelated process, and
 swallowing `kill` errors hid that case. The HTTP endpoint targets the live
 server by port and is a no-op when the server is already dead. Removing

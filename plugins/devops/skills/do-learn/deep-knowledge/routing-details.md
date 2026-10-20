@@ -105,7 +105,7 @@ Prefer the largest fitting container: **deep-knowledge > skill > CLAUDE.md**.
   (`{PLUGIN_ROOT}/deep-knowledge/claude-directory-structure.md`). Create the
   directory if missing; append under a short heading.
 - **Behavioral rule (when X, do Y)** → a project skill. Append to a matching
-  `{project}/.claude/skills/<skill>/SKILL.md` if one exists. Otherwise ask via
+  `{project}/.claude/skills/<skill>/reference.md` if one exists. Otherwise ask via
   AskUserQuestion: create a new project skill, or fall back to deep-knowledge.
 
 Append a one-line pointer to `{project}/CLAUDE.md` only as a last resort, so the
@@ -154,11 +154,12 @@ A reason that only explains the local need does not count.
 
 1. Match the learning to a plugin skill by topic (`ship`, `fix`, `concept`,
    `flow`, …).
-2. Create `{project}/.claude/skills/<skill>/SKILL.md` if absent, scaffolded from
-   the same template as `auto-extend` Step 3.
+2. Create `{project}/.claude/skills/<skill>/reference.md` if absent (never a
+   `SKILL.md` — Claude Code would load it as a skill of its own), scaffolded
+   from the same template as `auto-extend` Step 3.
 3. Append the rule under `## Project rules` — 1–3 lines each.
-4. Longer than 3 lines → put the bulk in that folder's `reference.md` and leave
-   a one-line pointer.
+4. Longer than 3 lines → put the bulk in a sibling file in that folder and
+   leave a one-line pointer in `reference.md`.
 
 No skill matches → treat it as ordinary branch C content.
 

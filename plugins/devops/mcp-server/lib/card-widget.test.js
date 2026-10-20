@@ -845,11 +845,10 @@ describe("cardWidgetInstruction", () => {
     expect(text).toContain("mcp__visualize__show_widget");
     // The widget is the whole card: last action, no markdown after it (#443, #470).
     expect(text).toMatch(/as the LAST action of the turn/);
-    expect(text).toMatch(/there is no card markdown to output/);
-    expect(text).toMatch(/Output NO text after the call/);
+    expect(text).toMatch(/IS the whole card/);
+    expect(text).toMatch(/No text after it/);
     // A failed widget call must not leave the turn with nothing visible.
-    expect(text).toMatch(/no retry, no note/);
-    expect(text).toMatch(/output the visible title line/);
+    expect(text).toMatch(/no retry/);
     expect(text).toContain(`### **✨✨✨ ${model.title} ✨✨✨**`);
     expect(text).not.toMatch(/skip silently/);
     const code = cardWidgetTemplate(model, "", desktop);
@@ -864,9 +863,8 @@ describe("cardWidgetInstruction", () => {
   // card every time. The empty reply ends the turn with the card last.
   test("the app's no-output nudge gets an empty reply, never a line under the card", () => {
     const text = cardWidgetInstruction(baseModel(), "", desktop);
-    expect(text).toContain(NO_OUTPUT_NUDGE_REPLY);
+    expect(text).toMatch(/reply nothing to the app's one "no visible output" nudge/);
     expect(NO_OUTPUT_NUDGE_REPLY).toMatch(/reply to it with nothing — no text, no tool call/);
-    expect(text).toMatch(/Never show this card a second time/);
     expect(text).not.toMatch(/ONE short line/);
   });
 
@@ -878,17 +876,14 @@ describe("cardWidgetInstruction", () => {
 
   test("the fallback line reads as the error path, never a shortcut (#451)", () => {
     const text = cardWidgetInstruction(baseModel(), "", desktop);
-    expect(text).toMatch(/mandatory, never optional/);
-    expect(text).toMatch(/ONLY when the call itself fails, or the tool does not exist/);
-    expect(text).toMatch(/never a shortcut/);
+    expect(text).toMatch(/Only if the call fails or the tool is missing \(no retry\)/);
   });
 
   test("forbids a prose recap of the card before the widget, keeps the answer as text before it (#642)", () => {
     const text = cardWidgetInstruction(baseModel(), "", desktop);
-    expect(text).toMatch(/no prose that restates the card/);
-    expect(text).toMatch(/Text before the widget: the full answer to the user's question/);
+    expect(text).toMatch(/no recap of the card/);
+    expect(text).toMatch(/Before the widget: the full answer to the user's question/);
     expect(text).toMatch(/the card never carries it/);
-    expect(text).toMatch(/a report the running skill requires \(e\.g\. auto-fix: root cause with file:line\) included/);
   });
 
   test("names the saved widget file when one was written, and only then", () => {

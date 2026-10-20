@@ -37,7 +37,7 @@ The loop continues until the user is done (closes page or says "fertig").
 ### Primary: HTTP Bridge (preferred)
 
 The pickup waker polls the bridge server for the deterministic pending flag
-(the backstop cron does the same, once per 15 minutes):
+(the pulser polls it too, but only when the waker's beat is stale):
 
 ```bash
 curl -s http://localhost:$PORT/pending
@@ -227,11 +227,10 @@ Three tiers, and only one of them is primary:
 - **Pickup waker — 20 s, primary.** The detached background task from
   `bridge-server.md` § step 3, task 2. 20 s is not arbitrary: it sits well
   under the 90 s `HEARTBEAT_STALE_MS` the page uses to decide the indicator.
-- **Cron — 15 min, backstop only, and only a partial one.** Every fire is a
-  model turn against the subscription limits, and session-only crons fire
-  only while the REPL is idle, so it cannot cover the window it looks like it
-  covers: during a processing round the REPL is busy. Re-launch the waker at
-  SKILL.md 5c step 7 instead of leaving that gap to the cron.
+- **No cron.** Every cron fire was a model turn against the subscription
+  limits (113 of 126 found nothing). The pulser is the waker's backup: it
+  wakes the session (`WAKER_MISSING`) for a submission nobody is waiting for.
+  Re-launch the waker at SKILL.md 5c step 7.
 - **Page liveness — the waker, per-tab.** The page is re-opened in Edge once
   when the user closed the last tab — no tab registered and a `/bye` after
   the last poll (60 s grace). Silence never reopens: a hidden or sleeping

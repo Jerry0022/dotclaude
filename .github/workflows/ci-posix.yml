@@ -1,0 +1,49 @@
+name: POSIX-only tests
+
+# The dev machine is Windows, so tests that only assert on POSIX (file modes,
+# uid ownership, sh quoting, a colon being a plain file-name character) are
+# skipped there via `process.platform === 'win32'` checks and never run before
+# a ship. This job runs exactly those tests on Linux — not the whole suite,
+# which is spawn-heavy and verified locally.
+#
+# Keep FILES and NAMES in sync when a new POSIX-only branch is added to a test.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-posix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  posix-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FILES: >-
+        plugins/devops/hooks/lib/issue-match.test.js
+        plugins/devops/hooks/lib/runtime-ignores.test.js
+        plugins/devops/scripts/claude-api-agent.test.js
+        plugins/devops/scripts/web-guide.test.js
+      # Test-name filter (vitest -t, a regex) so only the POSIX branches run.
+      NAMES: "cacheDirSafe: POSIX|untrackCommand single-quotes|colon in a name is an NTFS stream|file mode to 0600"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Run POSIX-only tests
+        # --passWithNoTests stays off: a renamed test must fail this job, not
+        # silently drop out of it.
+        run: npx vitest run $FILES -t "$NAMES"

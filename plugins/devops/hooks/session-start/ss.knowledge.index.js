@@ -154,6 +154,15 @@ function main() {
     // budget line in there is as old as that startup: a session resumed after
     // a limit hit must not inherit "sonnet-only" from last night. Emit only
     // the budget line (no run-once: every resume is a new reading).
+    // Compaction also drops the once-per-session reminders the per-prompt and
+    // per-tool hooks inject (delegation nudge, completion-card contract): hand
+    // their markers back so each comes once more.
+    if (source === 'compact') {
+      try {
+        require('../lib/run-once').releaseOnce('prompt-delegation-nudge', hook.session_id);
+        fs.unlinkSync(require('../lib/session-id').sessionFile('dotclaude-devops-card-contract-sent', hook.session_id));
+      } catch { /* marker already gone */ }
+    }
     const additionalContext = source === 'resume'
       ? buildResumeContext(pluginRoot, hook.session_id)
       : (

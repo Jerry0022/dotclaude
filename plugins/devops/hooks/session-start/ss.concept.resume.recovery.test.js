@@ -192,11 +192,11 @@ describe("a dead bridge with nothing pending is relaunched too (#348)", () => {
     expect(text).toContain("cron_id");
   });
 
-  test("re-arms all three watchers — pulser, waker and the backup cron", () => {
+  test("re-arms pulser and waker — no backup cron", () => {
     expect(text).toContain("--mode pulse");
     expect(text).toContain("--mode watch");
-    expect(text).toContain("concept-tick.js");
-    expect(text).toContain("CronCreate");
+    expect(text).not.toContain("CronCreate");
+    expect(text).not.toContain("*/15");
     expect(text).toContain('"C:/p/.claude/concept-active.json"');
   });
 

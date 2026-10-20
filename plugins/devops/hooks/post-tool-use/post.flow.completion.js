@@ -739,7 +739,7 @@ function completionCardLines(hook, toolName, isCodeEdit, editCount, scheduledTas
   // /auto-guide loop runs (#526): its turns live inside javascript_tool wait()
   // calls, stop.flow.guard waives their card, and a card is what ends the loop.
   const guideActive = firstOfTurn && isGuideActive(hook.cwd);
-  const cardContract = firstOfTurn && !guideActive;
+  const cardContract = !guideActive && contractDue(hook, firstOfTurn);
   if (guideActive) {
     lines.push(
       '[auto-guide] A guide run is active — no completion card while its step loop runs.',
@@ -751,6 +751,51 @@ function completionCardLines(hook, toolName, isCodeEdit, editCount, scheduledTas
   lines.push(...backgroundLaunchLines(hook));
   lines.push(...editMilestoneLines(hook, isCodeEdit, editCount));
   return { lines, cardContract };
+}
+
+/** Marker: the card contract went out for this prompt (content = the prompt's identity). */
+const CONTRACT_SENT_FLAG = 'dotclaude-devops-card-contract-sent';
+
+/** Identity of the turn's opening prompt entry (uuid, else timestamp) — '' when unreadable. */
+function currentPromptId(hook) {
+  try {
+    const { safeReadTranscript } = guardedRequire('../lib/card-guard');
+    const { isPromptEntry } = guardedRequire('../lib/skill-invocations');
+    const lines = String(safeReadTranscript(hook.transcript_path) || '').split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const raw = lines[i].trim();
+      if (!raw) continue;
+      let entry;
+      try { entry = JSON.parse(raw); } catch { continue; }
+      if (entry && entry.type === 'user' && isPromptEntry(entry)) {
+        return String(entry.uuid || entry.timestamp || '');
+      }
+    }
+  } catch { /* unreadable transcript: no identity */ }
+  return '';
+}
+
+/**
+ * 2c. Is the card contract due on this call? At most once per user prompt: the
+ * work-happened flag marks the turn's first call, but a Stop run mid-turn
+ * (card-turn-end, a blocking Stop hook) clears it and the next call looked
+ * "first" again — the full block then re-entered the context. The marker keeps
+ * the prompt's identity; a compaction start (ss.knowledge.index) removes it, so
+ * the contract comes once more on the next call, first of the turn or not.
+ */
+function contractDue(hook, firstOfTurn) {
+  const sent = readSessionFile(CONTRACT_SENT_FLAG, hook.session_id, { exact: true });
+  const sentId = sent ? String(sent.content || '').trim() : null;
+  let id = '';
+  if (sentId !== null) {
+    if (!firstOfTurn) return false;
+    id = currentPromptId(hook);
+    if (id && id === sentId) return false;
+  } else {
+    id = currentPromptId(hook);
+  }
+  try { writeSessionFile(sessionFile(CONTRACT_SENT_FLAG, hook.session_id), id || '-'); } catch { /* best effort */ }
+  return true;
 }
 
 /** 2a. Holds where an orchestrator has work after the card (card-turn-end holdReason). */

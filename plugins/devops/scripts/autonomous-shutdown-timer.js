@@ -35,9 +35,23 @@
  *                                usage-file read (testing / when the caller already
  *                                knows resetInMinutes).
  *                                → { ok, armed, seconds, minutes, source }
+ *                                → { ok, kept, fireAt, owner } when another
+ *                                session's LATER shutdown is already pending.
  *   cancel                       Run `shutdown /a`. A "nothing scheduled" result is
  *                                treated as success (idempotent).
  *                                → { ok, cancelled, noPending }
+ *                                → { ok, cancelled: false, foreign, owner } when the
+ *                                pending shutdown belongs to another session.
+ *
+ * Several sessions (owner marker): Windows holds ONE pending shutdown, so a blind
+ * `shutdown /a` in arm or cancel used to let session 2 replace or remove session
+ * 1's fail-safe. Every arm writes ~/.claude/autonomous-shutdown-owner.json
+ * ({ sessionId, fireAt }); the session id comes from CLAUDE_CODE_SESSION_ID /
+ * CLAUDE_SESSION_ID. arm keeps another session's pending shutdown when it fires
+ * LATER than ours (the later fire time wins, so no run is cut short) and re-arms
+ * only when ours is later. cancel only aborts a shutdown the marker attributes to
+ * this session; a marker that is missing, unparseable or already past its fire
+ * time is no evidence of another owner and keeps the legacy cancel.
  *
  * Platform: Windows-only (uses shutdown.exe). No-op on other platforms.
  */
@@ -53,6 +67,62 @@ const FIVE_HOURS_SEC = 5 * 60 * 60; // 18000 — fallback & hard cap (one token 
 const FLOOR_SEC = 90 * 60;          // 5400  — min, guards against cutting off live work
 const MAX_STALE_MIN = 300;          // usage older than a full window → unreliable → fallback
 const REFRESH_MAX_AGE_MIN = 3;      // cache younger than this is fresh enough → skip the scrape
+
+const MARKER_PATH = path.join(os.homedir(), '.claude', 'autonomous-shutdown-owner.json');
+
+function markerPath() {
+  return process.env.AUTONOMOUS_SHUTDOWN_MARKER || MARKER_PATH;
+}
+
+function currentSessionId() {
+  return process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || '';
+}
+
+/** The owner marker as { sessionId, fireAt }, or null when absent or unreadable. */
+function readMarker(file = markerPath()) {
+  try {
+    const m = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!m || typeof m !== 'object' || !Number.isFinite(m.fireAt)) return null;
+    return { sessionId: typeof m.sessionId === 'string' ? m.sessionId : '', fireAt: m.fireAt };
+  } catch {
+    return null;
+  }
+}
+
+function writeMarker(marker, file = markerPath()) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(marker));
+  try { fs.renameSync(tmp, file); } catch { fs.writeFileSync(file, JSON.stringify(marker)); try { fs.unlinkSync(tmp); } catch { /* gone */ } }
+}
+
+function clearMarker(file = markerPath()) {
+  try { fs.unlinkSync(file); } catch { /* nothing to clear */ }
+}
+
+/** Does the marker name ANOTHER session whose shutdown is still pending? */
+function foreignPending(marker, sessionId, now) {
+  return !!(marker && marker.fireAt > now && marker.sessionId !== sessionId);
+}
+
+/**
+ * arm decision. 'keep' leaves another session's pending shutdown in place when it
+ * fires at or after ours; otherwise 'arm' (replace it with ours).
+ * @returns {{action:'arm'|'keep'}}
+ */
+function planArm(marker, sessionId, fireAt, now) {
+  if (foreignPending(marker, sessionId, now) && marker.fireAt >= fireAt) return { action: 'keep' };
+  return { action: 'arm' };
+}
+
+/**
+ * cancel decision. 'leave' when the marker names another session with a pending
+ * shutdown; 'cancel' for our own, for a stale marker and for no marker at all.
+ * @returns {{action:'cancel'|'leave'}}
+ */
+function planCancel(marker, sessionId, now) {
+  return { action: foreignPending(marker, sessionId, now) ? 'leave' : 'cancel' };
+}
 
 function fail(msg) {
   process.stdout.write(JSON.stringify({ ok: false, error: msg }) + '\n');
@@ -181,8 +251,17 @@ function runArm(argv) {
 
   const exe = shutdownExe();
   const cwd = safeCwd();
+  const sessionId = currentSessionId();
+  const now = Date.now();
+  const fireAt = now + plan.seconds * 1000;
+  const marker = readMarker();
+  if (planArm(marker, sessionId, fireAt, now).action === 'keep') {
+    ok({ armed: false, kept: true, fireAt: new Date(marker.fireAt).toISOString(), owner: marker.sessionId,
+      seconds: plan.seconds, minutes: plan.minutes, source: plan.source });
+  }
 
-  // Idempotent re-arm: clear any pre-existing scheduled shutdown first.
+  // Idempotent re-arm: clear any pre-existing scheduled shutdown first (ours, a
+  // stale one, or another session's that fires EARLIER than ours).
   spawnSync(exe, ['/a'], { encoding: 'utf8', cwd, timeout: 30_000 });
 
   const msg =
@@ -195,11 +274,17 @@ function runArm(argv) {
     fail(`shutdown /s failed (status ${res.status}): ` +
       `${(res.stderr || res.stdout || '').trim()}`);
   }
+  try { writeMarker({ sessionId, fireAt }); } catch { /* best effort: the shutdown itself is placed */ }
   ok({ armed: true, seconds: plan.seconds, minutes: plan.minutes, source: plan.source });
 }
 
 function runCancel() {
+  const marker = readMarker();
+  if (planCancel(marker, currentSessionId(), Date.now()).action === 'leave') {
+    ok({ cancelled: false, foreign: true, owner: marker.sessionId, fireAt: new Date(marker.fireAt).toISOString() });
+  }
   const res = spawnSync(shutdownExe(), ['/a'], { encoding: 'utf8', cwd: safeCwd(), timeout: 30_000 });
+  clearMarker();
   if (res.status === 0) ok({ cancelled: true, noPending: false });
   // /a returns non-zero (error 1116) when no shutdown was scheduled — that's the
   // benign "nothing to cancel" case, not a failure.
@@ -222,6 +307,11 @@ if (require.main === module) {
 }
 
 module.exports = {
+  planArm,
+  planCancel,
+  readMarker,
+  writeMarker,
+  clearMarker,
   computeShutdownDelaySeconds,
   isCacheFresh,
   FIVE_HOURS_SEC,

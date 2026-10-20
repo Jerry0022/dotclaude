@@ -42,9 +42,10 @@ substitute (#568).
 
 Optional overrides — Glob each path first; skip missing files silently.
 
-1. Global: `~/.claude/skills/auto-concept/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/auto-concept/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/auto-concept/reference.md`
+2. Project: `{project}/.claude/skills/auto-concept/reference.md`
    Fallback (pre-PR-2 name): where `auto-concept/` does not exist, read `~/.claude/skills/concept/` / `{project}/.claude/skills/concept/` instead — an extension written before the rename keeps working.
+   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
 3. Merge: project > global > plugin defaults
 
 ## Step 0.5 — Concept Mode (asked once, at the start)
@@ -212,7 +213,7 @@ OS shell. **Forbidden alternatives** that will produce a broken session:
 
 The bridge server handles all communication — no JS eval injection needed.
 
-**Before executing this step, Read `deep-knowledge/step4-monitor.md` § Heartbeat, pickup and polling schedule completely** — the heartbeat POST, `/pending` vs `/decisions`, waker, backstop cron, initial wait, no timeout, never blocking the conversation.
+**Before executing this step, Read `deep-knowledge/step4-monitor.md` § Heartbeat, pickup and polling schedule completely** — the heartbeat POST, `/pending` vs `/decisions`, waker (+ pulser backup, no cron), initial wait, no timeout, never blocking the conversation.
 
 ## Step 5 — Live Feedback Loop
 

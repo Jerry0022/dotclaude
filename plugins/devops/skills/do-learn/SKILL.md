@@ -34,9 +34,10 @@ feedback belongs in auto-memory and is handled elsewhere — this skill writes
 Glob each path before reading; skip missing files silently. Merge project >
 global > plugin defaults.
 
-1. Global: `~/.claude/skills/do-learn/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/do-learn/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/do-learn/reference.md`
+2. Project: `{project}/.claude/skills/do-learn/reference.md`
    Fallback (pre-PR-2 name): where `do-learn/` does not exist, read `~/.claude/skills/claude-learn/` / `{project}/.claude/skills/claude-learn/` instead — an extension written before the rename keeps working.
+   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
 
 ## Step 1 — Collect the learning
 

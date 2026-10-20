@@ -7,11 +7,15 @@
  */
 
 import { z } from "zod";
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compareVersions } from "../lib/channels.js";
+import { findGreen, recordResult, treeKey, usualDurationMs } from "../lib/test-results.js";
+import {
+  buildLoad, classifyFailure, isEnvCleanupFailure, parseFailingTests, parseLockWait, readLockHolder, sampleCpu,
+} from "../lib/test-step.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -107,11 +111,16 @@ function readmeSectionsScript(cwd) {
   };
 }
 
+/** Per-step limit; the former 120 s stopped full suites under load. */
+export const DEFAULT_STEP_TIMEOUT_SEC = 300;
+
 export const schema = z.object({
   buildCmd: z.string().nullable().default(null).describe("Build command (null = auto-detect from package.json)"),
   lintCmd: z.string().nullable().default(null).describe("Lint command (null = auto-detect from package.json)"),
   testCmd: z.string().nullable().default(null).describe("Test command (null = auto-detect from package.json)"),
+  stepTimeoutSec: z.number().int().min(30).max(1800).default(DEFAULT_STEP_TIMEOUT_SEC).describe("Per-step limit (build, lint, test) in seconds. Default 300. A step stopped by it fails with failure: 'timeout' and the result names the limit (timeoutHit) — a harness stop, not a red test."),
   buildIdOnly: z.boolean().default(false).describe("Skip build, only compute build-ID"),
+  reuseGreen: z.boolean().default(true).describe("Skip the test step when a green run of the same testCmd on the identical tree (git tree hash) is recorded and younger than 24 h — the result then carries testsReused. false = always run."),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
 
@@ -135,12 +144,24 @@ function detectScripts(cwd) {
   }
 }
 
-function run(cmd, cwd) {
+/** `timeoutHit` for a step the limit stopped — so the caller raises stepTimeoutSec instead of debugging a green suite. */
+function timeoutNote(step, res) {
+  if (res.failure !== "timeout") return {};
+  return {
+    timeoutHit: {
+      step,
+      limitSec: res.limitSec,
+      note: `${step} was stopped at the ${res.limitSec} s step limit (not a failing ${step}). Re-run ship_build with a higher stepTimeoutSec, or run the step separately and pass a narrower testCmd.`,
+    },
+  };
+}
+
+function run(cmd, cwd, limitSec = DEFAULT_STEP_TIMEOUT_SEC) {
   try {
     const output = execSync(cmd, {
       cwd,
       encoding: "utf8",
-      timeout: 120_000,
+      timeout: limitSec * 1000,
       // Node's default maxBuffer (~1 MiB) kills a chatty-but-green test run
       // with ENOBUFS, which then read as a failed test step.
       maxBuffer: 64 * 1024 * 1024,
@@ -156,10 +177,100 @@ function run(cmd, cwd) {
     const out = { success: false, output: tail };
     if (failure) {
       out.failure = failure;
-      out.output = `[${failure}: the command was stopped by the ship harness, not by a failing test — ${failure === "timeout" ? "120 s limit" : "output exceeded 64 MiB"}]\n` + tail;
+      if (failure === "timeout") out.limitSec = limitSec;
+      out.output = `[${failure}: the command was stopped by the ship harness, not by a failing test — ${failure === "timeout" ? `${limitSec} s limit` : "output exceeded 64 MiB"}]\n` + tail;
     }
     return out;
   }
+}
+
+/** Tail kept of a red test step's output; failing test names are returned separately and in full. */
+const RED_TAIL = 4000;
+
+/**
+ * The test step via spawnSync so stdout AND stderr are both kept on success
+ * too — the suite-lock wait lines go to stderr, the vitest failure summary to
+ * stdout. `full` is for parsing only and never returned.
+ */
+function runTest(cmd, cwd, limitSec) {
+  const r = spawnSync(cmd, {
+    cwd,
+    shell: true,
+    encoding: "utf8",
+    timeout: limitSec * 1000,
+    maxBuffer: 64 * 1024 * 1024,
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  const stdout = (r.stdout || "").toString();
+  const stderr = (r.stderr || "").toString();
+  const full = stderr ? `${stdout}\n${stderr}` : stdout;
+  if (!r.error && r.status === 0) return { success: true, output: stdout.slice(-2000), full };
+  let failure;
+  if (r.error?.code === "ENOBUFS") failure = "output-overflow";
+  else if (r.error?.code === "ETIMEDOUT" || (r.signal && r.status === null)) failure = "timeout";
+  const tail = (full || r.error?.message || "").slice(-RED_TAIL);
+  const out = { success: false, output: tail, full };
+  if (failure) {
+    out.failure = failure;
+    if (failure === "timeout") out.limitSec = limitSec;
+    out.output = `[${failure}: the command was stopped by the ship harness, not by a failing test — ${failure === "timeout" ? `${limitSec} s limit` : "output exceeded 64 MiB"}]\n` + tail;
+  }
+  return out;
+}
+
+/**
+ * Test step with green-result reuse, one retry on an EPERM/EBUSY temp-cleanup
+ * failure, failure classification and the load signal (#762). Returns
+ * { step, extra } — extra holds testsReused / load / failureKind / failingTests.
+ */
+async function testStep(testCmd, cwd, limitSec, reuseGreen) {
+  const key = treeKey(cwd);
+  if (reuseGreen !== false && key) {
+    const hit = findGreen(cwd, { treeHash: key.treeHash, testCmd });
+    if (hit) {
+      return {
+        step: {
+          step: "test", cmd: testCmd, success: true, reused: true,
+          output: `reused green run (${hit.source}, ${hit.at}) on tree ${key.treeHash.slice(0, 12)} — not re-run`,
+        },
+        extra: { testsReused: { treeHash: key.treeHash, at: hit.at, source: hit.source, testCmd: hit.testCmd } },
+      };
+    }
+  }
+
+  const holderAtStart = readLockHolder();
+  const cpu = await sampleCpu();
+  const started = Date.now();
+  let res = runTest(testCmd, cwd, limitSec);
+  let retried = null;
+  if (!res.success && !res.failure && isEnvCleanupFailure(res.full)) {
+    retried = { reason: "EPERM/EBUSY temp-cleanup pattern", firstOutput: res.output.slice(-1500) };
+    res = runTest(testCmd, cwd, limitSec);
+    retried.secondPassed = res.success;
+  }
+  const durationMs = Date.now() - started;
+  const usualMs = usualDurationMs(cwd, testCmd);
+  // A retried step ran twice — its duration says nothing about "slower than usual".
+  const load = buildLoad({ lockWait: parseLockWait(res.full), holderAtStart, cpu, durationMs: retried ? null : durationMs, usualMs });
+
+  const { full, ...stepRes } = res;
+  const step = { step: "test", cmd: testCmd, ...stepRes, durationMs };
+  if (retried) step.retried = retried;
+  const extra = {};
+  if (load) extra.load = load;
+
+  if (res.success) {
+    // Record only when the tree did not move during the run.
+    const after = key ? treeKey(cwd) : null;
+    if (after && after.treeHash === key.treeHash) {
+      recordResult(cwd, { treeHash: key.treeHash, testCmd, passed: true, durationMs: retried ? null : durationMs, source: "ship_build" });
+    }
+  } else if (!res.failure) {
+    extra.failingTests = parseFailingTests(full);
+    extra.failureKind = classifyFailure(full, extra.failingTests);
+  }
+  return { step, extra };
 }
 
 function getBuildId(cwd) {
@@ -178,6 +289,7 @@ export async function handler(params) {
   const cwd = params.cwd;
   if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const { buildIdOnly } = params;
+  const limitSec = params.stepTimeoutSec ?? DEFAULT_STEP_TIMEOUT_SEC;
 
   if (buildIdOnly) {
     return { success: true, buildId: getBuildId(cwd), skipped: true };
@@ -190,6 +302,7 @@ export async function handler(params) {
   const testCmd = params.testCmd ?? detected.test;
 
   const steps = [];
+  let testExtra = {};
 
   // Generator failures are non-fatal to the build, but MUST NOT be swallowed
   // silently — a stale index that never regenerates is exactly the F5 bug.
@@ -228,28 +341,29 @@ export async function handler(params) {
 
   // Build (skip if no build script detected/provided)
   if (buildCmd) {
-    const buildResult = run(buildCmd, cwd);
+    const buildResult = run(buildCmd, cwd, limitSec);
     steps.push({ step: "build", cmd: buildCmd, ...buildResult });
     if (!buildResult.success) {
-      return { success: false, buildId: null, steps, failedAt: "build", warnings: genWarnings };
+      return { success: false, buildId: null, steps, failedAt: "build", ...timeoutNote("build", buildResult), warnings: genWarnings };
     }
   }
 
   // Lint
   if (lintCmd) {
-    const lintResult = run(lintCmd, cwd);
+    const lintResult = run(lintCmd, cwd, limitSec);
     steps.push({ step: "lint", cmd: lintCmd, ...lintResult });
     if (!lintResult.success) {
-      return { success: false, buildId: null, steps, failedAt: "lint", warnings: genWarnings };
+      return { success: false, buildId: null, steps, failedAt: "lint", ...timeoutNote("lint", lintResult), warnings: genWarnings };
     }
   }
 
   // Tests
   if (testCmd) {
-    const testResult = run(testCmd, cwd);
-    steps.push({ step: "test", cmd: testCmd, ...testResult });
+    const { step: testResult, extra } = await testStep(testCmd, cwd, limitSec, params.reuseGreen);
+    testExtra = extra;
+    steps.push(testResult);
     if (!testResult.success) {
-      return { success: false, buildId: null, steps, failedAt: "test", warnings: genWarnings };
+      return { success: false, buildId: null, steps, failedAt: "test", ...timeoutNote("test", testResult), ...testExtra, warnings: genWarnings };
     }
   }
 
@@ -261,6 +375,7 @@ export async function handler(params) {
     buildId,
     steps,
     detected: { build: !!buildCmd, lint: !!lintCmd, test: !!testCmd },
+    ...testExtra,
     warnings: genWarnings,
   };
 }

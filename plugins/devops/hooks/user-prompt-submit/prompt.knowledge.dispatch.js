@@ -26,6 +26,7 @@ const { readBudget, maybeRefreshUsage, nudgeSuffix, budgetLine } = require('../l
 const { readDelegation } = require('../lib/delegation');
 const { matchPointers, legacyOverrides, pointerLine } = require('../lib/knowledge-pointers');
 const { SAFE_CONTEXT_CHARS } = require('../lib/context-cap');
+const { runOnce } = require('../lib/run-once');
 
 /**
  * Topic-to-file keyword map.
@@ -159,6 +160,8 @@ const ASK_NUDGE =
   '(which agent, why) and run it only on a yes. Hard go ("agents/full") spawns directly; explicit run-* skills are unaffected.';
 
 const NUDGE_MIN_CHARS = 40;
+/** run-once key of the nudge text (released by ss.knowledge.index on a compaction start). */
+const NUDGE_ONCE_KEY = 'prompt-delegation-nudge';
 
 /** True when an AFK run has armed the lockout sentinel for this project. */
 function lockoutArmed(cwd) {
@@ -350,7 +353,17 @@ process.stdin.on('end', () => {
     } catch { /* never block the prompt */ }
   }
   const nudgeText = mode === 'off' ? null : mode === 'ask' ? ASK_NUDGE : DELEGATION_NUDGE;
-  const nudge = nudgeText && rawMessage.trim().length >= NUDGE_MIN_CHARS ? [nudgeText + budgetSuffix] : [];
+  //  10. The nudge text itself goes out once per session (and again after a
+  //      compaction — ss.knowledge.index releases the marker): the policy is in
+  //      context from SessionStart and every copy stays in the transcript. The
+  //      budget suffix still rides on every prompt, as it can change per prompt.
+  let nudge = [];
+  if (nudgeText && rawMessage.trim().length >= NUDGE_MIN_CHARS) {
+    let first = true;
+    try { first = runOnce(NUDGE_ONCE_KEY, sessionId); } catch { /* fail open: send it */ }
+    if (first) nudge = [nudgeText + budgetSuffix];
+    else if (budgetSuffix.trim()) nudge = [`[delegation-policy]${budgetSuffix.startsWith(' ') ? '' : ' '}${budgetSuffix}`];
+  }
   const blocks = [`[ui-locale: ${lang}]`, ...announce, ...nudge];
 
   if (isFresh) {

@@ -76,9 +76,10 @@ implement nothing. The ship path never loads auto-agents.
 Check for optional overrides. Use **Glob** to verify each path exists before
 reading. Skip missing files silently.
 
-1. Global: `~/.claude/skills/auto-harden/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/auto-harden/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/auto-harden/reference.md`
+2. Project: `{project}/.claude/skills/auto-harden/reference.md`
    Fallback (pre-PR-2 name): where `auto-harden/` does not exist, read `~/.claude/skills/tune-harden/` / `{project}/.claude/skills/tune-harden/` instead — an extension written before the rename keeps working.
+   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
 3. Merge order: project > global > plugin defaults
 
 Project extensions can add framework-specific consistency rules (e.g. design

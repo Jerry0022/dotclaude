@@ -72,6 +72,8 @@
  *   Claude reads AS INSTRUCTIONS — and into a JSON example.
  */
 
+const fs = require('fs');
+
 /** Text a background Agent launch returns. */
 const AGENT_LAUNCH_MARKER = 'Async agent launched successfully';
 /** Captures the agent id from that same tool_result. */
@@ -594,6 +596,71 @@ function scanOpenTasks(transcriptContent) {
   return [...open.entries()].map(([id, v]) => ({ id, kind: v.kind, name: v.name }));
 }
 
+/** Chunk size when the whole transcript has to be streamed. */
+const FULL_SCAN_CHUNK_BYTES = 4 * 1024 * 1024;
+/** A tool_use line of a tool that can launch, resume or stop background work. */
+const RELEVANT_TOOL_USE_RE =
+  /"name"\s*:\s*"(?:Agent|Task|Skill|Workflow|Bash|PowerShell|TaskStop|SendMessage)"/;
+
+/** True when a raw JSONL line can matter to scanOpenTasks. */
+function isRelevantLine(line) {
+  if (line.includes('<task-notification>') || line.includes(TASK_STOP_MARKER)
+      || line.includes(AGENT_LAUNCH_MARKER) || line.includes(BASH_LAUNCH_MARKER)
+      || line.includes(BASH_AUTO_BG_MARKER) || line.includes(WORKFLOW_LAUNCH_MARKER)
+      || line.includes(AGENT_RESUME_MARKER)) return true;
+  return line.includes('"tool_use"') && RELEVANT_TOOL_USE_RE.test(line);
+}
+
+/**
+ * The background work still open in a transcript FILE, however long the session.
+ *
+ * A tail slice misses a launch older than the slice: the agent is still running
+ * but its start is not visible, so the card gate says "no background task is
+ * open" and the Stop hook asks for no `pending` names. When the file is larger
+ * than the tail, the whole file is streamed in chunks and reduced to the lines
+ * that can matter (launch/notification/stop markers and the tool_use lines that
+ * name the launcher), then scanned chronologically as usual. A file that fits in
+ * the tail is scanned directly (fast path).
+ *
+ * @param {string} transcriptPath
+ * @param {number} tailBytes — the fast-path slice size
+ * @returns {Array<{ id: string, kind: string, name: string }>}
+ */
+function scanOpenTasksInFile(transcriptPath, tailBytes) {
+  if (!transcriptPath) return [];
+  let fd;
+  try {
+    const size = fs.statSync(transcriptPath).size;
+    fd = fs.openSync(transcriptPath, 'r');
+    if (size <= tailBytes) {
+      const buf = Buffer.alloc(size);
+      fs.readSync(fd, buf, 0, size, 0);
+      return scanOpenTasks(buf.toString('utf8'));
+    }
+    const kept = [];
+    const chunk = Buffer.alloc(FULL_SCAN_CHUNK_BYTES);
+    let carry = Buffer.alloc(0);
+    let pos = 0;
+    const take = lines => { for (const l of lines) if (l && isRelevantLine(l)) kept.push(l); };
+    while (pos < size) {
+      const n = fs.readSync(fd, chunk, 0, FULL_SCAN_CHUNK_BYTES, pos);
+      if (n <= 0) break;
+      pos += n;
+      const data = Buffer.concat([carry, chunk.subarray(0, n)]);
+      const cut = data.lastIndexOf(10);
+      if (cut < 0) { carry = data; continue; }
+      take(data.subarray(0, cut).toString('utf8').split('\n'));
+      carry = data.subarray(cut + 1);
+    }
+    take(carry.toString('utf8').split('\n'));
+    return scanOpenTasks(kept.join('\n'));
+  } catch {
+    return [];
+  } finally {
+    if (fd !== undefined) try { fs.closeSync(fd); } catch { /* ignore */ }
+  }
+}
+
 /**
  * The names of the open items, id-free — safe to put in a hook reason or any
  * other text Claude may echo. Deduplicated, order preserved.
@@ -696,6 +763,7 @@ module.exports = {
   responseLaunch,
   isConceptInfra,
   scanOpenTasks,
+  scanOpenTasksInFile,
   openTaskNames,
   taskEnds,
   labelFor,

@@ -98,7 +98,18 @@ ceiling is its proxy. `/do-run burn` is exempt (explicit run skill).
   reasoning effort. Its goal is to turn budget that would expire into
   depth-per-task rather than breadth-of-unfinished-tasks. See
   `skills/do-run/modes/burn/deep-knowledge/burn-scheduler.md` § Depth profiles.
-- Upgrading to opus or fable is fine for any agent when task complexity warrants it
+- **Implementers stay on sonnet** (`core`, `frontend`, `ai`, `designer`,
+  `qa` — their frontmatter): a well-specified bundle (contract given, files
+  named, tests known) is never upgraded. `opus` / `fable` only for
+  design-heavy, architecture or ambiguous work (no contract yet, an open
+  trade-off, a cross-cutting refactor) — and only in budget class `free`.
+  In every other class (Pro always lands there) an implementer is never
+  upgraded, also inside `/do-run` and after "the right agents": a smaller
+  plan only makes the rule lighter. Unaffected: the opus roles' own
+  frontmatter (`po`, `research`, `redteam`, `feature` — the full-ceremony
+  synthesis and the redteam gate keep opus) and `/do-run burn`, which
+  upgrades on purpose via `burn-plan.js gate`. Measured: 86 implementer
+  spawns on opus cost ≈ $1,500 per 50 sessions; on sonnet ≈ $300.
 
 ### Complexity Tiers
 
@@ -150,6 +161,12 @@ The count follows the work, not a fixed number. Parallel **implementers**
 5. **Read-only lens agents** (research, scout, qa, redteam, po) are not
    implementers: up to ~8 in parallel, limited by cost only — they cannot
    conflict, and more independent lenses keep adding signal.
+6. **Fewer wake-ups** — every background completion wakes the orchestrator
+   with its full context (measured: 323 wake-ups × ~353 k tokens in 50
+   sessions). Prefer one agent per disjoint bundle over many tiny agents;
+   work of ≤ ~5 tool calls is done inline, not by a background agent; a
+   command that finishes in < ~2 min (a test file, a lint, a build step) runs
+   in the foreground, not with `run_in_background`.
 6. **Synthesis stays short, verification does not** — every wave with more
    than one implementer ends in the inter-wave gate below: merge, then the
    full test suite. A central check after the merge is what keeps parallel
