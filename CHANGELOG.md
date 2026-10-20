@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.278.1] — 2026-10-20
+
+### Fixed
+- **Cards no longer offer the routine next step as an open point (#751).** `render_completion_card` drops `open` items that only name the step after a finished scope, such as „Version ausgeben, nach main pushen und Discord-Post senden“, ship, push, release, a version bump or a channel post (`lib/open-admission.js`). The tool result names how many were dropped. An item with a `?` stays, and so does any genuine decision. Past-tense wording („bereits gepushte Commits …“), compound nouns („Push-Benachrichtigungen“, „Release-Skript“), a bare „ausgeben“ or „posten“ and finished work in a linked side session that carries a reply also stay.
+- **The analysis card shows open points and their replies (#759).** An `analysis` card with `open` items lists them with ❓/👉 icons, and Nachbessern carries their replies. Finished, unshipped commits in a linked side session go on a `ready` card with `open: [{ text, reply: "ship" }]`, never `analysis`.
+- **Card audit fixes.** Several card problems from the audit are fixed:
+  - A deploy wait no longer counts as a deviation.
+  - The red count no longer reads „0 rot“ next to real failures.
+  - JSON-string fields are parsed.
+  - A run contract from another checkout no longer gates this card.
+  - A merged ship with a pending deploy gate never archives the session.
+
 ## [0.278.0] — 2026-10-20
 
 ### Added

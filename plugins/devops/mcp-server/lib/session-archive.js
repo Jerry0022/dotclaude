@@ -18,8 +18,8 @@
  * Qualifies only: Desktop app, a `ship-successful` / `released` card (after
  * the variant guard) with a real merge (`state.merged`, and pushed or a local
  * merge in a repo without a remote). Never with an explicit keep
- * (`state.kept`), pending background work, open points or user tests the
- * card still hands the user, a concept or batch mode in play, an orchestrator
+ * (`state.kept`), pending background work, open points, user tests or a
+ * pending deploy the card still hands the user, a concept or batch mode in play, an orchestrator
  * hold (autonomous lockout, ship queue, autonomous run — they ship several
  * items from one session), a missing `cwd`, a dirty work tree (tracked
  * changes or untracked files; ignored files are fine), or the
@@ -58,6 +58,8 @@ export function archiveDecision(params, deps) {
   if (deps.hasPending(params.pending)) return no("pending");
   if (hasItems(params.open)) return no("open");
   if (hasItems(params.userTest)) return no("user-test");
+  // A deploy the user still has to run or gate-check is their step too.
+  if (s.deployPending || hasItems(params.deployGate)) return no("deploy");
   if (deps.hasConcept(params.concept)) return no("concept");
   const cwd = typeof params.cwd === "string" ? params.cwd.trim() : "";
   if (!cwd) return no("no-cwd");

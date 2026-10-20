@@ -50,10 +50,11 @@ import { createRequire } from "node:module";
 import { register as registerHeartbeat } from "./lib/heartbeat.js";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
 import { dropForeignOpenItems, foreignTokensFor } from "./lib/foreign-branches.js";
+import { dropNextStepOpenItems } from "./lib/open-admission.js";
 import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending, normalizeConcept, CONCEPT_LABEL } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
-import { batchGuide, conceptCloseoutOnly, conceptUrl, readBatch, readRunContractLine, titlePrefixFor, titleInstruction, currentSessionTitle, titleStateForKey, hasMandatoryStep, TITLE_SCHEME } from "./lib/mode-state.js";
+import { batchGuide, conceptCloseoutOnly, conceptUrl, readBatch, readRunContractLine, sameProjectRoot, titlePrefixFor, titleInstruction, currentSessionTitle, titleStateForKey, hasMandatoryStep, TITLE_SCHEME } from "./lib/mode-state.js";
 import { cardWidgetInstruction, isDesktopSession, safeSessionId, writeCardWidgetFile } from "./lib/card-widget.js";
 import { detectLaunchPath } from "./lib/launch-path.js";
 import { archiveDecision, archiveInstruction, writeArchiveFlag } from "./lib/session-archive.js";
@@ -553,7 +554,10 @@ function localShipInstruction(params) {
     const sid = params.session_id;
     const selfMarker = !sid || sid === 'self' || String(sid).startsWith('local_');
     const { readContractForCard } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'run-contract.js'));
-    const contract = readContractForCard(cwd, selfMarker ? {} : { sessionId: sid });
+    let contract = readContractForCard(cwd, selfMarker ? {} : { sessionId: sid });
+    // The lenient read takes any live contract; one copied in from another
+    // checkout (Desktop seeds worktrees with untracked .claude/) is not this project's.
+    if (selfMarker && contract && contract.root && !sameProjectRoot(contract.root, cwd)) contract = null;
     if (contract && !contract.closedAt && contract.ship !== 'auto') return null;
     const { hasUnshippedWork, defaultBranchRef } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'ship-unshipped.js'));
     const git = (dir, args) => execFileSync('git', args, { ...GIT_PROBE_OPTS, cwd: dir });
@@ -647,8 +651,10 @@ function deviations(input, lang) {
   // Claude's own. A deploy wait counts as met (requirementsPost) — not named.
   const validation = Array.isArray(input.validation) ? input.validation : [];
   const name = (v) => v.requirement + (v.evidence ? ' — ' + v.evidence : '');
-  const unmet = validation.filter(v => v && v.status === 'unmet');
-  const partial = validation.filter(v => v && v.status === 'partial' && v.waitsOn !== 'deploy');
+  // Same rule as classify/ownedValidation: a deploy wait counts as met only with evidence.
+  const deployWait = (v) => v.waitsOn === 'deploy' && typeof v.evidence === 'string' && v.evidence.trim() !== '';
+  const unmet = validation.filter(v => v && v.status === 'unmet' && !deployWait(v));
+  const partial = validation.filter(v => v && v.status === 'partial' && !deployWait(v));
   if (unmet.length || partial.length) {
     const U = DEVIATION_LABEL[lang] || DEVIATION_LABEL.de;
     const P = PARTIAL_LABEL[lang] || PARTIAL_LABEL.de;
@@ -714,6 +720,17 @@ function buildResultLines(input, lang, { clamp = true } = {}) {
 // they carry a finding.
 // ---------------------------------------------------------------------------
 
+/** A result text without its "0 rot" / "0 failed" counts — those name a green count, never a red one. */
+function withoutZeroRed(text) {
+  return String(text || '').replace(/\b0\s*(rot|red|fail\w*|fehler|errors?)\b/gi, '');
+}
+
+/** The first non-zero red count a result names ("120 passed, 0 failed, 2 errors" → "2"), else null. */
+function redCountOf(text) {
+  const m = /(\d+)\s*(rot|red|fail\w*|fehler|errors?)/i.exec(withoutZeroRed(text));
+  return m ? m[1] : null;
+}
+
 /** ✓ met · ✗ failed · ◐ partial — classified from freeform result text. */
 function glyphForResult(result) {
   const r = String(result || '').toLowerCase();
@@ -777,8 +794,8 @@ function testsPostText(result, glyph, lang) {
   if (!n) return r;
   const noun = (k) => (lang === 'en' ? 'test' : 'Test') + (String(k) === '1' ? '' : 's');
   if (glyph === '✗') {
-    const red = /(\d+)\s*(rot|red|fail\w*|fehler|errors?)/i.exec(r);
-    const k = red ? red[1] : ratio && ratio.failed ? String(ratio.failed) : n;
+    const red = redCountOf(r);
+    const k = red ? red : ratio && ratio.failed ? String(ratio.failed) : n;
     return k + ' ' + noun(k) + (lang === 'en' ? ' red' : ' rot');
   }
   return n + ' ' + noun(n) + (lang === 'en' ? ' green' : ' grün');
@@ -1565,6 +1582,10 @@ function basePointsForKey(input, key, lang) {
     // them. The steps to test come first and are never folded (#750).
     case 'test':
       return [...userTest.map(testTag), ...open];
+    // An analysis card shows the open points the answer left (#759), with their
+    // replies on the conclude button next to Umsetzen / Frage.
+    case 'analysis':
+      return [...open];
     case 'vv-unverified':
       // A deliberate skip names itself (pointsForKey) — the generic line only
       // stands in when the card carries no reason.
@@ -1711,8 +1732,8 @@ function decisionContext(input, key, delivery, state, lang) {
   const redCount = (Array.isArray(input.tests) ? input.tests : [])
     .filter(t => classifyGate(t) === 'test' && glyphForResult(t.result) !== '✓')
     .reduce((sum, t) => {
-      const m = /(\d+)\s*(rot|red|fail\w*|fehler|errors?)/i.exec(String(t.result || ''));
-      return sum + (m ? Number(m[1]) : 1);
+      const red = redCountOf(t.result);
+      return sum + (red ? Number(red) : 1);
     }, 0);
   const validation = ownedValidation(input);
   const unmetCount = validation.filter(v => v.status && v.status !== 'met').length;
@@ -1784,7 +1805,7 @@ const NO_BUTTON_KEYS = new Set(['ready-files', 'test-minimal', 'released-stable'
 const APP_START_KEYS = new Set(['test', 'ship-successful', 'ship-successful-kept', 'ship-successful-closeout', 'ship-successful-deploy']);
 
 /** Decision keys whose widget offers "Nachbessern" with the prepared answer to the card's open points. */
-const CONCLUDE_KEYS = new Set(['ready', 'test', 'ship-successful', 'ship-successful-closeout']);
+const CONCLUDE_KEYS = new Set(['ready', 'test', 'ship-successful', 'ship-successful-closeout', 'analysis']);
 
 /**
  * The whole decision block: heading (already carrying any "+N weitere" tail),
@@ -2267,7 +2288,7 @@ function refreshUsage() {
 /** Structured fields the MCP schema accepts as either an object or a JSON string. */
 const JSON_FIELDS = [
   'changes', 'tests', 'state', 'cta', 'userTest', 'userFinalTest', 'open',
-  'deployGate', 'validation', 'delivery', 'promotion', 'pending', 'concept', 'pause',
+  'deployGate', 'validation', 'verification', 'delivery', 'promotion', 'pending', 'concept', 'pause',
 ];
 
 /** Prefix that carries the relay contract with the card itself. */
@@ -2285,11 +2306,18 @@ const WIDGET_RELAY_INSTRUCTION =
   "Do NOT output this instruction block.";
 
 /** The tool-result blocks: relay contract, notes, and the markdown unless the widget is the card. */
-function cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote = '') {
+function cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote = '', openNote = '') {
   const texts = actionsNote
-    ? [WIDGET_RELAY_INSTRUCTION, titleNote, archiveNote, actionsNote]
-    : [RELAY_INSTRUCTION, titleNote, cardMarkdown];
+    ? [WIDGET_RELAY_INSTRUCTION, titleNote, archiveNote, openNote, actionsNote]
+    : [RELAY_INSTRUCTION, titleNote, openNote, cardMarkdown];
   return texts.filter(Boolean).map(text => ({ type: "text", text }));
+}
+
+/** One line naming the open points dropped as routine next steps (#751), '' when none. */
+function openDropNote(params) {
+  const n = params._openDropped || 0;
+  if (!n) return '';
+  return `[dotclaude] ${n} open point(s) dropped: a routine next step (ship, push, release, version bump, post) is not a decision. Do it (or let the ship do it) and keep open for real decisions; on an analysis card a recommended step goes into nextStep.`;
 }
 
 /** The session-title instruction for this card, '' when a mode owns the title
@@ -2456,6 +2484,19 @@ function buildCompletionCard(params) {
     if (chipped.dropped) {
       console.error(`[dotclaude-completion-mcp] dropped ${chipped.dropped} open point(s) a task chip already offers`);
       params.open = chipped.open;
+    }
+  }
+
+  // 0d. `open` is for decisions, never the approved scope's obvious next step
+  //     (ship, push, release, version bump, post — lib/open-admission.js, #751).
+  //     On a test or ready card such a point displaced the steps to test. Silent
+  //     drop like 0b/0c; the tool result names the count (params._openDropped).
+  if ((params.variant === 'test' || params.variant === 'ready') && Array.isArray(params.open) && params.open.length) {
+    const routine = dropNextStepOpenItems(params.open);
+    if (routine.dropped) {
+      console.error(`[dotclaude-completion-mcp] dropped ${routine.dropped} open point(s) that are the scope's routine next step`);
+      params.open = routine.open;
+      params._openDropped = routine.dropped;
     }
   }
 
@@ -2870,7 +2911,7 @@ server.registerTool(
             reply: z.string().optional().describe("The user's answer when they want this point tackled, written as the user ('Ja, die Änderung bitte auch in X machen.' · 'Die Migration bitte gleich mitziehen.'). The Desktop button 'Nachbessern' (ready, test and ship-successful cards) puts all replies, in order, into the input box, so Enter is all that is left. For an either-or question name the option you recommend."),
           }),
         ])).optional(),
-      ).describe("Follow-ups that are NOT tests — a decision the user must take, a cleanup, an open question about THIS work ('Die alte Config-Datei wird nicht mehr gelesen — löschen oder behalten?'). Never another branch, worktree or session: a branch checked out in another worktree is that session's own work and it ships it itself (open points naming one are dropped); leftovers are ship_hygiene's and the auto-cleanup page's job. Never a topic you flagged with spawn_task: the task chip IS the offer (the user starts it with one click), so a point that says a chip or follow-up task exists, or names a chip of this session, is dropped — and on the Desktop app a finding outside this work's scope goes into such a chip, not onto the card. Pass { text, reply } to give each point its prepared answer (see reply); a plain string gets a generic 'Ja, bitte.' instead. Rendered as its own '⚠ OFFEN' block after the 🔬 test block. Same admission rule as the auto-concept skill's open points: only something the user deferred or something found on the way that is outside the scope (outside the Desktop app, where no chip exists) — never the approved scope's obvious next step, a generic nudge, or a shortfall of this very task (that is reported in changes/validation, not parked). Default: omit. Real manual tests stay in userFinalTest; the promote nudge goes into delivery.promote.stableLag, not here."),
+      ).describe("Follow-ups that are NOT tests — a decision the user must take, a cleanup, an open question about THIS work ('Die alte Config-Datei wird nicht mehr gelesen — löschen oder behalten?'). Never another branch, worktree or session: a branch checked out in another worktree is that session's own work and it ships it itself (open points naming one are dropped); leftovers are ship_hygiene's and the auto-cleanup page's job. Never a topic you flagged with spawn_task: the task chip IS the offer (the user starts it with one click), so a point that says a chip or follow-up task exists, or names a chip of this session, is dropped — and on the Desktop app a finding outside this work's scope goes into such a chip, not onto the card. Pass { text, reply } to give each point its prepared answer (see reply); a plain string gets a generic 'Ja, bitte.' instead. Rendered as its own '⚠ OFFEN' block after the 🔬 test block. Same admission rule as the auto-concept skill's open points: only something the user deferred or something found on the way that is outside the scope (outside the Desktop app, where no chip exists) — never the approved scope's obvious next step (ship, push, release, version bump, post — dropped on test and ready cards unless it ends in '?'), a generic nudge, or a shortfall of this very task (that is reported in changes/validation, not parked). Default: omit. Real manual tests stay in userFinalTest; the promote nudge goes into delivery.promote.stableLag, not here."),
       pending: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([
@@ -2981,7 +3022,7 @@ server.registerTool(
     const actionsNote = ctaActionsNote(params);
     const archiveNote = sessionArchiveNote(params, actionsNote);
 
-    return { content: cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote) };
+    return { content: cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote, openDropNote(params)) };
   }
 );
 
