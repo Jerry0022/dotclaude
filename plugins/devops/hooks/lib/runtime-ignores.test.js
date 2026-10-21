@@ -11,6 +11,7 @@ describe("isRuntimeState — runtime files ship_release must never stage", () =>
     [".claude/runs/x.json", true],
     [".claude/.ship-carddata-abc.json", true],
     [".claude\\.ship-checkpoint.json", true],
+    [".claude/concept-waker-8803.json", true],
     [".claude/skills/do-ship/reference.md", false],
     ["src/.ship-cli-last.json", false],
     ["README.md", false],

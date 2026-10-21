@@ -50,6 +50,8 @@ const CLAUDE_CODE_STATE = Object.freeze([
   '.claude/*.log',
   '.claude/token-config.json',
   '.claude/concept-active.json',
+  // The pickup waker's beat file (scripts/concept-watch.js beatPath).
+  '.claude/concept-waker-*.json',
   '.claude/concepts/',
   '.claude/session-opened-files.json',
   '.claude/scheduled_tasks.lock',
