@@ -97,6 +97,8 @@ must see their own language. The locale hint is authoritative.
 | `panel.status_local_only`      | Saved locally only · disconnected | Nur lokal gespeichert · getrennt |
 | `panel.status_local_only_connected` | Saved locally only       | Nur lokal gespeichert |
 | `panel.status_working`         | Submitted · Claude is working  | Übermittelt · Claude arbeitet |
+| `panel.toast_working`          | Claude is working              | Claude arbeitet |
+| `panel.toast_open`             | Show progress                  | Fortschritt anzeigen |
 | `panel.status_frozen`          | read-only                      | nur lesen |
 | `panel.status_detail`          | Progress                       | Fortschritt |
 | `panel.submit_menu`            | More submit options            | Weitere Absende-Optionen |
@@ -203,9 +205,22 @@ must see their own language. The locale hint is authoritative.
 | `design.favorite_badge`        | FAVOURITE                       | FAVORIT |
 | `design.favorite_set`          | Mark as favourite               | Als Favorit markieren |
 | `design.favorite_unset`        | Remove the favourite            | Favorit entfernen |
-| `design.favorite_hint_none`    | No favourite needed — Claude then decides from your comments. | Kein Favorit nötig — dann entscheidet Claude aus deinen Kommentaren. |
 | `design.favorite_hint_set`     | The favourite is the starting point; comments on every design still count. | Der Favorit ist der Startpunkt; Kommentare zu allen Designs fließen ein. |
 | `design.next_screen`           | Next page                       | Nächste Seite |
+| `design.change_new`            | New this round                  | Neu in dieser Runde |
+| `design.change_changed`        | Changed                         | Geändert |
+| `design.change_same`           | Unchanged                       | Unverändert |
+| `design.change_preview`        | Preview: {page}                 | Vorschau: {page} |
+| `design.change_dot`            | New since the last round        | Neu seit der letzten Runde |
+| `design.questions`             | Questions                       | Fragen |
+| `design.questions_open`        | {n} questions still open        | {n} Fragen noch offen |
+| `design.questions_progress`    | {done} of {n} answered          | {done} von {n} beantwortet |
+| `design.questions_all_done`    | All questions answered          | Alle Fragen beantwortet |
+| `design.questions_submit_hint` | {n} questions still open —      | {n} Fragen noch offen — |
+| `design.questions_jump`        | go to the first                 | zur ersten springen |
+| `design.questions_open_one`    | 1 question still open           | 1 Frage noch offen |
+| `design.questions_submit_hint_one` | 1 question still open —     | 1 Frage noch offen — |
+| `design.pages_of`              | Pages of {label}                | Seiten von {label} |
 | `design.keys_title`            | Keyboard shortcuts              | Tastenkürzel |
 | `design.keys_design`           | Design 1–9                      | Design 1–9 |
 | `design.keys_view`             | Question 1–9                    | Frage 1–9 |

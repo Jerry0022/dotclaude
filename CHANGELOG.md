@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.288.0] — 2026-10-21
+
+Concept pages show what changed between design rounds, and the quick nav fans out the active design's pages in one row.
+
+### Added
+- **Round changes on the overview.** Each design page is compared with the same design + page id of the previous design round by a markup signature (runtime attributes ignored), so nothing has to be authored. A card whose first page is unchanged previews the first changed page with a "Geändert: … / Neu / Unverändert" overlay, and every menu entry leading to a changed page carries a green dot until it is visited (per viewer, localStorage via `_guardedSetItem`). Before, an unchanged start page made the overview show the same screens every round. `templates-design-overview.md`, `templates-design.md`, `templates-utilities.md`.
+- **Persistent submitted toast.** After the decision was submitted, a toast bottom-centre mirrors the panel status (`renderSubmittedToast` fed from `renderPanelStatus`), so dismissing the veil no longer hides that the round is already submitted. `templates-panel-state.md`, `templates-common.md`.
+
+### Changed
+- **Quick nav "Auffächern".** One row: the active design fans out its pages in its own segment, the other designs are icon-only; overflow collapses into a "2 / 7" chip that opens a vertical list (measured synchronously — rAF never fires in background tabs). Open questions form a trailing amber segment with a count, an attached list tab, a questions card on the overview, a pulse on every return to the overview and a non-blocking submit hint; a view counts as answered on any note or touched bi-state. The fan-out animation uses clip-path without fill-mode, because a persisting clip-path clipped the overflow list. `templates-design-overview.md`.
+- **Design chrome for single-design rounds.** Header and quick nav now render from one design on (`body.dataset.overview`); overview grid, favourite and Esc-to-overview still need two. Pages build up with a staged load animation (off under reduced motion). `templates-design-js.md`, `templates-design.md`.
+- **Removed** the favourite hint "Kein Favorit nötig — dann entscheidet Claude aus deinen Kommentaren."
+
+Doc debt: `templates-design-overview.md`, `templates-design.md`, `templates-design-js.md` and `templates-common.md` were already over the 600-line doc budget before this change and were not split.
+
 ## [0.287.3] — 2026-10-21
 
 The stop guard counts only live work this session's model started as pending, and lets the model dismiss a false hit with a stated reason.
