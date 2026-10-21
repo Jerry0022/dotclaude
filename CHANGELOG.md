@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.288.1] — 2026-10-21
+
+Session titles drop the invisible padding and recover from stacked prefixes; three red tests are green again.
+
+### Fixed
+- **No title fill.** The Desktop sidebar drops every whitespace run (U+200A and NBSP included, checked with a live test title), so the hair-space fill of 0.287.0 never right-aligned anything. Prefixes are now `<STATUS> ┃ <Word> <EMOJI> ` without fill; titles that still carry it are recognised. `title-scheme.js` 2.1.0.
+- **Stacked prefixes.** An older plugin takes the leading `⏳ ` of a new title for its bare prefix and stacks its own in front (`⏳ 🧭 Concept – ┃ Shipping 🚀 X`), leaving a status-less `┃ Shipping 🚀` head. `stripPrefixes` now removes that head, so the next title write cleans the stack.
+- **burn-plan lock test.** A won stale-lock takeover retries at once instead of backing off first; the dead-PID test gets a 5 s window plus a timing check instead of 200 ms.
+- **zod in tests.** zod is a root devDependency, so the issues MCP contract and matching tests resolve it in every checkout.
+
 ## [0.287.0] — 2026-10-21
 
 Session titles get a calmer two-icon layout: a status square, a bar, then a right-aligned word with the activity emoji forming a column in the Desktop sidebar.
