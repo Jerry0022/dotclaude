@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.287.2] — 2026-10-21
+
+/do-learn no longer files one issue for two independent topics.
+
+### Changed
+- **Split rule for issues** — a learning or report that names two self-contained topics (e.g. "login window and console pop-ups") now becomes two cross-linked issues instead of one. Before, such a bundled issue could only be half adopted by a later triage. `skills/auto-issue/deep-knowledge/issue-rules.md` gains a Split rule as the inverse of the bundling rule; `skills/do-learn/SKILL.md` Step 1 and the branch B hand-over in `routing-details.md` point to it.
+
 ## [0.287.1] — 2026-10-21
 
 Foreign issues dropped by the backlog trust gate now get their own decision page instead of a bare list line.
