@@ -39,8 +39,10 @@ process.stdin.on("end", () => {
   if (hit && mode === "fail") { process.stderr.write("refusing " + file + "\\n"); process.exit(3); }
   if (hit && mode === "block") {
     fs.writeFileSync(marker, "reached");
-    // Bounded, and longer than the test's write timeout: the orphan left after git is killed exits on its own.
-    setTimeout(() => process.stdout.write(Buffer.concat(chunks)), 90000);
+    // Longer than the test's write timeout (20 s; the hold starts at c.slow, so it always outlasts it),
+    // but not far longer: a 90 s hold left git-sync reporting "another process holds index.lock"
+    // (observed 2026-10-22, Windows). The orphan left after git is killed exits on its own.
+    setTimeout(() => process.stdout.write(Buffer.concat(chunks)), 25000);
     return;
   }
   process.stdout.write(Buffer.concat(chunks));
