@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.289.0] — 2026-10-21
+
+A test run now warns before it starts when the machine is busy, and agent iteration loops can run only the tests their change touches.
+
+### Added
+- **Pre-run load warning (#762, A).** `ship_build` returns a `preRunWarning` field and writes one stderr line when another test run holds the lock or the usual duration says the run will be slow; `test-record-cli.js run` prints the same note (`buildPreRunWarning` in `ship/lib/test-step.js`).
+- **Scoped agent runs (#762, B).** `test-record-cli.js scope --files a,b` prints `npx vitest related <files> --run` when every file is JS/TS inside a directory and outside hooks/scripts (or is a test file), else `full`; paths with spaces are quoted, root-level config files fall back to the full suite. A scoped command is never recorded as a reusable green result (`isScopedCmd`).
+
+### Changed
+- **Agents iterate scoped.** `agents/qa.md` and `agents/feature.md` tell iteration loops to use `scope` and run the recorded full suite only once at the end; `do-ship/deep-knowledge/build-reuse.md` documents the warning and the never-recorded rule.
+
 ## [0.288.3] — 2026-10-21
 
 On Windows no plugin child process opens a console window any more, and the plugin starts far fewer `gh` processes in the background.
