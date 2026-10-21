@@ -1,11 +1,25 @@
 # Changelog
 
-## [0.284.2] — 2026-10-21
+## [0.284.4] — 2026-10-21
 
 The answer to a question reaches the user on the Desktop app: it goes into the completion card's `answer` field instead of prose before the card.
 
 ### Fixed
 - **Answer goes into the card, not before it (#757 follow-up).** On the Desktop app, prose written before the completion card and followed by further tool calls was collapsed by the app — even with `CLAUDE_CODE_THINKING_DISPLAY_UPDATES=0` — so the user saw no answer. The card's `answer` field (v0.280.0) already draws the answer inside the widget, but three instruction texts still said "write the answer as text before the card". The `post.flow.completion` hook text, the card-widget instruction of the completion renderer and the `quiet` output style template now route the answer into `render_completion_card`'s `answer` field; the do-ship skill and the session grader say the same. `output-style-quiet.shipped.json` carries the new template hash, so `output-style-sync` updates unmodified `~/.claude/output-styles/quiet.md` copies after the plugin update (customised copies are left alone).
+
+## [0.284.3] — 2026-10-21
+
+A Ctrl + click comment on a phone-sized concept screen opens fully visible instead of being cut off by the frame.
+
+### Fixed
+- **User-pin editor stays inside the screen.** The editor flipped sides only past 60 % of the screen width, so in a phone mock-up — narrower than pin plus 280 px editor — the device frame clipped it. `placeEditor()` in `templates-design-overview.md` now measures the editor against the content box when it opens, flips it to the side with room and clamps it inside with an 8 px gap, horizontally and vertically. Pinned by a regression test in `design-overview.test.js`.
+
+## [0.284.2] — 2026-10-21
+
+Questions keep their options in a fixed order for every user, not only inside this repo's `/do-run`.
+
+### Changed
+- **Option order is a plugin rule.** The fixed-order rule for `AskUserQuestion` options (same order every call, only the `(Recommended)` marker moves, the common-case recommendation first) moves from the repo-local `.claude/skills/do-run/reference.md` — which loaded only while `/do-run` ran — to `deep-knowledge/decision-format.md` § Option order, so it applies at runtime everywhere. `CONVENTIONS.md` § Question Blocks points skill authors at it; the project override is removed.
 
 ## [0.284.1] — 2026-10-21
 

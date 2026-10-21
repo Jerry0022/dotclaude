@@ -252,6 +252,13 @@ skills/{skill-name}/
 └── reference.md                ← Optional: documents the extension mechanism
 ```
 
+### Question Blocks
+
+Every `AskUserQuestion` a skill defines (in `SKILL.md`, its `deep-knowledge/`
+or a mode file) follows `deep-knowledge/decision-format.md` § Option order:
+fixed option order across calls, only the `(Recommended)` marker moves, and
+the common-case recommendation stands first.
+
 ### Internal Versioning
 
 Every SKILL.md starts with frontmatter including version:
