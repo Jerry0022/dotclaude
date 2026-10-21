@@ -73,7 +73,7 @@ function updateState(file, mutate) {
 function ghJson(args, cwd, timeout) {
   try {
     return JSON.parse(require('child_process').execFileSync('gh', args, {
-      cwd, encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'pipe'],
+      cwd, encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
     }));
   } catch { return null; }
 }

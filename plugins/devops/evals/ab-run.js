@@ -129,7 +129,7 @@ function runOne({ caseDef, variant, run, opts, bin, bash, graders, runDir }) {
     settings: buildSettings({ disable: opts.disable, deny: caseDef.denyTools }), model: opts.model,
   });
   if (caseDef.scaffold) {
-    const s = spawnSync(bash, [caseDef.scaffold], { cwd: workdir, encoding: "utf8", stdio: "pipe" });
+    const s = spawnSync(bash, [caseDef.scaffold], { windowsHide: true, cwd: workdir, encoding: "utf8", stdio: "pipe" });
     if (s.status !== 0) {
       try { fs.rmSync(workdir, { recursive: true, force: true }); } catch { /* best effort */ }
       throw new Error(`scaffold failed for ${caseDef.id}: ${s.stderr || s.error}`);
@@ -138,7 +138,7 @@ function runOne({ caseDef, variant, run, opts, bin, bash, graders, runDir }) {
   const pathPrepend = (caseDef.pathPrepend || []).map((d) => path.resolve(workdir, d));
   const started = Date.now();
   const proc = spawnSync(bin, args, {
-    cwd: workdir, env: childEnv(caseDef.env, process.env, pathPrepend, opts.apiKey), encoding: "utf8", shell: false,
+    windowsHide: true, cwd: workdir, env: childEnv(caseDef.env, process.env, pathPrepend, opts.apiKey), encoding: "utf8", shell: false,
     stdio: ["ignore", "pipe", "pipe"], timeout: opts.timeoutMin * 60000, maxBuffer: 512 * 1024 * 1024,
   });
   const wallMs = Date.now() - started;

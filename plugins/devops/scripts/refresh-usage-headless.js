@@ -588,6 +588,7 @@ async function launchScraperInstance({ visible = false, url = USAGE_URL } = {}) 
   const args = buildScraperArgs({ visible, url });
 
   log(`Launching dedicated scraper instance (${visible ? 'visible' : 'headless'})...`);
+  // windowsHide: opt-out the login window must be visible when the user has to sign in
   const child = spawn(EDGE_EXE, args, { detached: true, stdio: 'ignore', windowsHide: !visible });
   // Without a listener, an async spawn error (missing/blocked Edge exe) after
   // unref() becomes an uncaught exception → node exits 1, bypassing every

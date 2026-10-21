@@ -56,6 +56,7 @@ if (needsInstall()) {
       cwd: PLUGIN_DATA,
       timeout: 60000,
       stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
     });
 
     console.error("[local-llm] MCP dependencies installed.");

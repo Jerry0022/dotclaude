@@ -4,7 +4,7 @@
  * @version 0.2.0
  * @plugin devops
  * @description MCP server for heuristic issue matching.
- *   - Caches open GitHub issues lazily (refreshes every 60s)
+ *   - Caches open GitHub issues lazily (on demand, 5 min staleness window)
  *   - Exposes `match_issues` tool for fuzzy matching user prompts
  *   - Exposes `health_check` for boot diagnostics
  *
@@ -40,7 +40,7 @@ const SERVER_VERSION = "0.2.0";
 
 // Staleness window of a project's cache. Refresh is on demand (ensureCache on
 // match_issues): no background polling, so an idle session spawns no `gh`.
-const REFRESH_INTERVAL_MS = 15 * 60_000;
+const REFRESH_INTERVAL_MS = 5 * 60_000;
 const FETCH_TIMEOUT_MS = 15_000;
 // Delay of the post-connect warm-up fetch. The client sends `initialize`
 // immediately after the transport comes up; spawning `gh` in the same tick
@@ -238,4 +238,3 @@ console.error(`[${SERVER_NAME}-mcp] Server started on stdio (boot ${bootMs}ms)`)
 // match_issues on demand.
 const warmCwd = normalizeCwd(resolveCwd(undefined));
 if (warmCwd) setTimeout(() => { fetchIssues(warmCwd); }, WARMUP_DELAY_MS).unref();
-

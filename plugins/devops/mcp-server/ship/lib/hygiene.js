@@ -300,6 +300,7 @@ export function scanRepo(cwd, now = Date.now()) {
 }
 
 const PR_LIST_TTL_MS = 60_000;
+export const PR_LIST_LIMIT = 1000;
 const prListCache = new Map();
 
 /**
@@ -314,12 +315,11 @@ function fetchPrList(cwd) {
   if (hit && Date.now() - hit.at < PR_LIST_TTL_MS) return hit.list;
   let list = null;
   try {
-    const out = execFileSync("gh", ["pr", "list", "--state", "all", "--limit", "1000",
+    const out = execFileSync("gh", ["pr", "list", "--state", "all", "--limit", String(PR_LIST_LIMIT),
       "--json", "number,state,headRefName,headRefOid,baseRefName"], { windowsHide: true,
       cwd, encoding: "utf8", timeout: NETWORK_TIMEOUT, stdio: ["pipe", "pipe", "pipe"],
     });
-    const parsed = JSON.parse(out);
-    if (Array.isArray(parsed)) list = parsed;
+    list = JSON.parse(out);
   } catch {
     list = null;
   }
@@ -336,7 +336,6 @@ export function fetchMergedHeads(cwd, defaultBranch) {
   const all = fetchPrList(cwd);
   if (!all) return null;
   const list = all.filter((pr) => pr && pr.state === "MERGED");
-  if (!Array.isArray(list)) return null;
   const bySha = new Set();
   const byName = new Map();
   for (const pr of list) {
@@ -733,8 +732,16 @@ function worktreeBytes(u, cache, deadline, clock) {
 
 /** Heads of open PRs (branch names and commit ids), via gh; null when gh is unavailable. */
 export function fetchOpenHeads(cwd) {
-  const all = fetchPrList(cwd);
-  if (!all) return null;
+  return openHeadsFromList(fetchPrList(cwd));
+}
+
+/**
+ * Open-PR heads out of a `gh pr list --state all` result. null (unknown) when
+ * the list is missing or hit the limit: it may then hide open PRs, and no
+ * worktree with a possibly-open PR may be treated as cleanable.
+ */
+export function openHeadsFromList(all) {
+  if (!all || all.length >= PR_LIST_LIMIT) return null;
   const list = all.filter((p) => p && p.state === "OPEN");
   return {
     names: new Set(list.map((p) => p.headRefName).filter(Boolean)),

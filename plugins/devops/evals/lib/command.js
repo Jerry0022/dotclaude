@@ -74,7 +74,7 @@ function resolveBash(env = process.env, platform = process.platform) {
   if (env.EVAL_BASH) return env.EVAL_BASH;
   if (platform !== "win32") return "bash";
   try {
-    const execPath = execFileSync("git", ["--exec-path"], { encoding: "utf8" }).trim();
+    const execPath = execFileSync("git", ["--exec-path"], { windowsHide: true, encoding: "utf8" }).trim();
     const candidate = path.join(execPath, "..", "..", "..", "bin", "bash.exe");
     if (fs.existsSync(candidate)) return candidate;
   } catch { /* no git on PATH: fall back to whatever bash resolves to */ }
@@ -98,11 +98,11 @@ function unlinkJunctions(mcpServerDir) {
 // Check out <ref> into a detached temp worktree and return its plugin dir.
 // Call the returned cleanup() when done (`git worktree remove --force`).
 function materializeRef(ref, { repoRoot, subdir = path.join("plugins", "devops") } = {}) {
-  const root = repoRoot || execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+  const root = repoRoot || execFileSync("git", ["rev-parse", "--show-toplevel"], { windowsHide: true, encoding: "utf8" }).trim();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ab-variant-"));
   fs.rmdirSync(dir);
-  execFileSync("git", ["-C", root, "worktree", "add", "--detach", dir, ref], { stdio: "pipe" });
-  const sha = execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  execFileSync("git", ["-C", root, "worktree", "add", "--detach", dir, ref], { windowsHide: true, stdio: "pipe" });
+  const sha = execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { windowsHide: true, encoding: "utf8" }).trim();
   return {
     pluginDir: path.join(dir, subdir),
     sha,
@@ -111,7 +111,7 @@ function materializeRef(ref, { repoRoot, subdir = path.join("plugins", "devops")
       // its mcp-server dirs; `worktree remove --force` would delete through
       // them into the shared plugin-data install. Drop the links first.
       unlinkJunctions(path.join(dir, subdir, "mcp-server"));
-      try { execFileSync("git", ["-C", root, "worktree", "remove", "--force", dir], { stdio: "pipe" }); } catch { /* best effort: a locked temp worktree is left for `git worktree prune` */ }
+      try { execFileSync("git", ["-C", root, "worktree", "remove", "--force", dir], { windowsHide: true, stdio: "pipe" }); } catch { /* best effort: a locked temp worktree is left for `git worktree prune` */ }
     },
   };
 }

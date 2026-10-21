@@ -63,7 +63,7 @@ const MAX_ENTRIES = 50;
 /** Run a git command in `cwd`, return stdout trimmed. Throws on non-zero. */
 function git(args, cwd) {
   return child_process
-    .execFileSync("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"] })
+    .execFileSync("git", args, { windowsHide: true, cwd, stdio: ["ignore", "pipe", "pipe"] })
     .toString()
     .trim();
 }
