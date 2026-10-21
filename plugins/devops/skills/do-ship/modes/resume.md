@@ -31,6 +31,9 @@ there. A resumed run therefore rebuilds nothing from the conversation.
      files in `mismatches` to `vNew` by hand; never bump again.
    - `release` with a PR and not merged → `ship_release` reuses the open PR.
      Merged → skip straight to Step 4b onwards (watcher, cleanup, card).
+     Merged with `tagVerified` is a finished ship (#806): the hooks no longer
+     send a resume mandate or the "Shipping" title, they name a cleanup-only
+     leftover (`ship_cleanup keep:true` clears sentinel and checkpoint).
    - The checkpoint records only the tool steps. Skill steps that sit
      between the last ✓ and the next step run again. Example: build ✓ but
      bump not landed → the Codex gate, Docs-Sync and the CHANGELOG entry run

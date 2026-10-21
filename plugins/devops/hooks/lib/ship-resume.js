@@ -17,7 +17,7 @@
  *   checkpoint stays and ss.ship.resume / the next ship prompt pick it up.
  */
 
-const { openCheckpoint, nextStep, describeCheckpoint } = require('./ship-checkpoint');
+const { openCheckpoint, isShipDone, branchOf, nextStep, describeCheckpoint } = require('./ship-checkpoint');
 const { isShipIntent } = require('./ship-intent');
 
 const CONTINUE = [
@@ -45,8 +45,34 @@ function shipResumeFor(prompt, cwd) {
   if (!cwd) return null;
   if (!isContinuation(prompt) && !isShipIntent(prompt)) return null;
   const cp = openCheckpoint(cwd);
-  if (!cp) return null;
+  if (!cp || isShipDone(cp)) return null; // a merged ship is live: nothing to resume (#806)
   return { checkpoint: cp, next: nextStep(cp), summary: describeCheckpoint(cp) };
 }
 
-module.exports = { isContinuation, shipResumeFor };
+/**
+ * The checkpoint of a ship that already merged (tag verified) but whose
+ * cleanup never finished, or null. Reported as a leftover to clear, never
+ * resumed.
+ * @param {string} cwd
+ * @returns {{ checkpoint: object, summary: string }|null}
+ */
+function cleanupLeftoverFor(cwd) {
+  if (!cwd) return null;
+  const cp = openCheckpoint(cwd);
+  if (!cp || !isShipDone(cp)) return null;
+  return { checkpoint: cp, summary: describeCheckpoint(cp), cwd };
+}
+
+/** The note for a merged ship whose cleanup is still pending. */
+function cleanupLeftoverInstruction({ checkpoint: cp, summary, cwd }) {
+  const branch = branchOf(cp, cwd);
+  const tag = cp.steps.release.tag ? ` (${cp.steps.release.tag})` : '';
+  return [
+    `[ship-cleanup-leftover] The ship of branch ${cp.branch || '?'} is already DONE: release merged and the tag${tag} is verified. Only the cleanup did not finish.`,
+    `State: ${summary}`,
+    'This is NOT an interrupted ship: do NOT resume it, do NOT start a resume subagent, do NOT set the "Shipping" title, and never repeat bump, PR or tag.',
+    `To clear the leftover (sentinel + checkpoint) call ship_cleanup({ ${branch ? `branch: "${branch}", ` : ''}cwd, keep: true }) once; if it is denied, say so in one line and carry on with the user's request.`,
+  ].join('\n');
+}
+
+module.exports = { isContinuation, shipResumeFor, cleanupLeftoverFor, cleanupLeftoverInstruction };

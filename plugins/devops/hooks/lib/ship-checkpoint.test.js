@@ -148,4 +148,46 @@ describe("ship-resume — which prompt picks the ship up", () => {
     cp.clearCheckpoint(root);
     expect(resume.shipResumeFor("weiter", root)).toBeNull();
   });
+
+  test("#806: merged release + verified tag is done; earlier steps never read as pending", () => {
+    cp.recordShipStep("ship_preflight", { cwd: root }, { ready: true, branch: "feat/x", base: "main" });
+    cp.recordShipStep("ship_release", { cwd: root }, { success: true, pr: 7, merged: "main", tag: "v1.1.0", tagVerified: true });
+    const open = cp.openCheckpoint(root);
+    expect(cp.isShipDone(open)).toBe(true);
+    expect(cp.describeCheckpoint(open)).not.toContain("← next");
+    expect(cp.describeCheckpoint(open)).toContain("build ✓");
+    expect(resume.shipResumeFor("weiter", root)).toBeNull();
+    expect(resume.cleanupLeftoverFor(root)).not.toBeNull();
+  });
+
+  test("#806: merged without a verified tag is still an open ship", () => {
+    cp.recordShipStep("ship_preflight", { cwd: root }, { ready: true, branch: "feat/x", base: "main" });
+    cp.recordShipStep("ship_release", { cwd: root }, { success: true, pr: 7, merged: "main", tagVerified: false });
+    expect(cp.isShipDone(cp.openCheckpoint(root))).toBe(false);
+    expect(resume.cleanupLeftoverFor(root)).toBeNull();
+  });
+
+  test("#806: merged + tag unverified -> earlier steps done, never 'build <- next'", () => {
+    cp.recordShipStep("ship_preflight", { cwd: root }, { ready: true, branch: "feat/x", base: "main" });
+    cp.recordShipStep("ship_release", { cwd: root }, { success: true, pr: 7, merged: "main", tagVerified: false });
+    const d = cp.describeCheckpoint(cp.openCheckpoint(root));
+    expect(d).not.toContain("build \u2190 next");
+    expect(d).toContain("build \u2713");
+    expect(d).toContain("bump \u2713");
+  });
+
+  test("#806: branchOf falls back to the current branch, empty when none", () => {
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"], { cwd: root });
+    execFileSync("git", ["checkout", "-q", "-b", "feat/now"], { cwd: root });
+    const text = resume.cleanupLeftoverInstruction({
+      checkpoint: { branch: null, steps: { release: { merged: "main", tagVerified: true } } }, summary: "s", cwd: root,
+    });
+    expect(text).toContain('branch: "feat/now"');
+    expect(resume.cleanupLeftoverInstruction({
+      checkpoint: { branch: null, steps: { release: {} } }, summary: "s", cwd: path.join(root, "nope"),
+    })).not.toContain("branch:");
+    expect(cp.branchOf({ branch: null }, root)).toBe("feat/now");
+    expect(cp.branchOf({ branch: "feat/cp" }, root)).toBe("feat/cp");
+    expect(cp.branchOf({ branch: null }, path.join(root, "nope"))).toBe("");
+  });
 });

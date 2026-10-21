@@ -33,7 +33,7 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const path = require('path');
 const { isActive, sentinelPath } = require('../lib/ship-sentinel');
-const { openCheckpoint, describeCheckpoint } = require('../lib/ship-checkpoint');
+const { openCheckpoint, isShipDone, branchOf, describeCheckpoint } = require('../lib/ship-checkpoint');
 const { readCardData, renderFromFileInstruction } = require('../lib/ship-carddata');
 
 /**
@@ -59,6 +59,14 @@ function sentinelAgeMin(cwd) {
 function buildResumeInstruction({ cwd, source }) {
   if (!cwd) return null;
   const cp = openCheckpoint(cwd);
+  if (cp && isShipDone(cp)) {
+    return [
+      `[ss.ship.resume] The ship of branch ${cp.branch || '?'} in ${cwd} is DONE (release merged, tag verified); only its cleanup is left.`,
+      `State: ${describeCheckpoint(cp)}`,
+      'This is NOT an interrupted ship: do not resume it, do not set the "Shipping" title, never repeat a step.',
+      `Clear the leftover with ship_cleanup({ ${branchOf(cp, cwd) ? `branch: "${branchOf(cp, cwd)}", ` : ''}cwd, keep: true }); if that is denied, mention it in one line and carry on.`,
+    ].join('\n');
+  }
   if (cp) {
     const when = source === 'compact' ? 'the context was just compacted'
       : source === 'resume' ? 'this session was just resumed'

@@ -40,7 +40,7 @@
 // (AUD-028).
 let gitOut, parseShipRequest, cardDelivered, deliveredCardText, lastAssistantText, isCardWidgetCall,
   safeReadTranscript, CARD_MARKER, isPromptEntry, lastUserPromptText,
-  hasUnshippedWork, currentContextTokens, shouldDelegate, shipDelegateInstruction, shipResumeInstruction, shipResumeFor;
+  hasUnshippedWork, currentContextTokens, shouldDelegate, shipDelegateInstruction, shipResumeInstruction, shipResumeFor, cleanupLeftoverFor, cleanupLeftoverInstruction, isContinuation;
 try {
   require('../lib/plugin-guard');
   ({ gitOut } = require('../lib/git-timeout'));
@@ -50,7 +50,7 @@ try {
   ({ hasUnshippedWork } = require('../lib/ship-unshipped'));
   ({ currentContextTokens } = require('../lib/context-size'));
   ({ shouldDelegate, shipDelegateInstruction, shipResumeInstruction } = require('../lib/ship-delegate'));
-  ({ shipResumeFor } = require('../lib/ship-resume'));
+  ({ isContinuation, shipResumeFor, cleanupLeftoverFor, cleanupLeftoverInstruction } = require('../lib/ship-resume'));
 } catch (err) {
   // Silent to the user and the model (exit 0), but not traceless: the line
   // lands in the hook log, so a persistent load error can be found (AUD-068).
@@ -207,6 +207,15 @@ process.stdin.on('end', () => {
     process.stdout.write([
       shipResumeInstruction({ resume, delegate, pluginRoot: PLUGIN_ROOT, sessionId: hook.session_id || '' })].join('\n') + '\n');
     process.exit(0);
+  }
+
+  // A merged ship with only its cleanup left is done, not interrupted (#806).
+  if (isContinuation(rawPrompt)) {
+    const leftover = cleanupLeftoverFor(hook.cwd || process.cwd());
+    if (leftover) {
+      process.stdout.write(cleanupLeftoverInstruction(leftover) + '\n');
+      process.exit(0);
+    }
   }
 
   if (!isDirectShipIntent && !isAffirmationAfterCompletion) {

@@ -422,4 +422,18 @@ describe("prompt.ship.detect — resume an interrupted ship", () => {
   test("without a checkpoint 'weiter' is no ship at all", () => {
     expect(runHook({ prompt: "weiter", transcript_path: transcript(90_000) }).stdout).toBe("");
   });
+
+  // #806: release merged + tag verified, only the cleanup was denied.
+  test("a merged ship with a blocked cleanup is a cleanup leftover, not a ship to resume", async () => {
+    await checkpoint();
+    const cp = (await import("../lib/ship-checkpoint.js")).default;
+    cp.recordShipStep("ship_release", { cwd }, { success: true, pr: 7, merged: "main", tag: "v1.1.0", tagVerified: true });
+    const r = runHook({ prompt: "weiter", transcript_path: transcript(434_000) });
+    expect(r.stdout).toContain("[ship-cleanup-leftover]");
+    expect(r.stdout).toContain("keep: true");
+    expect(r.stdout).not.toContain("[ship-resume]");
+    expect(r.stdout).not.toContain("--resume\"");
+    expect(r.stdout).not.toContain("┃ Shipping 🚀 ");
+    expect(r.stdout).not.toContain("← next");
+  });
 });

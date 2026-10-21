@@ -258,6 +258,9 @@ function shipResumeInstruction({ resume, delegate, pluginRoot, sessionId = '', n
     `Progress: ${resume.summary}`,
     'This prompt continues it. Do NOT start the ship over and do NOT rebuild context from the conversation:',
     'the checkpoint and git/gh are the truth. Steps marked ✓ are never repeated (no second bump, PR or tag).',
+    cp.steps && cp.steps.release && cp.steps.release.merged
+      ? 'The PR is already MERGED: do not touch the PR or bump again. Only the tag verification and the cleanup remain.'
+      : '',
     ...how,
     decisions,
     'The session title stays "⏳ ┃ Shipping 🚀 " and the turn ends with the ship\'s own card (Released / Blocked).',
