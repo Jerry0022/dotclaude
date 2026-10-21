@@ -46,8 +46,11 @@ returns — the single-design page is untouched.
     count: '{{design.overview_count}}', open: '{{design.overview_open}}',
     notes: '{{design.overview_notes}}', fav: '{{design.favorite}}',
     favBadge: '{{design.favorite_badge}}', favSet: '{{design.favorite_set}}',
-    favUnset: '{{design.favorite_unset}}', hintNone: '{{design.favorite_hint_none}}',
+    favUnset: '{{design.favorite_unset}}',
     hintSet: '{{design.favorite_hint_set}}', next: '{{design.next_screen}}',
+    chNew: '{{design.change_new}}', chChanged: '{{design.change_changed}}',
+    chSame: '{{design.change_same}}', chPreview: '{{design.change_preview}}',
+    chDot: '{{design.change_dot}}',
     keysTitle: '{{design.keys_title}}', keysDesign: '{{design.keys_design}}',
     keysView: '{{design.keys_view}}', keysNext: '{{design.keys_next}}',
     keysRound: '{{design.keys_round}}', keysNotes: '{{design.keys_notes}}',
@@ -282,13 +285,138 @@ returns — the single-design page is untouched.
     return n;
   }
 
+  // ── Round changes: what this round changed against the one before ──────
+  // Design and screen ids repeat across rounds (templates-design.md § Views
+  // (optional)), so a screen is matched by id inside the same design of the
+  // nearest earlier design round and compared by a markup signature that
+  // ignores what the build or the runtime toggles (ids, hidden / disabled /
+  // readonly / checked, data-*, aria-*) and every overlay layer. A screen
+  // new to its design counts as changed; a design new to the round is "new"
+  // as a whole. Round 1 has nothing to compare against: no marks at all.
+  const SIG_SKIP = /^(id|name|for|hidden|disabled|readonly|checked|selected|tabindex|inert|title|role|data-.*|aria-.*)$/;
+  const SIG_DROP = '[data-anno-layer], .device-stage, .upin-layer, .upin, script, template, textarea';
+  const sigCache = new WeakMap();
+  function signature(sec) {
+    if (sigCache.has(sec)) return sigCache.get(sec);
+    const parts = [];
+    const walk = n => {
+      if (n.nodeType === 3) {
+        const t = n.nodeValue.replace(/\s+/g, ' ').trim();
+        if (t) parts.push('"' + t);
+        return;
+      }
+      if (n.nodeType !== 1 || n.matches(SIG_DROP)) return;
+      const attrs = [...n.attributes].map(a => a.name).filter(k => !SIG_SKIP.test(k)).sort()
+        .map(k => k + '=' + (k === 'class'
+          ? [...n.classList].filter(c => !/^upin/.test(c)).sort().join(' ') : n.getAttribute(k)));
+      parts.push('<' + n.localName + ' ' + attrs.join(' '));
+      n.childNodes.forEach(walk);
+      parts.push('>');
+    };
+    sec.childNodes.forEach(walk);
+    const s = parts.join('');
+    sigCache.set(sec, s);
+    return s;
+  }
+  function previousDesignRound(it) {
+    const n = Number(it && it.dataset.iteration);
+    let best = null;
+    document.querySelectorAll('section[data-iteration]').forEach(s => {
+      const k = Number(s.dataset.iteration);
+      if (k < n && designsOf(s).length && (!best || k > Number(best.dataset.iteration))) best = s;
+    });
+    return best;
+  }
+  const changeCache = new WeakMap();
+  function changesOf(it) {
+    if (!it) return null;
+    if (changeCache.has(it)) return changeCache.get(it);
+    const prev = previousDesignRound(it);
+    let out = null;
+    if (prev) {
+      out = { round: Number(it.dataset.iteration), designs: {} };
+      designsOf(it).forEach(d => {
+        const id = d.dataset.design;
+        const old = designsOf(prev).find(x => x.dataset.design === id);
+        const entry = { isNew: !old, screens: [] };
+        if (old) d.querySelectorAll('section[data-screen][id]').forEach(sec => {
+          const was = old.querySelector(`section[data-screen][id="${CSS.escape(sec.id)}"]`);
+          if (!was || signature(was) !== signature(sec)) entry.screens.push(sec.id);
+        });
+        out.designs[id] = entry;
+      });
+    }
+    changeCache.set(it, out);
+    return out;
+  }
+  window.designRoundChanges = changesOf;
+
+  // "Something new here" dots on every menu entry that leads to a changed
+  // page, until the user has opened that page once. Seen pages are a
+  // per-viewer convenience: localStorage, keyed by page and round, never
+  // persisted anywhere Claude reads.
+  const SEEN_KEY = 'concept-seen:' + location.pathname;
+  function seenSet() {
+    try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || '[]')); } catch (e) { return new Set(); }
+  }
+  function markSeen(keys) {
+    const s = seenSet();
+    const fresh = keys.filter(k => !s.has(k));
+    if (!fresh.length) return;
+    fresh.forEach(k => s.add(k));
+    if (typeof _guardedSetItem === 'function') _guardedSetItem(SEEN_KEY, JSON.stringify([...s].slice(-500)));
+  }
+  function unseenOf(it) {
+    const ch = isLive(it) ? changesOf(it) : null;
+    const seen = seenSet();
+    const screens = id => {
+      const e = ch && ch.designs[id];
+      return e && !e.isNew ? e.screens.filter(s => !seen.has(ch.round + '/' + id + '/' + s)) : [];
+    };
+    const design = id => {
+      const e = ch && ch.designs[id];
+      if (!e) return false;
+      return e.isNew ? !seen.has(ch.round + '/' + id + '/*') : screens(id).length > 0;
+    };
+    return { screens, design };
+  }
+  function setDot(node, show) {
+    if (!node) return;
+    let dot = node.querySelector(':scope > .dz-new-dot');
+    if (show && !dot) {
+      dot = el('span', 'dz-new-dot');
+      dot.setAttribute('role', 'img');
+      dot.setAttribute('aria-label', L.chDot);
+      node.appendChild(dot);
+    } else if (!show && dot) dot.remove();
+    if (show) node.dataset.changed = 'true'; else delete node.dataset.changed;
+  }
+  function paintChanges(it) {
+    const u = unseenOf(it);
+    document.querySelectorAll('#screen-nav .screen-nav-design-heading').forEach(h => setDot(h, u.design(h.dataset.designId)));
+    document.querySelectorAll('#screen-nav .screen-nav-item').forEach(b =>
+      setDot(b, u.screens(b.dataset.designId).includes(b.dataset.screenId)));
+    if (quick) quick.querySelectorAll('.design-quick-seg').forEach(seg => setDot(seg, u.design(seg.dataset.designId)));
+    document.querySelectorAll('.design-ov-card').forEach(card => {
+      const id = card.dataset.designId;
+      card.querySelectorAll('.design-ov-chip').forEach(chip => setDot(chip, u.screens(id).includes(chip.dataset.screenId)));
+    });
+  }
+  function noteVisit(it) {
+    if (!isLive(it) || mode() !== 'design') return;
+    const ch = changesOf(it);
+    const d = activeDesignOf(it);
+    const sec = activeScreenOf(d);
+    if (!ch || !d || !sec) return;
+    markSeen([ch.round + '/' + d.dataset.design + '/' + sec.id, ch.round + '/' + d.dataset.design + '/*']);
+  }
+
   // ── Overview cards ─────────────────────────────────────────────────────
-  function cloneFirstScreen(d, prefix) {
+  function cloneScreen(first, prefix) {
     const wrap = el('div', 'design-ov-scale');
     wrap.dataset.deviceClone = 'overview';
     wrap.setAttribute('inert', '');
     wrap.setAttribute('aria-hidden', 'true');
-    const first = d.querySelector('section[data-screen]');
     if (!first) return wrap;
     [...first.children].forEach(child => {
       if (child.hasAttribute('data-anno-layer') || child.classList.contains('device-stage')
@@ -327,19 +455,51 @@ returns — the single-design page is untouched.
     preview.tabIndex = 0;
     preview.setAttribute('aria-label', L.open + ': ' + m.label);
     setTip(preview, L.open, String(m.n));
-    preview.appendChild(cloneFirstScreen(d, 'ov' + m.n + '-'));
+    // An unchanged first page would show the same picture round after round
+    // while the change sits on page 4: the preview then shows the first
+    // CHANGED page, and opening the card lands there too.
+    const screens = [...d.querySelectorAll('section[data-screen][id]')];
+    const ch = changesOf(it);
+    const delta = ch && ch.designs[m.id];
+    let shown = screens[0] || d.querySelector('section[data-screen]');
+    if (delta && !delta.isNew && delta.screens.length && shown && !delta.screens.includes(shown.id)) {
+      shown = screens.find(s => s.id === delta.screens[0]) || shown;
+    }
+    const open = () => (shown && shown !== screens[0] ? window.showDesign(m.id, shown.id) : window.showDesign(m.id));
+    preview.appendChild(cloneScreen(shown, 'ov' + m.n + '-'));
     preview.appendChild(el('span', 'design-ov-zoom', '⤢'));
-    preview.addEventListener('click', () => window.showDesign(m.id));
+    if (delta) {
+      const flag = el('div', 'design-ov-change');
+      const kind = delta.isNew ? 'new' : delta.screens.length ? 'changed' : 'same';
+      flag.dataset.kind = kind;
+      card.dataset.change = kind;
+      const head = el('strong', '', kind === 'new' ? L.chNew : kind === 'changed' ? L.chChanged : L.chSame);
+      flag.appendChild(head);
+      if (kind === 'changed') {
+        const names = delta.screens.map(id => {
+          const s = screens.find(x => x.id === id);
+          return s ? (s.dataset.navLabel || s.id) : id;
+        });
+        const list = names.length > 3 ? names.slice(0, 3).join(', ') + ' +' + (names.length - 3) : names.join(', ');
+        flag.appendChild(el('span', 'design-ov-change-list', list));
+        flag.dataset.tip = names.join('\n');
+      }
+      preview.appendChild(flag);
+      if (shown && shown !== screens[0]) {
+        preview.appendChild(el('span', 'design-ov-shown', L.chPreview.replace('{page}', shown.dataset.navLabel || shown.id)));
+      }
+    }
+    preview.addEventListener('click', open);
     preview.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.showDesign(m.id); }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
     });
     card.appendChild(preview);
-    const screens = [...d.querySelectorAll('section[data-screen][id]')];
     if (screens.length > 1) {
       const chips = el('div', 'design-ov-chips');
       screens.forEach(sec => {
         const chip = el('button', 'design-ov-chip', sec.dataset.navLabel || sec.id);
         chip.type = 'button';
+        chip.dataset.screenId = sec.id;
         chip.addEventListener('click', () => window.showDesign(m.id, sec.id));
         chips.appendChild(chip);
       });
@@ -591,6 +751,8 @@ returns — the single-design page is untouched.
       if (quick) quick.innerHTML = '';
       placeEye(false);
       disarm();
+      noteVisit(it);
+      paintChanges(it);
       return;
     }
     metas = all.map(metaOf);
@@ -647,6 +809,8 @@ returns — the single-design page is untouched.
   // ── Projection: header, quick nav, cards, pins ─────────────────────────
   function updateChrome() {
     const it = visibleIteration();
+    noteVisit(it);
+    paintChanges(it);
     const active = on() && !!overviewOf(it);
     placeEye(active);
     const navOv = document.querySelector('#screen-nav .screen-nav-overview-group');
@@ -676,7 +840,7 @@ returns — the single-design page is untouched.
         H.star.removeAttribute('aria-pressed');
         if (favMeta) setTip(H.star, L.open + ': ' + favMeta.label);
         motto = L.count.replace('{n}', String(metas.length));
-        note = fav ? L.hintSet : L.hintNone;
+        note = fav ? L.hintSet : '';
       } else if (md === 'view') {
         const v = it.querySelector(':scope > section[data-view][data-view-active="true"]');
         H.iconSlot.appendChild(iconEl('question', { kind: 'plain' }));
@@ -707,6 +871,7 @@ returns — the single-design page is untouched.
             tab.setAttribute('aria-selected', String(sec === cur));
             if (sec !== cur && screens.indexOf(sec) === (screens.indexOf(cur) + 1) % screens.length) setTip(tab, L.next, 'Tab');
             tab.addEventListener('click', () => window.showScreen(sec.id));
+            setDot(tab, unseenOf(it).screens(m.id).includes(sec.id));
             H.tabs.appendChild(tab);
           });
         }
@@ -1163,6 +1328,42 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
   padding: 0.15rem 0.6rem; font: inherit; font-size: 0.78rem; cursor: pointer;
 }
 .design-ov-chip:hover { color: var(--text, #e6edf3); border-color: var(--dz-color); }
+
+/* ── Round changes: overlay on the preview, dots on menu entries ── */
+.design-ov, .design-header, .design-quick, .screen-nav { --dz-new-color: var(--success-color, #3fb950); }
+.design-ov-change {
+  position: absolute; top: 0.5rem; left: 0.5rem; right: 0.5rem; z-index: 1;
+  display: flex; align-items: baseline; gap: 0.45rem; min-width: 0;
+  padding: 0.35rem 0.65rem; border-radius: 10px; font-size: 0.8rem;
+  background: color-mix(in srgb, var(--panel-bg, #0d1117) 90%, transparent);
+  border: 1px solid var(--dz-new-color); color: var(--text, #e6edf3);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); backdrop-filter: blur(4px);
+}
+.design-ov-change strong { flex: none; color: var(--dz-new-color); }
+.design-ov-change strong::before {
+  content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 0.4rem;
+  border-radius: 50%; background: currentColor; vertical-align: 1px;
+}
+.design-ov-change-list { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.design-ov-change[data-kind="same"] {
+  right: auto; border-color: var(--border-color, #30363d); box-shadow: none;
+  color: var(--text-secondary, #8b949e);
+}
+.design-ov-change[data-kind="same"] strong { color: var(--text-secondary, #8b949e); font-weight: 600; }
+.design-ov-change[data-kind="same"] strong::before { display: none; }
+.design-ov-shown {
+  position: absolute; left: 0.5rem; bottom: 0.5rem; padding: 0.15rem 0.55rem;
+  border-radius: 999px; font-size: 0.75rem; max-width: calc(100% - 4rem);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: color-mix(in srgb, var(--panel-bg, #0d1117) 85%, transparent);
+  color: var(--text, #e6edf3);
+}
+.dz-new-dot {
+  display: inline-block; flex: none; width: 7px; height: 7px; margin-left: 0.4rem;
+  border-radius: 50%; background: var(--dz-new-color, #3fb950); vertical-align: middle;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dz-new-color, #3fb950) 30%, transparent);
+}
+.design-ov-chip[data-changed="true"] { color: var(--text, #e6edf3); border-color: var(--dz-new-color); }
 .design-ov-traits { margin: 0; padding: 0 0 0 1.1rem; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.92rem; font-weight: 600; }
 .design-ov-traits li::marker { color: var(--dz-color); }
 .design-ov-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }

@@ -385,6 +385,49 @@ html[data-template="design"] .frozen-bar {
   max-width: min(34vw, 560px);
 }
 
+/* Submitted toast — renderSubmittedToast() (§ Status line). Bottom centre,
+   between the viewport toggle (bottom-left) and the 💬 FAB (bottom-right),
+   the success tint of .submitted-indicator. Above the dimmer (50) so it reads
+   over the veil too, below the FABs (100). Hidden while the panel is open
+   (the panel shows the same state) and on a past tab (the frozen bar owns
+   that moment). The offline strip shares the spot: the toast steps up. */
+.submitted-toast {
+  position: fixed; left: 50%; bottom: 2rem; transform: translateX(-50%);
+  z-index: 97;
+  box-sizing: border-box;
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  max-width: min(560px, calc(100vw - 184px));
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--success-color, #3fb950);
+  background: color-mix(in srgb, var(--success-color, #3fb950) 16%, var(--panel-bg, #161b22));
+  color: var(--text-color, #c9d1d9);
+  font: inherit; font-size: 0.85rem; white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  cursor: pointer;
+  animation: submitted-toast-in 0.25s ease;
+}
+.submitted-toast[hidden],
+body.panel-open .submitted-toast,
+body.viewing-frozen .submitted-toast { display: none; }
+.submitted-toast:hover { filter: brightness(1.1); }
+.submitted-toast:focus-visible { outline: 2px solid var(--accent-color, #58a6ff); outline-offset: 2px; }
+.submitted-toast-check { color: var(--success-color, #3fb950); font-weight: 800; }
+.submitted-toast-label { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.submitted-toast-sep, .submitted-toast-working { color: var(--text-secondary, #8b949e); }
+.submitted-toast-dots:empty { display: none; }
+body:has(.draft-offline-strip:not([hidden])) .submitted-toast { bottom: 4.75rem; }
+@keyframes submitted-toast-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (max-width: 560px) {
+  .submitted-toast-sep, .submitted-toast-working { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .submitted-toast { animation: none; } }
+
 /* Submitted state — compact: it shares the ≤120px foot with the frozen block
    and the split button, and the progress itself lives in the status line.
    Measured at panel width (#341): indicator 63px + hint 54px overran the cap

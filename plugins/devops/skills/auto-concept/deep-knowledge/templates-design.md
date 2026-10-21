@@ -781,6 +781,15 @@ icon, or when the traits are not exactly three (`concept-gate.js`
   shown read-only on a frozen round, payload `userPins[]`.
 - **☰ panel** — each design row gets a small icon prefix; its pages stay
   indented below; a row's hotkey keycap appears on row hover.
+- **Round changes** — from round 2 on, every page is compared with the same
+  design + page id of the previous design round (markup signature, runtime
+  attributes ignored). A card whose first page is unchanged previews its
+  first CHANGED page instead and names it; an overlay on the preview reads
+  "Geändert: <pages>", "Neu in dieser Runde" or "Unverändert". Every menu
+  entry leading to a changed page (quick nav, ☰ rows, header tabs, card
+  chips) carries a green dot until that page was opened once (per viewer,
+  localStorage). Keep ids stable across rounds — a renamed page id reads as
+  new. Nothing to author.
 
 ## Layout — Fullscreen single-screen + Overlay Panel + Feedback Dock
 

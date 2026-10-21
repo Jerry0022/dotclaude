@@ -585,6 +585,50 @@ function renderPanelStatus() {
   const detail = document.getElementById('status-detail');
   if (detail) detail.hidden = (status !== 'submitted');
   if (typeof renderStatusDots === 'function') renderStatusDots();
+  if (typeof renderSubmittedToast === 'function') renderSubmittedToast(status === 'submitted');
+}
+
+// --- Submitted toast (all templates) ---
+// The veil after a submit is clicked away by reflex, and with the panel
+// closed nothing on the page said the round was already sent. A pinned
+// bottom-centre toast repeats the panel's state — "✓ Entscheidungen
+// übermittelt · ⏳ Claude arbeitet" plus the same progress dots — for as
+// long as the round is in flight; a click opens the panel. CSS hides it
+// while the panel is open (the panel says the same) and on a past tab.
+// Built here, not in the skeleton, so every template gets it from the one
+// renderer that already knows the submitted state.
+function renderSubmittedToast(show) {
+  let toast = document.getElementById('submitted-toast');
+  if (!toast) {
+    if (!show) return;
+    toast = document.createElement('button');
+    toast.type = 'button';
+    toast.id = 'submitted-toast';
+    toast.className = 'submitted-toast';
+    toast.setAttribute('aria-live', 'polite');
+    toast.dataset.tip = '{{panel.toast_open}}';
+    const part = (cls, text) => {
+      const n = document.createElement('span');
+      n.className = cls;
+      n.textContent = text;
+      toast.appendChild(n);
+      return n;
+    };
+    part('submitted-toast-check', '✓');
+    part('submitted-toast-label', '{{panel.submitted}}');
+    part('submitted-toast-sep', '·');
+    part('submitted-toast-working', '⏳ {{panel.toast_working}}');
+    part('status-dots submitted-toast-dots', '').setAttribute('aria-hidden', 'true');
+    toast.addEventListener('click', () => {
+      if (typeof openPanel === 'function') openPanel();
+      else document.getElementById('panel-toggle')?.click();
+    });
+    document.body.appendChild(toast);
+  }
+  toast.hidden = !show;
+  const dots = toast.querySelector('.submitted-toast-dots');
+  const src = document.getElementById('status-dots');
+  if (dots) dots.replaceChildren(...(show && src ? [...src.children].map(i => i.cloneNode(true)) : []));
 }
 
 function checkClaudeConnection() {
