@@ -64,7 +64,12 @@ never replaces one. `👉 🧭 Concept – ` is no process but a wait: it says "
 move — look at the page", so whenever Claude works in a concept session
 (generating the page, a user prompt, a picked-up submission, iterating,
 implementing) the title is the bare `⏳ ` (or `⏳ 🧭 Concept – ` while
-iterating), and the card brings 👉 back only for the `waiting` phase. Only a task-notification turn leaves the compass
+iterating), and the card brings 👉 back only for the `waiting` phase. **A
+running ship outranks `concept.waiting` (#785):** while the title is
+`⏳ 🚀 Shipping – ` — also during a delegated ship in a subagent — a card that
+does not end the ship (anything but `ship-successful`, `released`,
+`ship-blocked`, `aborted`) leaves the title alone instead of restoring the
+compass; the ship's own outcome card sets the next prefix. Only a task-notification turn leaves the compass
 alone (it may end without a card). Concretely:
 `prompt.flow.title-work` leaves `⏳ 🚀 Shipping – ` / `👉 📥 Batch – ` titles
 untouched, and a prompt that *is* a ship (`hooks/lib/ship-intent.js`, the same

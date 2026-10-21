@@ -2329,9 +2329,10 @@ function openDropNote(params) {
  *  or the title is already right. The current title comes off the transcript
  *  tail, so the block names the exact value (no get_session round trip). */
 function sessionTitleNote(params) {
-  const prefix = titlePrefixFor(params, { hasPending, hasConcept, outcome: outcomeTitlePrefix });
+  const current = currentSessionTitle(params.session_id, params.cwd);
+  const prefix = titlePrefixFor(params, { hasPending, hasConcept, outcome: outcomeTitlePrefix, current });
   if (prefix === null) return '';
-  return titleInstruction(prefix, currentSessionTitle(params.session_id, params.cwd));
+  return titleInstruction(prefix, current);
 }
 
 /** Orchestrator holds and the devops switch, read through the hooks' own libs
