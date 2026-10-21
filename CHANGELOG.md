@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.285.0] — 2026-10-21
+
+Strict mode keeps the content literal but delivers it complete: the tests, docs and callers of the changed thing come with it.
+
+### Changed
+- **Strict = literal content, complete delivery.** The strict contract (`hooks/lib/strict-state.js` `CONTRACT_BLOCK`, mirrored in `deep-knowledge/strict.md`) excluded doc updates and new tests, so a strict `/do-run` left stale docs and untested behaviour behind. It now has a `COMPLETE, not partial` rule: the tests, docs and callers of the changed thing are part of the change, and the test the change needs is added. Extra features, refactors, "while I'm here" and docs or tests about other things stay out. `strict.md` gets grey-zone rows for an uncovered behaviour and a doc describing the changed thing, and its report example and `untouched` rule are updated to match; doc-maintenance is no longer overridden. The do-run "Umfang?" options now describe the two levels by content: Flexibel may widen the content, Strikt delivers exactly what was said, complete. The README strict line says the same. Pinned in `strict-state.test.js`.
+
 ## [0.284.6] — 2026-10-21
 
 Question views in a design round show a `?` and a short title in the navigation; the full question stands only on the question page itself.
