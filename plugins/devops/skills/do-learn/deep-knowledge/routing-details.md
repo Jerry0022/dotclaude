@@ -98,6 +98,9 @@ Delegate") with a self-contained prompt:
   it to `gh issue create --repo`; its Step 4 verifies the returned URL's
   `owner/name` against it.
 - **issue type** — `bug` or `feature` accordingly.
+- **one topic per issue** — a learning covering two independent topics is two
+  hand-overs in the same `/auto-issue` call, cross-linked (Split rule in
+  `issue-rules.md`), never one issue with both.
 
 Nothing is persisted locally in this branch. Report the issue URL after
 checking its owner/name is the upstream slug — an issue in the consumer repo

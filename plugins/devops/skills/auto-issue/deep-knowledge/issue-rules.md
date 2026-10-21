@@ -18,6 +18,14 @@ its own issue.
 use case) become **ONE issue**, titled and scoped by the user value they
 jointly deliver. List the sub-tasks as a checklist in the issue body.
 
+**Split rule — the inverse:** two topics that each pass the gate on their own
+are **two issues**, even when one report, one learning or one prompt names
+both ("login window and console pop-ups"). The test per topic: could it be
+fixed, shipped and closed without touching the other? Yes for both → split,
+one issue each, cross-linked with a `Related: #N` line. One issue holding two
+independent topics cannot be decided, implemented or closed in one piece:
+a later triage has to carry one half over and drop the other.
+
 **Body requirement:** every issue body states the user value in one line:
 `**User value:** <direct or indirect effect>`. If you cannot write that
 line honestly, the issue fails the gate.
