@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.283.0] — 2026-10-21
+
+Concept design pages: the favourite star in the design header is clickable, like the eye and the comment pin beside it.
+
+### Added
+- **Clickable favourite star.** On a design page the header star is a round icon in the same shape as the eye and the pin: ☆ when the design is not the favourite, filled ★ when it is. A click toggles that design's favourite, exactly like the `F` key; the app tooltip names the action and the `F` hotkey, and the button is disabled on frozen rounds. On the overview, "★ <name>" opens the favourite design. Question views still show no star.
+
 ## [0.282.0] — 2026-10-21
 
 Concept design pages: annotation pins can be moved, the variant overview is readable, and the design header no longer jumps on hover.
