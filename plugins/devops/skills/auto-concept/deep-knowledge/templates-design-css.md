@@ -626,6 +626,8 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   border-color: var(--accent-color); font-weight: 600;
 }
 .screen-nav-view-item .has-notes { color: var(--warning-color); font-size: 0.75rem; }
+/* The `?` glyph in front of a view's short title (viewNavTitle()). */
+.screen-nav-view-item .screen-idx { color: var(--accent-color); font-weight: 600; margin-right: 0.5rem; }
 
 /* Hidden per-screen / per-design / per-view textareas: only the active one
    shown. #view-textareas belongs here for the same reason the other two do —
