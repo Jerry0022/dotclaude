@@ -113,6 +113,11 @@ function recordMetric(event, extra, ctx) {
   try { if (metricsLib) metricsLib.record(event, extra, ctx); } catch { /* fail-silent */ }
 }
 
+// Savings log for the plugin audit (estimates, labelled as such). Fail-silent.
+function logSaving(op, estTokens, extra) {
+  try { require('../lib/savings-log').record('token-guard', op, estTokens, extra); } catch { /* never blocks */ }
+}
+
 // A confirmation is meant to cover the retry that follows seconds later, not
 // to pre-authorise the same command indefinitely. Without an expiry the flag
 // would silently approve a command the user abandoned weeks ago.
@@ -516,6 +521,7 @@ process.stdin.on('end', () => {
     try { fs.unlinkSync(flag); } catch {}
     if (fresh) {
       recordMetric('guard_released', { tool: toolName, kind: guardKind }, { cwd, sid: sidForMetrics });
+      logSaving('released', estimatedTokens, { tool: toolName, kind: guardKind });
       process.exit(0); // User confirmed — allow
     }
     // Expired: fall through and block again, re-arming the flag below.
@@ -524,6 +530,7 @@ process.stdin.on('end', () => {
   // First time — block and warn
   try { fs.writeFileSync(flag, Date.now().toString()); } catch {}
   recordMetric('guard_blocked', { tool: toolName, kind: guardKind, est: estimatedTokens }, { cwd, sid: sidForMetrics });
+  logSaving('blocked', estimatedTokens, { tool: toolName, kind: guardKind });
 
   const W = 54;
   const line = '─'.repeat(W);

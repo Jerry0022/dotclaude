@@ -1,9 +1,8 @@
 # Agent Delegation Policy
 
-Always-on (injected at SessionStart). This plugin instruction **is** the
-standing request to use the Agent tool for the devops role agents — no user
-prompt has to ask for it. Classify every task by the tiers below before the
-first tool call; pick the tier by signal, not by habit.
+Always-on (SessionStart). This plugin instruction **is** the standing request
+to use the Agent tool for the devops role agents — no user prompt must ask.
+Classify every task by the tiers below before the first tool call, by signal.
 
 ## Tiers (Inline → 1 agent → 2–3 agents → Full ceremony)
 
@@ -19,10 +18,8 @@ auto-fix, auto-harden, auto-polish) execute through the auto-agents skill:
 it applies this table and shows agent cards; Inline needs no skill load.
 Prompts without a skill apply the table directly.
 
-**Aim:** agents in roughly 30–70 % of implementation sessions — not 100 %
-(each costs a context bootstrap), but a long session with none is a smell:
-the suite run inline again and again (→ `qa`, background), 10+ files touched
-(→ offer the ceremony), a `weiter`/`ship` continuation redoing sweeps inline.
+**Aim:** agents in ~30–70 % of implementation sessions; a long session with
+none is a smell (details: `agent-orchestration.md` § Delegation smells).
 
 Every spawn gets an agent card (`pre.agent.announce`) — show it verbatim as
 the next text, also under Quiet; spawns in one message → only the last card.
@@ -58,9 +55,8 @@ domain agent on `sonnet`; opus only for design-heavy/ambiguous work in class
 
 ## Budget (the `[budget] … → class` line; plan × window × week)
 
-Volume goes where opus·high agents are spawned. The Agent tool has no
-effort parameter, so the spare path has two levers: `model: sonnet` and a
-tool-call ceiling in the agent prompt. Class names say what they do.
+The Agent tool has no effort parameter: the spare path's levers are
+`model: sonnet` and a tool-call ceiling in the agent prompt.
 
 - **free** → tiers as above; ceilings per `agent-orchestration.md`.
 - **ask-before-parallel** (Pro from 0 %, Max 5x ≥ 80 %/90 %, Max 20x
@@ -76,16 +72,13 @@ tool-call ceiling in the agent prompt. Class names say what they do.
   → the 1-agent tier runs on `model: sonnet` with ≤ 5 tool calls;
   parallel/ceremony ask as above, naming the binding reset ("window
   resets in N min" / "week resets in N h").
-- **The answer holds for the whole session and every tier**: after "the right
-  agents", also the 1-agent tier is back on its frontmatter model; after
-  "spare", parallel stays collapsed. Re-ask only when you cannot tell whether
-  you asked (after a compaction) or the class changed (a reset, a window
-  filling up). A new session asks again; nothing is persisted.
+- **The answer holds for the whole session and every tier** ("the right
+  agents" → the 1-agent tier is back on its frontmatter model; "spare" →
+  parallel stays collapsed). Re-ask only after a compaction or a class change.
+  A new session asks again; nothing is persisted.
 - Never ask on Inline or 1-agent prompts: there is no real alternative there.
-- The class comes from `~/.claude/usage-live.json`; a snapshot past its
-  reset, or old enough that the class may have tightened (plan-scaled: Pro
-  minutes, Max 20x hours; never at the limit or minutes before a reset),
-  gets a detached refresh; the `budget:` suffix carries it next prompt.
+- The class comes from `~/.claude/usage-live.json`; stale snapshots are
+  refreshed detached and the `budget:` suffix carries the result next prompt.
 - **The newest `[budget]` line is the class** — it outranks every earlier
   usage claim (a limit message, your own plan text, a percentage in skill
   args), never the user. Never put usage numbers or a class into skill

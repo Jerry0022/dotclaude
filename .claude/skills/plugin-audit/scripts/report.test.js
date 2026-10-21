@@ -51,6 +51,28 @@ describe('plugin-audit report fragment', () => {
     expect(html).toContain('Schätzung: Unsicherheit');
   });
 
+  it('inits the source folder inside a main checkout (git-ignored state dir of a ship-triggered run)', () => {
+    const fs = require('node:fs');
+    const os = require('node:os');
+    const path = require('node:path');
+    const { execFileSync } = require('node:child_process');
+    const { build } = require('./report.js');
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'audit-main-'));
+    try {
+      const git = (...a) => execFileSync('git', ['-C', repo, ...a], { stdio: 'ignore', windowsHide: true });
+      git('init', '-q', '-b', 'main');
+      git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'init');
+      const dir = path.join(repo, '.claude', 'plugin-audit', 'runs', 'r1');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'results.json'), JSON.stringify(results));
+      const res = build(dir, { noBuild: true, repoRoot: path.resolve(__dirname, '../../../..'), stateDirOverride: path.join(repo, 'state') });
+      expect(res.error).toBeUndefined();
+      expect(fs.existsSync(path.join(dir, 'report', 'rounds', '01.html'))).toBe(true);
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  }, 60000);
+
   it('falls back to rule-based suggestions for red/yellow checks', () => {
     const fb = fallbackSuggestions(results);
     expect(fb.map((s) => s.id)).toEqual(['fix-ci', 'fix-references']);

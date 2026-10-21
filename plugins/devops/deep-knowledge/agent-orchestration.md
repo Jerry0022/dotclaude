@@ -183,6 +183,13 @@ amplify errors 17.2×, a central verifier 4.4×), "Passes Alone, Fails Together"
 (arXiv 2609.25396: interference on shared helpers, recovered by a note about
 the concurrent change).
 
+### Delegation smells
+
+Agents belong in roughly 30–70 % of implementation sessions (not 100 %: each
+costs a context bootstrap). A long session with none is a smell: the suite run
+inline again and again (-> `qa`, background), 10+ files touched (-> offer the
+ceremony), a `weiter`/`ship` continuation redoing sweeps inline.
+
 ## Wave Execution
 
 Follow the wave model from `agent-collaboration.md`. The execution mechanics below

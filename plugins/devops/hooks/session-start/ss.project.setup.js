@@ -175,6 +175,14 @@ function setupProject({ cwd, home = os.homedir(), pluginRoot = path.resolve(__di
   return { gitignore, offer };
 }
 
+/** `[devops] version=0.290.0` from the plugin manifest, or null. */
+function versionTag(pluginRoot = path.resolve(__dirname, '..', '..')) {
+  try {
+    const v = JSON.parse(fs.readFileSync(path.join(pluginRoot, '.claude-plugin', 'plugin.json'), 'utf8')).version;
+    return /^\d+\.\d+\.\d+/.test(String(v)) ? `[devops] version=${v}` : null;
+  } catch { return null; }
+}
+
 function main() {
   let input = '';
   process.stdin.setEncoding('utf8');
@@ -188,9 +196,13 @@ function main() {
     } catch {
       process.exit(0);
     }
-    if (res && res.offer) {
+    // Always: a short version tag so the plugin audit can attribute a
+    // transcript to the running devops version (mining.js VERSION_RE).
+    const tag = versionTag();
+    const ctx = [tag, res && res.offer].filter(Boolean).join('\n');
+    if (ctx) {
       process.stdout.write(JSON.stringify({
-        hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: res.offer },
+        hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: ctx },
       }) + '\n');
     }
     process.exit(0);
@@ -199,4 +211,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { setupProject, syncGitignore, newRepoReason };
+module.exports = { versionTag, setupProject, syncGitignore, newRepoReason };

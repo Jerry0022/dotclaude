@@ -4,9 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { setupProject } = require("./ss.project.setup.js");
+const __dirname_ = path.dirname(fileURLToPath(import.meta.url));
+const { setupProject, versionTag } = require("./ss.project.setup.js");
 const { BLOCK_START, BLOCK_END } = require("../lib/runtime-ignores.js");
 
 const tmp = [];
@@ -155,5 +157,13 @@ describe("ss.project.setup — one-time setup offer in a new repository", () => 
   test("an established repo gets no offer", () => {
     const repo = initRepo();
     expect(setupProject({ cwd: repo, home: mkTmp("ps-home-") }).offer).toBeNull();
+  });
+});
+
+describe("version tag", () => {
+  test("reads the manifest version into a parseable tag", () => {
+    const v = JSON.parse(fs.readFileSync(path.join(__dirname_, "..", "..", ".claude-plugin", "plugin.json"), "utf8")).version;
+    expect(versionTag()).toBe(`[devops] version=${v}`);
+    expect(versionTag(os.tmpdir())).toBeNull();
   });
 });

@@ -70,7 +70,7 @@ inline that way, the largest at 951 k.
      then `SendMessage` the answer to the same agent and wait for its next
      result. Repeat until the status is `done`.
    - `{ "status": "done", "titlePrefix", "widgetFile" | "markdown",
-     "widgetTitle", "exitWorktree" }`: the card is already rendered. Do not call
+     "widgetTitle", "exitWorktree", "afterRender"? }`: the card is already rendered. Do not call
      `render_completion_card` again.
      1. If `exitWorktree` is true, call `ExitWorktree({ action: "remove" })`.
      2. Set the session title to `titlePrefix` plus the current title with
@@ -83,13 +83,20 @@ inline that way, the largest at 951 k.
         recognizes the card by its `dc-card` markup, but a foreign title on a
         widget without that markup is not the card. In the terminal, output
         `markdown` verbatim. Add no text of your own.
+     4. Run the optional `afterRender` steps. A background command among them
+        is started here, by you: its completion notice reaches only the agent
+        that started it, and the subagent has ended by then. Still running at
+        the end of your turn → list it in the card's `pending`.
    - `{ "status": "done", "cardData", "afterRender", "exitWorktree" }` (only
      with `--card-data`, see below): the card is NOT rendered yet. On a
      shipped variant finish your own close-out first (the /auto-concept
      finalize: part D and Step 6a, so the bridge, pulser and waker are
      stopped and the state file is gone); on `ship-blocked` skip it — the
      concept stays open. A failed close-out still goes on. Then call
-     `render_completion_card` with `cardData` verbatim, carry out its
+     `render_completion_card` with `cardData` verbatim — except `answer`:
+     the subagent saw only the brief, so its `answer` covers at most a part
+     of the user's request; merge it into the answer to everything the user
+     asked in this conversation. Carry out its
      `[SESSION TITLE]` step and show the card as the last action, run the
      `afterRender` steps, and only then, if `exitWorktree` is true, call
      `ExitWorktree({ action: "remove" })` — the render reads the worktree
@@ -152,6 +159,7 @@ extension. Only these points differ:
 | Step 5e (memory dream) | Skip it. The learnings live in the parent's conversation, not in the brief. |
 | Step 6 | Unchanged up to and including `render_completion_card` (with the `session_id` and `lang` from your prompt) and any project-extension step that runs after the render, such as a plugin self-sync. Take `changes`, `validation` and `userFinalTest` from the brief, plus what the ship itself found. **Never call `show_widget` or rename the session**: return the result in the `done` JSON. `titlePrefix` is the prefix the `[SESSION TITLE]` block names. On Desktop, `widgetFile` is the path the result names ("The same HTML is saved in …") and `widgetTitle` is always `"completion_card_body"`. In the terminal, `markdown` is the card markdown verbatim. |
 | Step 6 with `--card-data` | Do everything up to the render, but do **not** call `render_completion_card` and do not run the project-extension steps that follow the render. Return `{ "status": "done", "cardData": <the full render_completion_card input you would have passed, session_id and lang included>, "afterRender": [<each deferred extension step, as a command or one-line instruction>], "exitWorktree" }`. List an extension step in `afterRender` only when it would have run here: `ship_release` succeeded and its own conditions hold (e.g. no `.claude/.ship-queue` marker) — otherwise `[]`. Before you return, store the same object on disk so a compaction in the parent cannot lose it: `node "{PLUGIN_ROOT}/scripts/ship-carddata.js" write --cwd "<cwd>" --session <session_id from your prompt>` with `{ "cardData", "afterRender", "exitWorktree" }` on stdin (a heredoc). The parent renders after its close-out. |
+| Background work a step would start (a project extension's background audit, a watcher the parent must own) | Do not start it: its completion notice would reach only you, after you ended. Put it into the `done` JSON's `afterRender` as a command or one-line instruction; the parent starts it. |
 | Sentinel hygiene | Unchanged. Before a `ship-blocked` card, call `ship_cleanup({ …, keep: true })`. |
 
 End **every** return (`decision` and `done` alike) with exactly one fenced `json`

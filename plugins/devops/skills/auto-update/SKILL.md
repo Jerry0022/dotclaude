@@ -32,7 +32,7 @@ HOOK_SCRIPT = ${PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js
 
 ## Step 0 — Capture current state + channel
 
-1. Current version from `MARKETPLACE_DIR/PLUGIN_SUBDIR/.claude-plugin/plugin.json`
+1. Current version from `<MARKETPLACE_DIR>/<PLUGIN_SUBDIR>/.claude-plugin/plugin.json`
    and SHA from `git -C MARKETPLACE_DIR rev-parse --short HEAD`.
 2. Channel pin from `~/.claude/plugins/.channels.json` (key = marketplace
    name, missing/invalid → `stable`). One channel per MARKETPLACE — a single
@@ -69,7 +69,7 @@ Read the NEW version and SHA, then `git -C MARKETPLACE_DIR log --oneline
 ## Step 3 — Verify & Report
 
 1. **Version alignment** — these three must match, else report the mismatch:
-   `MARKETPLACE_DIR/PLUGIN_SUBDIR/.claude-plugin/plugin.json`; the cache's
+   `<MARKETPLACE_DIR>/<PLUGIN_SUBDIR>/.claude-plugin/plugin.json`; the cache's
    `.claude-plugin/plugin.json` (`installed_plugins.json` → `installPath`);
    `installed_plugins.json` → `devops@dotclaude` → `version`.
 2. **Cache completeness** — under `installPath`: `.claude-plugin/plugin.json`,

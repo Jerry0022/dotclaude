@@ -41,6 +41,14 @@ describe("prompt.skill.overrides", () => {
     expect(L.readRecordFile(L.recordPath("s-prompt", tmp)).skills[0].skill).toBe("do-ship");
   });
 
+  test("raw pre-expansion prompts: /devops:skill args and bare /skill args both match", () => {
+    override("do-ship", "## Replace Step 2\nscp\n");
+    const ns = main(prompt("/devops:do-ship stable"), { home, dir: tmp });
+    expect(ns.context).toContain("[skill-overrides] do-ship: project reference.md");
+    const bare = main(prompt("/do-ship stable"), { home, dir: tmp });
+    expect(bare.context).toContain("[skill-overrides] do-ship: project reference.md");
+  });
+
   test("the harness <command-name> form with a mode arg picks the mode's old dir", () => {
     override("do-run", "run rule");
     override("run-backlog", "backlog rule");
