@@ -242,26 +242,23 @@ describe("favourite — at most one, toggled until submit, in the payload", () =
   }, BOOT_TIMEOUT);
 });
 
-describe("header — expands over the content, never shifts it", () => {
-  test("the header is fixed chrome outside <main>; opening it changes nothing in the content box", async () => {
+describe("header — one row, never expands", () => {
+  test("the header is fixed chrome outside <main> with a single row; hover only changes its opacity", async () => {
     const { window, document } = await boot(page(2));
     window.showDesign("d2");
     const header = document.getElementById("design-header");
     expect(header.closest("main")).toBeNull();
-    const box = document.getElementById("d2-s1").firstElementChild;
-    const snapshot = () => [box.getBoundingClientRect().top, box.getAttribute("style"), document.getElementById("d2-s1").getAttribute("style"),
-      document.querySelector("main").getAttribute("style")];
-    const before = snapshot();
-    header.dataset.open = "true";
-    expect(snapshot()).toEqual(before);
-    // The rules behind it: fixed position, expanded state touches no geometry
-    // of anything but the header itself (real-browser measurement: content top
-    // 232px before and after, header 230×41 → 512×119).
+    expect([...header.children].map((c) => c.className)).toEqual(["design-header-main"]);
+    expect(header.querySelector(".design-header-tabs, .design-fav-btn, .design-header-note")).toBeNull();
+    // A tap on the header's surface opens nothing.
+    header.querySelector(".design-header-name").click();
+    expect(header.dataset.open).not.toBe("true");
     const css = md.match(/```css\n([\s\S]*?)```/g).join("\n");
     expect(css).toMatch(/\.design-header \{\s*position: fixed;/);
-    const expanded = /\.design-header:hover, \.design-header:focus-within, \.design-header\[data-open="true"\] \{([^}]*)\}/.exec(css);
-    expect(expanded, "expanded-state rule").not.toBeNull();
-    expect(expanded[1]).not.toMatch(/position|top:|left:|margin/);
+    expect(css).not.toMatch(/\.design-header-more|\.design-header\[data-open/);
+    const hover = /\.design-header:hover, \.design-header:focus-within \{([^}]*)\}/.exec(css);
+    expect(hover, "hover rule").not.toBeNull();
+    expect(hover[1]).not.toMatch(/position|top:|left:|margin|width|height/);
   }, BOOT_TIMEOUT);
 
   test("collapsed: icon + name, ★ only for the favourite; the back item has no arrow", async () => {
@@ -416,7 +413,7 @@ describe("Ctrl + click user pins", () => {
     window.showDesign("d1");
     expect(document.querySelectorAll("#d1-s1 .upin").length).toBe(1);
     expect(document.querySelector("#d1-s1 .upin-editor textarea").readOnly).toBe(true);
-    expect(document.querySelector("#design-header .design-fav-btn").disabled).toBe(true);
+    expect(document.querySelector("#design-header .design-header-star").disabled).toBe(true);
   }, BOOT_TIMEOUT);
 });
 
