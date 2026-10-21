@@ -320,6 +320,7 @@ function fetchPrList(cwd) {
       cwd, encoding: "utf8", timeout: NETWORK_TIMEOUT, stdio: ["pipe", "pipe", "pipe"],
     });
     list = JSON.parse(out);
+    if (!Array.isArray(list)) list = null;
   } catch {
     list = null;
   }
