@@ -749,7 +749,7 @@ icon, or when the traits are not exactly three (`concept-gate.js`
   reload returns to where the user was (`_overview` / `_overviewDesign` /
   `_overviewScreen`, § State Persistence).
 - **Favourite** — optional, at most one, toggled until submit (button on the
-  card, in the expanded header, or `F`). The favoured card is raised with a
+  card, the header's ★, or `F`). The favoured card is raised with a
   gold border and a `★ FAVOURITE` badge, the others dim. Payload:
   `favorite: <designId>|null` (§ Decision schema). Meaning for the next
   round: step5-process.md § 5a.
@@ -758,9 +758,9 @@ icon, or when the traits are not exactly three (`concept-gate.js`
   icon + name, `★` only when this design IS the favourite (on the overview:
   `★ <name>` only when one is set), the annotation eye and, on a live design
   page, the comment-pin icon (touch path for user pins) drawn like the eye.
-  The motto is the name's tooltip. Semi-transparent at rest, opaque on
-  hover; hover, keyboard focus or a tap grows it as ONE card over the
-  content (fixed, so nothing below moves) with the page tabs and ☆ Favourite.
+  The motto is the name's tooltip. ONE row only, semi-transparent at rest,
+  opaque on hover or keyboard focus — it never grows a second row (pages
+  live in the quick nav, the favourite on ★).
 - **Quick nav** (top centre, replaces `#design-switcher`) — one row. On a
   design page the active design fans its pages out inside its own segment
   (fan-out animation) and every other design shrinks to its icon (name in
@@ -948,9 +948,8 @@ icon, or when the traits are not exactly three (`concept-gate.js`
          #anno-toggle moves into the header's first row. A single-design round
          never shows any of them and renders exactly as before.
          #design-header — the one card top left: back item · icon · name ·
-           ★ · eye · pin icon (motto = the name's tooltip); hover / focus /
-           tap grows it over the content (fixed, so nothing below shifts)
-           with page tabs and ☆ favourite.
+           ★ · eye · pin icon (motto = the name's tooltip); one row,
+           never expands.
          #design-quick — top-centre quick nav: one row — designs (the active
            one with its pages), then a `?` segment when the round has views.
          #upin-hint — bottom-centre hint while Ctrl is held (user pins).
