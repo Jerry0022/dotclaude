@@ -56,7 +56,7 @@ const {
 } = require('./card-guard');
 const { detectCardHandoff, webGuideInvokedThisTurn } = require('./guide-handoff');
 const validationGaps = require('./validation-gaps');
-const { scanOpenTasksInFile, openTaskNames } = require('./pending-tasks');
+const { scanOpenTasksInFile, openTaskNames, withoutOwnShipAgent } = require('./pending-tasks');
 const { readSessionFile, sessionFile, writeSessionFile } = require('./session-id');
 const {
   BG_RUN_MAX_MS, parseBackgroundRuns, VERIFICATION_EXEMPT_VARIANTS,
@@ -241,7 +241,9 @@ function findings(input, { validationPending = false, openTasks = null, verifica
   }
 
   const pending = Array.isArray(input.pending) ? input.pending.filter(Boolean) : [];
-  if (openTasks && openTasks.length > 0 && pending.length === 0) out.push(buildPendingReason(openTasks));
+  const dismissed = typeof input.pendingDismissed === 'string' && input.pendingDismissed.trim().length >= 20;
+  const live = withoutOwnShipAgent(openTasks, input.variant);
+  if (live && live.length > 0 && pending.length === 0 && !dismissed) out.push(buildPendingReason(live));
 
   if (verificationOwed && !VERIFICATION_EXEMPT_VARIANTS.has(input.variant) && !cardSkipReason(input)) {
     out.push(buildCardVerificationReason(verificationOwed.kind, { red: verificationOwed.red === true }));
@@ -302,7 +304,7 @@ function check(input, { home, tmp } = {}) {
     const file = tmp ? path.join(tmp, `${REFUSED_PREFIX}-${sessionId}`) : sessionFile(REFUSED_PREFIX, sessionId);
     if (reasons.length === 0) {
       try { fs.unlinkSync(file); } catch { /* none */ }
-      return { refuse: false };
+      return { refuse: false, dismissed: dismissedNames(input, openTasks) };
     }
     const sig = crypto.createHash('sha1').update(reasons.join('\n')).digest('hex');
     let prev = null;
@@ -318,6 +320,17 @@ function check(input, { home, tmp } = {}) {
   }
 }
 
+/** Minimum length of a `pendingDismissed` reason (#807). */
+const DISMISS_MIN = 20;
+
+/** Open work the card dismissed with a stated reason, so the card can show it. */
+function dismissedNames(input, openTasks) {
+  const live = withoutOwnShipAgent(openTasks, input && input.variant) || [];
+  const reason = input && typeof input.pendingDismissed === 'string' ? input.pendingDismissed.trim() : '';
+  const declared = Array.isArray(input && input.pending) && input.pending.filter(Boolean).length > 0;
+  return live.length > 0 && reason.length >= DISMISS_MIN && !declared ? live : [];
+}
+
 function refusalText(reasons) {
   const head = [
     '[card-pregate] Not rendered — this card would be blocked by stop.flow.guard after the turn.',
@@ -329,4 +342,4 @@ function refusalText(reasons) {
   return [...head, '', ...body].join('\n').replace(/\[stop\.flow\.guard\] /g, '');
 }
 
-module.exports = { check, findings, findTranscript, readVerificationOwed, refusalText, writeToolsThisTurn, REFUSED_PREFIX };
+module.exports = { check, dismissedNames, findings, findTranscript, readVerificationOwed, refusalText, writeToolsThisTurn, REFUSED_PREFIX };

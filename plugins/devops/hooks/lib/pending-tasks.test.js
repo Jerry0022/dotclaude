@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  scanOpenTasks, scanOpenTasksInFile, openTaskNames, labelFor, isConceptInfra, responseTaskId, responseLaunch, taskEnds,
+  scanOpenTasks, scanOpenTasksInFile, openTaskNames, labelFor, withoutOwnShipAgent, isConceptInfra, responseTaskId, responseLaunch, taskEnds,
   AGENT_LAUNCH_MARKER, BASH_LAUNCH_MARKER, WORKFLOW_LAUNCH_MARKER,
 } from './pending-tasks.js';
 
@@ -851,7 +851,7 @@ describe('labelFor — sanitization', () => {
   test('never returns an empty label', () => {
     expect(labelFor({}, 'workflow')).toBe('workflow');
     expect(labelFor({}, 'agent')).toBe('agent');
-    expect(labelFor({}, 'task')).toBe('task');
+    expect(labelFor({}, 'task')).toMatch(/background command/);
   });
 });
 
@@ -1082,5 +1082,51 @@ describe('scanOpenTasksInFile — a launch older than the tail slice', () => {
     expect(scanOpenTasksInFile(write('small.jsonl', AGENT_START), 1 << 20).map(t => t.id)).toEqual(['a75d674f7108dd6c8']);
     expect(scanOpenTasksInFile(path.join(dir, 'nope.jsonl'), TAIL)).toEqual([]);
     expect(scanOpenTasksInFile('', TAIL)).toEqual([]);
+  });
+});
+
+describe('#807 — only live, model-started work counts, and it is always named', () => {
+  const bash = (id, taskId, input) => [
+    toolUse(id, 'Bash', { run_in_background: true, ...input }),
+    toolResult(id, BASH_BG_TEXT.replaceAll('b68oycrr6', taskId)),
+  ];
+
+  test('a hook-spawned install (graphify uv tool install) is not work', () => {
+    const t = bash('toolu_i', 'bin1', { command: 'uv tool install graphifyy', description: 'Install graphify' });
+    expect(scanOpenTasks(t.join('\n'))).toEqual([]);
+  });
+
+  test.each(['completed', 'failed', 'killed'])('a %s notification ends the task', (status) => {
+    const t = bash('toolu_n', 'bn1', { command: 'npm test', description: 'Run the suite' });
+    expect(scanOpenTasks(t.join('\n'))).toHaveLength(1);
+    expect(scanOpenTasks([...t, notification('bn1', status)].join('\n'))).toEqual([]);
+  });
+
+  test('a task without description or command is named, never a bare "task"', () => {
+    const [open] = scanOpenTasks(bash('toolu_u', 'bu1', {}).join('\n'));
+    expect(open.name).not.toBe('task');
+    expect(open.name).toMatch(/background command/);
+  });
+
+  test('a task is named by its command when it has no description', () => {
+    const [open] = scanOpenTasks(bash('toolu_c', 'bc1', { command: 'npm run build' }).join('\n'));
+    expect(open.name).toBe('npm run build');
+  });
+
+  test('withoutOwnShipAgent drops the ship agent only on a ship card', () => {
+    const names = ['devops:do-ship', 'devops:research'];
+    expect(withoutOwnShipAgent(names, 'ship-successful')).toEqual(['devops:research']);
+    expect(withoutOwnShipAgent(names, 'ready')).toEqual(names);
+  });
+
+  test('withoutOwnShipAgent matches the exact delegated ship only', () => {
+    expect(withoutOwnShipAgent(['do-ship', 'Ship im Subagenten', 'x --delegated'], 'ship-successful')).toEqual([]);
+    const keep = ['ship the fix', 'ship-watcher', 'Deploy and ship tests'];
+    expect(withoutOwnShipAgent(keep, 'ship-successful')).toEqual(keep);
+  });
+
+  test('a model-started npm install graphify-foo still counts', () => {
+    const t = bash('toolu_g', 'bg1', { command: 'npm install graphify-foo' });
+    expect(scanOpenTasks(t.join('\n'))).toHaveLength(1);
   });
 });

@@ -993,8 +993,17 @@ function buildPendingReason(names) {
     'then appends this work as its own sentence ("… in Implementierung. 2 Agenten arbeiten") instead of the',
     'generic "NOCH NICHT FERTIG".',
     '',
-    'If the work has in fact already finished, collect the results first and then',
-    'render the real completion card — do not declare it pending to get past this.',
+    'FIRST check each item above (TaskOutput / its output file): is it really still',
+    'running, and did YOU start it? Then pick exactly one:',
+    '  - still running and yours  → re-render with `pending` as described above.',
+    '  - already finished         → collect the result, then render the real card.',
+    '  - not your work (a hook-spawned install, a task another process owns) or',
+    '    already finished and only the record is stale → re-render the SAME card',
+    '    with `pendingDismissed: "<one sentence: why it is not pending work>"`.',
+    '    The gate accepts that once; the reason is yours to stand behind.',
+    '',
+    'NEVER invent a `pending` entry just to get past this gate — a made-up entry',
+    'replaces the real CTA with "noch nicht fertig" and tells the user a lie.',
   ].join('\n');
 }
 

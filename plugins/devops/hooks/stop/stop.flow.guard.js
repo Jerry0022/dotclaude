@@ -130,7 +130,7 @@ const { ANSWER_ASKED_FLAG, shouldAskForAnswer, buildAnswerMissingReason } = requ
 function isTreeClean(cwd, sessionId) {
   try {
     const out = execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], {
-      cwd: cwd || process.cwd(), encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'],
+      cwd: cwd || process.cwd(), encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
     });
     return out.trim().length === 0;
   } catch {}

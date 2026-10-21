@@ -2612,7 +2612,7 @@ function buildCompletionCard(params) {
     validationGaps.writeRepoOpen(params.cwd, openItems);
     // pending-attested satisfies the pending gate — set only when the field
     // actually carries items (an empty array declares nothing).
-    if (hasPending(params.pending)) {
+    if (hasPending(params.pending) || pendingDismissedReason(params)) {
       writeFileSync(join(tmpdir(), 'dotclaude-devops-pending-attested-' + key), new Date().toISOString());
     }
   } catch (e) {
@@ -2954,7 +2954,8 @@ server.registerTool(
             doing: z.string().optional().describe("Short description of the work it is doing, e.g. 'Farbstil auf Tokens umstellen'."),
           }),
         ])).optional(),
-      ).describe("Background work STILL RUNNING at turn end — subagents started with run_in_background, backgrounded Bash tasks, or Workflow runs. MANDATORY whenever such work is in flight: it overrides the decision heading of EVERY variant with 'noch nicht fertig — {what}', names the first three items on a dim line directly above that CTA, and renders a block naming each item with what it is doing, so the card never asks the user to SHIP or act on a result that does not exist yet. The card body still reports what IS true; only the call to action is corrected. stop.flow.guard blocks the turn when open background work is detected and this field is missing."),
+      ).describe("Background work STILL RUNNING at turn end — subagents started with run_in_background, backgrounded Bash tasks, or Workflow runs. MANDATORY whenever such work is in flight: it overrides the decision heading of EVERY variant with 'noch nicht fertig — {what}', names the first three items on a dim line directly above that CTA, and renders a block naming each item with what it is doing, so the card never asks the user to SHIP or act on a result that does not exist yet. The card body still reports what IS true; only the call to action is corrected. stop.flow.guard blocks the turn when open background work is detected and this field is missing. List only work that is really running and that you started - NEVER invent an entry to get past the gate (use pendingDismissed when the work is not yours or already finished)."),
+      pendingDismissed: z.string().optional().describe("Answer to the pending gate when it listed background work that is NOT live work of yours: one sentence why (e.g. hook-spawned install, not mine / already finished, output checked). Use ONLY after checking the task output; accepted once. NEVER use it to hide work that really runs, and NEVER invent a `pending` entry to pass the gate."),
       concept: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.union([
@@ -3049,7 +3050,9 @@ server.registerTool(
     // (hooks/lib/card-pregate.js). The Stop gate itself is unchanged.
     const pre = cardPregate.check(params);
     if (pre.refuse) return { isError: true, content: [{ type: 'text', text: pre.text }] };
-    const cardMarkdown = buildCompletionCard(params);
+    let cardMarkdown = buildCompletionCard(params);
+    const dismissTrace = pendingDismissTrace(pre.dismissed, params);
+    if (dismissTrace) cardMarkdown += '\n\n' + dismissTrace;
     const titleNote = sessionTitleNote(params);
     const actionsNote = ctaActionsNote(params);
     const archiveNote = sessionArchiveNote(params, actionsNote);
@@ -3060,8 +3063,20 @@ server.registerTool(
 
 // Exported for unit tests — the usage meter is pure and worth asserting on
 // directly (column grid, bar semantics) without driving the whole card.
+/** One dim trace line naming the open work the card dismissed and why (#807). */
+function pendingDismissTrace(names, params) {
+  const reason = pendingDismissedReason(params);
+  if (!reason || !Array.isArray(names) || names.length === 0) return '';
+  return `*Nicht als laufend gezählt: ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` +${names.length - 3}` : ''} — ${reason}*`;
+}
+
+function pendingDismissedReason(p) {
+  const r = p && typeof p.pendingDismissed === 'string' ? p.pendingDismissed.trim() : '';
+  return r.length >= 20 ? r : '';
+}
+
 export {
-  insideWorkTree, withDetectedRepoMode,
+  insideWorkTree, withDetectedRepoMode, pendingDismissTrace,
   renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget,
   buildBudgetModel, renderBudgetLineMd, sanitizeSessionId, buildResultLines, buildEvidencePosts, renderPipelineLine, buildChannelLadder, renderChannelLadderMd,
   ctaInput, resolveCardKey, sessionArchiveNote, buildDecisionBlock, buildCardModel, sessionFileCandidates, readSessionFlagRaw,
