@@ -720,7 +720,7 @@ four attributes; the engine (templates-design-overview.md § Variant overview JS
 
 | Attribute | Content |
 |---|---|
-| `data-design-motto` | The design's slogan, 2–5 words ("Less is calm."). It heads the card and the expanded header. |
+| `data-design-motto` | The design's slogan, 2–5 words ("Less is calm."). It heads the card and is the header name's tooltip. |
 | `data-design-traits` | Exactly **three** traits, separated by `\|`. Only genuine differences to the OTHER designs of the round — never something every design has ("responsive", "dark mode"). |
 | `data-design-icon` | A built-in icon name (`leaf`, `rocket`, `gauge`, `grid`, `map`, `cube`, `chart`, `bolt`, `heart`, `compass`, `layers`, `sparkles`, `shield`, `book`, `user`, `home`, `sun`, `moon`, `flame`, `palette`, `game`, `list`) or one inline SVG, entity-escaped inside the attribute (`data-design-icon="&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;&lt;path d=&quot;…&quot;/&gt;&lt;/svg&gt;"` — a raw `<`/`>` in an attribute breaks the build's and the gate's tag scanners); stroke paths in `currentColor`, everything outside svg/g/path/circle/ellipse/line/polyline/polygon/rect and their geometry/stroke attributes is dropped. A short emoji works too. Claude picks it thematically per concept — the icon is how the user tells the designs apart in the quick nav. |
 | `data-design-color` | Optional. A hex colour for the design's card, header line and icon background. Never the accent blue: the icons themselves are drawn in one uniform accent tint, and the background must stay distinguishable. Without it the engine assigns a palette colour by position. |
@@ -747,10 +747,11 @@ icon, or when the traits are not exactly three (`concept-gate.js`
 - **Header** (top left, replaces `#screen-indicator`) — compact: back item
   "▦ Übersicht" (on a design or view page; overview icon + word, no arrow),
   icon + name, `★` only when this design IS the favourite (on the overview:
-  `★ <name>` only when one is set), and the annotation eye. Semi-transparent
-  at rest, opaque on hover; hover, keyboard focus or a tap grows it as ONE
-  card over the content (fixed, so nothing below moves) with the motto, the
-  page tabs, ☆ Favourite and the pin button (touch path for user pins).
+  `★ <name>` only when one is set), the annotation eye and, on a live design
+  page, the comment-pin icon (touch path for user pins) drawn like the eye.
+  The motto is the name's tooltip. Semi-transparent at rest, opaque on
+  hover; hover, keyboard focus or a tap grows it as ONE card over the
+  content (fixed, so nothing below moves) with the page tabs and ☆ Favourite.
 - **Quick nav** (top centre, replaces `#design-switcher`) — one segment per
   design with its icon (uniform accent tint on the design colour), `★` on the
   favourite; a second, smaller row of `?` segments only when the round has
@@ -913,8 +914,9 @@ icon, or when the traits are not exactly three (`concept-gate.js`
          #anno-toggle moves into the header's first row. A single-design round
          never shows any of them and renders exactly as before.
          #design-header — the one card top left: back item · icon · name ·
-           ★ · eye; hover / focus / tap grows it over the content (fixed, so
-           nothing below shifts) with motto, page tabs, ☆ favourite, pin.
+           ★ · eye · pin icon (motto = the name's tooltip); hover / focus /
+           tap grows it over the content (fixed, so nothing below shifts)
+           with page tabs and ☆ favourite.
          #design-quick — top-centre quick nav: one icon segment per design,
            a second row of `?` segments only when the round has views.
          #upin-hint — bottom-centre hint while Ctrl is held (user pins).

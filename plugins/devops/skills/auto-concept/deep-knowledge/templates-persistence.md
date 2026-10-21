@@ -383,6 +383,14 @@ function saveState() {
   // range/select scans. Written unconditionally (not just when true) so
   // toggling back to visible also persists past a reload.
   state['annoHidden'] = document.body.classList.contains('anno-hidden');
+  // Pins the user dragged aside (wireAnnotationLayer() § moving a pin),
+  // keyed by round + pin id so a frozen round's same-named pin stays put.
+  const _annoPos = {};
+  document.querySelectorAll('[data-anno][data-anno-moved]').forEach(a => {
+    const r = a.closest('section[data-iteration]');
+    _annoPos[(r ? r.dataset.iteration : '') + ':' + a.dataset.anno] = a.dataset.annoMoved;
+  });
+  state['annoPos'] = _annoPos;
   // Work package B — the dock's user-controlled maximise override (a DOM
   // attribute, not a JS closure variable, so it can be read/written from
   // this script block even though applyDockSize() lives in a different
@@ -503,6 +511,19 @@ function restoreState() {
     // class; never removes it here, since the default (no class) already
     // means "visible" and a missing/false key must not fight that default.
     if (state.annoHidden) document.body.classList.add('anno-hidden');
+    // Mirror of annoPos in saveState(): put dragged pins back where the user
+    // left them, before updateAnnoUI() runs its first placement.
+    if (state.annoPos && typeof state.annoPos === 'object') {
+      document.querySelectorAll('[data-anno]').forEach(a => {
+        const r = a.closest('section[data-iteration]');
+        const pos = state.annoPos[(r ? r.dataset.iteration : '') + ':' + a.dataset.anno];
+        const m = /^(\d+(?:\.\d+)?),(\d+(?:\.\d+)?)$/.exec(String(pos || ''));
+        if (!m) return;
+        a.dataset.annoMoved = pos;
+        a.style.setProperty('--anno-x', m[1] + '%');
+        a.style.setProperty('--anno-y', m[2] + '%');
+      });
+    }
     // Mirror of the annoHidden restore above — see saveState(). Re-applies
     // sizing immediately (not just on the next iteration switch) because
     // this script block's DOMContentLoaded listener is not guaranteed to
