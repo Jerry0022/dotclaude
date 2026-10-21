@@ -428,6 +428,22 @@ describe("☰ overview row, the eye on the overview, draggable pins", () => {
     expect(document.getElementById("d2b-s1").hidden, "d2b has no page 3 → its first page").toBe(false);
   }, BOOT_TIMEOUT);
 
+  test("a question view tied to a design maps to the target design's view at the same position", async () => {
+    const views = '<section data-view="qa" data-view-for="d2" data-nav-label="Frage A" hidden><p>A</p></section>'
+      + '<section data-view="qb" data-view-for="d2b" data-nav-label="Frage B" hidden><p>B</p></section>';
+    const html = page(3).replace(/<section data-design="d2" /, (m) => views + m);
+    const { window, document, errors } = await boot(html);
+    expect(errors).toEqual([]);
+    window.showView("qa");
+    expect(document.body.dataset.viewActive).toBe("true");
+    key(window, document.body, { key: "2", code: "Digit2" });
+    expect(document.querySelector('section[data-view="qb"]').hidden, "d2b's own view at the same position").toBe(false);
+    key(window, document.body, { key: "3", code: "Digit3" });
+    expect(document.body.dataset.viewActive, "d2c has no view → its first page").toBe("false");
+    expect(activeDesign(document).dataset.design).toBe("d2c");
+    expect(document.getElementById("d2c-s1").hidden).toBe(false);
+  }, BOOT_TIMEOUT);
+
   test("a dragged pin keeps its spot across a reload", async () => {
     const html = withAnno();
     const a = await boot(html);
