@@ -80,6 +80,19 @@ Delegate") with a self-contained prompt:
   MCP / convention), plus a `**User value:**` line (`auto-issue` Step 1a
   rejects an issue without one) phrased as the effect on anyone using the
   plugin ("every project hitting X stops losing Y"), not on this session.
+  Close the body with an **Environment** block, so a later triage can tell
+  whether a fix landed after the version that hit it:
+
+  ```
+  **Environment**
+  - Plugin: devops v<version from {PLUGIN_ROOT}/.claude-plugin/plugin.json>
+  - Claude Code: <`claude --version`> · <surface: Desktop app | terminal | IDE>
+  - Model: <session model id>
+  - OS: <platform + version>
+  ```
+
+  Fill every line from the real source in this session, never from memory; a
+  value that cannot be read is written as `unknown`, never left out.
 - **target repo** — the slug, so the issue lands upstream rather than in the
   consumer repo. `auto-issue` Step 1 takes this as `{target_repo}` and passes
   it to `gh issue create --repo`; its Step 4 verifies the returned URL's
@@ -175,7 +188,9 @@ Resolve the target's remote: `git -C "{target_project}" remote get-url origin`.
   Delegate"). Target repo set to that project, title
   `[CHORE] Capture learning: <short>`, body = the learning plus
   `Captured from a session in {current-project}.` and a `**User value:**` line
-  naming what following the rule improves, type `chore`. If it declines, fall
+  naming what following the rule improves, plus the branch B **Environment**
+  block when the learning is about a tool or plugin behaviour, type `chore`.
+  If it declines, fall
   through to the no-remote path below.
 - **No GitHub remote** → ask first. Default option (a): emit a copy-pastable
   block for the user to paste into that project's session —
