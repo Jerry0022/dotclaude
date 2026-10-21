@@ -205,7 +205,8 @@ of its card lines and the skip rules.
 
 The tool removes leftover branches and session worktrees whose content
 provably landed — only after a ship, only once one of them is older than the
-age gate (default 30 days), and then every removable one older than 30 days;
+age gate (default 3 days), and then every removable one older than 3 days
+(beyond the 5 newest removable ones always);
 younger leftovers stay for the page. It flags unlanded work on a
 `[gone]` branch or a detached session worktree, and decides whether the
 cleanup page is worth suggesting (more than 50 leftovers, at most once a

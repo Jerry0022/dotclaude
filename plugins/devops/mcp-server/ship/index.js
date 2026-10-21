@@ -160,7 +160,7 @@ registerTool(
   "Ship Hygiene",
   "After a SUCCESSFUL ship (trigger 'ship') or promotion-only run (trigger 'promote'): " +
   "removes leftover branches/worktrees whose content provably landed — only after a ship: once one is older than the " +
-  "age gate (default 30 days) everything removable older than 30 days, beyond the 20 newest removable ones always, and " +
+  "age gate (default 3 days) everything removable older than 3 days, beyond the 5 newest removable ones always, and " +
   "the oldest kept worktree checkouts when they exceed 10 GB (branch kept) — and decides whether the card " +
   "suggests the cleanup page (more than 50 leftovers, at most weekly). Thresholds are user settings (devops-config). " +
   "Returns ready-made card lines: card.tests → the card's tests array, card.open ({ text, reply }) → its open array. " +
