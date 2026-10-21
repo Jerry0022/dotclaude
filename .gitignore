@@ -20,6 +20,8 @@ service-account*.json
 .credentials.json
 *.env
 .claude/local-llm/config.json
+# plugin-audit project skill: run state (results, history, pending marker)
+**/.claude/plugin-audit/
 
 # AI tooling — session state (never track)
 
@@ -105,6 +107,7 @@ service-account*.json
 !.claude/skills/do-ship/
 !.claude/skills/auto-polish/
 !.claude/skills/do-run/
+!.claude/skills/plugin-audit/
 
 # OS
 .DS_Store

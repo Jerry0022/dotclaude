@@ -276,3 +276,37 @@ user's single restart.
 On the user's next session start, `ss.plugin.update` finds the marketplace clone and cache
 already on the shipped version → nothing moves → it **clears** the stale sentinel → MCP
 tools work immediately, new version active. One restart, no blocked-tool window.
+
+## Add after Step 5b
+
+### Plugin audit on a decade boundary (background, never a gate)
+
+Runs only on the **final ship** of a version that crosses a decade boundary
+(`floor(minor/10)` grows, e.g. `0.289.3 → 0.290.0`), at most once per decade.
+Intermediate ships, promotions (`beta`/`stable`) and keep-mode ships never start
+it. It is a project skill of this repo (`.claude/skills/plugin-audit/`), not part
+of the plugin, and it must never block or delay the ship.
+
+**Why after Step 5b:** the version is merged and tagged (Step 4), the worktree is
+gone and the session sits in the main checkout (`$MAIN_REPO_ROOT`), so the audit
+measures the shipped state. Every audit script is plain `node` — the Step 8
+finalizer's `.mcp-stale.json` only blocks `mcp__plugin_devops_*` tools and does
+not touch it. Everything that needs the completion card (the hint below) happens
+in Step 6, **before** the Step 8 finalizer; the report steps afterwards (2–5 of
+`plugin-audit/SKILL.md`) use no devops MCP tool except the optional issue creation
+via `/auto-issue`, which is a later turn after the restart anyway.
+
+1. Decide: `node "$MAIN_REPO_ROOT/.claude/skills/plugin-audit/scripts/lib/trigger.js" --prev <vOld> --new <vNew>`
+   (`vOld` = the version before the Step 3 bump, `vNew` = the shipped one). Prints
+   `{"run":bool,"reason":…}`. On `run:false` do nothing and mention nothing.
+2. On `run:true`, and only if `$MAIN_REPO_ROOT`'s `plugins/devops/.claude-plugin/plugin.json`
+   already shows `vNew`: start `node "$MAIN_REPO_ROOT/.claude/skills/plugin-audit/scripts/audit.js" --trigger ship`
+   with the Bash tool's `run_in_background: true`, cwd `$MAIN_REPO_ROOT`. **No gate**,
+   no waiting, no output check — a failure of the audit never fails the ship.
+3. Step 6 card: add the hint item
+   `Plugin-Audit läuft im Hintergrund — der Bericht öffnet sich als Concept-Seite, sobald er fertig ist`
+   (a `userFinalTest` entry of the info kind; never an open point that blocks).
+4. When the background task completes, run `.claude/skills/plugin-audit/SKILL.md`
+   steps 2–5 in this session (currency agent, synthesis agent, report, record). If
+   the session is already over, `audit.js` left `report-pending.json` in the audit
+   state dir; the next session opens the report on its first prompt.

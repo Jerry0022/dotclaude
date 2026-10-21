@@ -13,5 +13,8 @@
     "globals": "^16.1.0",
     "jsdom": "^29.1.1",
     "vitest": "^3.2.0"
+  },
+  "overrides": {
+    "tinypool": "^2.1.2"
   }
 }
