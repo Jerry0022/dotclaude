@@ -146,8 +146,8 @@ Q2  header: "Ablauf?"       multiSelect: false
 
 Q3  header: "Umfang?"       multiSelect: false
     question: "Wie weit darf die Änderung greifen?"
-    1. "Flexibel (Recommended)"         — Zieht Nötiges mit: Aufrufer, Tests, Doku.
-    2. "Strikt"                         — Nur was der Prompt nennt; jede offene Wahl wird berichtet.
+    1. "Flexibel (Recommended)"         — Darf inhaltlich erweitern: Angrenzendes, Refactors, eigene Ideen.
+    2. "Strikt"                         — Inhalt exakt wie gesagt, vollständig mit Tests, Doku, Aufrufern; offene Wahl wird berichtet.
 
 Q4  header: "Durchgänge?"   multiSelect: true   [only when option 1 or 2 applies, else dropped; questions.md § Reading Q4]
     question: "Was kommt dazu? (Leer lassen = nichts)"   [with Rethink recommended: "(Leer lassen = Rethink vorher)"]
