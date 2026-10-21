@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.284.2] — 2026-10-21
+
+Questions keep their options in a fixed order for every user, not only inside this repo's `/do-run`.
+
+### Changed
+- **Option order is a plugin rule.** The fixed-order rule for `AskUserQuestion` options (same order every call, only the `(Recommended)` marker moves, the common-case recommendation first) moves from the repo-local `.claude/skills/do-run/reference.md` — which loaded only while `/do-run` ran — to `deep-knowledge/decision-format.md` § Option order, so it applies at runtime everywhere. `CONVENTIONS.md` § Question Blocks points skill authors at it; the project override is removed.
+
 ## [0.284.1] — 2026-10-21
 
 A running ship keeps its sidebar title instead of falling back to a stale concept title.
