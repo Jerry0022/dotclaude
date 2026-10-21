@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.288.1] — 2026-10-21
+
+A ship whose PR is merged and whose tag is verified counts as done; a cleanup that was blocked afterwards is reported as a leftover instead of resuming the ship.
+
+### Fixed
+- **Merged ship is done (#806, carried over from #789).** `hooks/lib/ship-checkpoint.js` gains `isShipDone(cp)` (release `merged` + `tagVerified === true`); release facts record `tagVerified`; `describeCheckpoint` marks every step before a merged release as done (never "build ← next"); `nextStep` returns `release` for a merged ship whose tag is unverified; `branchOf(cp, cwd)` falls back to the checked-out branch. A legacy checkpoint without a `tagVerified` field keeps its old next step (cleanup), even when an earlier step entry is missing.
+- **Cleanup leftover instead of resume.** `prompt.ship.detect`, `ss.ship.resume` and `ship-delegate` print a `[ship-cleanup-leftover]` block (clear sentinel/checkpoint with `ship_cleanup keep:true`) for a done ship with a blocked cleanup — no `[ship-resume]`, no resume-subagent mandate, no "Shipping" session title. A merged ship with an unverified tag resumes with "PR merged, only tag verification + cleanup remain". `skills/do-ship/modes/resume.md` documents it.
+
 ## [0.288.0] — 2026-10-21
 
 Concept pages show what changed between design rounds, and the quick nav fans out the active design's pages in one row.

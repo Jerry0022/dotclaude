@@ -88,9 +88,24 @@ function openCheckpoint(cwd, { branch = null, now = Date.now() } = {}) {
   return cp;
 }
 
+/**
+ * A ship whose release merged and whose tag is verified is DONE (#806): it is
+ * live. Whatever is still on disk then (checkpoint, sentinel) is a cleanup
+ * leftover to clear, never a ship to resume.
+ */
+function isShipDone(cp) {
+  const rel = cp && cp.steps && cp.steps.release;
+  return !!(rel && rel.merged && rel.tagVerified === true);
+}
+
 /** First pipeline step that has not finished, or 'cleanup' when all did. */
 function nextStep(cp) {
   const steps = (cp && cp.steps) || {};
+  // A merged PR proves preflight/build/bump ran: never report them as pending.
+  if (steps.release && steps.release.merged) {
+    // Unverified tag → release still owes the tag; done or legacy (no field) → cleanup.
+    return steps.release.tagVerified === false ? 'release' : 'cleanup';
+  }
   for (const s of STEPS) {
     if (s === 'release' ? !(steps.release && steps.release.merged) : !steps[s]) return s;
   }
@@ -101,6 +116,8 @@ function nextStep(cp) {
 function describeCheckpoint(cp) {
   const steps = (cp && cp.steps) || {};
   const next = nextStep(cp);
+  const done = isShipDone(cp);
+  const merged = !!(steps.release && steps.release.merged);
   const parts = STEPS.map((s) => {
     const st = steps[s];
     let label = s;
@@ -109,17 +126,27 @@ function describeCheckpoint(cp) {
       const bits = [st.pr ? `PR #${st.pr}` : '', st.commit ? `commit ${st.commit}` : '', st.merged ? `merged into ${st.merged}` : 'not merged'].filter(Boolean);
       label = `release (${bits.join(', ')})`;
     }
-    if (s === next) return `${label} ← next`;
-    return (s === 'release' ? st && st.merged : st) ? `${label} ✓` : label;
+    if (s === next && !(merged && s !== 'release')) return `${label} ← next`;
+    // A merged release proves every step before it ran, even if the checkpoint lost one.
+    return (merged && s !== 'release') || done || (s === 'release' ? st && st.merged : st) ? `${label} ✓` : label;
   });
-  if (next === 'cleanup') parts.push('cleanup + card ← next');
+  if (done) parts.push('cleanup only (ship is live)');
+  else if (next === 'cleanup') parts.push('cleanup + card ← next');
   return parts.join(' · ');
+}
+
+/** The branch a leftover note names: the checkpoint's, else the current one in cwd, else ''. */
+function branchOf(cp, cwd) {
+  if (cp && cp.branch) return cp.branch;
+  try {
+    return require('child_process').execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, encoding: 'utf8', windowsHide: true, timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch { return ''; }
 }
 
 /** Picks the release fields a resumed run needs, success or not. */
 function releaseFacts(result) {
   const out = {};
-  for (const k of ['commit', 'pr', 'prNumber', 'prUrl', 'merged', 'mergeSha', 'tag', 'delivered', 'pushed']) {
+  for (const k of ['commit', 'pr', 'prNumber', 'prUrl', 'merged', 'mergeSha', 'tag', 'tagVerified', 'delivered', 'pushed']) {
     if (result[k] !== undefined && result[k] !== null) out[k === 'prNumber' ? 'pr' : k] = result[k];
   }
   if (out.pr && typeof out.pr === 'object' && out.pr.number) out.pr = out.pr.number;
@@ -201,5 +228,5 @@ function addDecision(cwd, question, answer) {
 module.exports = {
   CHECKPOINT_REL, MAX_AGE_MS, STEPS,
   checkpointPath, readCheckpoint, writeCheckpoint, clearCheckpoint, openCheckpoint,
-  nextStep, describeCheckpoint, recordShipStep, setBrief, addDecision,
+  isShipDone, branchOf, nextStep, describeCheckpoint, recordShipStep, setBrief, addDecision,
 };
