@@ -1,9 +1,9 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 
 // zod is a runtime dependency of the MCP server (installed where the server
-// runs) but is not a devDependency of this repo, so the test environment can't
-// resolve it. The handler never invokes the schema — only the MCP registration
-// does — so a minimal chainable stub is enough to load the module.
+// runs); the repo's devDependency copy serves the issues contract tests.
+// The handler never invokes the schema — only the MCP registration does —
+// so a minimal chainable stub is enough to load the module.
 vi.mock("zod", () => {
   const node = new Proxy(() => node, { get: () => () => node });
   return { z: { object: () => node, string: () => node, boolean: () => node, array: () => node } };

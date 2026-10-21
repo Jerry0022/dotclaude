@@ -310,7 +310,11 @@ describe("AUD-C022 — parallel gate calls never claim the same task", () => {
     // A PID that (almost certainly) names no live process, timestamped now:
     // age alone would make a waiter wait the full stale window.
     fs.writeFileSync(lock, "999999 now\n");
-    expect(bp.withStateLock(file, () => "won", { waitMs: 200 })).toBe("won");
+    // The bound proves "not after LOCK_STALE_MS" (60 s) with room for a loaded
+    // Windows runner; 200 ms failed there although the takeover itself works.
+    const t0 = Date.now();
+    expect(bp.withStateLock(file, () => "won", { waitMs: 5000 })).toBe("won");
+    expect(Date.now() - t0).toBeLessThan(5000);
     expect(fs.existsSync(lock)).toBe(false);
   });
 

@@ -1446,8 +1446,9 @@ function withStateLock(file, fn, { waitMs = Math.max(LOCK_WAIT_MS, LOCK_STALE_MS
         // that keeps failing (e.g. antivirus/indexer holding the file on
         // Windows) must still respect the deadline and back off between
         // attempts instead of spinning at full CPU.
-        removeStaleLock(lock, stat, holderText);
-        giveUpOrRetry();
+        // A won takeover retries 'wx' at once; only a lost or failed rename
+        // backs off.
+        if (!removeStaleLock(lock, stat, holderText)) giveUpOrRetry();
         continue;
       }
       giveUpOrRetry();

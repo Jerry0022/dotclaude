@@ -12,7 +12,8 @@
     "eslint": "^9.28.0",
     "globals": "^16.1.0",
     "jsdom": "^29.1.1",
-    "vitest": "^3.2.0"
+    "vitest": "^3.2.0",
+    "zod": "^3.25.76"
   },
   "overrides": {
     "tinypool": "^2.1.2"
