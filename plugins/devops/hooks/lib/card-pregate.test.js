@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { check, findings, findTranscript, REFUSED_PREFIX } = require('./card-pregate.js');
+const { check, dismissedNames, findings, findTranscript, REFUSED_PREFIX } = require('./card-pregate.js');
 const { decideAction } = require('./card-guard.js');
 
 /**
@@ -94,6 +94,19 @@ describe('card-pregate — findings', () => {
   test('open background work without `pending`', () => {
     expect(findings(ok, { openTasks: ['devops:research'] }).join()).toMatch(/STILL RUNNING/);
     expect(findings({ ...ok, pending: [{ name: 'devops:research', kind: 'agent' }] }, { openTasks: ['devops:research'] })).toEqual([]);
+  });
+
+  test('#807 pendingDismissed with a reason is accepted; a ship card ignores its own ship agent', () => {
+    const r = findings(ok, { openTasks: ['uv tool install x'] });
+    expect(r.join()).toMatch(/pendingDismissed/);
+    expect(r.join()).toMatch(/NEVER invent a `pending` entry/);
+    expect(r.join()).toMatch(/TaskOutput/);
+    expect(findings({ ...ok, pendingDismissed: 'hook-spawned install, not mine' }, { openTasks: ['uv tool install x'] })).toEqual([]);
+    expect(findings({ ...ok, pendingDismissed: 'too short reason' }, { openTasks: ['a'] }).join()).toMatch(/STILL RUNNING/);
+    expect(findings({ ...ok, variant: 'ship-successful' }, { openTasks: ['ship the fix'] }).join()).toMatch(/ship the fix/);
+    expect(dismissedNames({ ...ok, pendingDismissed: 'hook-spawned install, not mine' }, ['uv tool install x'])).toEqual(['uv tool install x']);
+    expect(dismissedNames(ok, ['uv tool install x'])).toEqual([]);
+    expect(findings({ ...ok, variant: 'ship-successful' }, { openTasks: ['devops:do-ship'] })).toEqual([]);
   });
 
   test('several findings are all named at once', () => {

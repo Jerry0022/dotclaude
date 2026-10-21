@@ -1024,6 +1024,9 @@ function backgroundLaunchLines(hook) {
       'mich" — without it the card would tell the user to SHIP or act on a result that',
       'does not exist yet. stop.flow.guard detects open background work and blocks a',
       'card that omits it. Name the agent/workflow/task; NEVER put an internal agentId in the card.',
+      'List ONLY work that is really still running and that you started. NEVER invent a',
+      '`pending` entry to get past the gate: if the task already ended (TaskStop, a completion',
+      'notification) or is not yours, check its output and pass `pendingDismissed: "<why>"` instead.',
     ];
   }
   return [];

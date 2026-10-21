@@ -702,7 +702,7 @@ describe("buildPendingReason", () => {
   });
 
   test("tells the model not to fake pending to get past the gate", () => {
-    expect(buildPendingReason(["devops:qa"])).toMatch(/do not declare it pending/);
+    expect(buildPendingReason(["devops:qa"])).toMatch(/NEVER invent a `pending` entry/);
   });
 });
 

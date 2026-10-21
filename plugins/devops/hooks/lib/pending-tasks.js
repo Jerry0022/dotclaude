@@ -256,8 +256,29 @@ const CONCEPT_INFRA_RE =
  */
 function isConceptInfra(input) {
   const i = input || {};
-  return CONCEPT_INFRA_RE.test(String(i.command || ''))
-    || CONCEPT_INFRA_RE.test(String(i.description || ''));
+  const text = [String(i.command || ''), String(i.description || '')];
+  return text.some(t => CONCEPT_INFRA_RE.test(t) || HOOK_INSTALL_RE.test(t));
+}
+
+/**
+ * Tool installs a HOOK spawns on its own (e.g. graphify's `uv tool install`) —
+ * the model never asked for them and no result is owed to the user (#807).
+ */
+const HOOK_INSTALL_RE = /\buv\s+tool\s+install\b[^\n]*\bgraphify/i;
+
+/** A ship subagent's launch label: "devops:do-ship", "ship" ... */
+const SHIP_AGENT_NAME_RE = /^(?:devops:)?do-ship$|^ship (?:im subagenten|in subagent)|--delegated/i;
+
+/**
+ * Drops the delegated ship's OWN agent from a list of open names when the card
+ * being rendered is a ship card: the pregate then runs inside that very
+ * subagent, whose launch is still open in the parent's transcript (#807).
+ * @param {string[]} names
+ * @param {string} [variant]
+ */
+function withoutOwnShipAgent(names, variant) {
+  if (!Array.isArray(names) || !/^ship/i.test(String(variant || ''))) return names;
+  return names.filter(n => !SHIP_AGENT_NAME_RE.test(String(n)));
 }
 
 /** Max characters of a Bash command used as a fallback label. */
@@ -345,7 +366,7 @@ function labelFor(input, kind, text) {
   const desc = sanitizeLabel(i.description);
   if (desc) return desc;
   const cmd = sanitizeLabel(String(i.command || '').replace(/\s+/g, ' '));
-  if (!cmd) return 'task';
+  if (!cmd) return 'background command (no command recorded)';
   return cmd.length > COMMAND_LABEL_MAX ? cmd.slice(0, COMMAND_LABEL_MAX) + '…' : cmd;
 }
 
@@ -767,5 +788,7 @@ module.exports = {
   openTaskNames,
   taskEnds,
   labelFor,
+  withoutOwnShipAgent,
+  HOOK_INSTALL_RE,
   sanitizeLabel,
 };
