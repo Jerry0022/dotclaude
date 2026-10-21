@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.288.3] — 2026-10-21
+
+On Windows no plugin child process opens a console window any more, and the plugin starts far fewer `gh` processes in the background.
+
+### Fixed
+- **Hidden console windows (#804, carried over from #791 and the console part of #702).** Every `child_process` call under `plugins/devops` (MCP servers incl. `issues/index.js` and `ship/lib/*`, hooks, scripts, evals) and `plugins/local-llm` (`anythingllm-lifecycle`, `ss.llm.deps`) passes `windowsHide: true`; shared option constants (`GIT_PROBE_OPTS` etc.) carry it. The #702 login window stays visible as designed since #683.
+- **Guard test.** `scripts/console-spawn-hidden.test.js` scans all of `plugins/devops` for every child_process form (spawn/spawnSync/exec/execSync/execFile/execFileSync/fork, namespace and `require().fn` calls, variable first args), requires a literal `windowsHide: true`, verifies the shared-constant definitions and honours a `// windowsHide: opt-out` marker; the scanner has self-tests.
+
+### Changed
+- **Issues MCP fetches on demand.** The 60 s per-session `gh issue list` interval is gone; `match_issues` fetches when the cache is older than 5 min (concurrent calls share one in-flight fetch; the warm-up fetch at startup stays).
+- **One `gh pr list` per repo in ship hygiene.** `ship/lib/hygiene.js` merges its two `gh pr list` calls into one `--state all --limit 1000` call cached for 60 s, and fails closed (nothing cleaned) when the list is truncated at the limit or is not an array. The issue's suspected per-branch loop in `orphan-scan.js` did not exist.
+
 ## [0.288.2] — 2026-10-21
 
 Session titles drop the invisible padding and recover from stacked prefixes; three red tests are green again.

@@ -66,7 +66,7 @@ function docSyncChecks(cwd) {
   const genScript = join(pluginDir, "scripts", "gen-readme-sections.mjs");
   if (existsSync(genScript)) {
     try {
-      execFileSync(process.execPath, [genScript, "--check", cwd], { stdio: "pipe" });
+      execFileSync(process.execPath, [genScript, "--check", cwd], { windowsHide: true, stdio: "pipe" });
       out.push({ name: "doc-markers", ok: true });
     } catch {
       out.push({

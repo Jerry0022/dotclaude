@@ -789,7 +789,7 @@ function mainCheckoutRefusal(dir, args) {
   let probe = path.resolve(dir);
   while (!fs.existsSync(probe) && path.dirname(probe) !== probe) probe = path.dirname(probe);
   const git = (a) => {
-    try { return execFileSync('git', ['-C', probe, ...a], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
+    try { return execFileSync('git', ['-C', probe, ...a], { windowsHide: true, encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
     catch { return null; }
   };
   const gitDir = git(['rev-parse', '--absolute-git-dir']);

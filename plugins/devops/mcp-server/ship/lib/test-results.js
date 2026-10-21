@@ -39,7 +39,7 @@ const KEEP_DURATIONS = 5;
 export const STORE_NAME = "devops-test-results.json";
 
 function git(cwd, args, env) {
-  return execFileSync("git", args, {
+  return execFileSync("git", args, { windowsHide: true,
     cwd, encoding: "utf8", timeout: 60_000, maxBuffer: 64 * 1024 * 1024,
     stdio: ["ignore", "pipe", "pipe"], env: env ? { ...process.env, ...env } : process.env,
   });

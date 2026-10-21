@@ -316,7 +316,7 @@ export async function handler(params) {
         result.includedUntracked = stagedUntracked;
         if (skippedRuntime.length) result.skippedRuntimeState = skippedRuntime;
       }
-      execFileSync("git", ["commit", "-m", commitMessage], {
+      execFileSync("git", ["commit", "-m", commitMessage], { windowsHide: true,
         cwd,
         encoding: "utf8",
         timeout: 15_000,
@@ -783,7 +783,7 @@ export async function handler(params) {
           execFileSync("git", [
             "tag", "-a", channelTag, tagTarget, "-m",
             JSON.stringify({ channel: "alpha", version: tag.replace(/^v/, "") }),
-          ], { cwd, encoding: "utf8", timeout: 15_000, stdio: ["pipe", "pipe", "pipe"] });
+          ], { windowsHide: true, cwd, encoding: "utf8", timeout: 15_000, stdio: ["pipe", "pipe", "pipe"] });
           // The tag push is its own retried step with its own timeout — never
           // shared with, or capped by, the checks wait or the merge (#398). A
           // push whose client side timed out after the ref landed is harmless

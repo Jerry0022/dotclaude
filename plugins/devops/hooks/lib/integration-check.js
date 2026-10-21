@@ -21,7 +21,7 @@ const GIT_TIMEOUT = 15000;
 
 function git(args, cwd, timeout = GIT_TIMEOUT) {
   try {
-    return execFileSync('git', args, { cwd, encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    return execFileSync('git', args, { windowsHide: true, cwd, encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   } catch { return null; }
 }
 const gitOk = (args, cwd) => git(args, cwd) !== null;
@@ -56,7 +56,7 @@ function dirtyPaths(wtPath, timeout = GIT_TIMEOUT) {
   let out;
   try {
     out = execFileSync('git', ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
-      { cwd: wtPath, encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'pipe'] });
+      { windowsHide: true, cwd: wtPath, encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch { return []; }
   const parts = out.split('\0').filter(Boolean);
   const paths = [];
@@ -198,7 +198,7 @@ async function contentReason(wt, hyg) {
   let out;
   try {
     out = execFileSync('git', ['status', '--porcelain', '-z', '--untracked-files=all', '--ignored=matching'],
-      { cwd: wt, encoding: 'utf8', timeout: GIT_TIMEOUT, stdio: ['ignore', 'pipe', 'pipe'] });
+      { windowsHide: true, cwd: wt, encoding: 'utf8', timeout: GIT_TIMEOUT, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch { return 'status-unreadable'; }
   const entries = out.split('\0').filter(Boolean);
   if (entries.some((e) => !e.startsWith('!! '))) return 'uncommitted';

@@ -48,7 +48,7 @@ const SESSION_WORKTREE_MARKER = '/.claude/worktrees/';
 
 function gitOut(args, cwd) {
   try {
-    return execFileSync('git', args, {
+    return execFileSync('git', args, { windowsHide: true,
       cwd, encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
   } catch {

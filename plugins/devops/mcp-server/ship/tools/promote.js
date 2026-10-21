@@ -166,7 +166,7 @@ function ensureLocalTag(tag, sha, payload, opts) {
   }
   // Annotated (-a): promotion timestamp/actor live in the tag object —
   // lightweight tags would collapse all channels onto the commit date (R4).
-  execFileSync("git", ["tag", "-a", tag, sha, "-m", JSON.stringify(payload)], {
+  execFileSync("git", ["tag", "-a", tag, sha, "-m", JSON.stringify(payload)], { windowsHide: true,
     cwd: opts.cwd,
     encoding: "utf8",
     timeout: 15_000,

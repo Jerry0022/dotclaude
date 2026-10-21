@@ -61,7 +61,7 @@ function defaultFetchAnnotations(jobId, opts) {
   const raw = execFileSync(
     "gh",
     ["api", `repos/{owner}/{repo}/check-runs/${jobId}/annotations`],
-    { cwd: opts?.cwd || process.cwd(), encoding: "utf8", timeout: 20_000, stdio: ["pipe", "pipe", "pipe"] },
+    { windowsHide: true, cwd: opts?.cwd || process.cwd(), encoding: "utf8", timeout: 20_000, stdio: ["pipe", "pipe", "pipe"] },
   );
   return JSON.parse(raw);
 }

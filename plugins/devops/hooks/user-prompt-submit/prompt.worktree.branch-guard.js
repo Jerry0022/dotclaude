@@ -22,7 +22,7 @@ const cwd = process.cwd();
 
 function git(cmd) {
   try {
-    return execSync(`git ${cmd}`, {
+    return execSync(`git ${cmd}`, { windowsHide: true,
       cwd,
       encoding: 'utf8',
       timeout: 5000,

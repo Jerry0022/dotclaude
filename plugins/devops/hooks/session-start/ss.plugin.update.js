@@ -105,7 +105,7 @@ const sentinelFile = path.join(home, '.claude', 'plugins', '.mcp-stale.json');
 
 function run(cmd, cwd) {
   try {
-    return execSync(cmd, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 15000 }).trim();
+    return execSync(cmd, { windowsHide: true, cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 15000 }).trim();
   } catch {
     return '';
   }
@@ -138,11 +138,11 @@ function notifyDesktop(title, body) {
       child.unref();
     } else if (process.platform === 'darwin') {
       // argv arrays, no shell: version/plugin names reach `body` from a marketplace.
-      execFileSync('osascript', ['-e', 'on run argv', '-e', 'display notification (item 1 of argv) with title (item 2 of argv)', '-e', 'end run', body, title], {
+      execFileSync('osascript', ['-e', 'on run argv', '-e', 'display notification (item 1 of argv) with title (item 2 of argv)', '-e', 'end run', body, title], { windowsHide: true,
         timeout: 5000, stdio: 'ignore',
       });
     } else {
-      execFileSync('notify-send', [title, body], { timeout: 5000, stdio: 'ignore' });
+      execFileSync('notify-send', [title, body], { windowsHide: true, timeout: 5000, stdio: 'ignore' });
     }
   } catch {
     // Notification failed — non-fatal
@@ -254,7 +254,7 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
   // stderr — the post-ship finalizer reads it and retries.
   let fetchError = '';
   try {
-    execSync('git fetch origin --tags', { cwd: mDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 15000 });
+    execSync('git fetch origin --tags', { windowsHide: true, cwd: mDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 15000 });
   } catch (e) {
     fetchError = String((e && e.stderr) || (e && e.message) || 'unknown').trim().split('\n').filter(Boolean).pop() || 'unknown';
     process.stderr.write(`[ss.plugin.update] ${marketplace}: git fetch --tags failed — ${fetchError}\n`);

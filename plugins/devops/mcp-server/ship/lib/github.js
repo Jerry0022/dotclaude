@@ -28,7 +28,7 @@ const ANSI_PATTERN = new RegExp(String.fromCharCode(27) + "\\[[0-9;]*[A-Za-z]", 
 
 function gh(args, opts = {}) {
   const { cwd = process.cwd(), timeout = DEFAULT_TIMEOUT } = opts;
-  return execFileSync("gh", args, {
+  return execFileSync("gh", args, { windowsHide: true,
     cwd,
     encoding: "utf8",
     timeout,
@@ -60,7 +60,7 @@ export function deleteRemoteBranch(branch, opts = {}) {
   }
   try {
     const { cwd = process.cwd(), timeout = DEFAULT_TIMEOUT } = opts;
-    execFileSync("git", ["push", "origin", "--delete", branch], { cwd, encoding: "utf8", timeout, stdio: ["pipe", "pipe", "pipe"] });
+    execFileSync("git", ["push", "origin", "--delete", branch], { windowsHide: true, cwd, encoding: "utf8", timeout, stdio: ["pipe", "pipe", "pipe"] });
     return { ok: true, method: "git-push" };
   } catch (e) {
     errors.push(`git push --delete: ${sanitizeError(e) || "failed"}`);
@@ -78,7 +78,7 @@ export function createPR({ title, body, base = "main", head }, opts) {
   const url = execFileSync(
     "gh",
     ["pr", "create", "--title", title, "--body-file", "-", "--base", base, "--head", head],
-    {
+    { windowsHide: true,
       cwd,
       encoding: "utf8",
       input: body,
@@ -214,8 +214,8 @@ export function mergePR(prNumber, base = "main", opts, flags = {}) {
   let readError = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      execFileSync("git", ["fetch", "origin", base], { cwd, encoding: "utf8", timeout: DEFAULT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"] });
-      sha = execFileSync("git", ["rev-parse", "--short", `origin/${base}`], { cwd, encoding: "utf8", timeout: DEFAULT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"] }).trim();
+      execFileSync("git", ["fetch", "origin", base], { windowsHide: true, cwd, encoding: "utf8", timeout: DEFAULT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"] });
+      sha = execFileSync("git", ["rev-parse", "--short", `origin/${base}`], { windowsHide: true, cwd, encoding: "utf8", timeout: DEFAULT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"] }).trim();
       break;
     } catch (e) {
       readError = sanitizeError(e) || e?.message || "unknown error";
@@ -405,7 +405,7 @@ export function watchPRChecks(prNumber, opts, {
     execFileSync(
       "gh",
       ["pr", "checks", String(prNumber), "--watch", "--fail-fast", "--interval", String(intervalSec)],
-      {
+      { windowsHide: true,
         cwd: opts?.cwd || process.cwd(),
         encoding: "utf8",
         timeout: watchTimeoutMs,
@@ -485,7 +485,7 @@ export function createRelease({ tag, title, notes, prerelease = false }, opts) {
   const cwd = opts?.cwd || process.cwd();
   const args = ["release", "create", tag, "--title", title, "--notes-file", "-"];
   if (prerelease) args.push("--prerelease");
-  execFileSync("gh", args, {
+  execFileSync("gh", args, { windowsHide: true,
     cwd,
     encoding: "utf8",
     input: notes,
@@ -502,7 +502,7 @@ export function createRelease({ tag, title, notes, prerelease = false }, opts) {
 export function releaseExists(tag, opts) {
   const cwd = opts?.cwd || process.cwd();
   try {
-    execFileSync("gh", ["release", "view", tag], {
+    execFileSync("gh", ["release", "view", tag], { windowsHide: true,
       cwd,
       encoding: "utf8",
       timeout: DEFAULT_TIMEOUT,

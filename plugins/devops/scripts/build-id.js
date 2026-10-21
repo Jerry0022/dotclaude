@@ -60,7 +60,7 @@ try {
   // List source files (tracked + untracked, excluding gitignored)
   const filesRaw = execSync(
     `git ls-files --cached --others --exclude-standard -- . ${pathspecs.map(p => `"${p}"`).join(' ')}`,
-    { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 }
+    { windowsHide: true, encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 }
   ).trim();
 
   if (!filesRaw) {
@@ -86,7 +86,7 @@ try {
 
   // Hash each file's content via git (reads from working tree)
   const hashes = files.length
-    ? execSync('git hash-object --stdin-paths', {
+    ? execSync('git hash-object --stdin-paths', { windowsHide: true,
         input: files.join('\n'),
         encoding: 'utf8',
         maxBuffer: 10 * 1024 * 1024,
@@ -94,7 +94,7 @@ try {
     : '';
 
   // Combine all hashes into a single deterministic hash
-  const combined = execSync('git hash-object --stdin', {
+  const combined = execSync('git hash-object --stdin', { windowsHide: true,
     input: missing.length ? `${hashes}\ndeleted:${missing.join('\n')}` : hashes,
     encoding: 'utf8',
   }).trim();

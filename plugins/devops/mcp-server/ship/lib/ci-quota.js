@@ -45,7 +45,7 @@ export function repoKey(cwd, { remoteUrl } = {}) {
   let url = remoteUrl;
   if (url === undefined) {
     try {
-      url = execFileSync("git", ["remote", "get-url", "origin"], {
+      url = execFileSync("git", ["remote", "get-url", "origin"], { windowsHide: true,
         cwd, encoding: "utf8", timeout: 10_000, stdio: ["pipe", "pipe", "pipe"],
       }).trim();
     } catch { return null; }

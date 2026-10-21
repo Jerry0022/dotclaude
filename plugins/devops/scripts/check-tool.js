@@ -59,7 +59,7 @@ function which(command) {
  */
 function probeVersion(exe, versionArgs) {
   try {
-    const out = execFileSync(exe, versionArgs, {
+    const out = execFileSync(exe, versionArgs, { windowsHide: true,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 5000,

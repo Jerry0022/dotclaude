@@ -24,7 +24,7 @@ function arg(name) {
   let integrationRef = arg('integration');
   if (!integrationRef) {
     try {
-      integrationRef = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
+      integrationRef = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { windowsHide: true, cwd, encoding: 'utf8' }).trim();
     } catch { integrationRef = 'HEAD'; }
   }
   const sub = arg('sub');

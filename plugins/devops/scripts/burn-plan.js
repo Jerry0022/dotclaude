@@ -1475,7 +1475,7 @@ function withStateLock(file, fn, { waitMs = Math.max(LOCK_WAIT_MS, LOCK_STALE_MS
 /** Best-effort headless refresh — never opens a login window, bounded. */
 function refreshUsage() {
   try {
-    spawnSync(process.execPath, [path.join(__dirname, 'refresh-usage-headless.js'), '--no-login', '--quiet'], {
+    spawnSync(process.execPath, [path.join(__dirname, 'refresh-usage-headless.js'), '--no-login', '--quiet'], { windowsHide: true,
       cwd: os.tmpdir(), timeout: 90_000, stdio: 'ignore',
     });
   } catch { /* usage stays as last read; the gate copes with stale data */ }

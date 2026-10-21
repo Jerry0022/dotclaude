@@ -18,7 +18,7 @@ export function resolveGitRoot(cwd) {
   const key = cwd || "";
   if (_cache.has(key)) return _cache.get(key) || null;
   try {
-    const opts = { encoding: "utf8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] };
+    const opts = { windowsHide: true, encoding: "utf8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] };
     if (cwd) opts.cwd = cwd;
     const raw = execSync("git rev-parse --show-toplevel", opts).trim();
     const resolved = resolve(raw);

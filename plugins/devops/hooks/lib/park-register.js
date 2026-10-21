@@ -28,7 +28,7 @@ const NUDGE = 'behalten, integrieren oder verwerfen';
 
 function git(args, cwd) {
   try {
-    return execFileSync('git', args, { cwd, encoding: 'utf8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'] });
+    return execFileSync('git', args, { windowsHide: true, cwd, encoding: 'utf8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'] });
   } catch {
     return null;
   }

@@ -19,7 +19,7 @@ export const NETWORK_TIMEOUT = 60_000;
 export function git(cmd, opts = {}) {
   const { cwd = process.cwd(), timeout = DEFAULT_TIMEOUT } = opts;
   try {
-    return execSync(`git ${cmd}`, {
+    return execSync(`git ${cmd}`, { windowsHide: true,
       cwd,
       encoding: "utf8",
       timeout,
@@ -35,7 +35,7 @@ export function git(cmd, opts = {}) {
  */
 export function gitStrict(cmd, opts = {}) {
   const { cwd = process.cwd(), timeout = DEFAULT_TIMEOUT } = opts;
-  return execSync(`git ${cmd}`, {
+  return execSync(`git ${cmd}`, { windowsHide: true,
     cwd,
     encoding: "utf8",
     timeout,
@@ -59,7 +59,7 @@ export function gitStrict(cmd, opts = {}) {
  */
 export function gitArgs(args, opts = {}) {
   const { cwd = process.cwd(), timeout = DEFAULT_TIMEOUT } = opts;
-  return execFileSync("git", args, {
+  return execFileSync("git", args, { windowsHide: true,
     cwd,
     encoding: "utf8",
     timeout,
@@ -110,7 +110,7 @@ export function dirtyState(opts) {
   const { cwd = process.cwd(), timeout = DEFAULT_TIMEOUT } = opts || {};
   let raw;
   try {
-    raw = execSync("git status --porcelain -z --untracked-files=all", {
+    raw = execSync("git status --porcelain -z --untracked-files=all", { windowsHide: true,
       cwd,
       encoding: "utf8",
       timeout,

@@ -63,7 +63,7 @@ const MAX_ENTRIES = 50;
 /** Run a git command in `cwd`, return stdout trimmed. Throws on non-zero. */
 function git(args, cwd) {
   return child_process
-    .execFileSync("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"] })
+    .execFileSync("git", args, { windowsHide: true, cwd, stdio: ["ignore", "pipe", "pipe"] })
     .toString()
     .trim();
 }
@@ -345,12 +345,12 @@ function openInBrowser(absPath) {
         windowsHide: true
       }).unref();
     } else if (process.platform === "darwin") {
-      child_process.spawn("open", ["-a", "Microsoft Edge", fileUrl], {
+      child_process.spawn("open", ["-a", "Microsoft Edge", fileUrl], { windowsHide: true,
         detached: true,
         stdio: "ignore"
       }).unref();
     } else {
-      child_process.spawn("microsoft-edge", [fileUrl], {
+      child_process.spawn("microsoft-edge", [fileUrl], { windowsHide: true,
         detached: true,
         stdio: "ignore"
       }).unref();

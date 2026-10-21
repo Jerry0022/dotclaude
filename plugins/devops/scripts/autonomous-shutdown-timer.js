@@ -208,7 +208,7 @@ function isCacheFresh(usageData, nowMs) {
 function refreshUsageBestEffort() {
   try {
     const scraper = path.join(__dirname, 'refresh-usage-headless.js');
-    spawnSync(process.execPath, [scraper, '--no-login', '--quiet'], {
+    spawnSync(process.execPath, [scraper, '--no-login', '--quiet'], { windowsHide: true,
       cwd: safeCwd(), // always-local CWD — a UNC session dir can't break the spawn
       timeout: 90_000,
       stdio: 'ignore',
@@ -262,13 +262,13 @@ function runArm(argv) {
 
   // Idempotent re-arm: clear any pre-existing scheduled shutdown first (ours, a
   // stale one, or another session's that fires EARLIER than ours).
-  spawnSync(exe, ['/a'], { encoding: 'utf8', cwd, timeout: 30_000 });
+  spawnSync(exe, ['/a'], { windowsHide: true, encoding: 'utf8', cwd, timeout: 30_000 });
 
   const msg =
     `Claude autonomous fail-safe — PC shuts down in ${plan.minutes} min unless the ` +
     `task finishes first. Run 'shutdown /a' to abort.`;
   const res = spawnSync(exe, ['/s', '/t', String(plan.seconds), '/c', msg],
-    { encoding: 'utf8', cwd, timeout: 30_000 });
+    { windowsHide: true, encoding: 'utf8', cwd, timeout: 30_000 });
 
   if (res.status !== 0) {
     fail(`shutdown /s failed (status ${res.status}): ` +
@@ -283,7 +283,7 @@ function runCancel() {
   if (planCancel(marker, currentSessionId(), Date.now()).action === 'leave') {
     ok({ cancelled: false, foreign: true, owner: marker.sessionId, fireAt: new Date(marker.fireAt).toISOString() });
   }
-  const res = spawnSync(shutdownExe(), ['/a'], { encoding: 'utf8', cwd: safeCwd(), timeout: 30_000 });
+  const res = spawnSync(shutdownExe(), ['/a'], { windowsHide: true, encoding: 'utf8', cwd: safeCwd(), timeout: 30_000 });
   clearMarker();
   if (res.status === 0) ok({ cancelled: true, noPending: false });
   // /a returns non-zero (error 1116) when no shutdown was scheduled — that's the

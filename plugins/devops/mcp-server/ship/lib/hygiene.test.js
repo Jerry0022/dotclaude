@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import {
   parseWorktrees, scanRepo, planAutoClean, executeAutoClean, runHygiene, cardLines, landedVia,
   isRegenerable, isToolingState, hasLiveSession, hasMovedSession, LIVE_SESSION_MS, REMOVE_TIMEOUT, normPath,
-  reachableFromMerged, dirBytes, landingState,
+  reachableFromMerged, dirBytes, landingState, openHeadsFromList, PR_LIST_LIMIT,
 } from "./hygiene.js";
 
 const DAY = 86_400_000;
@@ -901,5 +901,22 @@ describe("cardLines — a damaged removal names its path (AUD-C010)", () => {
   test("the orphan path is on the card", () => {
     const out = cardLines({ autoClean: { ran: true, removed: [], skipped: [{ kind: "worktree", path: "/r/.claude/worktrees/x", reason: "remove-timeout: damaged — manual check", orphan: "/r/.claude/worktrees/x" }] } }, "en");
     expect(out.tests.result).toContain("damaged — manual check: /r/.claude/worktrees/x");
+  });
+});
+
+describe("openHeadsFromList — fail closed on a truncated PR list", () => {
+  const pr = (i, state) => ({ number: i, state, headRefName: `b${i}`, headRefOid: `sha${i}` });
+  test("collects only open heads", () => {
+    const r = openHeadsFromList([pr(1, "OPEN"), pr(2, "MERGED")]);
+    expect([...r.names]).toEqual(["b1"]);
+    expect([...r.shas]).toEqual(["sha1"]);
+  });
+  test("a list at the limit is unknown (null)", () => {
+    const full = Array.from({ length: PR_LIST_LIMIT }, (_, i) => pr(i, "MERGED"));
+    expect(openHeadsFromList(full)).toBeNull();
+    expect(openHeadsFromList(full.slice(1))).not.toBeNull();
+  });
+  test("a missing list is unknown (null)", () => {
+    expect(openHeadsFromList(null)).toBeNull();
   });
 });

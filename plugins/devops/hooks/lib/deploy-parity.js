@@ -511,13 +511,13 @@ function classifyFailure(r) {
 // ---------------------------------------------------------------------------
 
 function git(args, cwd, timeout = GIT_TIMEOUT_MS) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout }).trim();
+  return execFileSync('git', args, { windowsHide: true, cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout }).trim();
 }
 
 function killTree(child) {
   try {
     if (process.platform === 'win32') {
-      execFileSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', timeout: 10_000 });
+      execFileSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', timeout: 10_000 });
     } else {
       process.kill(-child.pid, 'SIGKILL');
     }
@@ -564,14 +564,14 @@ function toolOf(cmd) {
 function toolAvailable(tool, env) {
   if (!tool || /[\\/]/.test(tool)) return true; // a path — let the run decide
   try {
-    if (process.platform === 'win32') execFileSync('where', [tool], { stdio: 'ignore', env, timeout: 10_000 });
-    else execFileSync('sh', ['-c', `command -v "${tool.replace(/"/g, '')}"`], { stdio: 'ignore', env, timeout: 10_000 });
+    if (process.platform === 'win32') execFileSync('where', [tool], { windowsHide: true, stdio: 'ignore', env, timeout: 10_000 });
+    else execFileSync('sh', ['-c', `command -v "${tool.replace(/"/g, '')}"`], { windowsHide: true, stdio: 'ignore', env, timeout: 10_000 });
     return true;
   } catch { return false; }
 }
 
 function hasDocker() {
-  try { execFileSync('docker', ['version', '--format', '{{.Server.Version}}'], { stdio: 'ignore', timeout: 10_000 }); return true; } catch { return false; }
+  try { execFileSync('docker', ['version', '--format', '{{.Server.Version}}'], { windowsHide: true, stdio: 'ignore', timeout: 10_000 }); return true; } catch { return false; }
 }
 
 function removeTempWorktree(tmpRoot, adminDir) {

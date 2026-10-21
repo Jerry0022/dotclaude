@@ -115,7 +115,7 @@ const KEY_FILES = [
 
 function gitFiles(cwd) {
   try {
-    const out = execSync("git ls-files", {
+    const out = execSync("git ls-files", { windowsHide: true,
       cwd,
       encoding: "utf8",
       timeout: 15_000,
@@ -137,7 +137,7 @@ function gitFiles(cwd) {
  */
 function mainCheckoutDir(cwd) {
   try {
-    const common = execSync("git rev-parse --path-format=absolute --git-common-dir", {
+    const common = execSync("git rev-parse --path-format=absolute --git-common-dir", { windowsHide: true,
       cwd,
       encoding: "utf8",
       timeout: 15_000,

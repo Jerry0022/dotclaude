@@ -111,7 +111,7 @@ function graphifyInstalled() {
 
 function isGitRepo() {
   try {
-    return execSync('git rev-parse --is-inside-work-tree', {
+    return execSync('git rev-parse --is-inside-work-tree', { windowsHide: true,
       cwd, encoding: 'utf8', timeout: 4000, stdio: ['pipe', 'pipe', 'pipe'],
     }).trim() === 'true';
   } catch {

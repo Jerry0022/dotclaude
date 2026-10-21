@@ -119,7 +119,7 @@ if (needsInstall()) {
     }
     writeFileSync(CACHED_PKG, readFileSync(SOURCE_PKG, "utf8"));
 
-    execSync("npm install --omit=dev --no-fund --no-audit", {
+    execSync("npm install --omit=dev --no-fund --no-audit", { windowsHide: true,
       cwd: PLUGIN_DATA,
       timeout: 60000,
       stdio: ["pipe", "pipe", "pipe"],

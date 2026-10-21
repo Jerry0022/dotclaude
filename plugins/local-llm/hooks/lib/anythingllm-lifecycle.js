@@ -63,7 +63,7 @@ function isRunningWindows() {
       const out = execFileSync(
         'tasklist',
         ['/FI', `IMAGENAME eq ${name}`, '/NH'],
-        { encoding: 'utf8', timeout: 3000 }
+        { encoding: 'utf8', timeout: 3000, windowsHide: true }
       );
       if (new RegExp(name.replace('.', '\\.'), 'i').test(out)) return true;
     } catch { /* try next */ }
@@ -138,6 +138,7 @@ function isRunningPosix() {
       encoding: 'utf8',
       timeout: 3000,
       stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
     });
     return true;
   } catch {
@@ -196,12 +197,14 @@ function launch(exePath) {
         const child = spawn('open', ['-a', bundle[1]], {
           detached: true,
           stdio: 'ignore',
+          windowsHide: true,
         });
         child.unref();
         return { ok: true, pid: child.pid };
       }
     }
 
+    // windowsHide: opt-out the AnythingLLM desktop app is a GUI the user wants to see
     const child = spawn(exePath, [], {
       detached: true,
       stdio: 'ignore',

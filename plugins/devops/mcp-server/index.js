@@ -424,7 +424,7 @@ function hasBody(variant) { return variant !== 'test-minimal'; }
  * Resolve the GitHub HTTPS base URL from the git remote origin.
  * Returns e.g. "https://github.com/owner/repo" or '' on failure.
  */
-const GIT_PROBE_OPTS = { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] };
+const GIT_PROBE_OPTS = { windowsHide: true, encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] };
 
 /**
  * The repo's remote names, or null when the probe failed (not a repo, git
@@ -432,7 +432,7 @@ const GIT_PROBE_OPTS = { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pip
  */
 function remoteNames(cwd) {
   try {
-    return execSync('git remote', { ...GIT_PROBE_OPTS, cwd: cwd || undefined })
+    return execSync('git remote', { windowsHide: true, ...GIT_PROBE_OPTS, cwd: cwd || undefined })
       .split(/\r?\n/).map(s => s.trim()).filter(Boolean);
   } catch {
     return null;
@@ -562,7 +562,7 @@ function localShipInstruction(params) {
     if (selfMarker && contract && contract.root && !sameProjectRoot(contract.root, cwd)) contract = null;
     if (contract && !contract.closedAt && contract.ship !== 'auto') return null;
     const { hasUnshippedWork, defaultBranchRef } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'ship-unshipped.js'));
-    const git = (dir, args) => execFileSync('git', args, { ...GIT_PROBE_OPTS, cwd: dir });
+    const git = (dir, args) => execFileSync('git', args, { windowsHide: true, ...GIT_PROBE_OPTS, cwd: dir });
     // No base branch yet (a repo without a first commit): nothing to land on.
     if (!defaultBranchRef(cwd, git)) return null;
     const tracked = git(cwd, ['status', '--porcelain', '--untracked-files=no']).trim();
@@ -589,7 +589,7 @@ function getRepoUrl(cwd) {
     // printed "error: No such remote 'origin'" to stderr (#500).
     const names = remoteNames(cwd);
     if (!names || !names.includes('origin')) return '';
-    const raw = execSync('git remote get-url origin', { ...GIT_PROBE_OPTS, cwd: cwd || undefined }).trim();
+    const raw = execSync('git remote get-url origin', { windowsHide: true, ...GIT_PROBE_OPTS, cwd: cwd || undefined }).trim();
     // SSH: git@github.com:owner/repo.git
     const sshMatch = raw.match(/git@github\.com:(.+?)(?:\.git)?$/);
     if (sshMatch) return 'https://github.com/' + sshMatch[1];
@@ -606,13 +606,13 @@ function getBuildId(overrideCwd) {
   try {
     // Use overrideCwd when provided (e.g. worktree path from caller),
     // otherwise resolve git toplevel from the MCP server's own cwd.
-    const cwd = overrideCwd || execSync('git rev-parse --show-toplevel', {
+    const cwd = overrideCwd || execSync('git rev-parse --show-toplevel', { windowsHide: true,
       encoding: 'utf8',
       timeout: 5000,
     }).trim();
     return execSync(
       '"' + process.execPath + '" "' + join(PLUGIN_ROOT, 'scripts', 'build-id.js') + '"',
-      { encoding: 'utf8', timeout: 10000, cwd }
+      { windowsHide: true, encoding: 'utf8', timeout: 10000, cwd }
     ).trim();
   } catch (err) {
     console.error('[dotclaude-completion-mcp] build-id computation failed:', err.message);
@@ -2260,7 +2260,7 @@ function refreshUsage() {
   let scrapeErr = null;
   if (scraperScript) {
     try {
-      execSync(`node "${scraperScript}" --quiet --no-login`, {
+      execSync(`node "${scraperScript}" --quiet --no-login`, { windowsHide: true,
         timeout: 60000,
         stdio: ['pipe', 'pipe', 'pipe'],
       });

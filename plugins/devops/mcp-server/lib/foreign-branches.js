@@ -126,7 +126,7 @@ export function dropForeignOpenItems(open, tokens) {
  */
 export function foreignTokensFor(cwd) {
   if (!cwd) return [];
-  const opts = { cwd, encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] };
+  const opts = { windowsHide: true, cwd, encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] };
   try {
     const top = execFileSync("git", ["rev-parse", "--show-toplevel"], opts).trim();
     const list = parseWorktreeList(execFileSync("git", ["worktree", "list", "--porcelain"], opts));
