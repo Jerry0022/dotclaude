@@ -80,7 +80,7 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
   });
 
   test("appStart (#680) appends a non-primary Start-app button after the card's own verbs, before the guide", () => {
-    const de = buttonsFor("test", "de", { appStart: true, guideHandoff: { service: "Supabase" } });
+    const de = buttonsFor("test", "de", { appStart: true, guideHandoff: { service: "Supabase" }, replies: ["Ja, bitte."] });
     expect(de.map((a) => a.label)).toEqual(["Ship", "Nachbessern", "App starten", "Web-Guide starten"]);
     const start = de.find((a) => a.label === "App starten");
     expect(start).toMatchObject({ icon: "player-play", prompt: APP_START_BUTTON.de.prompt });
@@ -139,7 +139,10 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     const ready = buttonsFor("ready", "de", { noShip: true });
     expect(ready.map((a) => a.label)).toEqual(["Ändern"]);
     expect(ready[0].primary).toBe(true); // the row keeps its accented verb
-    expect(buttonsFor("test", "en", { noShip: true }).map((a) => a.label)).toEqual(["Rework"]);
+    expect(buttonsFor("test", "en", { noShip: true }).map((a) => a.label)).toEqual([]);
+    const reworkOnly = buttonsFor("test", "en", { noShip: true, replies: ["A."] });
+    expect(reworkOnly.map((a) => a.label)).toEqual(["Rework"]);
+    expect(reworkOnly[0].primary).toBe(true);
     for (const key of Object.keys(BUTTONS.de)) {
       for (const lang of ["de", "en"]) {
         expect(buttonsFor(key, lang, { noShip: true }).some((a) => /^ship\b/i.test(a.prompt))).toBe(false);
@@ -182,9 +185,11 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     // plain merge: nothing to promote, Nachbessern alone
     expect(buttonsFor("ship-successful-plain", "en", { replies }).map((a) => a.label)).toEqual(["Rework"]);
     expect(buttonsFor("ship-successful-plain", "de")).toEqual([]);
-    // without replies: nothing appended, test keeps its "frag mich" prompt
-    expect(buttonsFor("test", "de").map((a) => a.label)).toEqual(["Ship", "Nachbessern"]);
-    expect(buttonsFor("test", "de")[1].prompt).toMatch(/frag mich, was/);
+    // #784: without replies nothing is open — no Nachbessern / Rework at all
+    expect(buttonsFor("test", "de").map((a) => a.label)).toEqual(["Ship"]);
+    expect(buttonsFor("test", "en", { replies: [] }).map((a) => a.label)).toEqual(["Ship"]);
+    expect(buttonsFor("test", "de", { appStart: true }).map((a) => a.label)).toEqual(["Ship", "App starten"]);
+    expect(buttonsFor("test", "de").some((a) => /frag mich, was/.test(a.prompt))).toBe(false);
   });
 
   test("conclusionPrompt: one answer alone, several as an ordered bullet list, never a leading slash", () => {
