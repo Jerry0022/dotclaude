@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.286.0] — 2026-10-21
+
+The red panel after each collected batch note is short: one status line, a blank line and three icon-led command lines instead of a 13-line mode summary.
+
+### Changed
+- **Short icon-led collect panel (do-batch).** `buildAck` / `buildRearmAck` in `prompt.batch.collect.js` no longer repeat the static mode summary (2 header lines plus 10 summary lines, "kein Fehler" three times) after every collected prompt. The panel now shows a status line (`🗂️ Notiz #N abgelegt [🖼️ mit Bild] — rotes Panel ist Absicht, kein Fehler.`), an optional notice line (`💭` question hint, `🔔` near auto-end), a blank line and three command lines (`🎬` Umsetzen, `🛑` Stoppen, `🕰️` Auto-Ende); the rearm panel leads with `📌`. The `[do-batch]` prefix, `✓` and `📎` are gone. `batch-state.js` gains `PANEL_ICONS`, `renderCommandLines` and `renderAutoEndNotice` (warns when ≤ 5 notes or ≤ 30 min remain; the hook now passes `mode.expiresAt`); `renderModeSummary` is trimmed for activation and `/do-batch status`, `renderHelp` is unchanged. The panel icons are chosen so none of them is used by another devops surface (session titles, card, concept, ship) and could be read as session state — pinned by a test. Hook `@version` 0.11.0. The do-batch SKILL.md and `activation.md` describe the new panel.
+
 ## [0.285.0] — 2026-10-21
 
 Strict mode keeps the content literal but delivers it complete: the tests, docs and callers of the changed thing come with it.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.batch.collect
- * @version 0.10.1
+ * @version 0.11.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Collect mode for `/do-batch`: while active, blocks the user
@@ -134,34 +134,35 @@ const EXCERPT_CHARS = 200;
  * mechanism the mode runs on. So the first line has to carry the all-clear:
  * the note landed, nothing failed.
  *
- * The body is the shared mode summary (`renderModeSummary`): the same block
- * the activation ends with, so the panel always says what is happening, how to
- * keep collecting, how to fire, and how to only stop.
+ * Short on purpose — it shows on EVERY collected prompt: the status line, an
+ * extra line only when it matters (question, near auto-end), a blank line, then
+ * the three command lines (`renderCommandLines`). The full mode summary is for
+ * activation, rearm and `/do-batch status`.
  *
  * @param {number} count total notes after this one
  * @param {string} marker configured execute marker
  * @param {boolean} question whether the note reads like a question
- * @param {{expiryHours?:number,maxNotes?:number}} [bounds] pinned mode bounds
+ * @param {{expiryHours?:number,maxNotes?:number,expiresAt?:string}} [bounds] pinned mode bounds
  * @param {number} [images] pasted images kept with this note
  */
 function buildAck(count, marker, question, bounds = {}, images = 0) {
-  const lines = [
-    `[do-batch] ✓ Notiz #${count} gespeichert — alles korrekt, kein Fehler.`,
-    'Der Sammelmodus stoppt den Prompt absichtlich, statt ihn zu bearbeiten.',
-  ];
-  if (images > 0) {
-    lines.push(`📎 ${images === 1 ? 'Das Bild ist' : `${images} Bilder sind`} mit der Notiz gespeichert — der Merge sieht ${images === 1 ? 'es' : 'sie'}.`);
-  }
+  const I = B.PANEL_ICONS;
+  const lines = [`${I.stored} Notiz #${count} abgelegt${imageTag(images)} — rotes Panel ist Absicht, kein Fehler.`];
   if (question) {
     // Advisory only. The hook never decides what is a question; it just makes a
     // forgotten marker visible instead of silent.
-    lines.push(
-      `Das sah nach einer Frage aus. Als Notiz gespeichert — schick sie mit "${marker}" davor,`,
-      'wenn du jetzt eine Antwort willst.',
-    );
+    lines.push(`${I.question} Klang nach Frage — für eine Antwort jetzt: "${marker} " davor.`);
   }
-  lines.push('', B.renderModeSummary({ marker, count, ...bounds }));
+  const notice = B.renderAutoEndNotice({ count, ...bounds });
+  if (notice) lines.push(notice);
+  lines.push('', B.renderCommandLines({ marker, ...bounds }));
   return lines.join('\n');
+}
+
+/** " 🖼️ mit Bild" / " 🖼️ mit 2 Bildern" — '' without images. */
+function imageTag(images) {
+  if (!(images > 0)) return '';
+  return ` ${B.PANEL_ICONS.image} mit ${images === 1 ? 'Bild' : `${images} Bildern`}`;
 }
 
 /**
@@ -175,21 +176,12 @@ function buildAck(count, marker, question, bounds = {}, images = 0) {
  * @param {{expiryHours?:number,maxNotes?:number}} [bounds]
  */
 function buildRearmAck(count, marker, stored, bounds = {}, images = 0) {
-  const lines = [
-    stored
-      ? `[do-batch] Sammelmodus läuft bereits — der Aufruf wurde als Notiz #${count} gespeichert, kein Fehler.`
-      : '[do-batch] Sammelmodus läuft bereits — Aufruf ignoriert, kein Fehler.',
-  ];
-  if (stored && images > 0) {
-    // AUD-C057: the panel used to stay silent about a kept image.
-    lines.push(`📎 ${images === 1 ? 'Das Bild ist' : `${images} Bilder sind`} mit der Notiz gespeichert — der Merge sieht ${images === 1 ? 'es' : 'sie'}.`);
-  }
-  lines.push(
-    'Ein erneutes Einschalten ist nicht nötig; alles Weitere wird weiter gesammelt.',
-    '',
-    B.renderModeSummary({ marker, count, ...bounds }),
-  );
-  return lines.join('\n');
+  const I = B.PANEL_ICONS;
+  // AUD-C057: a kept image is named, never silent.
+  const head = stored
+    ? `${I.running} Sammelmodus läuft schon — Aufruf als Notiz #${count} abgelegt${imageTag(images)}, kein Fehler.`
+    : `${I.running} Sammelmodus läuft schon — Aufruf ignoriert, kein Fehler. ${count} ${count === 1 ? 'Notiz' : 'Notizen'}.`;
+  return [head, '', B.renderCommandLines({ marker, ...bounds })].join('\n');
 }
 
 /**
@@ -844,6 +836,7 @@ process.stdin.on('end', () => {
       if (Number.isFinite(h) && h > 0) bounds.expiryHours = Math.round(h * 10) / 10;
     }
     if (mode?.maxNotes) bounds.maxNotes = mode.maxNotes;
+    if (mode?.expiresAt) bounds.expiresAt = mode.expiresAt;
   } catch { /* defaults */ }
 
   if (verdict === 'rearm') {

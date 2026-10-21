@@ -972,30 +972,74 @@ function parseBatchCommand(text) {
 // ── mode summary ───────────────────────────────────────────────────────────
 
 /**
- * The one block that explains the running mode — shown at activation, on
- * every collected prompt, and when a re-activation is absorbed. One source so
- * the three places can never drift apart: what happens to a prompt, how to
- * fire the merge, how to only stop, and when the mode ends on its own.
+ * Icons of the collect panels. Chosen so none of them is already taken by
+ * another devops surface (session titles, completion card, concept, ship) —
+ * a 📥 or ⏳ here would read as a session state instead of a note.
+ */
+const PANEL_ICONS = Object.freeze({
+  stored: '🗂️', image: '🖼️', question: '💭', notice: '🔔',
+  fire: '🎬', stop: '🛑', autoEnd: '🕰️', running: '📌',
+});
+
+/** Auto-end warning thresholds for the per-note panel. */
+const AUTO_END_WARN_NOTES = 5;
+const AUTO_END_WARN_MS = 30 * 60_000;
+
+/**
+ * The three command lines every collect panel ends with: how to fire, how to
+ * only stop, when the mode ends on its own. One source, so the per-note
+ * panel, the rearm panel and the status block can never drift apart.
+ *
+ * @param {{marker?:string,expiryHours?:number,maxNotes?:number}} p
+ */
+function renderCommandLines(p = {}) {
+  const marker = p.marker || DEFAULTS.marker;
+  const hours = p.expiryHours ?? DEFAULTS.expiryHours;
+  const max = p.maxNotes ?? DEFAULTS.maxNotes;
+  const I = PANEL_ICONS;
+  return [
+    `${I.fire} Umsetzen:  "${marker} <text>" oder /do-batch go (merged main, plant EINE Umsetzung)`,
+    `${I.stop} Stoppen:   /do-batch off (Notizen bleiben) · /do-batch on sammelt weiter`,
+    `${I.autoEnd} Auto-Ende: ${hours} h oder ${max} Notizen · /do-batch status · marker · help`,
+  ].join('\n');
+}
+
+/**
+ * The block that explains the running mode — shown at activation, by
+ * `/do-batch status` and when a re-activation is absorbed: the state line,
+ * what happens to a prompt, then the command lines.
  *
  * @param {{marker:string,count?:number,expiryHours?:number,maxNotes?:number}} p
  */
 function renderModeSummary(p) {
   const marker = p.marker || DEFAULTS.marker;
-  const hours = p.expiryHours ?? DEFAULTS.expiryHours;
-  const max = p.maxNotes ?? DEFAULTS.maxNotes;
   const count = typeof p.count === 'number' ? ` · ${p.count} Notiz(en)` : '';
   return [
-    `Sammelmodus AKTIV${count} · Marker "${marker}"`,
-    `• Sammeln:    jeder Prompt ohne Marker landet als Notiz in .claude/batch.md.`,
-    `              Das rote "Eingabe blockiert"-Panel ist dabei normal, kein Fehler.`,
-    `• Umsetzen:   "${marker} <text>" oder /do-batch go — merged zuerst main in den`,
-    `              Branch, liest alle Notizen und plant EINE Umsetzung. Text nach dem`,
-    `              Marker ist Anweisung für diese nächste Phase.`,
-    `• Abschalten: /do-batch off — beendet nur das Sammeln, Notizen bleiben;`,
-    `              /do-batch on sammelt später weiter (auch nach dem Auto-Ende).`,
-    `• Auto-Ende:  nach ${hours} Stunden oder ${max} Notizen.`,
-    `• Sonstiges:  /do-batch status · marker (Marker ändern) · help (Ablauf ausführlich).`,
+    `${PANEL_ICONS.running} Sammelmodus AKTIV${count} · Marker "${marker}"`,
+    `${PANEL_ICONS.stored} Jeder Prompt ohne Marker wird Notiz — das rote Panel dabei ist Absicht, kein Fehler.`,
+    '',
+    renderCommandLines(p),
   ].join('\n');
+}
+
+/**
+ * The one-line auto-end warning, or '' while the end is not near: at most
+ * AUTO_END_WARN_NOTES notes or AUTO_END_WARN_MS left.
+ *
+ * @param {{count:number,maxNotes?:number,expiresAt?:string,now?:number}} p
+ */
+function renderAutoEndNotice(p) {
+  const max = p.maxNotes ?? DEFAULTS.maxNotes;
+  const left = max - p.count;
+  if (left > 0 && left <= AUTO_END_WARN_NOTES) {
+    return `${PANEL_ICONS.notice} Nur noch ${left} ${left === 1 ? 'Notiz' : 'Notizen'} bis zum Auto-Ende — Notizen bleiben erhalten.`;
+  }
+  const end = p.expiresAt ? Date.parse(p.expiresAt) : NaN;
+  const ms = end - (p.now ?? Date.now());
+  if (Number.isFinite(ms) && ms > 0 && ms <= AUTO_END_WARN_MS) {
+    return `${PANEL_ICONS.notice} Auto-Ende in ${Math.max(1, Math.round(ms / 60_000))} min — Notizen bleiben erhalten.`;
+  }
+  return '';
 }
 
 /**
@@ -1240,6 +1284,7 @@ module.exports = {
   touchActivity, readActivity,
   isMachinePrompt, isExpandedCommand, hasAttachment, attachmentRefs, detectActivation,
   parseBatchCommand, REARM_ROUTES, renderModeSummary, describeMode, renderHelp,
+  PANEL_ICONS, renderCommandLines, renderAutoEndNotice,
   startsWithMarker, stripMarker, looksLikeQuestion,
   validateMarker, markerMatch, effectiveMarker, MARKER_MAX_LENGTH,
   classify, willBeCollected,

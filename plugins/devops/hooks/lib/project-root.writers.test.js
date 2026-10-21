@@ -81,7 +81,7 @@ describe("prompt.batch.collect — hook run from a subdirectory cwd", () => {
     B.activate(root);
     const res = runHook(BATCH_HOOK, { prompt: "remember to rename the helper later" });
     expect(res.status).toBe(2); // collected = blocked, as at the root
-    expect(res.stderr).toContain("Notiz #1 gespeichert");
+    expect(res.stderr).toContain("Notiz #1 abgelegt");
     expect(B.readNotes(root).map(n => n.text).join("\n")).toContain("rename the helper");
     expect(claudeDirsUnder(root)).toEqual([".claude"]);
   });
