@@ -36,6 +36,12 @@ describe("ship-checkpoint — the ship server records every step", () => {
     expect(cp.readCheckpoint(root)).toBeNull();
   });
 
+  test("#806: a merged release never reports an earlier step as next, even with no tagVerified field", () => {
+    const legacy = { steps: { preflight: { branch: "feat/x" }, release: { merged: "main" } } };
+    expect(cp.nextStep(legacy)).toBe("cleanup");
+    expect(cp.nextStep({ steps: { release: { merged: "main", tagVerified: false } } })).toBe("release");
+  });
+
   test("I4: a successful promote stores its target channel (params.to) and tag, not null", () => {
     preflight();
     cp.recordShipStep("ship_promote", { cwd: root, version: "1.1.0", from: "alpha", to: "stable" }, { success: true, tag: "stable/v1.1.0" });

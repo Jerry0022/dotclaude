@@ -102,8 +102,10 @@ function isShipDone(cp) {
 function nextStep(cp) {
   const steps = (cp && cp.steps) || {};
   // A merged PR proves preflight/build/bump ran: never report them as pending.
-  if (steps.release && steps.release.merged && steps.release.tagVerified === false) return 'release';
-  if (isShipDone(cp)) return 'cleanup';
+  if (steps.release && steps.release.merged) {
+    // Unverified tag → release still owes the tag; done or legacy (no field) → cleanup.
+    return steps.release.tagVerified === false ? 'release' : 'cleanup';
+  }
   for (const s of STEPS) {
     if (s === 'release' ? !(steps.release && steps.release.merged) : !steps[s]) return s;
   }
