@@ -146,7 +146,7 @@ function registerExclude(dir) {
   try {
     const gitDir = execFileSync(
       'git', ['rev-parse', '--path-format=absolute', '--git-common-dir'],
-      { cwd: dir, encoding: 'utf8' },
+      { windowsHide: true, cwd: dir, encoding: 'utf8' },
     ).trim();
     if (!gitDir) return;
     const excl = path.join(gitDir, 'info', 'exclude');

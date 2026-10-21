@@ -38,7 +38,9 @@ const SERVER_VERSION = "0.2.0";
 // Issue cache
 // ---------------------------------------------------------------------------
 
-const REFRESH_INTERVAL_MS = 60_000;
+// Staleness window of a project's cache. Refresh is on demand (ensureCache on
+// match_issues): no background polling, so an idle session spawns no `gh`.
+const REFRESH_INTERVAL_MS = 15 * 60_000;
 const FETCH_TIMEOUT_MS = 15_000;
 // Delay of the post-connect warm-up fetch. The client sends `initialize`
 // immediately after the transport comes up; spawning `gh` in the same tick
@@ -75,12 +77,12 @@ function fetchIssues(cwd) {
     execFile(
       "gh",
       ["issue", "list", "--state", "open", "--json", "number,title,labels", "--limit", String(ISSUE_LIST_LIMIT)],
-      { encoding: "utf8", timeout: FETCH_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024, cwd },
+      { windowsHide: true, encoding: "utf8", timeout: FETCH_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024, cwd },
       (err, stdout) => {
         if (err) {
           process.stderr.write(`[issues-mcp] Failed to fetch issues: ${err.message}\n`);
           // Keep stale cache if available. lastRefresh stays put so the next
-          // call retries instead of trusting an empty cache for 60 s.
+          // call retries instead of trusting an empty cache for the refresh window.
           resolve();
           return;
         }
@@ -109,7 +111,7 @@ function fetchIssues(cwd) {
 
 /** Write the list for the hook, keyed by the project's origin. Best effort. */
 function persistCache(issues, cwd) {
-  execFile("git", ["config", "--get", "remote.origin.url"], { encoding: "utf8", timeout: 5_000, cwd }, (err, url) => {
+  execFile("git", ["config", "--get", "remote.origin.url"], { windowsHide: true, encoding: "utf8", timeout: 5_000, cwd }, (err, url) => {
     if (err || !url) return;
     try { writeCache(url, issues); } catch (e) { process.stderr.write(`[issues-mcp] cache write failed: ${e.message}\n`); }
   });
@@ -228,16 +230,12 @@ bootMs = Math.round(process.uptime() * 1000);
 registerHeartbeat(SERVER_NAME);
 console.error(`[${SERVER_NAME}-mcp] Server started on stdio (boot ${bootMs}ms)`);
 
-// Warm the cache and keep it fresh — fire-and-forget, errors already swallowed
-// to stderr inside fetchIssues(). Both timers are unref'd so they never keep
-// the process alive on their own.
+// Warm the cache once — fire-and-forget, errors already swallowed to stderr
+// inside fetchIssues(). Later refreshes are on demand (ensureCache). The timer
+// is unref'd so it never keeps the process alive on its own.
 // The server runs in the plugin folder, so only projects we know a directory
 // for are fetched: CLAUDE_PROJECT_DIR at warm-up, every cwd seen by
-// match_issues on the interval.
+// match_issues on demand.
 const warmCwd = normalizeCwd(resolveCwd(undefined));
 if (warmCwd) setTimeout(() => { fetchIssues(warmCwd); }, WARMUP_DELAY_MS).unref();
-setInterval(() => {
-  // Snapshot: fetchIssues -> cacheFor re-inserts the key (LRU touch), which a
-  // live Map iterator would visit again. Order is kept, so eviction is too.
-  for (const key of [...caches.keys()]) if (key !== NO_CWD) fetchIssues(key);
-}, REFRESH_INTERVAL_MS).unref();
+

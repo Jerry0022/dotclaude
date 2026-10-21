@@ -93,7 +93,7 @@ function parseArgs(argv) {
 
 function git(cwd, args) {
   try {
-    return execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] });
+    return execFileSync('git', ['-C', cwd, ...args], { windowsHide: true, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] });
   } catch { return ''; }
 }
 

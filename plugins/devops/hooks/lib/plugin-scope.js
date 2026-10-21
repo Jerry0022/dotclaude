@@ -27,7 +27,7 @@ const MANAGED_SUBDIRS = ['cache', 'marketplaces', 'repos'];
 
 function gitTopLevel(cwd) {
   try {
-    return execFileSync('git', ['rev-parse', '--show-toplevel'], {
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], { windowsHide: true,
       cwd, encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
   } catch {

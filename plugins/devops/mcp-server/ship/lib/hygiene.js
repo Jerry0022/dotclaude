@@ -139,7 +139,7 @@ const LOG_KEEP = 200;
 
 function gitOut(args, cwd, timeout = GIT_TIMEOUT) {
   try {
-    return execFileSync("git", args, { cwd, encoding: "utf8", timeout, stdio: ["pipe", "pipe", "pipe"] }).trim();
+    return execFileSync("git", args, { windowsHide: true, cwd, encoding: "utf8", timeout, stdio: ["pipe", "pipe", "pipe"] }).trim();
   } catch {
     return null;
   }
@@ -147,7 +147,7 @@ function gitOut(args, cwd, timeout = GIT_TIMEOUT) {
 
 function gitOk(args, cwd, timeout = GIT_TIMEOUT) {
   try {
-    execFileSync("git", args, { cwd, timeout, stdio: ["pipe", "pipe", "pipe"] });
+    execFileSync("git", args, { windowsHide: true, cwd, timeout, stdio: ["pipe", "pipe", "pipe"] });
     return true;
   } catch {
     return false;
@@ -299,22 +299,43 @@ export function scanRepo(cwd, now = Date.now()) {
   return { units, defaultBranch, current, main, paths: worktrees.map((w) => normPath(w.path)) };
 }
 
+const PR_LIST_TTL_MS = 60_000;
+const prListCache = new Map();
+
+/**
+ * All PRs of the repo at `cwd` from ONE `gh pr list` call, shared by the
+ * merged and open lookups and cached briefly per directory, so a machine-wide
+ * scan costs one gh process per repo instead of one per question. Branches are
+ * matched against the list in memory. null when gh is unavailable.
+ */
+function fetchPrList(cwd) {
+  const key = normPath(cwd || process.cwd());
+  const hit = prListCache.get(key);
+  if (hit && Date.now() - hit.at < PR_LIST_TTL_MS) return hit.list;
+  let list = null;
+  try {
+    const out = execFileSync("gh", ["pr", "list", "--state", "all", "--limit", "1000",
+      "--json", "number,state,headRefName,headRefOid,baseRefName"], { windowsHide: true,
+      cwd, encoding: "utf8", timeout: NETWORK_TIMEOUT, stdio: ["pipe", "pipe", "pipe"],
+    });
+    const parsed = JSON.parse(out);
+    if (Array.isArray(parsed)) list = parsed;
+  } catch {
+    list = null;
+  }
+  prListCache.set(key, { at: Date.now(), list });
+  return list;
+}
+
 /**
  * Heads of PRs merged into `defaultBranch`, via gh. null when gh is missing,
  * unauthenticated or offline — the offline criteria still apply then.
  * @returns {{bySha:Set<string>, byName:Map<string,string[]>}|null}
  */
 export function fetchMergedHeads(cwd, defaultBranch) {
-  let list;
-  try {
-    const out = execFileSync("gh", ["pr", "list", "--state", "merged", "--limit", "1000",
-      "--json", "number,headRefName,headRefOid,baseRefName"], {
-      cwd, encoding: "utf8", timeout: NETWORK_TIMEOUT, stdio: ["pipe", "pipe", "pipe"],
-    });
-    list = JSON.parse(out);
-  } catch {
-    return null;
-  }
+  const all = fetchPrList(cwd);
+  if (!all) return null;
+  const list = all.filter((pr) => pr && pr.state === "MERGED");
   if (!Array.isArray(list)) return null;
   const bySha = new Set();
   const byName = new Map();
@@ -341,7 +362,7 @@ export function reachableFromMerged(cwd, merged, baseRef) {
   if (!merged || !merged.bySha || merged.bySha.size === 0) return new Set();
   const run = (args, input) => {
     try {
-      return execFileSync("git", args, {
+      return execFileSync("git", args, { windowsHide: true,
         cwd, input, encoding: "utf8", timeout: GIT_TIMEOUT, maxBuffer: 64 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"],
       });
     } catch {
@@ -386,7 +407,7 @@ function withTempIndex(ctx, fn) {
   const idx = path.join(os.tmpdir(), `hygiene-idx-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const env = { ...process.env, GIT_INDEX_FILE: idx };
   try {
-    execFileSync("git", ["read-tree", ctx.baseRef], { cwd: ctx.cwd, env, timeout: GIT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"] });
+    execFileSync("git", ["read-tree", ctx.baseRef], { windowsHide: true, cwd: ctx.cwd, env, timeout: GIT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"] });
     return fn(env);
   } catch {
     return null;
@@ -413,10 +434,10 @@ function filesInBase(sha, ctx) {
     let filesIn = 0;
     for (const f of files) {
       try {
-        const patch = execFileSync("git", ["diff", "--binary", mb, sha, "--", f], {
+        const patch = execFileSync("git", ["diff", "--binary", mb, sha, "--", f], { windowsHide: true,
           cwd: ctx.cwd, encoding: "utf8", timeout: GIT_TIMEOUT, maxBuffer: 64 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"],
         });
-        execFileSync("git", ["apply", "--cached", "-R", "--check", "-"], {
+        execFileSync("git", ["apply", "--cached", "-R", "--check", "-"], { windowsHide: true,
           cwd: ctx.cwd, env, input: patch, timeout: GIT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"],
         });
         filesIn += 1;
@@ -540,7 +561,7 @@ function ownClaudeFiles(wtPath, mainPath, entry) {
 function worktreeContentReason(wtPath, mainPath = null) {
   let out;
   try {
-    out = execFileSync("git", ["status", "--porcelain", "-z", "--untracked-files=all", "--ignored=matching"], {
+    out = execFileSync("git", ["status", "--porcelain", "-z", "--untracked-files=all", "--ignored=matching"], { windowsHide: true,
       cwd: wtPath, encoding: "utf8", timeout: GIT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"],
     });
   } catch {
@@ -712,19 +733,13 @@ function worktreeBytes(u, cache, deadline, clock) {
 
 /** Heads of open PRs (branch names and commit ids), via gh; null when gh is unavailable. */
 export function fetchOpenHeads(cwd) {
-  try {
-    const out = execFileSync("gh", ["pr", "list", "--state", "open", "--limit", "500", "--json", "headRefName,headRefOid"], {
-      cwd, encoding: "utf8", timeout: NETWORK_TIMEOUT, stdio: ["pipe", "pipe", "pipe"],
-    });
-    const list = JSON.parse(out);
-    if (!Array.isArray(list)) return null;
-    return {
-      names: new Set(list.map((p) => p && p.headRefName).filter(Boolean)),
-      shas: new Set(list.map((p) => p && p.headRefOid).filter(Boolean)),
-    };
-  } catch {
-    return null;
-  }
+  const all = fetchPrList(cwd);
+  if (!all) return null;
+  const list = all.filter((p) => p && p.state === "OPEN");
+  return {
+    names: new Set(list.map((p) => p.headRefName).filter(Boolean)),
+    shas: new Set(list.map((p) => p.headRefOid).filter(Boolean)),
+  };
 }
 
 /**
@@ -736,7 +751,7 @@ export function fetchOpenHeads(cwd) {
 export function uncommittedCount(wtPath) {
   let out;
   try {
-    out = execFileSync("git", ["status", "--porcelain", "-z", "--untracked-files=all"], {
+    out = execFileSync("git", ["status", "--porcelain", "-z", "--untracked-files=all"], { windowsHide: true,
       cwd: wtPath, encoding: "utf8", timeout: GIT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"],
     });
   } catch {
@@ -945,7 +960,7 @@ function removeWorktree(unit, cwd, current, timeout, projectsDir, mainPath) {
   const why = worktreeContentReason(unit.path, mainPath);
   if (why) return why;
   try {
-    execFileSync("git", ["worktree", "remove", unit.path], { cwd, timeout, stdio: ["pipe", "pipe", "pipe"] });
+    execFileSync("git", ["worktree", "remove", unit.path], { windowsHide: true, cwd, timeout, stdio: ["pipe", "pipe", "pipe"] });
     return null;
   } catch (e) {
     const timedOut = e && (e.code === "ETIMEDOUT" || e.signal);

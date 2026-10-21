@@ -124,7 +124,7 @@ function isCacheFresh(usageData, nowMs) {
 function refreshUsageBestEffort() {
   try {
     const scraper = path.join(__dirname, 'refresh-usage-headless.js');
-    spawnSync(process.execPath, [scraper, '--no-login', '--quiet'], {
+    spawnSync(process.execPath, [scraper, '--no-login', '--quiet'], { windowsHide: true,
       cwd: os.tmpdir(), // always-local CWD — a UNC session dir can't break the spawn
       timeout: 90_000,
       stdio: 'ignore',

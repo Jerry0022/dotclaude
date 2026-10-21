@@ -21,7 +21,7 @@ const fs = require('fs');
 
 function run(cmd, cwd, timeout = 15000) {
   try {
-    return execSync(cmd, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout }).trim();
+    return execSync(cmd, { windowsHide: true, cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout }).trim();
   } catch {
     return '';
   }
@@ -40,7 +40,7 @@ function run(cmd, cwd, timeout = 15000) {
  */
 function runOk(cmd, cwd, timeout = 15000) {
   try {
-    execSync(cmd, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout });
+    execSync(cmd, { windowsHide: true, cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout });
     return true;
   } catch {
     return false;

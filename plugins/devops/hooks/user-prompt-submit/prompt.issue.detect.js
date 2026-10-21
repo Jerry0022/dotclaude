@@ -89,7 +89,7 @@ process.stdin.on('end', () => {
   // Also check current git branch for implicit issue reference
   if (trackNumbers.length === 0 && askNumbers.length === 0) {
     try {
-      const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', { windowsHide: true,
         encoding: 'utf8',
         timeout: 5000,
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -119,7 +119,7 @@ process.stdin.on('end', () => {
       const { MATCH_ASK_MIN, readCache, matchIssues } = require('../lib/issue-match');
       let issues = null;
       try {
-        const remote = execSync('git config --get remote.origin.url', {
+        const remote = execSync('git config --get remote.origin.url', { windowsHide: true,
           cwd: hook.cwd || process.cwd(), encoding: 'utf8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'],
         }).trim();
         issues = readCache(remote);

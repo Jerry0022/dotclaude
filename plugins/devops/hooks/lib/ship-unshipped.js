@@ -27,7 +27,7 @@ const GIT_TIMEOUT_MS = 3000;
 
 /** Default git runner: stdout as a string, throws on non-zero exit. */
 function runGit(cwd, args) {
-  return execFileSync('git', args, {
+  return execFileSync('git', args, { windowsHide: true,
     cwd, encoding: 'utf8', timeout: GIT_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'ignore'],
   });
 }

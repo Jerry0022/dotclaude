@@ -99,7 +99,7 @@ function gitProcesses({ platform = process.platform, now = Date.now() } = {}) {
       });
       return parseWinJson(out);
     }
-    const out = execFileSync('ps', ['-A', '-o', 'pid=,etime=,args='], {
+    const out = execFileSync('ps', ['-A', '-o', 'pid=,etime=,args='], { windowsHide: true,
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: LIST_TIMEOUT_MS,
     });
     return parsePs(out, now);

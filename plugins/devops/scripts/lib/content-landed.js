@@ -34,7 +34,7 @@ const MAX_FILES = 200;
 function makeGit(cwd) {
   return (args) => {
     try {
-      return { ok: true, out: execFileSync('git', ['--literal-pathspecs', ...args], {
+      return { ok: true, out: execFileSync('git', ['--literal-pathspecs', ...args], { windowsHide: true,
         cwd, encoding: 'utf8', timeout: GIT_TIMEOUT, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
       }) };
     } catch (e) {

@@ -345,12 +345,12 @@ function openInBrowser(absPath) {
         windowsHide: true
       }).unref();
     } else if (process.platform === "darwin") {
-      child_process.spawn("open", ["-a", "Microsoft Edge", fileUrl], {
+      child_process.spawn("open", ["-a", "Microsoft Edge", fileUrl], { windowsHide: true,
         detached: true,
         stdio: "ignore"
       }).unref();
     } else {
-      child_process.spawn("microsoft-edge", [fileUrl], {
+      child_process.spawn("microsoft-edge", [fileUrl], { windowsHide: true,
         detached: true,
         stdio: "ignore"
       }).unref();

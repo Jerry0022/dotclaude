@@ -116,7 +116,7 @@ function syncGitignore(root, isNew, commonDir = null) {
 function newRepoReason(root) {
   let hasCommit = true;
   try {
-    execFileSync('git', ['rev-parse', '--verify', '-q', 'HEAD'], { cwd: root, stdio: 'ignore', timeout: 5000 });
+    execFileSync('git', ['rev-parse', '--verify', '-q', 'HEAD'], { windowsHide: true, cwd: root, stdio: 'ignore', timeout: 5000 });
   } catch (e) {
     // exit 1 = no commit yet; a timeout or missing git proves nothing
     hasCommit = !(e && e.status === 1);

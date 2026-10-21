@@ -35,7 +35,7 @@ const TOOLING_ROOT = /^(AUTONOMOUS|BACKLOG|BURN)[-_]/;
 
 function git(args, cwd, { env, input, timeout } = {}) {
   try {
-    return execFileSync('git', args, {
+    return execFileSync('git', args, { windowsHide: true,
       cwd, encoding: 'utf8', timeout: timeout || T, input, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       env: env ? { ...process.env, ...env } : process.env, maxBuffer: 32 * 1024 * 1024,
     }).trim();

@@ -389,7 +389,7 @@ function trackedUnderBlock(root, { timeoutMs = 10_000 } = {}) {
   const tmp = path.join(os.tmpdir(), `claude-block-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   try {
     fs.writeFileSync(tmp, renderBlock() + '\n');
-    const out = execFileSync('git', ['ls-files', '-z', '-c', '-i', '-X', tmp], {
+    const out = execFileSync('git', ['ls-files', '-z', '-c', '-i', '-X', tmp], { windowsHide: true,
       cwd: root, encoding: 'utf8', timeout: timeoutMs, stdio: ['ignore', 'pipe', 'ignore'],
     });
     return out.split('\0').filter(Boolean);

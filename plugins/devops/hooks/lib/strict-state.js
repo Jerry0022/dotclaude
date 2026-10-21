@@ -111,7 +111,7 @@ function deactivate(cwd) {
 
 function gitOut(cwd, args) {
   try {
-    return execFileSync('git', args, {
+    return execFileSync('git', args, { windowsHide: true,
       cwd, timeout: 5000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
   } catch {

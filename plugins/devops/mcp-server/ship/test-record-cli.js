@@ -45,7 +45,7 @@ function say(log, obj) {
 }
 
 /** Returns the exit code. `deps` exists for tests. */
-export function main(argv, { exec = (cmd, cwd) => spawnSync(cmd, { cwd, shell: true, stdio: "inherit" }).status ?? 1,
+export function main(argv, { exec = (cmd, cwd) => spawnSync(cmd, { windowsHide: true, cwd, shell: true, stdio: "inherit" }).status ?? 1,
   key = treeKey, record = recordResult, log = (s) => process.stderr.write(s), now = () => Date.now() } = {}) {
   const a = parseArgs(argv);
   if (a.sub === "key") {

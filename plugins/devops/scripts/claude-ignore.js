@@ -25,7 +25,7 @@ const { execFileSync } = require('child_process');
 const ri = require('../hooks/lib/runtime-ignores');
 
 function gitPaths(repo) {
-  const out = execFileSync('git', ['rev-parse', '--show-toplevel', '--git-common-dir'], {
+  const out = execFileSync('git', ['rev-parse', '--show-toplevel', '--git-common-dir'], { windowsHide: true,
     cwd: repo, encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'ignore'],
   }).trim().split(/\r?\n/);
   const root = path.resolve(out[0]);

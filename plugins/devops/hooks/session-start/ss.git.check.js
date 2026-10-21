@@ -55,7 +55,7 @@ const GIT_TIMEOUT_MS = 15_000;
 
 function run(cmd, cwd, timeout = GIT_TIMEOUT_MS) {
   try {
-    return execSync(cmd, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout }).trim();
+    return execSync(cmd, { windowsHide: true, cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout }).trim();
   } catch {
     return '';
   }
@@ -104,7 +104,7 @@ function hasRemote(dir) {
  */
 function lacksOrigin(dir) {
   try {
-    const names = execSync('git remote', { cwd: dir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: GIT_TIMEOUT_MS });
+    const names = execSync('git remote', { windowsHide: true, cwd: dir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: GIT_TIMEOUT_MS });
     return !names.split(/\r?\n/).map(s => s.trim()).includes('origin');
   } catch {
     return false;

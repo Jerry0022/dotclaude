@@ -158,7 +158,7 @@ function timeoutNote(step, res) {
 
 function run(cmd, cwd, limitSec = DEFAULT_STEP_TIMEOUT_SEC) {
   try {
-    const output = execSync(cmd, {
+    const output = execSync(cmd, { windowsHide: true,
       cwd,
       encoding: "utf8",
       timeout: limitSec * 1000,
@@ -277,7 +277,7 @@ function getBuildId(cwd) {
   try {
     return execSync(
       `"${process.execPath}" "${BUILD_ID_SCRIPT()}"`,
-      { cwd, encoding: "utf8", timeout: 10_000 }
+      { windowsHide: true, cwd, encoding: "utf8", timeout: 10_000 }
     ).trim();
   } catch (err) {
     console.error(`[ship_build] build-id computation failed: ${err.message}`);

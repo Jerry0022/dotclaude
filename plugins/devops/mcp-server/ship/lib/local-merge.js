@@ -23,7 +23,7 @@ const TIMEOUT = 15_000;
 const MERGE_TIMEOUT = 120_000;
 
 function run(args, cwd, input, timeout = TIMEOUT) {
-  return execFileSync("git", args, {
+  return execFileSync("git", args, { windowsHide: true,
     cwd,
     encoding: "utf8",
     timeout,
