@@ -6,7 +6,6 @@ import { createRequire } from "node:module";
 import { titlePrefixFor, TITLE_SCHEME } from "./lib/mode-state.js";
 import { hasPending, hasConcept } from "./lib/pending.js";
 import TITLE_SCHEME_MOD from "../hooks/lib/title-scheme.js";
-const F = TITLE_SCHEME_MOD.withFill;
 
 // Title = CTA (concept 2026-10-19 "title-cta-emoji-scheme"): EVERY
 // completion-card variant × every flag that changes the heading or the
@@ -175,7 +174,7 @@ describe("title = CTA — every completion-card variant × every heading/prefix 
       test(`${name} (${lang}) → ${status} ┃ ${word} ${activity}`, () => {
         const { heading, title } = evaluate(params, lang);
         const head = `${status} ┃ ${word} ${activity}`;
-        const prefix = F(head + " ");
+        const prefix = (head + " ");
         if (opts.titleOwnedBySkill) {
           // An armed batch owns the title (the card leaves it alone) — and the
           // skill's title carries exactly the heading's head.
@@ -215,7 +214,7 @@ describe("title = CTA — every completion-card variant × every heading/prefix 
     expect(optional.heading).toBe("🟩 ┃ Alpha 🚀 — v0.1.0 — nach Beta promoten?");
     const mandatory = evaluate({ variant: "ship-successful", state: SHIPPED, delivery: ring("alpha"), userFinalTest: FINAL }, "en");
     expect(mandatory.heading).toBe("👉 ┃ Alpha 🚀 — v0.1.0 — promote to beta?");
-    expect(mandatory.title).toBe(F("👉 ┃ Alpha 🚀 "));
+    expect(mandatory.title).toBe("👉 ┃ Alpha 🚀 ");
   });
 
   test("worked examples from the concept read exactly", () => {

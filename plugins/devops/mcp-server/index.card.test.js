@@ -6,7 +6,7 @@ import * as RC from "../hooks/lib/run-contract.js";
 import TITLE_SCHEME_MOD from "../hooks/lib/title-scheme.js";
 
 // index.js boots an MCP server over stdio at import time and pulls in the
-// @modelcontextprotocol SDK + zod (neither is a devDependency of this repo).
+// @modelcontextprotocol SDK + zod (the SDK is not a devDependency of this repo).
 // Mock all three so the module imports cleanly and we can capture the
 // render_completion_card handler to exercise the pure card renderer.
 // Never spawn the real headless usage scraper (Edge) from a unit test — it is
@@ -1237,7 +1237,7 @@ describe("render_completion_card — concept close-out after the implement ship 
       expect(deText).not.toMatch(/weiter in/);
       const all = de.content.map(c => c.text).join("\n");
       expect(all).not.toContain("\"🧭 Concept – \" +");
-      expect(all).toContain("set the title to \"" + TITLE_SCHEME_MOD.withFill("👉 ┃ Alpha 🚀 ") + "\" +");
+      expect(all).toContain("set the title to \"" + "👉 ┃ Alpha 🚀 " + "\" +");
       const en = await cardText({ ...kept, summary: "x", lang: "en", session_id: "test-closeout-en", cwd });
       expect(en).toMatch(/^## 👉 ┃ Alpha 🚀 — v0\.1\.0 — Close out the concept – final report is waiting\.$/m);
       expect(en).not.toMatch(/continue on/);

@@ -6,7 +6,6 @@ import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import TITLE_SCHEME_MOD from "../hooks/lib/title-scheme.js";
-const F = TITLE_SCHEME_MOD.withFill;
 
 // The CLI fallback exists for the session where the MCP server never connected
 // (CONNECT_TIMEOUT under load, mid-session cache rebuild, crashed spawn). It is
@@ -150,7 +149,7 @@ describe("--render-card CLI fallback", () => {
     const { stdout, stderr } = await renderCardFull({ variant: "ready", summary: "Titel-Test", session_id: S("title"), changes: [{ area: "x", description: "y" }] });
     expect(stdout).not.toContain("SESSION TITLE");
     expect(stderr).toContain("[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]");
-    expect(stderr).toContain('"' + F("👉 ┃ Ready 📦 ") + '" + <stripped title>');
+    expect(stderr).toContain('"' + "👉 ┃ Ready 📦 " + '" + <stripped title>');
   });
 
   test("a title readable from the transcript yields the exact set call — no get_session", async () => {
@@ -165,7 +164,7 @@ describe("--render-card CLI fallback", () => {
         { HOME: home, USERPROFILE: home },
       );
       expect(stdout).not.toContain("SESSION TITLE");
-      expect(stderr).toContain('mcp__ccd_session_mgmt__set_session_title {session_id:"self", title:' + JSON.stringify(F("👉 ┃ Ready 📦 CLI task")) + "}");
+      expect(stderr).toContain('mcp__ccd_session_mgmt__set_session_title {session_id:"self", title:' + JSON.stringify("👉 ┃ Ready 📦 CLI task") + "}");
       expect(stderr).not.toContain("mcp__ccd_session_mgmt__get_session");
     } finally {
       rmSync(home, { recursive: true, force: true });

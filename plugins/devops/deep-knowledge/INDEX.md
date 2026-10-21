@@ -51,7 +51,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [session-grader.md](session-grader.md) | Session Grader (weekly rule check) | Do recent sessions keep missing the same plugin rules after a skill change? |
 | [session-title-scheme.md](session-title-scheme.md) | Session Title Scheme | The session-title prefixes the devops plugin sets in the Desktop app sidebar,... |
 | [skill-extension-guide.md](skill-extension-guide.md) | Skill Extension Guide — For Plugin Integrators | How to customize devops skills and agents for your project. |
-| [strict.md](strict.md) | Strict Mode — Literal Scope, Discretionary Parameters | The deliverable is exactly what the prompt names, nothing wider; attributes t... |
+| [strict.md](strict.md) | Strict Mode — Literal Scope, Discretionary Parameters | The deliverable is exactly what the prompt names, nothing wider — and complet... |
 | [test-autonomy.md](test-autonomy.md) | Test Autonomy — Cross-Cutting Rules for Test Tool Selection | Cross-cutting rule for every skill, hook, and agent that performs or triggers |
 | [test-plan.md](test-plan.md) | Test Plan — Detect Profile, Pin Tool-Chain | Cross-cutting reference for **every** skill, hook, or agent that tests, verif... |
 | [test-strategy.md](test-strategy.md) | Test Execution Strategy | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |

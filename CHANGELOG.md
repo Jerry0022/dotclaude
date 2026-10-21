@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.288.2] — 2026-10-21
+
+Session titles drop the invisible padding and recover from stacked prefixes; three red tests are green again.
+
+### Fixed
+- **No title fill.** The Desktop sidebar drops every whitespace run (U+200A and NBSP included, checked with a live test title), so the hair-space fill of 0.287.0 never right-aligned anything. Prefixes are now `<STATUS> ┃ <Word> <EMOJI> ` without fill; titles that still carry it are recognised. `title-scheme.js` 2.1.0.
+- **Stacked prefixes.** An older plugin takes the leading `⏳ ` of a new title for its bare prefix and stacks its own in front (`⏳ 🧭 Concept – ┃ Shipping 🚀 X`), leaving a status-less `┃ Shipping 🚀` head. `stripPrefixes` now removes that head, so the next title write cleans the stack.
+- **burn-plan lock test.** A won stale-lock takeover retries at once instead of backing off first; the dead-PID test gets a 5 s window plus a timing check instead of 200 ms.
+- **zod in tests.** zod is a root devDependency, so the issues MCP contract and matching tests resolve it in every checkout.
+
+## [0.287.0] — 2026-10-21
+
+Session titles get a calmer two-icon layout: a status square, a bar, then a right-aligned word with the activity emoji forming a column in the Desktop sidebar.
+
+### Changed
+- **New session-title grammar `STATUS ┃ <fill>Word EMOJI title`.** The old two-slot prefix (`👉 🧪 Test – `) put two differently styled colour emoji side by side and read restless in the sidebar. `hooks/lib/title-scheme.js` now builds `<status> ┃ <hair-space fill><Word> <activity emoji> ` (e.g. `👉 ┃ Test 🧪 `): status squares ⏳ 👉 🟩 🟥 🟦 (paused moves from ⏸️ to 🟦), the word right-aligned by U+200A fill computed from a hardcoded Segoe UI 14px width table so the activity emoji line up as a column, no ` – ` separator. Generic work is `⏳ ┃ Solo 🤖`, background agents `Team 🤖`; releases `Alpha/Beta/Stable 🚀`, promote-only `Beta/Stable 🎊`; Batch 📚, Blocked 🚧, Analysis 📊, Started 💡, Restart 🔌. Square emoji are kept out of the activity column (▶️ read as pause). The completion-card CTA heading uses the same parts without fill (`👉 ┃ Ready 📦 — Shippen?`). Every earlier prefix (two-slot, legacy single-icon, bare `⏳ `) is still recognized and stripped; matching tolerates FE0F and any number of U+200A. Emoji style itself cannot be changed (Segoe UI Emoji renders one fixed style, mods have no sidebar hook), so the separation comes from structure; monochrome glyphs, FE0E, enclosed letters, Unicode frames and a tooltip-only word were rejected. Consumers updated: `card-guard.js` heading regex, `mode-state.js` / `prompt.flow.title-work.js` instruction texts, `session-title-scheme.md` rewritten, concept/ship/batch skill docs; new `hooks/lib/title-scheme.test.js`.
+- **auto-concept: one visual topic per design set.** `step1-templates.md` — a design set varies ONE visual topic; independent topics (e.g. layout and icons) run as a sequence instead of being bundled, so the user never has to switch designs to compare one aspect.
+
 ## [0.288.1] — 2026-10-21
 
 A ship whose PR is merged and whose tag is verified counts as done; a cleanup that was blocked afterwards is reported as a leftover instead of resuming the ship.

@@ -5,17 +5,14 @@ const HAIR = String.fromCharCode(0x200A);
 const FE0F = String.fromCharCode(0xFE0F);
 
 describe("title-scheme — new grammar", () => {
-  test("prefix shape: status, bar, fill before the word, activity, one space", () => {
-    // Short word: Ship is 26.98px -> round((69.91 - 26.98) / 1.75) = 25 hair spaces.
-    expect(S.prefixOf("aborted-ship")).toBe("🟥 ┃ " + HAIR.repeat(25) + "Ship 🚀 ");
-    // Long word: Interrupted is the target width -> no fill.
+  test("prefix shape: status, bar, word, activity, one space — no fill", () => {
+    // The sidebar drops whitespace runs, so a hair-space fill never renders.
+    expect(S.prefixOf("aborted-ship")).toBe("🟥 ┃ Ship 🚀 ");
     expect(S.prefixOf("interrupted")).toBe("👉 ┃ Interrupted ⚡ ");
-    // Wider than the target never goes negative.
-    expect(S.fillFor("Not deployed")).toBe("");
-    expect(S.fillFor("Unknown word")).toBe("");
+    expect(S.prefixOf("ready")).not.toContain(HAIR);
   });
 
-  test("head and heading carry the same parts without fill", () => {
+  test("head and heading carry the same parts", () => {
     expect(S.head("ready").text).toBe("👉 ┃ Ready 📦");
     expect(S.headingOf("ready", "Shippen?")).toBe("👉 ┃ Ready 📦 — Shippen?");
     expect(S.head("released-alpha").text).toBe("🟩 ┃ Alpha 🚀");
@@ -25,14 +22,14 @@ describe("title-scheme — new grammar", () => {
   });
 
   test("the generic work prefix is Solo and classifies as work", () => {
-    expect(S.WORK_PREFIX).toBe("⏳ ┃ " + HAIR.repeat(24) + "Solo 🤖 ");
+    expect(S.WORK_PREFIX).toBe("⏳ ┃ Solo 🤖 ");
     expect(S.classify(S.WORK_PREFIX + "Fix")).toBe("work");
     expect(S.stripPrefixes(S.WORK_PREFIX + "Fix")).toBe("Fix");
   });
 
-  test("withFill turns a fill-less text into the title shape", () => {
-    expect(S.withFill("🟩 ┃ Alpha 🚀 Login")).toBe(S.prefixOf("released-alpha") + "Login");
-    expect(S.withFill("plain")).toBe("plain");
+  test("a 2.0.0 title with its hair-space fill is still recognised", () => {
+    expect(S.classify("⏳ ┃ " + HAIR.repeat(24) + "Solo 🤖 Fix")).toBe("work");
+    expect(S.stripPrefixes("🟩 ┃ " + HAIR.repeat(19) + "Alpha 🚀 Login")).toBe("Login");
   });
 });
 
@@ -75,6 +72,14 @@ describe("title-scheme — legacy generation", () => {
     expect(S.classify("⏳ Working – X")).toBe("work");
     expect(S.classify("📦 Ready – X")).toBe("outcome");
     expect(S.classify("Plain")).toBe("plain");
+  });
+
+  test("a status-less head left by an older plugin's stacking is stripped", () => {
+    expect(S.stripPrefixes("⏳ 🧭 Concept – ┃ Shipping 🚀 DevOps backlog")).toBe("DevOps backlog");
+    expect(S.stripPrefixes("⏳ 🤖 Agents – ┃ " + " ".repeat(9) + "Shipping 🚀 Dev start")).toBe("Dev start");
+    expect(S.stripPrefixes("┃ Solo 🤖 Anno")).toBe("Anno");
+    expect(S.classify("┃ Solo 🤖 Anno")).toBe("plain");
+    expect(S.stripPrefixes("┃ not a head")).toBe("┃ not a head");
   });
 
   test("stacked old and new prefixes are stripped together", () => {

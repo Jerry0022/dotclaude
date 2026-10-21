@@ -1,16 +1,16 @@
 /**
  * @module title-scheme
- * @version 2.0.0
+ * @version 2.1.0
  * @description The ONE table behind the session title and the completion
  *   card's CTA heading (concept 2026-10-21 "title-iconography").
  *
- *   Grammar: `<STATUS> ┃ <FILL><Word> <ACTIVITY> <title>` — a status icon, a
- *   heavy bar (U+2503), the English keyword and the activity emoji. FILL is a
- *   run of U+200A hair spaces BEFORE the word: it right-aligns the word so the
- *   activity emoji forms a column in the Desktop sidebar (widths are Segoe UI
- *   14px measurements, `WIDTH`). The CTA heading of every card starts with the
- *   SAME parts WITHOUT fill, followed by ` — ` and the localized sentence —
- *   both are built here from one state id, so they cannot drift.
+ *   Grammar: `<STATUS> ┃ <Word> <ACTIVITY> <title>` — a status icon, a heavy
+ *   bar (U+2503), the English keyword and the activity emoji. The CTA heading
+ *   of every card starts with the SAME parts, followed by ` — ` and the
+ *   localized sentence — both are built here from one state id, so they
+ *   cannot drift. No fill: 2.0.0 right-aligned the word with U+200A hair
+ *   spaces, but the Desktop sidebar drops every whitespace run (verified
+ *   2026-10-21), so titles from that release still carry an invisible fill.
  *
  *   STATUS is chosen by card content, not by variant name: a `done` state
  *   turns into the user's move (👉) when the card carries a mandatory user
@@ -44,25 +44,6 @@ const STATUS = Object.freeze({
 
 /** Old paused status — still recognised on titles in the wild. */
 const LEGACY_STATUS = Object.freeze({ ...STATUS, paused: '⏸️' });
-
-/** Rendered width (px, Segoe UI 14px) of each keyword; drives the fill. */
-const WIDTH = Object.freeze({
-  Shipping: 54.77, Testing: 43.53, Team: 32.47, Solo: 27.23, Concept: 51.56,
-  Batch: 34.28, Test: 23.97, Ready: 37.43, Files: 26.88, Question: 56,
-  'Red tests': 56.05, Unverified: 63.16, 'Not deployed': 84.98, Blocked: 48.61,
-  Interrupted: 69.91, Alpha: 35.7, Beta: 27.21, Stable: 37.8, Committed: 69.43,
-  Started: 44.03, Analysis: 49.51, System: 43.87, Aborted: 50.64, Ship: 26.98,
-  Promote: 53.24, Paused: 43.91, 'Limit reset': 64.2, Restart: 42.7, Reboot: 44.67,
-});
-const TARGET_WIDTH = 69.91;
-const HAIR_WIDTH = 1.75;
-
-/** The hair-space run that right-aligns `word`. */
-function fillFor(word) {
-  const w = WIDTH[word];
-  if (w === undefined) return '';
-  return HAIR.repeat(Math.max(0, Math.round((TARGET_WIDTH - w) / HAIR_WIDTH)));
-}
 
 /**
  * Every named state: [status key, English keyword, activity icon].
@@ -173,9 +154,9 @@ function abortedState(activity) {
   return ABORT_ACTIVITIES.includes(a) ? 'aborted-' + a : 'aborted';
 }
 
-/** `👉 ┃ Ready 📦` for a status icon, keyword and activity (no fill). */
-function compose(status, word, activity, fill = '') {
-  return `${status} ${BAR} ${fill}${word} ${activity}`;
+/** `👉 ┃ Ready 📦` for a status icon, keyword and activity. */
+function compose(status, word, activity) {
+  return `${status} ${BAR} ${word} ${activity}`;
 }
 
 /**
@@ -195,10 +176,9 @@ function head(id, { mandatory = false } = {}) {
   return { id, status, activity: s[2], word: s[1], text: compose(status, s[1], s[2]) };
 }
 
-/** `👉 ┃ Ready 📦 ` — the session-title prefix of a state (with fill). */
+/** `👉 ┃ Ready 📦 ` — the session-title prefix of a state. */
 function prefixOf(id, opts) {
-  const h = head(id, opts);
-  return compose(h.status, h.word, h.activity, fillFor(h.word)) + ' ';
+  return head(id, opts).text + ' ';
 }
 
 /** `👉 ┃ Ready 📦 — Shippen?` — the CTA heading of a state. */
@@ -208,23 +188,8 @@ function headingOf(id, sentence, opts) {
   return s ? `${h} — ${s}` : h;
 }
 
-/**
- * `text` (`👉 ┃ Ready 📦 …`, no fill) with the hair-space fill of its word
- * inserted — the shape a session title carries. Text without a known word
- * after the bar comes back unchanged.
- */
-function withFill(text) {
-  const t = String(text ?? '');
-  const bar = t.indexOf(BAR + ' ');
-  if (bar < 0) return t;
-  const at = bar + 2;
-  const rest = t.slice(at);
-  const word = Object.keys(WIDTH).filter((w) => rest.startsWith(w + ' ')).sort((a, b) => b.length - a.length)[0];
-  return word ? t.slice(0, at) + fillFor(word) + rest : t;
-}
-
 /** Generic work: `⏳ ┃ Solo 🤖 ` — what a bare unnamed turn gets. */
-const WORK_PREFIX = compose(STATUS.work, 'Solo', '🤖', fillFor('Solo')) + ' ';
+const WORK_PREFIX = compose(STATUS.work, 'Solo', '🤖') + ' ';
 /** The pre-2.0 bare hourglass — still recognised as generic work. */
 const BARE_WORK = STATUS.work + ' ';
 
@@ -322,6 +287,14 @@ const KNOWN = [];
 /** Every known prefix but the bare ⏳, longest first. */
 const KNOWN_PREFIXES = Object.freeze([...new Set(KNOWN)].sort((a, b) => b.length - a.length));
 
+// A current head that lost its status: an older plugin strips the leading
+// ⏳ as its own bare prefix and stacks its prefix on the rest
+// ("⏳ 🧭 Concept – ┃ Shipping 🚀 X"). Stripped, never classified — the
+// title gets a fresh head right after.
+const ORPHAN_HEADS = Object.freeze([...new Set(
+  [...KNOWN].filter((p) => p.includes(BAR)).map((p) => p.slice(p.indexOf(BAR))),
+)].sort((a, b) => b.length - a.length));
+
 /**
  * Length of `prefix` at the start of `t`, ignoring FE0F and U+200A on both
  * sides, or -1.
@@ -379,8 +352,10 @@ function stripPrefixes(title) {
   let t = String(title ?? '');
   for (;;) {
     const lead = leadingPrefix(t);
-    if (!lead) return t;
-    t = t.slice(lead.length);
+    if (lead) { t = t.slice(lead.length); continue; }
+    const orphan = ORPHAN_HEADS.map((p) => matchLength(t, p)).find((n) => n >= 0);
+    if (orphan === undefined) return t;
+    t = t.slice(orphan);
   }
 }
 
@@ -418,7 +393,6 @@ module.exports = {
   FE0F,
   HAIR,
   BAR,
-  WIDTH,
   STATUS,
   STATES,
   LEGACY_STATES,
@@ -433,8 +407,6 @@ module.exports = {
   LEGACY_PREFIXES,
   LEGACY,
   KNOWN_PREFIXES,
-  fillFor,
-  withFill,
   canonical,
   head,
   prefixOf,

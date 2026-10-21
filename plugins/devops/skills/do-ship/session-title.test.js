@@ -6,7 +6,6 @@ import { SESSION_PREFIX as RAW_PREFIX } from "../../mcp-server/lib/mode-state.js
 // Docs spell the prefixes without the hair-space fill the code inserts.
 const SESSION_PREFIX = Object.fromEntries(Object.entries(RAW_PREFIX).map(([k, v]) => [k, v.replace(/\u200A/g, "")]));
 import TITLE_SCHEME_MOD from "../../hooks/lib/title-scheme.js";
-const F = TITLE_SCHEME_MOD.withFill;
 
 // /do-ship marks the session while the pipeline runs and leaves its outcome on
 // the title: 🚀 Shipping while the pipeline runs, 🚀 Shipped once it landed,

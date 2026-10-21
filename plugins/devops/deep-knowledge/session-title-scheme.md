@@ -4,10 +4,9 @@ The session-title prefixes the devops plugin sets in the Desktop app sidebar, an
 
 A title reads `<STATUS> ┃ <Word> <ACTIVITY> <title>` (heavy bar U+2503, one
 space each side, one space between the emoji and the title; no ` – `
-separator). The code inserts a run of U+200A hair spaces BEFORE the word
-(`fillFor` in `title-scheme.js`, Segoe UI 14px widths) so the word is
-right-aligned and the activity emoji forms a column in the sidebar; the
-prefixes below are written without that fill. Generic, unnamed work gets
+separator). No padding: the Desktop sidebar drops every whitespace run
+(U+200A and NBSP included, verified 2026-10-21) and the app refuses other
+invisible fillers, so a right-aligned word column is not possible. Generic, unnamed work gets
 `⏳ ┃ Solo 🤖 <title>` (`WORK_PREFIX`), set by `prompt.flow.title-work` on every
 prompt; the card's session-title note replaces it with the result prefix at
 turn end. Nothing else strips or sets titles.
@@ -20,7 +19,7 @@ turn end. Nothing else strips or sets titles.
 | `🟥` | Aborted |
 | `🟦` | Paused |
 
-| State | Prefix (without fill) |
+| State | Prefix |
 |---|---|
 | work | `⏳ ┃ Shipping 🚀`, `⏳ ┃ Testing 🧪`, `⏳ ┃ Team 🤖` (pending background work), `⏳ ┃ Concept 🧭` (iterating/implementing), `⏳ ┃ Solo 🤖` (generic) |
 | user | `👉 ┃ Concept 🧭` (page waits), `Batch 📚`, `Test 🧪`, `Ready 📦`, `Files 📦`, `Question ❓`, `Red tests ⚠️`, `Unverified ⚠️`, `Not deployed ⚠️`, `Blocked 🚧`, `Interrupted ⚡` (see F5) |
@@ -53,8 +52,10 @@ an old single-icon prefix (`🚀 Shipped – `, `📦 Ready – `, `🧭 Concept
 `📥 Batch – `, `⏳ Working – `, …). All are still recognised and stripped
 (also stacked, old and new mixed), and `classify` maps old and new forms to
 the same categories. Matching ignores FE0F and any number of U+200A, so a
-title whose fill count differs still matches. Only known prefixes are
-stripped; `⏳ Fix Login – Bug` keeps its text.
+v0.287 title with its hair-space fill still matches. A status-less head
+(`┃ Shipping 🚀 `) is stripped too: an older plugin takes the leading `⏳ ` for
+its bare prefix and stacks its own in front (`⏳ 🧭 Concept – ┃ Shipping 🚀 X`).
+Only known prefixes are stripped; `⏳ Fix Login – Bug` keeps its text.
 
 **Process prefixes outrank the hourglass.** Two prefixes name a running
 process rather than an outcome: `⏳ ┃ Shipping 🚀 ` (the ship pipeline) and
