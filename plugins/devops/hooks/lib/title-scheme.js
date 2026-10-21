@@ -1,6 +1,6 @@
 /**
  * @module title-scheme
- * @version 2.1.0
+ * @version 2.1.1
  * @description The ONE table behind the session title and the completion
  *   card's CTA heading (concept 2026-10-21 "title-iconography").
  *
@@ -302,7 +302,10 @@ const ORPHAN_HEADS = Object.freeze([...new Set(
 
 /**
  * Length of `prefix` at the start of `t`, ignoring FE0F and U+200A on both
- * sides, or -1.
+ * sides, or -1. A space in `prefix` takes a whole run of spaces in `t`: the
+ * Desktop app stores the 2.0.0 hair-space fill as plain U+0020 (observed
+ * 2026-10-21, "┃" + 25 spaces + "Solo 🤖"), and a fill the matcher missed
+ * left every older head on the title, stacked one per turn.
  * @param {string} t
  * @param {string} prefix
  * @returns {number}
@@ -316,6 +319,7 @@ function matchLength(t, prefix) {
     if (skip(t[i])) { i++; continue; }
     if (i >= t.length || t[i] !== prefix[j]) return -1;
     i++; j++;
+    if (prefix[j - 1] === ' ') while (t[i] === ' ' || skip(t[i])) i++;
   }
   return i;
 }
