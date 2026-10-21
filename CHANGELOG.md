@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.284.0] — 2026-10-21
+
+Foreign issues come with a verdict instead of a bare "fremd" line, and `/do-learn` issues carry the version they were filed against.
+
+### Added
+- **Review of foreign issues.** `/do-run backlog` and `burn` still keep third-party issues out of the queue, but now review each one read-only: a linked PR or commit, a fix since the version the issue reports, an own duplicate, current code that no longer behaves that way. Every issue gets one verdict — ✅ erledigt · 🔁 Duplikat · 🟡 teilweise · 🆕 übernehmen · ⛔ ablehnen · ❓ unklar — with a concrete recommendation and its evidence, shown in the presence phase and in the report (`deep-knowledge/issue-trust.md` → "Reviewing a dropped issue"). Closing, commenting or carrying an issue over stays the user's yes.
+- **Environment block in `/do-learn` issues.** Upstream issues (branch B) end with plugin version, Claude Code version and surface, model and OS, read in the session; branch D adds it when the learning concerns tool behaviour. The foreign-issue review uses it to tell whether a fix landed after the reported version.
+
 ## [0.283.0] — 2026-10-21
 
 Concept design pages: the favourite star in the design header is clickable, like the eye and the comment pin beside it.
