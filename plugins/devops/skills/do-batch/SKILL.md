@@ -49,8 +49,8 @@ it is why they invoked the skill in the first place.
 **While the mode is on, the hook absorbs a re-activation.** `/do-batch`,
 `/do-batch on`, `/do-batch <text>` and `/do-batch help` are blocked
 by `prompt.batch.collect.js` (`classify` → `rearm`): free text becomes a note,
-`help` prints `renderHelp`, and otherwise the user sees the mode summary
-(`renderModeSummary`) instead of paying a turn.
+`help` prints `renderHelp`, and otherwise the user sees the short rearm panel
+(status line + `renderCommandLines`) instead of paying a turn.
 You only see such an invocation when it carried an attachment — then it is the
 content fallback, filed per Step 2.6. `off`, `go`, `status` and `marker` always
 reach you.

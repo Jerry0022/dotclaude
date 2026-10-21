@@ -11,6 +11,7 @@ import {
   classify, willBeCollected, notesPath, modePath,
   loadConfig, saveConfig, configPath, effectiveMarker,
   parseBatchCommand, renderModeSummary, describeMode, renderHelp,
+  PANEL_ICONS, renderCommandLines, renderAutoEndNotice,
   DEFAULTS, HARNESS_RESERVED_PREFIXES, MARKER_SUGGESTIONS,
 } from "./batch-state.js";
 
@@ -768,13 +769,13 @@ describe("mode summary — one block, three places", () => {
   test("names every exit and the auto-end bounds", () => {
     const s = renderModeSummary({ marker: ">go", count: 4, expiryHours: 8, maxNotes: 100 });
     expect(s).toContain("Sammelmodus AKTIV · 4 Notiz(en) · Marker \">go\"");
-    expect(s).toContain(".claude/batch.md");
-    expect(s).toContain("Eingabe blockiert");
+    expect(s).toContain("Jeder Prompt ohne Marker wird Notiz");
+    expect(s).toContain("kein Fehler");
     expect(s).toContain("\">go <text>\"");
     expect(s).toContain("/do-batch go");
     expect(s).toContain("/do-batch off");
     expect(s).toContain("main");
-    expect(s).toContain("8 Stunden oder 100 Notizen");
+    expect(s).toContain("8 h oder 100 Notizen");
   });
 
   test("describeMode reads the pinned bounds and the live note count", () => {
@@ -784,7 +785,7 @@ describe("mode summary — one block, three places", () => {
     const s = describeMode(cwd);
     expect(s).toContain("2 Notiz(en)");
     expect(s).toContain("Marker \">start\"");
-    expect(s).toContain("2 Stunden oder 7 Notizen");
+    expect(s).toContain("2 h oder 7 Notizen");
   });
 });
 
@@ -820,12 +821,40 @@ describe("help route and the long-form summary", () => {
 
   test("the short summary points at status, marker and help in one line", () => {
     const s = renderModeSummary({ marker: ">>" });
-    const line = s.split("\n").find((l) => l.includes("Sonstiges"));
+    const line = s.split("\n").find((l) => l.includes("Auto-Ende"));
     expect(line).toBeTruthy();
     expect(line).toContain("status");
-    expect(line).toContain("marker (Marker ändern)");
+    expect(line).toContain("marker");
     expect(line).toContain("help");
-    expect(s).toContain("auch nach dem Auto-Ende");
+    expect(s).toContain("/do-batch on sammelt weiter");
+  });
+
+  test("the command lines are three icon-led lines", () => {
+    const lines = renderCommandLines({ marker: ">go", expiryHours: 3, maxNotes: 50 }).split("\n");
+    expect(lines).toHaveLength(3);
+    expect(lines[0].startsWith(`${PANEL_ICONS.fire} Umsetzen:`)).toBe(true);
+    expect(lines[1].startsWith(`${PANEL_ICONS.stop} Stoppen:`)).toBe(true);
+    expect(lines[2].startsWith(`${PANEL_ICONS.autoEnd} Auto-Ende:`)).toBe(true);
+    expect(lines[2]).toContain("3 h oder 50 Notizen");
+  });
+
+  test("panel icons never reuse an icon another devops surface already owns", () => {
+    // Session titles, completion card, concept, ship: a shared icon would read
+    // as a session state instead of a note.
+    const taken = ["⏳", "👉", "✓", "✗", "✅", "❌", "🚀", "⚠", "✨", "📥", "📦", "🧭", "🧪", "🟩", "🟥",
+      "⏸", "🎊", "🧾", "🤖", "⚡", "🧩", "📋", "📝", "❓", "⛔", "🚫", "✋", "🔧", "🔄", "📎"];
+    for (const icon of Object.values(PANEL_ICONS)) {
+      for (const t of taken) expect(icon.includes(t), `${icon} reuses ${t}`).toBe(false);
+    }
+  });
+
+  test("the auto-end notice appears only near the end", () => {
+    expect(renderAutoEndNotice({ count: 10, maxNotes: 100 })).toBe("");
+    expect(renderAutoEndNotice({ count: 97, maxNotes: 100 })).toContain("Nur noch 3 Notizen");
+    expect(renderAutoEndNotice({ count: 99, maxNotes: 100 })).toContain("Nur noch 1 Notiz ");
+    const now = Date.parse("2026-10-21T12:00:00Z");
+    expect(renderAutoEndNotice({ count: 1, maxNotes: 100, expiresAt: "2026-10-21T13:00:00Z", now })).toBe("");
+    expect(renderAutoEndNotice({ count: 1, maxNotes: 100, expiresAt: "2026-10-21T12:20:00Z", now })).toContain("Auto-Ende in 20 min");
   });
 
   test("re-arming after an auto-end keeps the collected notes", () => {
