@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.284.5] — 2026-10-21
+
+The answer block in the completion card reads like the rest of the card: normal weight, 14 px, paragraph gaps, list bullets.
+
+### Fixed
+- **Answer block styled like the card body.** `mcp-server/lib/answer-markdown.js` emitted bare `<p>`, `<ul>`, `<li>`, `<strong>` and `<code>` without styles, so on the Desktop app the answer inherited the widget host's base typography — everything bold and large, lists without bullets, no paragraph gaps, code without a background — while the rest of the card sets size, weight and colour inline. Every element of the answer HTML now carries inline styles from the card body (14 px / weight 400 / `var(--text-primary)`, paragraph margins, `disc`/`decimal` list markers, `strong` 600, `code` 12.5 px monospace on a subtle `color-mix` background, `pre` block, `h4`–`h6` 14 px / 600). Host tokens only. Pinned by a typography test in `answer-markdown.test.js`.
+
 ## [0.284.4] — 2026-10-21
 
 The answer to a question reaches the user on the Desktop app: it goes into the completion card's `answer` field instead of prose before the card.

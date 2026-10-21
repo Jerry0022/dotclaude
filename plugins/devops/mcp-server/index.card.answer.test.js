@@ -55,7 +55,7 @@ describe("render_completion_card — answer field (#757)", () => {
       answer: "Die Antwort: **ja** <script>alert(1)</script>",
     }));
     const all = allText(res);
-    expect(all).toContain("<strong>ja</strong>");
+    expect(all).toContain('<strong style="font-weight:600">ja</strong>');
     expect(all).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(all).not.toContain("<script>alert(1)");
     expect(all.indexOf('class="dc-answer"')).toBeGreaterThanOrEqual(0);
