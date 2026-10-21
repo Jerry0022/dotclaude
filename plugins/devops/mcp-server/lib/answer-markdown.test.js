@@ -24,7 +24,9 @@ describe("answerHtml", () => {
   });
 
   test("headings, lists, code, emphasis, paragraphs", () => {
-    const h = answerHtml("# Titel\n\n- eins\n- **zwei**\n\n1. a\n2. b\n\nText `a<b` und *kursiv*\nneue Zeile\n\n```\nif (a < b) {}\n```");
+    // Structure only — the inline styles are checked in the next test.
+    const h = answerHtml("# Titel\n\n- eins\n- **zwei**\n\n1. a\n2. b\n\nText `a<b` und *kursiv*\nneue Zeile\n\n```\nif (a < b) {}\n```")
+      .replace(/ style="[^"]*"/g, "");
     expect(h).toContain("<h4>Titel</h4>");
     expect(h).toContain("<ul><li>eins</li><li><strong>zwei</strong></li></ul>");
     expect(h).toContain("<ol><li>a</li><li>b</li></ol>");
@@ -33,6 +35,19 @@ describe("answerHtml", () => {
     expect(h).toContain("<br>neue Zeile");
     expect(h).toContain("<pre><code>if (a &lt; b) {}</code></pre>");
     expect(h.startsWith('<div class="dc-answer"')).toBe(true);
+  });
+
+  // Reported: unstyled, the answer inherited the widget host's base type —
+  // everything bold and large, lists without bullets, no paragraph gaps.
+  test("every element carries the card's own typography inline", () => {
+    const h = answerHtml("**fett** Text `code`\n\n- eins\n\n1. a");
+    expect(h).toMatch(/^<div class="dc-answer" style="[^"]*font-size:14px;font-weight:400;[^"]*color:var\(--text-primary\)/);
+    expect(h).toMatch(/<p style="margin:0 0 8px">/);
+    expect(h).toMatch(/<strong style="font-weight:600">fett<\/strong>/);
+    expect(h).toMatch(/<ul style="[^"]*padding-left:20px;list-style:disc">/);
+    expect(h).toMatch(/<ol style="[^"]*list-style:decimal">/);
+    expect(h).toMatch(/<li style="margin:2px 0">eins<\/li>/);
+    expect(h).toMatch(/<code style="[^"]*font-size:12.5px[^"]*">code<\/code>/);
   });
 
   test("an oversized answer is capped", () => {
