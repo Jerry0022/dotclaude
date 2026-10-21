@@ -487,3 +487,53 @@ describe("currentSessionTitle", () => {
     }
   });
 });
+
+// #785: a running ship — also a delegated one in a subagent — owns the title.
+// A card that does not end the ship never puts the compass back over
+// `⏳ 🚀 Shipping – `; ship-ending cards and an unknown title keep the old rules.
+describe("titlePrefixFor — a running ship outranks a waiting concept", () => {
+  const shipping = "⏳ 🚀 Shipping – v0.12 Stationen";
+
+  test("a waiting concept card leaves the shipping title (no rename)", () => {
+    const prefix = titlePrefixFor({ variant: "ready", concept: { phase: "waiting" } }, { ...deps, current: shipping });
+    expect(prefix).toBeNull();
+    expect(titleInstruction(prefix, shipping)).toBe("");
+  });
+
+  test("ship-ending cards still replace the shipping prefix", () => {
+    expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" } }, { ...deps, current: shipping }))
+      .toBe(SESSION_PREFIX["released-alpha"]);
+    expect(titlePrefixFor({ variant: "ship-blocked" }, { ...deps, current: shipping })).toBe(SESSION_PREFIX.blocked);
+    expect(titlePrefixFor({ variant: "ship-successful", concept: { phase: "waiting" } }, { ...deps, current: shipping }))
+      .toBe(SESSION_PREFIX["concept-waiting"]);
+  });
+
+  test("without a shipping title, or with an unknown one, a waiting concept still gets the compass", () => {
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "waiting" } }, { ...deps, current: "⏳ v0.12 Stationen" }))
+      .toBe(SESSION_PREFIX["concept-waiting"]);
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "waiting" } }, { ...deps, current: null }))
+      .toBe(SESSION_PREFIX["concept-waiting"]);
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "waiting" } }, deps)).toBe(SESSION_PREFIX["concept-waiting"]);
+  });
+
+  test("an iterating concept keeps its working prefix", () => {
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "iterating" } }, { ...deps, current: shipping }))
+      .toBe(SESSION_PREFIX["concept-working"]);
+  });
+
+  test("the conditional concept path leaves the shipping title for the owner", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "devops-title-ship-"));
+    try {
+      mkdirSync(join(cwd, ".claude"));
+      writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html" }));
+      mkdirSync(join(cwd, "docs", "concepts"), { recursive: true });
+      writeFileSync(join(cwd, "docs", "concepts", "x.html"), "<!doctype html>");
+      expect(titlePrefixFor({ variant: "ready", cwd }, { ...deps, current: shipping }))
+        .toEqual({ owned: null, other: SESSION_PREFIX.ready });
+      expect(titlePrefixFor({ variant: "ready", cwd }, { ...deps, current: "⏳ v0.12 Stationen" }))
+        .toEqual({ owned: SESSION_PREFIX["concept-waiting"], other: SESSION_PREFIX.ready });
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+});

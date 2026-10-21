@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.284.1] — 2026-10-21
+
+A running ship keeps its sidebar title instead of falling back to a stale concept title.
+
+### Fixed
+- **Shipping title outranks a waiting concept (#785).** While the session title reads `⏳ 🚀 Shipping – …` — also during a delegated ship in a subagent — a completion card with `concept: { phase: "waiting" }` no longer puts `👉 🧭 Concept – ` back. Only a card that ends the ship (`ship-successful`, `released`, `ship-blocked`, `aborted`) replaces the shipping prefix; without a shipping title a waiting concept still gets the compass (`deep-knowledge/session-title-scheme.md`).
+
 ## [0.284.0] — 2026-10-21
 
 Foreign issues come with a verdict instead of a bare "fremd" line, and `/do-learn` issues carry the version they were filed against.

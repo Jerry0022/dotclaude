@@ -58,7 +58,9 @@ inline that way, the largest at 951 k.
    args>]". session_id: <this session's id>. lang: <the user's language>.` and
    then carries the brief. A title that already starts with `⏳ 🚀 Shipping – `
    stays. Otherwise apply Pre-Step C here, because a subagent cannot rename the
-   session it runs in.
+   session it runs in. The shipping title holds until the `done` result: any
+   other card the parent renders meanwhile (a waiting concept included) leaves
+   it (#785) — only the `done` result's `titlePrefix` replaces it.
 5. **Result.** First relay the agent card that `pre.agent.announce` handed you
    for the spawn, verbatim: it is hook output, not text of your own, and
    `pre.agent.relay` holds the next tool call until it is shown. The agent's

@@ -205,20 +205,30 @@ function variantOutcome(params) {
  * session that runs the concept restores the concept prefix, any other
  * session — or the turn that closes the concept out — gets the plain outcome.
  *
+ * A running ship outranks a waiting concept (#785): while the current title
+ * is `⏳ 🚀 Shipping – ` (also a delegated ship in a subagent), a card that
+ * does not end the ship never puts the compass back — the waiting prefix
+ * becomes `null` ("leave it"). A ship-ending card (`SHIP_ENDING_VARIANTS`)
+ * and an unknown current title keep the rules above.
+ *
  * Pending background work outranks the outcome: `⏳ 🤖 Agents – `.
  * Otherwise the outcome is `deps.outcome(params)` — the card computes it from
  * the same decision key its CTA heading uses (title = CTA) — or, without it,
  * the variant's state.
  *
  * @param {object} params card params
- * @param {{ hasPending: (p: unknown) => boolean, hasConcept: (c: unknown) => boolean, outcome?: (params: object) => string }} deps
- * @returns {string|null|{ owned: string, other: string|null }}
+ * @param {{ hasPending: (p: unknown) => boolean, hasConcept: (c: unknown) => boolean, outcome?: (params: object) => string, current?: string|null }} deps
+ *   `current` — the session title now (`currentSessionTitle`), `null` when unknown
+ * @returns {string|null|{ owned: string|null, other: string|null }}
  */
-export function titlePrefixFor(params, { hasPending, hasConcept, outcome }) {
+export function titlePrefixFor(params, { hasPending, hasConcept, outcome, current = null }) {
   const outcomeOf = (pending) => (pending ? SESSION_PREFIX.agents : (outcome || variantOutcome)(params));
+  const shipRunning = typeof current === "string" && S.classify(current) === "shipping"
+    && !SHIP_ENDING_VARIANTS.has(params.variant);
+  const waiting = shipRunning ? null : SESSION_PREFIX["concept-waiting"];
   if (hasConcept(params.concept)) {
     return conceptPhase(params.concept) === "waiting"
-      ? SESSION_PREFIX["concept-waiting"]
+      ? waiting
       : SESSION_PREFIX["concept-working"];
   }
   if (conceptUrl(params.cwd, undefined)) {
@@ -229,7 +239,7 @@ export function titlePrefixFor(params, { hasPending, hasConcept, outcome }) {
       return readBatch(params.cwd) ? null : outcomeOf(pending);
     }
     return {
-      owned: pending ? SESSION_PREFIX["concept-working"] : SESSION_PREFIX["concept-waiting"],
+      owned: pending ? SESSION_PREFIX["concept-working"] : waiting,
       other: readBatch(params.cwd) ? null : outcomeOf(pending),
     };
   }
@@ -368,6 +378,9 @@ function knownTitleInstruction(prefix, current) {
 /** Variants that follow a merged ship — the ones a close-out-only concept
  *  must not pull back to the compass (#693). */
 const SHIP_OUTCOME_VARIANTS = new Set(["ship-successful", "released"]);
+/** Variants that end a running ship — the cards that may replace
+ *  `⏳ 🚀 Shipping – ` (#785); every other card leaves a running ship's title. */
+const SHIP_ENDING_VARIANTS = new Set([...SHIP_OUTCOME_VARIANTS, "ship-blocked", "aborted"]);
 
 /**
  * True when the project's open concept has nothing left but its close-out:
