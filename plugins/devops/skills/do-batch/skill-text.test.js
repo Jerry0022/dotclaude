@@ -15,7 +15,9 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SESSION_PREFIX } from "../../mcp-server/lib/mode-state.js";
+import { SESSION_PREFIX as RAW_PREFIX } from "../../mcp-server/lib/mode-state.js";
+// Docs spell the prefixes without the hair-space fill the code inserts.
+const SESSION_PREFIX = Object.fromEntries(Object.entries(RAW_PREFIX).map(([k, v]) => [k, v.replace(/\u200A/g, "")]));
 
 const here = dirname(fileURLToPath(import.meta.url));
 const skill = readFileSync(join(here, "SKILL.md"), "utf8");
@@ -82,7 +84,7 @@ describe("do-batch SKILL.md — session title prefix", () => {
     expect(step2).toMatch(/no `get_session`/);
     // The activation card must see the mode file — that is how it swaps its CTA.
     expect(step2).toMatch(/completion\s+card \*\*with `cwd` set to the project root\*\*/);
-    expect(step2).toContain("📥 BATCH sammelt");
+    expect(step2).toContain("┃ Batch 📚");
   });
 
   it("every way out strips the prefix: go, off, expiry", () => {

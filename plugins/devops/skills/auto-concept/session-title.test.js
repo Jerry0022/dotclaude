@@ -3,7 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readSkill } from "./skill-source.js";
-import { SESSION_PREFIX } from "../../mcp-server/lib/mode-state.js";
+import { SESSION_PREFIX as RAW_PREFIX } from "../../mcp-server/lib/mode-state.js";
+// Docs spell the prefixes without the hair-space fill the code inserts.
+const SESSION_PREFIX = Object.fromEntries(Object.entries(RAW_PREFIX).map(([k, v]) => [k, v.replace(/\u200A/g, "")]));
 
 // A concept turns the session into a waiting room, and from the sidebar that
 // is invisible: the dot says idle, the user types the next task into a session

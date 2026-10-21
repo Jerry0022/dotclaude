@@ -3,10 +3,12 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import TITLE_SCHEME_MOD from "../lib/title-scheme.js";
+const F = TITLE_SCHEME_MOD.withFill;
 
 // F5 end to end through the real Stop hook: a turn that ends WITHOUT a card
 // while the session title is still the bare "⏳ " is blocked once with the
-// exact rename to "👉 ⚡ Interrupted – …". A batch title (a batch turn without
+// exact rename to "👉 ┃ Interrupted ⚡ …". A batch title (a batch turn without
 // a card is intended), a waiting concept and a running ship stay untouched,
 // and the follow-up stop always passes — never a loop.
 const STOP_HOOK = path.join(__dirname, "stop.flow.guard.js");
@@ -65,14 +67,14 @@ describe("stop.flow.guard — F5 interrupted title", () => {
       const out = await stop(dir, { transcript_path });
       expect(out).toMatch(/"decision":"block"/);
       const reason = JSON.parse(out).reason;
-      expect(reason).toContain('mcp__ccd_session_mgmt__set_session_title {session_id:"self", title:"👉 ⚡ Interrupted – Refactor"}');
+      expect(reason).toContain('mcp__ccd_session_mgmt__set_session_title {session_id:"self", title:' + JSON.stringify(F("👉 ┃ Interrupted ⚡ Refactor")) + "}");
       expect(reason).toMatch(/no get_session/);
       expect(reason).toMatch(/no card/);
       expect(reason).not.toContain("render_completion_card");
       // The follow-up stop passes even though the transcript still says ⏳ — no loop.
       expect(await stop(dir, { transcript_path, stop_hook_active: true })).toBe("");
       // The marker is consumed: a later card-less turn on a bare ⏳ is renamed again.
-      expect(await stop(dir, { transcript_path })).toMatch(/Interrupted – Refactor/);
+      expect(await stop(dir, { transcript_path })).toMatch(/Interrupted ⚡ Refactor/);
     } finally {
       cleanup(dir);
     }
@@ -82,7 +84,7 @@ describe("stop.flow.guard — F5 interrupted title", () => {
     const dir = project();
     try {
       const out = await stop(dir, { transcript_path: transcript(dir, "⏳ Working – Refactor") });
-      expect(out).toContain("👉 ⚡ Interrupted – Refactor");
+      expect(out).toContain(F("👉 ┃ Interrupted ⚡ Refactor"));
     } finally {
       cleanup(dir);
     }
@@ -90,10 +92,10 @@ describe("stop.flow.guard — F5 interrupted title", () => {
 
   test("batch, a waiting concept, a running ship and every named state stay untouched", async () => {
     for (const title of [
-      "👉 📥 Batch – Ideen", "📥 Batch – Ideen",
-      "👉 🧭 Concept – Billing", "🧭 Concept – Billing", "⏳ 🧭 Concept – Billing",
-      "⏳ 🚀 Shipping – Login-Fix", "🚀 Shipping – Login-Fix",
-      "⏳ 🤖 Agents – Refactor", "🟩 🚀 Released Alpha – Login-Fix", "👉 ⚡ Interrupted – Refactor",
+      F("👉 ┃ Batch 📚 Ideen"), "📥 Batch – Ideen",
+      F("👉 ┃ Concept 🧭 Billing"), "🧭 Concept – Billing", F("⏳ ┃ Concept 🧭 Billing"),
+      F("⏳ ┃ Shipping 🚀 Login-Fix"), "🚀 Shipping – Login-Fix",
+      F("⏳ ┃ Team 🤖 Refactor"), F("🟩 ┃ Alpha 🚀 Login-Fix"), F("👉 ┃ Interrupted ⚡ Refactor"),
       "Plain title",
     ]) {
       const dir = project();

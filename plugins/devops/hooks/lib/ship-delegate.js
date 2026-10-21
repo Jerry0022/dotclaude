@@ -260,7 +260,7 @@ function shipResumeInstruction({ resume, delegate, pluginRoot, sessionId = '', n
     'the checkpoint and git/gh are the truth. Steps marked ✓ are never repeated (no second bump, PR or tag).',
     ...how,
     decisions,
-    'The session title stays "⏳ 🚀 Shipping – " and the turn ends with the ship\'s own card (Released / Blocked).',
+    'The session title stays "⏳ ┃ Shipping 🚀 " and the turn ends with the ship\'s own card (Released / Blocked).',
   ].filter(Boolean).join('\n');
 }
 

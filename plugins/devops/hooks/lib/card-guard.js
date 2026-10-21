@@ -393,7 +393,7 @@ function extractPoints(cardText) {
  *  open points (❓ / 👉) count: the steps to test are never folded (#750). */
 function pointsViolation(points, heading) {
   if (!Array.isArray(points)) return null;
-  const counted = /🧪 Test\b/.test(heading || '')
+  const counted = /Test 🧪/.test(heading || '')
     ? points.filter(p => /^\d+\.\s+(❓|👉)\s/.test(p))
     : points;
   if (counted.length <= 3) return null;
@@ -830,12 +830,12 @@ function buildBlockReason(pluginRoot, opts = {}) {
     'PENDING (orthogonal to the variant): if background subagents, workflows or',
     'tasks you started are STILL running, also pass `pending` — [{ name, kind,',
     'doing }] with kind "agent" | "task" | "workflow" — naming each. It replaces',
-    'the CTA with "⏳ 🤖 Agents — noch nicht fertig … ich melde mich", so the card never asks',
+    'the CTA with "⏳ ┃ Team 🤖 — noch nicht fertig … ich melde mich", so the card never asks',
     'the user to act on a result that does not exist yet. Never put an internal',
     'agentId in the card; use the agent type / workflow name / task label.',
     'CONCEPT (outranks pending): if a /auto-concept page is OPEN, pass `concept` —',
     '{ phase: "waiting" | "iterating" | "implementing" } — and the CTA becomes',
-    '"👉 🧭 Concept — wartet auf deine Entscheidungen" / "⏳ 🧭 Concept — in Iteration /',
+    '"👉 ┃ Concept 🧭 — wartet auf deine Entscheidungen" / "⏳ ┃ Concept 🧭 — in Iteration /',
     'in Implementierung — ich MELDE mich". The bridge',
     'server, keepalive pulser and pickup waker are infrastructure, NOT pending —',
     'never list them; this gate ignores them.',
@@ -986,7 +986,7 @@ function buildPendingReason(names) {
     '',
     'Keep the variant and every other field as they were — the body still reports',
     'what IS true. `pending` only corrects the last line, to',
-    '"⏳ 🤖 Agents — noch nicht fertig … — ich melde mich".',
+    '"⏳ ┃ Team 🤖 — noch nicht fertig … — ich melde mich".',
     '',
     'Use the names listed above. NEVER put an internal agentId in the card.',
     'If a /auto-concept page is open, ALSO pass `concept: { phase }` — the concept CTA',

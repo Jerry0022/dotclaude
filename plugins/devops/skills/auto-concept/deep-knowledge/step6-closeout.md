@@ -39,11 +39,11 @@ duplicate watcher) is a silent turn: no text, no title change.
 
 **Restore the session title** (Desktop app only — skip silently elsewhere; deferred is not unavailable — load both tools via `ToolSearch` first, `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`):
 `mcp__ccd_session_mgmt__get_session` `self`; strip every leading devops
-prefix (`👉 🧭 Concept – `, `⏳ `, `⏳ 🚀 Shipping – `, … — the `SESSION_PREFIX`
+prefix (`👉 ┃ Concept 🧭 `, `⏳ `, `⏳ ┃ Shipping 🚀 `, … — the `SESSION_PREFIX`
 and `LEGACY_PREFIXES` values). If part C shipped successfully, its ship card
 is the closing artefact and no Step 6b card follows — set
-`"🟩 🚀 Released Alpha – " + {stripped title}`. Otherwise set the stripped title; the
-final card (Step 6b) then sets the outcome prefix (`👉 📦 Ready – `, …). A
+`"🟩 ┃ Alpha 🚀 " + {stripped title}`. Otherwise set the stripped title; the
+final card (Step 6b) then sets the outcome prefix (`👉 ┃ Ready 📦 `, …). A
 title without any prefix is left untouched — the user renamed it meanwhile,
 and that name wins.
 

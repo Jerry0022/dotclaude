@@ -45,14 +45,14 @@ function rest(current) {
  * two-slot grammar (R1) and check the running ship first:
  *
  * User prompt (`prefix` = WORK_PREFIX): the batch title is owned by its
- * skill; a running `⏳ 🚀 Shipping – ` (or its legacy form) is never
+ * skill; a running `⏳ ┃ Shipping 🚀 ` (or its legacy form) is never
  * replaced, nor is any other ⏳ process (Concept working, Agents, Testing);
  * a bare `⏳ ` title is already marked (the legacy `⏳ Working – ` is not).
  * Every other prefix — a waiting concept and every outcome — yields to the
  * bare hourglass; the turn's card sets the next state.
  *
  * A ship (`prefix` = SHIPPING_PREFIX): everything but the batch and an
- * already running ship becomes `⏳ 🚀 Shipping – ` (a legacy
+ * already running ship becomes `⏳ ┃ Shipping 🚀 ` (a legacy
  * `🚀 Shipping – ` is upgraded).
  *
  * Machine turn (a task notification): any known prefix stays — only a plain
@@ -89,7 +89,7 @@ function nextTitle(current, { prefix = WORK_PREFIX, machine = false } = {}) {
 
 /**
  * The title arming /do-batch leaves (activation.md § Session title prefix):
- * `👉 📥 Batch – ` in front, every known prefix stripped first so prefixes
+ * `👉 ┃ Batch 📚 ` in front, every known prefix stripped first so prefixes
  * never stack. `null` when unknown, already marked, or nothing is left.
  *
  * @param {string|null} current
@@ -104,7 +104,7 @@ function batchTitle(current) {
 
 /**
  * The title retiring /do-batch leaves (merge.md § Retire): exactly the
- * leading batch prefix removed (`👉 📥 Batch – `, or the legacy
+ * leading batch prefix removed (`👉 ┃ Batch 📚 `, or the legacy
  * `📥 Batch – `). `null` when the title does not carry it — a title the
  * user renamed meanwhile wins — or nothing would be left.
  *
@@ -120,7 +120,7 @@ function unbatchTitle(current) {
 /**
  * F5: the title a turn that ended WITHOUT a completion card leaves. Only a
  * bare `⏳ ` (generic work, or the legacy `⏳ Working – `) becomes
- * `👉 ⚡ Interrupted – <title>`; a batch, a waiting concept, a running ship
+ * `👉 ┃ Interrupted ⚡ <title>`; a batch, a waiting concept, a running ship
  * and every other named state stay (`null`).
  *
  * @param {string|null} current

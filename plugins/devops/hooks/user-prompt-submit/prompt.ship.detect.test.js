@@ -134,7 +134,7 @@ describe("prompt.ship.detect — delegated ship on a large context", () => {
 
   test("an affirmation to a ship-asking card is a ship too, and is delegated the same way", () => {
     const t = transcript(500_000);
-    append(t, textCard("👉 📦 Ready — Shippen?"));
+    append(t, textCard("👉 ┃ Ready 📦 — Shippen?"));
     const r = runHook({ prompt: "ja", transcript_path: t });
     expect(r.stdout).toContain("[ship-delegate]");
   });
@@ -194,22 +194,22 @@ describe("prompt.ship.detect — a bare affirmation ships only after a ship-aski
   });
 
   test.each(["ja", "yes", "ok", "passt", "Ja.", "OK!"])("%j after a ready card that asks to ship → ship", (prompt) => {
-    const r = runHook({ prompt, transcript_path: cardTranscript(textCard("👉 📦 Ready — Shippen?")) });
+    const r = runHook({ prompt, transcript_path: cardTranscript(textCard("👉 ┃ Ready 📦 — Shippen?")) });
     expect(r.stdout).toContain(SHIPS);
   });
 
   test("a test card with the ship question counts", () => {
-    const r = runHook({ prompt: "ja", transcript_path: cardTranscript(textCard("👉 🧪 Test — Erst testen, dann shippen?")) });
+    const r = runHook({ prompt: "ja", transcript_path: cardTranscript(textCard("👉 ┃ Test 🧪 — Erst testen, dann shippen?")) });
     expect(r.stdout).toContain(SHIPS);
   });
 
   test("the Desktop widget card with the ship question counts", () => {
-    const r = runHook({ prompt: "ja", transcript_path: cardTranscript(widgetCard("👉 📦 Ready — Shippen?", ["ship", "Ändern"])) });
+    const r = runHook({ prompt: "ja", transcript_path: cardTranscript(widgetCard("👉 ┃ Ready 📦 — Shippen?", ["ship", "Ändern"])) });
     expect(r.stdout).toContain(SHIPS);
   });
 
   test("the current prompt already in the transcript does not hide the card", () => {
-    const t = cardTranscript(textCard("👉 📦 Ready — Shippen?"));
+    const t = cardTranscript(textCard("👉 ┃ Ready 📦 — Shippen?"));
     append(t, userPrompt("ja"));
     expect(runHook({ prompt: "ja", transcript_path: t }).stdout).toContain(SHIPS);
   });
@@ -220,15 +220,15 @@ describe("prompt.ship.detect — a bare affirmation ships only after a ship-aski
   });
 
   test("real case: a question asked after the card → no ship", () => {
-    const r = runHook({ prompt: "ja", transcript_path: cardTranscript(textCard("👉 📦 Ready — Shippen?"), assistantText("Soll ich auch die Tests anpassen?")) });
+    const r = runHook({ prompt: "ja", transcript_path: cardTranscript(textCard("👉 ┃ Ready 📦 — Shippen?"), assistantText("Soll ich auch die Tests anpassen?")) });
     expect(r.stdout).not.toContain(SHIPS);
   });
 
   test("real case: a ship-successful card + 'ja, passt' → no ship", () => {
     for (const card of [
-      textCard("🟩 🚀 Released Alpha — v0.212.0 — nach Beta promoten?"),
-      widgetCard("🟩 🚀 Released Alpha — v0.212.0 — nach Beta promoten?", ["promote beta"]),
-      textCard("🟩 🎊 Promoted Beta — v0.212.0 — nach Stable?"),
+      textCard("🟩 ┃ Alpha 🚀 — v0.212.0 — nach Beta promoten?"),
+      widgetCard("🟩 ┃ Alpha 🚀 — v0.212.0 — nach Beta promoten?", ["promote beta"]),
+      textCard("🟩 ┃ Beta 🎊 — v0.212.0 — nach Stable?"),
     ]) {
       const r = runHook({ prompt: "ja, passt", transcript_path: cardTranscript(card) });
       expect(r.stdout).not.toContain(SHIPS);
@@ -237,7 +237,7 @@ describe("prompt.ship.detect — a bare affirmation ships only after a ship-aski
 
   test("real case: a ship card three messages back → no ship", () => {
     const t = cardTranscript(
-      textCard("👉 📦 Ready — Shippen?"),
+      textCard("👉 ┃ Ready 📦 — Shippen?"),
       userPrompt("erklär mir noch den cache"), assistantText("Der Cache liest …"),
       userPrompt("und die Hooks?"), assistantText("Die Hooks laufen …"),
       userPrompt("danke"), assistantText("Gern."),
@@ -246,10 +246,10 @@ describe("prompt.ship.detect — a bare affirmation ships only after a ship-aski
   });
 
   test.each([
-    ["analysis", "🟩 📋 Analysis — gelesen — umsetzen oder Fragen?"],
-    ["concept waiting", "👉 🧭 Concept — Entscheidungen offen — im Konzept entscheiden?"],
-    ["question", "👉 ❓ Question — Wartet auf dich: Port 3000 oder 8080 — wie entscheidest du?"],
-    ["ship-blocked", "👉 ⛔ Blocked — Lint umgehen und trotzdem shippen?"],
+    ["analysis", "🟩 ┃ Analysis 📊 — gelesen — umsetzen oder Fragen?"],
+    ["concept waiting", "👉 ┃ Concept 🧭 — Entscheidungen offen — im Konzept entscheiden?"],
+    ["question", "👉 ┃ Question ❓ — Wartet auf dich: Port 3000 oder 8080 — wie entscheidest du?"],
+    ["ship-blocked", "👉 ┃ Blocked 🚧 — Lint umgehen und trotzdem shippen?"],
   ])("a %s card + ja → no ship", (_name, heading) => {
     const r = runHook({ prompt: "ja", transcript_path: cardTranscript(textCard(heading)) });
     expect(r.stdout).not.toContain(SHIPS);
@@ -261,7 +261,7 @@ describe("prompt.ship.detect — a bare affirmation ships only after a ship-aski
 
   test("a ship-asking card but nothing unshipped on the branch → no ship", () => {
     nothingUnshipped();
-    const r = runHook({ prompt: "ja", transcript_path: cardTranscript(textCard("👉 📦 Ready — Shippen?")) });
+    const r = runHook({ prompt: "ja", transcript_path: cardTranscript(textCard("👉 ┃ Ready 📦 — Shippen?")) });
     expect(r.stdout).not.toContain(SHIPS);
   });
 
@@ -402,7 +402,7 @@ describe("prompt.ship.detect — resume an interrupted ship", () => {
     expect(r.stdout).toContain("bump 1.0.0 → 1.1.0 ✓");
     expect(r.stdout).toContain('with args "--resume"');
     expect(r.stdout).not.toContain(INLINE + " to execute the full shipping pipeline");
-    expect(r.stdout).toContain("🚀 Shipping – ");
+    expect(r.stdout).toContain("┃ Shipping 🚀 ");
   });
 
   test("a large context resumes it in the subagent with the stored brief and decisions", async () => {
