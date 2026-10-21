@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.290.1] — 2026-10-21
+
+Session titles no longer stack `┃ Solo 🤖` heads turn after turn.
+
+### Fixed
+- **Plain-space fill is recognised.** The Desktop app stores the 2.0.0 hair-space fill of a title head as plain spaces (`┃` + 25 spaces + `Solo 🤖`). The title matcher only tolerated U+200A, missed those heads and every turn put one more in front. A space in a known prefix now takes a whole run of spaces (`hooks/lib/title-scheme.js`). A session whose card still runs an older plugin server keeps writing the legacy `👉 🧪 Test – ` head until it restarts; the next prompt then clears it.
+
 ## [0.290.0] — 2026-10-21
 
 Leftover branches and worktrees no longer pile up: landed work is recognised through integration chains and cleaned within days, and the session-start checks stop raising false alarms.
