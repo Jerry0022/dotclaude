@@ -49,7 +49,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [responsive-testing.md](responsive-testing.md) | Responsive Testing — Multi-Viewport Verification | Multi-device web apps require verification at phone, tablet, and desktop |
 | [run-contract.md](run-contract.md) | Run Contract — what the user chose in do-run is enforced, not hoped for | A hook records the answers to `do-run`'s questions and refuses the tool call ... |
 | [session-grader.md](session-grader.md) | Session Grader (weekly rule check) | Do recent sessions keep missing the same plugin rules after a skill change? |
-| [session-title-scheme.md](session-title-scheme.md) | Session Title Scheme | The double-icon session-title prefixes the devops plugin sets in the Desktop ... |
+| [session-title-scheme.md](session-title-scheme.md) | Session Title Scheme | The session-title prefixes the devops plugin sets in the Desktop app sidebar,... |
 | [skill-extension-guide.md](skill-extension-guide.md) | Skill Extension Guide — For Plugin Integrators | How to customize devops skills and agents for your project. |
 | [strict.md](strict.md) | Strict Mode — Literal Scope, Discretionary Parameters | The deliverable is exactly what the prompt names, nothing wider; attributes t... |
 | [test-autonomy.md](test-autonomy.md) | Test Autonomy — Cross-Cutting Rules for Test Tool Selection | Cross-cutting rule for every skill, hook, and agent that performs or triggers |

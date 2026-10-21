@@ -1322,7 +1322,7 @@ function renderChannelLadderMd(ladder, lang) {
 // The localized SENTENCE of each heading. The head in front of it — status
 // icon, activity icon, English keyword — comes from the title scheme
 // (hooks/lib/title-scheme.js) via `cardHead`, the same state id the session
-// title gets: title `👉 📦 Ready – X` ↔ heading `👉 📦 Ready — Shippen?`.
+// title gets: title `👉 ┃ Ready 📦 X` ↔ heading `👉 ┃ Ready 📦 — Shippen?`.
 const HEADINGS = {
   de: {
     // #714: ship is offered only when nothing is open — an `open` point or a
@@ -1455,9 +1455,9 @@ const CONCEPT_HEADING = {
   de: { waiting: 'wartet auf deine Entscheidungen', tail: ' — ich melde mich' },
   en: { waiting: 'waiting for your decisions', tail: ' — I will report back' },
 };
-// The heading head mirrors the session title: `👉 🧭 Concept` only while
+// The heading head mirrors the session title: `👉 ┃ Concept 🧭` only while
 // the page waits for the user; iterating / implementing means Claude works,
-// so the card shows `⏳ 🧭 Concept` like the title (concept 2026-10-19).
+// so the card shows `⏳ ┃ Concept 🧭` like the title (concept 2026-10-19).
 function conceptHeadState(concept) {
   const { phase } = normalizeConcept(concept) || { phase: 'waiting' };
   return phase === 'waiting' ? 'concept-waiting' : 'concept-working';
@@ -2864,7 +2864,7 @@ server.registerTool(
       "and the app's one no-output nudge that follows gets an empty reply; " +
       "the visible title line is only for a failed call, never a shortcut.",
     inputSchema: z.object({
-      variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (alpha→beta→stable) do-ship renders whenever a promotion ran — also after a ship in the same run (ship stable): ONE released card then carries the ship's changes, tests, state and userFinalTest plus the promotion facts, never a ship-successful card first. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report. `paused` is for work the user pauses to continue later (\"machen wir später weiter\", \"pause for now\") AND for work whose next step is a Claude Code restart, a machine reboot or a usage-limit reset — never `analysis`, `ready` or `fallback` then; pass `pause: { reason }` (restart / reboot / usage-reset). The card states the pause, the result lines say what was stopped and what was kept, and it asks nothing — the session title becomes `⏸️ ✋ Paused – …` (with a reason: `⏸️ 🔄 Restart – …`, `⏸️ 💻 Reboot – …`, `⏸️ 🔋 Limit reset – …`)."),
+      variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (alpha→beta→stable) do-ship renders whenever a promotion ran — also after a ship in the same run (ship stable): ONE released card then carries the ship's changes, tests, state and userFinalTest plus the promotion facts, never a ship-successful card first. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report. `paused` is for work the user pauses to continue later (\"machen wir später weiter\", \"pause for now\") AND for work whose next step is a Claude Code restart, a machine reboot or a usage-limit reset — never `analysis`, `ready` or `fallback` then; pass `pause: { reason }` (restart / reboot / usage-reset). The card states the pause, the result lines say what was stopped and what was kept, and it asks nothing — the session title becomes `🟦 ┃ Paused ✋ …` (with a reason: `🟦 ┃ Restart 🔌 …`, `🟦 ┃ Reboot 💻 …`, `🟦 ┃ Limit reset 🔋 …`)."),
       summary: z.string().transform(v => clampText(v, SUMMARY_MAX).value)
         .describe("What changed for the user, ≤ 8 words / 60 characters (clamped on a word boundary, not rejected). No pipeline status — 'gemergt', 'geshipped', 'live', the version: the Delivery block and the CTA already say that."),
       answer: z.string().optional().describe("The full answer to the user's question, as markdown (#757). Drawn ABOVE the card body — inside the Desktop widget, as markdown in front of the card elsewhere. Use it whenever the turn answers a question or the running skill owes a report (root cause with file:line, findings, a comparison); also for other topics of the user's prompt. Raw HTML is shown as text; links need http(s). Never a recap of what the card already shows."),
@@ -2903,7 +2903,7 @@ server.registerTool(
           filesModified: z.number().optional().describe("file-only mode: how many files changed on disk. Replaces the commit count."),
           delivered: z.string().optional().describe("file-only / no-remote mode: what actually left the working tree ('none', 'local-commit-only', ...). Never claim a merge here."),
           kept: z.boolean().optional().describe("Ship cleanup was skipped — branch + worktree preserved for follow-up work. Switches the ship-successful decision heading to '{version} — weiter in `{branch}`?'."),
-          deployPending: z.boolean().optional().describe("Out-of-band deploy artifacts (DB migrations / edge functions) were merged but NOT deployed (#243). Flips the ship-successful decision heading to '👉 ⚠️ Not deployed — Gemergt, aber nicht live — Migration jetzt deployen?' (noch nicht live)'. Pair with the top-level `deployGate` list naming each artifact."),
+          deployPending: z.boolean().optional().describe("Out-of-band deploy artifacts (DB migrations / edge functions) were merged but NOT deployed (#243). Flips the ship-successful decision heading to '👉 ┃ Not deployed ⚠️ — Gemergt, aber nicht live — Migration jetzt deployen?' (noch nicht live)'. Pair with the top-level `deployGate` list naming each artifact."),
         }).optional(),
       ).describe("Repository state"),
       cta: z.preprocess(
@@ -2916,7 +2916,7 @@ server.registerTool(
           info: z.string().optional(),
           reason: z.string().optional(),
           description: z.string().optional(),
-          activity: z.enum(["ship", "promote", "test", "concept", "batch", "analysis", "agents"]).optional().describe("aborted only: the named process that was aborted. The title and the heading keep its activity ('🟥 🚀 Ship – …'); omit for a generic abort ('🟥 📦 Aborted – …')."),
+          activity: z.enum(["ship", "promote", "test", "concept", "batch", "analysis", "agents"]).optional().describe("aborted only: the named process that was aborted. The title and the heading keep its activity ('🟥 ┃ Ship 🚀 …'); omit for a generic abort ('🟥 ┃ Aborted 📦 …')."),
         }).optional(),
       ).describe("CTA template placeholders — an OBJECT, e.g. { reason } for aborted, { version } for ship cards, { description } for test-minimal. A plain string is accepted as { info }."),
       nextStep: z.string().optional().describe("analysis variant: the ONE step you recommend Claude does next, written as the user's instruction ('Bau im Governor eine Summen-Drossel für viele kleine Claude-Prozesse ein.'). The Desktop primary button becomes 'Empfehlung umsetzen' and sends exactly this text — without it the button says only 'Umsetzen' and the user cannot tell what it starts. Steps the user must do themselves belong in the answer text, not here."),
@@ -2964,14 +2964,14 @@ server.registerTool(
             url: z.string().optional().describe("Override for the page URL shown above the CTA while the phase is 'waiting' (no link while iterating or implementing). Normally NOT needed: pass `cwd` and the card reads port + html_path from the project's .claude/concept-active.json — the URL the page is already open at."),
           }),
         ]).optional(),
-      ).describe("A /auto-concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '👉 🧭 Concept — {phase}' ('⏳ 🧭 Concept — …' while iterating or implementing, like the session title), where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work (content agents, a workflow) still goes into `pending` and follows the phase as its own sentence ('⏳ 🧭 Concept — in Implementierung. 2 Agenten arbeiten — ich melde mich'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: while the phase is 'waiting' the card then shows the page's http://localhost:{port}/… link above the CTA — iterating and implementing cards carry no link."),
+      ).describe("A /auto-concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '👉 ┃ Concept 🧭 — {phase}' ('⏳ ┃ Concept 🧭 — …' while iterating or implementing, like the session title), where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work (content agents, a workflow) still goes into `pending` and follows the phase as its own sentence ('⏳ ┃ Concept 🧭 — in Implementierung. 2 Agenten arbeiten — ich melde mich'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: while the phase is 'waiting' the card then shows the page's http://localhost:{port}/… link above the CTA — iterating and implementing cards carry no link."),
       pause: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({
           reason: z.enum(["restart", "reboot", "usage-reset", "user"]).optional().describe("What unblocks the work: 'restart' = restart Claude Code (a new plugin/MCP version, a settings change), 'reboot' = restart the machine, 'usage-reset' = wait for the usage limit to reset, 'user' (default) = the user paused it."),
           resetAt: z.string().optional().describe("usage-reset only: when the limit resets, as the user reads it (e.g. '23:40' or 'Mo 09:00'). Named in the heading."),
         }).optional(),
-      ).describe("paused variant only: why the work stops (#583). The session title and the heading name the reason ('⏸️ 🔄 Restart – …') and the context line the one action that resumes it. Omit for a plain user pause."),
+      ).describe("paused variant only: why the work stops (#583). The session title and the heading name the reason ('🟦 ┃ Restart 🔌 …') and the context line the one action that resumes it. Omit for a plain user pause."),
       deployGate: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([
@@ -2982,7 +2982,7 @@ server.registerTool(
             action: z.string().optional().describe("The concrete deploy action still required, e.g. 'apply_migration' or 'deploy_edge_function desktop-latest'."),
           }),
         ])).optional(),
-      ).describe("Out-of-band deploy gate (#243) — artifacts a code merge did NOT deploy (DB migrations, edge/serverless functions) and that are therefore NOT live yet. Renders the '👉 ⚠️ Not deployed' state with a block naming each artifact + its deploy action, so a merged-but-undeployed ship never reads as done. Pair with state.deployPending to also flip the decision heading. Available in all variants except test-minimal and test. Populate from ship_preflight.outOfBandDeploys when the project has no deploy handler that already applied them."),
+      ).describe("Out-of-band deploy gate (#243) — artifacts a code merge did NOT deploy (DB migrations, edge/serverless functions) and that are therefore NOT live yet. Renders the '👉 ┃ Not deployed ⚠️' state with a block naming each artifact + its deploy action, so a merged-but-undeployed ship never reads as done. Pair with state.deployPending to also flip the decision heading. Available in all variants except test-minimal and test. Populate from ship_preflight.outOfBandDeploys when the project has no deploy handler that already applied them."),
       validation: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.object({

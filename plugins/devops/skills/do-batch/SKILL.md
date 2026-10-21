@@ -130,8 +130,8 @@ in the same message as your next tool call — no `get_session`. No block →
 already marked. Only a block saying the title is unknown sends you to the
 `get_session` fallback in `deep-knowledge/activation.md` § Session title prefix.
 
-The prefix is exactly `👉 📥 Batch – ` (pointing hand, inbox tray, space, word, space, en dash,
-space) — the same two icons the completion card carries in its `👉 📥 BATCH sammelt`
+The prefix is exactly `👉 ┃ Batch 📚 ` (pointing hand, bar, word, books emoji, space; the code adds hair-space fill before the word,
+same icons as the completion card in its `👉 ┃ Batch 📚`
 CTA while the mode is armed. Both tools exist only in the Desktop app. Deferred is not unavailable: when they sit in the deferred-tools list, load
 both once with `ToolSearch` `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`, then call them
 (`{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`). In a
@@ -344,7 +344,7 @@ where they are (`deep-knowledge/merge.md` § Archive).
 **4.8 Retire the mode — never ask whether to stay in it.** Collection is already
 off (the hook deactivated it when the merge fired; on the `/do-batch go` path
 do it yourself — `deactivate(cwd)` is idempotent). Stop the watchdog
-(`batch-watchdog.js stop .`) and strip a leading `👉 📥 Batch – ` from the session
+(`batch-watchdog.js stop .`) and strip a leading `👉 ┃ Batch 📚 ` from the session
 title, leaving any other title alone — commands and steps:
 `deep-knowledge/merge.md` § Retire.
 
@@ -398,7 +398,7 @@ node -e "require('{PLUGIN_ROOT}/hooks/lib/batch-state.js').deactivate(process.cw
 
 Restore the session title the same way as in Step 4.8: the `deactivate` call
 above answers with a `[post.flow.title-mode]` block carrying the title with
-the leading `👉 📥 Batch – ` stripped — `set_session_title` `self` with it, in
+the leading `👉 ┃ Batch 📚 ` stripped — `set_session_title` `self` with it, in
 parallel with your next tool call. No block → no prefix to strip (any other
 title stays untouched); skip silently outside the Desktop app.
 
@@ -462,8 +462,8 @@ silently if absent. Detail: `deep-knowledge/merge.md` § Local compaction.
   the merge.
 - **The mode expires on its own** (time and note cap). If collection stopped
   mid-session, say so — do not let the user believe prompts are still landing
-  in the queue — and strip the `👉 📥 Batch – ` title prefix in that turn.
-- **The title prefix is state, not decoration.** `👉 📥 Batch – ` goes on when the
+  in the queue — and strip the `👉 ┃ Batch 📚 ` title prefix in that turn.
+- **The title prefix is state, not decoration.** `👉 ┃ Batch 📚 ` goes on when the
   mode arms (2.2b) and comes off when it ends (4.8, 5, expiry) — never by
   re-typing a remembered title, only by stripping exactly that prefix. Missing
   session tools (terminal, unattended) mean skip, not fail.

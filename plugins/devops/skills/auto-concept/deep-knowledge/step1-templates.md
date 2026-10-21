@@ -93,6 +93,17 @@ stay on one template throughout.
    (`docs/superpowers/specs/2026-08-03-concept-per-iteration-design-mode-design.md`)
    for the markup shape.
 
+   **One visual topic per design set.** When a design concept has several
+   independent visual topics (e.g. a sidebar layout AND an icon set), the
+   designs of a round vary ONE of them; every other topic is held identical
+   across the designs. Once the user has a favourite for a topic, it stays
+   fixed and the next round varies the next topic. Bundling them forces the
+   user, who already likes design 2's layout, to keep switching to designs 1
+   and 3 just to compare their icons (seen in a 10-round title-icon concept).
+   Do not add a second axis or a view to work around it — sequence the topics.
+   Exception: topics that are genuinely coupled (a theme that restyles many
+   elements at once) belong in one design together.
+
    **Two or more designs → overview attributes.** Every
    `section[data-design]` of a round with ≥2 designs carries
    `data-design-motto` (a 2–5 word slogan), `data-design-traits` (exactly

@@ -14,7 +14,7 @@
  *   from the transcript via lib/card-guard) AND the branch still has
  *   unshipped work (lib/ship-unshipped.js). The keyword list lives in
  *   lib/ship-intent.js, shared with prompt.flow.title-work so a ship prompt
- *   is marked `⏳ 🚀 Shipping – ` in the sidebar, never the bare `⏳ `.
+ *   is marked `⏳ ┃ Shipping 🚀 ` in the sidebar, never the bare `⏳ `.
  *   Above a context threshold the mandate becomes the delegate instruction
  *   from lib/ship-delegate.js: the ship would re-read that context ~25
  *   times, so the main session briefs a fresh-context subagent that runs

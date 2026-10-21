@@ -6,12 +6,12 @@
  * @plugin devops
  * @description Marks a session as "being worked on" in the sidebar: on the
  *   first real prompt of a session — and on the first prompt after every
- *   completion card — it asks Claude to put the bare `⏳ ` (icon only, no
+ *   completion card — it asks Claude to put the generic `⏳ ┃ Solo 🤖 ` (no
  *   word — `SESSION_PREFIX.work` in mcp-server/lib/mode-state.js) in front of
  *   the session title, replacing whatever outcome prefix the last card left
  *   (📦 Ready, 🧪 Test, …). The hourglass is ONE state — "Claude works, not
  *   your move" — whether this turn runs or background work continues after
- *   it: a card with pending work sets the same bare `⏳ `. The worded
+ *   it: a card with pending work sets the same Solo prefix. The worded
  *   `⏳ Working – ` of older versions is a legacy form, rewritten wherever
  *   it is still found. The app's
  *   own summary stays the title. The card that ends the turn sets the
@@ -80,11 +80,11 @@ const {
   WORK_PREFIX, LEGACY_PENDING_PREFIX, LEGACY_PREFIXES, SHIPPING_PREFIX, CONCEPT_PREFIX, BATCH_PREFIX,
   classify, nextTitle, readCurrentTitle,
 } = require('../lib/session-title');
-const { STATUS } = require('../lib/title-scheme');
+const { STATUS, BARE_WORK } = require('../lib/title-scheme');
 
 /**
  * The prefix a prompt puts on the title: the process it starts when it
- * starts one (a ship → `⏳ 🚀 Shipping – `), the bare hourglass otherwise. The
+ * starts one (a ship → `⏳ ┃ Shipping 🚀 `), the bare hourglass otherwise. The
  * hourglass is the fallback, never the override.
  */
 function prefixFor(prompt, cwd) {
@@ -132,7 +132,7 @@ function titleWorkOutput(hook, prompt, cwd) {
 function instruction(prefix = WORK_PREFIX, { machine = false } = {}) {
   const shipping = prefix === SHIPPING_PREFIX;
   const statuses = Object.values(STATUS).join(' ');
-  const known = `a known "<status> <activity> <Word> – " prefix (status icon one of ${statuses}), the bare "${WORK_PREFIX}", or a legacy one (${LEGACY_PREFIXES.map(p => `"${p}"`).join(', ')})`;
+  const known = `a known "<status> ┃ <Word> <activity> " prefix (status icon one of ${statuses}; hair-space fill before the word), the older "<status> <activity> <Word> – " two-icon form (also with ⏸️), the bare "${BARE_WORK}", or a legacy one (${LEGACY_PREFIXES.map(p => `"${p}"`).join(', ')})`;
   // A machine turn (a task notification — the concept's own watchers exit
   // that way) is no proof of work: it may end without a card, so it keeps its
   // hands off every known prefix (#618). Only a plain title (or the legacy
@@ -143,20 +143,20 @@ function instruction(prefix = WORK_PREFIX, { machine = false } = {}) {
       '  a mode or a card owns it (this turn is no user prompt — an open concept page keeps its prefix, an outcome stays).',
     ]
     : [
-      `  If the title is empty or starts with "${BATCH_PREFIX}" (or the legacy "📥 Batch – "): do nothing — batch mode owns it.`,
+      `  If the title is empty or starts with "${BATCH_PREFIX}" (or the legacy "📥 Batch – " / "👉 📥 Batch – "): do nothing — batch mode owns it.`,
       ...(shipping
         ? [`  Else if it already starts with "${SHIPPING_PREFIX}": do nothing — the ship is already marked.`]
         : [
           `  Else if it already starts with "${SHIPPING_PREFIX}" (or the legacy "🚀 Shipping – "): do nothing — a ship is running and the`,
           '  hourglass is only the fallback for work that is no named process.',
-          '  Else if it starts with any other "⏳ <activity> <Word> – " prefix (a running named process): do nothing.',
-          `  Else if it is a bare "${WORK_PREFIX}<title>" and NOT "${LEGACY_PENDING_PREFIX}": do nothing`,
-          '  (that worded form is a legacy of older versions — only the bare icon counts as already-marked).',
+          '  Else if it starts with any other "⏳ ┃ <Word> <activity> " prefix (a running named process): do nothing.',
+          `  Else if it already starts with "${WORK_PREFIX}" (or a bare "${BARE_WORK}<title>") and NOT "${LEGACY_PENDING_PREFIX}": do nothing`,
+          '  (that worded form is a legacy of older versions — only the Solo prefix or the bare icon counts as already-marked).',
         ]),
     ];
   const tail = shipping
     ? 'The word is exactly "Shipping" — this is the do-ship skill\'s Pre-Step C done early; the skill finds the title marked and leaves it.'
-    : 'The hourglass is icon-only — no activity, no word after it, the title text stays as it is.';
+    : 'The generic prefix names no process — the title text stays as it is.';
   const conceptNote = machine ? [] : [
     `A "${CONCEPT_PREFIX}" title yields too: it means the page waits for the user, and now Claude works.`,
     'If a concept page stays open after this turn, end the turn with its completion card (concept field + cwd) — that card sets the concept prefix again.',

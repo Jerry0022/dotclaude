@@ -7,14 +7,16 @@ import { fileURLToPath } from "node:url";
 import { ONCE_KEY, WORK_PREFIX, LEGACY_PENDING_PREFIX, LEGACY_PREFIXES as HOOK_LEGACY, SHIPPING_PREFIX, CONCEPT_PREFIX, BATCH_PREFIX, instruction, directInstruction, titleWorkOutput, prefixFor, shouldMark, releaseTitleWork } from "./prompt.flow.title-work.js";
 import { runOnce } from "../lib/run-once.js";
 import { SESSION_PREFIX, LEGACY_PREFIXES } from "../../mcp-server/lib/mode-state.js";
+import TITLE_SCHEME_MOD from "../lib/title-scheme.js";
+const F = TITLE_SCHEME_MOD.withFill;
 
 // The first prompt of a session puts the bare hourglass on the sidebar title.
 // The hook is CJS and reads the shared scheme (lib/title-scheme.js); these
 // tests bind it to the ESM side so the two can never drift.
 describe("prompt.flow.title-work", () => {
-  test("the bare icon is SESSION_PREFIX.work — icon only, no activity, no word", () => {
+  test("the generic prefix is SESSION_PREFIX.work — Solo, no named process", () => {
     expect(WORK_PREFIX).toBe(SESSION_PREFIX.work);
-    expect(WORK_PREFIX).toBe("⏳ ");
+    expect(WORK_PREFIX).toBe(F("⏳ ┃ Solo 🤖 "));
   });
 
   test("the worded hourglass is legacy only; the hook and the card share one legacy list", () => {
@@ -27,7 +29,7 @@ describe("prompt.flow.title-work", () => {
     expect(CONCEPT_PREFIX).toBe(SESSION_PREFIX["concept-waiting"]);
     expect(BATCH_PREFIX).toBe(SESSION_PREFIX.batch);
     expect(SHIPPING_PREFIX).toBe(SESSION_PREFIX.shipping);
-    expect(SHIPPING_PREFIX).toBe("⏳ 🚀 Shipping – ");
+    expect(SHIPPING_PREFIX).toBe(F("⏳ ┃ Shipping 🚀 "));
   });
 
   test("the instruction names both session-mgmt tools, the hourglass, and the silent-skip rule", () => {
@@ -35,7 +37,7 @@ describe("prompt.flow.title-work", () => {
     expect(text).toContain("mcp__ccd_session_mgmt__get_session");
     expect(text).toContain("mcp__ccd_session_mgmt__set_session_title");
     expect(text).toContain(`"${WORK_PREFIX}" + <stripped title>`);
-    expect(text).toMatch(/icon-only/);
+    expect(text).toMatch(/names no process/);
     expect(text).toMatch(/skip silently/);
     expect(text).toMatch(/Desktop app only/);
     // #661: a deferred tool is not an unavailable one — load, then call.
@@ -48,11 +50,11 @@ describe("prompt.flow.title-work", () => {
   // The instruction must replace an outcome prefix and leave batch alone.
   test("the instruction replaces an outcome prefix with the bare icon and leaves batch untouched", () => {
     const text = instruction();
-    expect(text).toContain(`starts with "${BATCH_PREFIX}" (or the legacy "📥 Batch – "): do nothing — batch mode owns it`);
-    for (const s of ["⏳", "👉", "🟩", "🟥", "⏸️"]) expect(text).toContain(s);
+    expect(text).toContain(`starts with "${BATCH_PREFIX}" (or the legacy "📥 Batch – " / "👉 📥 Batch – "): do nothing — batch mode owns it`);
+    for (const s of ["⏳", "👉", "🟩", "🟥", "🟦"]) expect(text).toContain(s);
     expect(text).toMatch(/strip every leading/);
     for (const p of LEGACY_PREFIXES) expect(text).toContain(`"${p}"`);
-    expect(text).toContain(`is a bare "${WORK_PREFIX}<title>" and NOT "${LEGACY_PENDING_PREFIX}": do nothing`);
+    expect(text).toContain(`already starts with "${WORK_PREFIX}" (or a bare "⏳ <title>") and NOT "${LEGACY_PENDING_PREFIX}": do nothing`);
     // F6: free text is never stripped.
     expect(text).toMatch(/never free text such as "Fix Login – "/);
   });
@@ -101,7 +103,7 @@ describe("prompt.flow.title-work", () => {
     const text = instruction();
     expect(text).toContain(`already starts with "${SHIPPING_PREFIX}" (or the legacy "🚀 Shipping – "): do nothing`);
     expect(text).toMatch(/hourglass is only the fallback/);
-    expect(text).toMatch(/any other "⏳ <activity> <Word> – " prefix \(a running named process\): do nothing/);
+    expect(text).toMatch(/any other "⏳ ┃ <Word> <activity> " prefix \(a running named process\): do nothing/);
     expect(text).toContain(`"${WORK_PREFIX}" + <stripped title>`);
     expect(instruction(WORK_PREFIX)).toBe(text);
   });
@@ -201,8 +203,8 @@ describe("prompt.flow.title-work — title known from the transcript", () => {
 
   test("the direct instruction carries the exact title, set in parallel — no get_session", () => {
     const text = out("🧪 Test – Login");
-    expect(text).toBe(directInstruction("⏳ Login"));
-    expect(text).toContain('mcp__ccd_session_mgmt__set_session_title {session_id:"self", title:"⏳ Login"}');
+    expect(text).toBe(directInstruction(WORK_PREFIX + "Login"));
+    expect(text).toContain('mcp__ccd_session_mgmt__set_session_title {session_id:"self", title:' + JSON.stringify(WORK_PREFIX + "Login") + "}");
     expect(text).toMatch(/SAME message as this turn's first other tool call/);
     expect(text).not.toContain("mcp__ccd_session_mgmt__get_session");
     expect(text).toContain('ToolSearch "select:mcp__ccd_session_mgmt__set_session_title"');
@@ -214,32 +216,32 @@ describe("prompt.flow.title-work — title known from the transcript", () => {
 
   test("a title that is already right → no output at all", () => {
     expect(out("⏳ Login")).toBe("");
-    expect(out("👉 📥 Batch – Queue")).toBe("");
+    expect(out(F("👉 ┃ Batch 📚 Queue"))).toBe("");
     expect(out("📥 Batch – Queue")).toBe("");
-    expect(out("⏳ 🚀 Shipping – Login")).toBe("");
+    expect(out(F("⏳ ┃ Shipping 🚀 Login"))).toBe("");
     expect(out("🚀 Shipping – Login")).toBe("");
     // R1: every ⏳ two-slot process stays — the bare-⏳ shortcut is not what keeps them.
-    expect(out("⏳ 🧭 Concept – Login")).toBe("");
-    expect(out("⏳ 🤖 Agents – Login")).toBe("");
-    expect(out("⏳ 🧪 Testing – Login")).toBe("");
+    expect(out(F("⏳ ┃ Concept 🧭 Login"))).toBe("");
+    expect(out(F("⏳ ┃ Team 🤖 Login"))).toBe("");
+    expect(out(F("⏳ ┃ Testing 🧪 Login"))).toBe("");
   });
 
   test("a ship prompt gets the Shipping title and the Pre-Step C note", () => {
     const text = out("⏳ Login", "/do-ship");
-    expect(text).toContain('title:"⏳ 🚀 Shipping – Login"');
+    expect(text).toContain("title:" + JSON.stringify(F("⏳ ┃ Shipping 🚀 Login")));
     expect(text).toMatch(/Pre-Step C/);
   });
 
   test("a waiting concept title yields and names the card that restores it", () => {
-    for (const cur of ["👉 🧭 Concept – Dashboard", "🧭 Concept – Dashboard"]) {
+    for (const cur of [F("👉 ┃ Concept 🧭 Dashboard"), "🧭 Concept – Dashboard"]) {
       const text = out(cur);
-      expect(text, cur).toContain('title:"⏳ Dashboard"');
+      expect(text, cur).toContain("title:" + JSON.stringify(WORK_PREFIX + "Dashboard"));
       expect(text, cur).toMatch(/sets it again/);
     }
   });
 
   test("a machine turn leaves an outcome alone", () => {
-    expect(out("🟩 🚀 Released Alpha – Login", "<task-notification>\n<status>completed</status>\n</task-notification>")).toBe("");
+    expect(out(F("🟩 ┃ Alpha 🚀 Login"), "<task-notification>\n<status>completed</status>\n</task-notification>")).toBe("");
   });
 
   test("title unknown (no entry, no transcript) → the get_session fallback", () => {
@@ -263,8 +265,8 @@ describe("prompt.flow.title-work — title known from the transcript", () => {
         releaseTitleWork(sid);
       }
     };
-    expect(run("👉 📦 Ready – Login")).toContain('title:"⏳ Login"');
-    expect(run("📦 Ready – Login")).toContain('title:"⏳ Login"');
+    expect(run(F("👉 ┃ Ready 📦 Login"))).toContain("title:" + JSON.stringify(WORK_PREFIX + "Login"));
+    expect(run("📦 Ready – Login")).toContain("title:" + JSON.stringify(WORK_PREFIX + "Login"));
     expect(run("⏳ Login")).toBe("");
   });
 });
