@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.284.4] — 2026-10-21
+
+The answer to a question reaches the user on the Desktop app: it goes into the completion card's `answer` field instead of prose before the card.
+
+### Fixed
+- **Answer goes into the card, not before it (#757 follow-up).** On the Desktop app, prose written before the completion card and followed by further tool calls was collapsed by the app — even with `CLAUDE_CODE_THINKING_DISPLAY_UPDATES=0` — so the user saw no answer. The card's `answer` field (v0.280.0) already draws the answer inside the widget, but three instruction texts still said "write the answer as text before the card". The `post.flow.completion` hook text, the card-widget instruction of the completion renderer and the `quiet` output style template now route the answer into `render_completion_card`'s `answer` field; the do-ship skill and the session grader say the same. `output-style-quiet.shipped.json` carries the new template hash, so `output-style-sync` updates unmodified `~/.claude/output-styles/quiet.md` copies after the plugin update (customised copies are left alone).
+
 ## [0.284.3] — 2026-10-21
 
 A Ctrl + click comment on a phone-sized concept screen opens fully visible instead of being cut off by the frame.

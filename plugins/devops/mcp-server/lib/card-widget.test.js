@@ -892,8 +892,9 @@ describe("cardWidgetInstruction", () => {
   test("forbids a prose recap of the card before the widget, keeps the answer as text before it (#642)", () => {
     const text = cardWidgetInstruction(baseModel(), "", desktop);
     expect(text).toMatch(/no recap of the card/);
-    expect(text).toMatch(/Before the widget: the full answer to the user's question/);
-    expect(text).toMatch(/the card never carries it/);
+    // Prose before the widget was collapsed by the Desktop app and a user saw
+    // no answer twice in a row; the answer rides in the card (#757).
+    expect(text).toMatch(/answer to the user's question belongs in render_completion_card's `answer` field/);
   });
 
   test("names the saved widget file when one was written, and only then", () => {

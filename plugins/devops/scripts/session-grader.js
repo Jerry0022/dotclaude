@@ -57,7 +57,7 @@ const DEFAULT_RULES = [
     signals: ['\\[card-pregate\\] Not rendered', '\\[stop\\.flow\\.guard\\] \\d+ card gates failed', '\\[stop\\.flow\\.guard\\] (Title carries|Result lines violate|Decision points violate|Validation required|Requirement gaps)'] },
   { id: 'agent-card-relayed', description: 'A finished subagent\'s agent card is relayed verbatim before the next tool call.',
     signals: ['\\[agent-card-relay\\] The agent card of your last launch never reached'] },
-  { id: 'answer-before-card', description: 'The answer / explanation text is written before the card, not only inside it.', signals: [] },
+  { id: 'answer-before-card', description: 'The answer / explanation text reaches the user in full — in the card\'s answer field, not as prose before the card.', signals: [] },
   { id: 'no-recap-after-card', description: 'Nothing (no recap, no summary) is written after the card.', signals: [] },
   { id: 'chat-language', description: 'Chat replies are in the language of the user\'s latest message (German when the user writes German).', signals: [] },
   { id: 'run-contract', description: 'Run-contract passes (harden/polish) are run or explicitly skipped with a reason, never silently dropped.',

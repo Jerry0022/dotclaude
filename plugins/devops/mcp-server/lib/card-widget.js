@@ -622,7 +622,8 @@ export function cardWidgetInstruction(model, repoUrl, env = process.env, { widge
     "call mcp__visualize__show_widget with title \"completion_card_body\", " +
     "loading_messages [\"Card wird geladen\"], widget_code = EXACTLY the block below (verbatim). " +
     "No text after it; reply nothing to the app's one \"no visible output\" nudge.\n" +
-    "Before the widget: the full answer to the user's question (the card never carries it, #642), no recap of the card.\n" +
+    "The answer to the user's question belongs in render_completion_card's `answer` field (#757) — drawn inside this widget; " +
+    "prose before the widget can be collapsed by the app; no recap of the card.\n" +
     `Only if the call fails or the tool is missing (no retry): output \`### **✨✨✨ ${model.title || ""} ✨✨✨**\`.\n` +
     (widgetFile ? `Copy: ${widgetFile} — if the block below is cut off, Read it.\n` : "") +
     "----- widget_code -----\n" +
