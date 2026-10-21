@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.286.2] — 2026-10-21
+
+The test card shows its Nachbessern button only when something is open, and the button names the concrete points.
+
+### Changed
+- **Nachbessern only when something is open (#784).** The `test` card always offered Nachbessern / Rework with a generic "frag mich, was" prompt — on a clean test card a dead-end click. The button now carries `onlyOpen: true` in `mcp-server/lib/card-widget.js`, and `buttonsFor` drops it when the card has no prepared answer: a clean test card shows Ship (plus App starten / Web-Guide) only. With something open, a new `testReplies()` in `mcp-server/index.js` builds the prepared answer from the open points' replies plus one reply per partial/unmet `validation` entry ("<requirement> — <evidence> — bitte angehen."), deduplicated, so the prompt names what to fix. Open points with their own reply are unchanged; the `ready` card's generic Ändern stays. `deep-knowledge/completion-card-design.md` (prepared-answer section and the `test` row) describes it. Pinned in `card-widget.test.js` and `index.card.test.js` (de + en, empty-row guard for a no-ship clean test card).
+
 ## [0.286.1] — 2026-10-21
 
 The Desktop completion card no longer stays a bare title right after a ship: a cold jsDelivr tag gets a second try, and the completion server warms the client file when it starts.
