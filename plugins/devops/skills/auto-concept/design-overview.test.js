@@ -315,6 +315,34 @@ describe("Ctrl + click user pins", () => {
     expect(p.document.querySelectorAll("#d2-s1 .upin").length).toBe(1);
   }, BOOT_TIMEOUT);
 
+  test("the editor stays inside a narrow screen (phone frame) instead of being clipped", async () => {
+    const p = await boot(page(2));
+    const { window } = p;
+    // jsdom has no layout: a 300 × 600 host, the pin at (150, 100), and an
+    // editor box derived from what placeEditor() set (flip + inline offsets).
+    const W = 280, H = 120, PX = 150, PY = 100;
+    const rect = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top });
+    const orig = window.Element.prototype.getBoundingClientRect;
+    window.Element.prototype.getBoundingClientRect = function () {
+      if (this.classList.contains("upin-host")) return rect(0, 0, 300, 600);
+      if (this.classList.contains("upin")) return rect(PX, PY, 26, 26);
+      if (this.classList.contains("upin-editor")) {
+        const wrap = this.parentElement;
+        const w = parseFloat(this.style.width) || W;
+        const left = this.style.left ? PX + parseFloat(this.style.left) : wrap.dataset.flipX ? PX - 32 - w : PX + 32;
+        const top = this.style.top ? PY + parseFloat(this.style.top) : wrap.dataset.flipY ? PY - 30 - H : PY;
+        return rect(left, top, w, H);
+      }
+      return orig.call(this);
+    };
+    window.showDesign("d2");
+    p.document.querySelector("#d2-s1 h1").dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));
+    const r = p.document.querySelector("#d2-s1 .upin-editor").getBoundingClientRect();
+    expect(r.left).toBeGreaterThanOrEqual(8);
+    expect(r.right).toBeLessThanOrEqual(292);
+    window.Element.prototype.getBoundingClientRect = orig;
+  }, BOOT_TIMEOUT);
+
   test("persisted like an annotation answer: restored on reload, under a text: key the bridge mirrors", async () => {
     const html = page(2);
     const a = await boot(html);

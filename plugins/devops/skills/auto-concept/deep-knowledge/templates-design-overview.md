@@ -865,13 +865,40 @@ returns — the single-design page is untouched.
     const it = visibleIteration();
     renderPins(it, readState(it), isLive(it));
   }
+  // The editor sits inside the screen, whose frame clips it — a phone mock-up
+  // is narrower than pin + editor — so it is placed by measuring: open on the
+  // side with room, then clamp it inside the content box.
+  function placeEditor(wrap) {
+    const ed = wrap.querySelector('.upin-editor');
+    const host = wrap.closest('.upin-host');
+    if (!ed || ed.hidden || !host) return;
+    const b = host.getBoundingClientRect();
+    if (!b.width || !b.height) return;
+    const gap = 8;
+    delete wrap.dataset.flipX;
+    delete wrap.dataset.flipY;
+    ['left', 'right', 'top', 'bottom', 'width'].forEach(p => { ed.style[p] = ''; });
+    if (ed.getBoundingClientRect().width > b.width - 2 * gap) ed.style.width = Math.max(160, b.width - 2 * gap) + 'px';
+    let r = ed.getBoundingClientRect();
+    if (r.right > b.right - gap) { wrap.dataset.flipX = 'true'; r = ed.getBoundingClientRect(); }
+    if (r.left < b.left + gap || r.right > b.right - gap) {
+      const left = Math.min(Math.max(r.left, b.left + gap), b.right - gap - r.width);
+      ed.style.left = (left - wrap.getBoundingClientRect().left) + 'px';
+      ed.style.right = 'auto';
+    }
+    r = ed.getBoundingClientRect();
+    if (r.bottom > b.bottom - gap) { wrap.dataset.flipY = 'true'; r = ed.getBoundingClientRect(); }
+    if (r.top < b.top + gap || r.bottom > b.bottom - gap) {
+      const top = Math.max(Math.min(r.top, b.bottom - gap - r.height), b.top + gap);
+      ed.style.top = (top - wrap.getBoundingClientRect().top) + 'px';
+      ed.style.bottom = 'auto';
+    }
+  }
   function pinNode(pin, k, live, isDraft) {
     const wrap = el('div', 'upin');
     wrap.dataset.upinId = pin.id;
     wrap.style.setProperty('--upin-x', pin.x + '%');
     wrap.style.setProperty('--upin-y', pin.y + '%');
-    if (pin.x > 60) wrap.dataset.flipX = 'true';
-    if (pin.y > 70) wrap.dataset.flipY = 'true';
     const label = L.upinLabel.replace('{n}', String(k));
     const btn = el('button', 'upin-pin', String(k));
     btn.type = 'button';
@@ -900,7 +927,7 @@ returns — the single-design page is untouched.
       const open = ed.hidden;
       document.querySelectorAll('.upin-editor').forEach(x => { if (x !== ed) x.hidden = true; });
       ed.hidden = !open;
-      if (open) ta.focus();
+      if (open) { placeEditor(wrap); ta.focus(); }
     });
     ta.addEventListener('keydown', e => {
       e.stopPropagation();
@@ -940,14 +967,13 @@ returns — the single-design page is untouched.
     box.classList.add('upin-host');
     const layer = el('div', 'upin-layer');
     pins.forEach((p, i) => layer.appendChild(pinNode(p, i + 1, live, false).wrap));
-    let focusTa = null;
+    let drafted = null;
     if (showDraft) {
-      const n = pinNode(draft, pins.length + 1, true, true);
-      layer.appendChild(n.wrap);
-      focusTa = n.ta;
+      drafted = pinNode(draft, pins.length + 1, true, true);
+      layer.appendChild(drafted.wrap);
     }
     box.appendChild(layer);
-    if (focusTa) focusTa.focus();
+    if (drafted) { placeEditor(drafted.wrap); drafted.ta.focus(); }
   }
 
   // ── Hotkeys ────────────────────────────────────────────────────────────
