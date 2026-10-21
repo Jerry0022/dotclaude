@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.284.3] — 2026-10-21
+
+A Ctrl + click comment on a phone-sized concept screen opens fully visible instead of being cut off by the frame.
+
+### Fixed
+- **User-pin editor stays inside the screen.** The editor flipped sides only past 60 % of the screen width, so in a phone mock-up — narrower than pin plus 280 px editor — the device frame clipped it. `placeEditor()` in `templates-design-overview.md` now measures the editor against the content box when it opens, flips it to the side with room and clamps it inside with an 8 px gap, horizontally and vertically. Pinned by a regression test in `design-overview.test.js`.
+
 ## [0.284.2] — 2026-10-21
 
 Questions keep their options in a fixed order for every user, not only inside this repo's `/do-run`.
