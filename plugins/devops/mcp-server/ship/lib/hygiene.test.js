@@ -106,7 +106,7 @@ describe("parseWorktrees", () => {
     ].join("\n");
     expect(parseWorktrees(out)).toEqual([
       { path: "C:/r", head: "aaa", branch: "main", detached: false, locked: false, prunable: false },
-      { path: "C:/r/.claude/worktrees/x", head: "bbb", branch: null, detached: true, locked: true, prunable: false },
+      { path: "C:/r/.claude/worktrees/x", head: "bbb", branch: null, detached: true, locked: true, lockReason: "reason", prunable: false },
       { path: "C:/gone", head: "ccc", branch: "g", detached: false, locked: false, prunable: true },
     ]);
   });
@@ -275,7 +275,7 @@ describe("auto-clean — sub-agent branches of a squash-merged PR (#572)", () =>
     const baseRef = "refs/remotes/origin/main";
     const viaMerged = reachableFromMerged(dir, merged, baseRef);
     expect(viaMerged.has(child)).toBe(true);
-    expect(landedVia(child, "worktree-agent-a1", { cwd: dir, baseRef, merged, viaMerged })).toBe("tree");
+    expect(landedVia(child, "worktree-agent-a1", { cwd: dir, baseRef, merged, viaMerged })).toBe("chain");
     expect(landedVia(child, "worktree-agent-a1", { cwd: dir, baseRef, merged: null })).toBe("tree");
   });
 

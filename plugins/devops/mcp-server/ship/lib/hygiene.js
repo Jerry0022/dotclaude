@@ -6,10 +6,10 @@
  *
  *   1. Auto-clean (after a ship only). Three triggers, each over REMOVABLE
  *      leftovers only:
- *        - age: once one is older than `autoCleanGateDays` (default 30),
- *          every one older than `autoCleanMinAgeDays` (default 30) goes;
- *        - count: more than `autoCleanKeepNewest` (default 20) → all but the
- *          newest 20 go, whatever their age — a busy repo (~10 sessions a
+ *        - age: once one is older than `autoCleanGateDays` (default 3),
+ *          every one older than `autoCleanMinAgeDays` (default 3) goes;
+ *        - count: more than `autoCleanKeepNewest` (default 5) → all but the
+ *          newest 5 go, whatever their age — a busy repo (~10 sessions a
  *          day) never reaches the age gate;
  *        - disk: the session worktrees still kept weigh more than
  *          `autoCleanMaxGB` (default 10) → the oldest of them lose their
@@ -72,7 +72,8 @@
  *   cannot be inspected is treated as not removable.
  */
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -184,12 +185,45 @@ export function parseWorktrees(output) {
       cur.detached = true;
     } else if (line === "locked" || line.startsWith("locked ")) {
       cur.locked = true;
+      const reason = line.slice("locked".length).trim();
+      if (reason) cur.lockReason = reason;
     } else if (line === "prunable" || line.startsWith("prunable ")) {
       cur.prunable = true;
     }
   }
   if (cur) out.push(cur);
   return out;
+}
+
+/** `p` lies below `dir` (normalised, never `dir` itself). */
+function isUnderDir(p, dir) {
+  const d = normPath(dir);
+  return Boolean(d) && normPath(p).startsWith(`${d}/`);
+}
+
+/** A temp worktree is pruned once idle this long (and nothing holds it). */
+export const TEMP_WORKTREE_MS = 3_600_000;
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return Boolean(e && e.code === "EPERM");
+  }
+}
+
+/**
+ * A temp worktree nothing holds: not locked, or locked by a dead pid /
+ * left "initializing" (idle past TEMP_WORKTREE_MS counts as dead). A lock
+ * naming a live pid keeps it. null = free, else the keep reason.
+ */
+export function tempHeldReason(unit, now = Date.now()) {
+  if (now - unit.activityMs < TEMP_WORKTREE_MS) return "recent-temp-worktree";
+  if (!unit.locked) return null;
+  const m = /\bpid[\s=:]*(\d+)/i.exec(unit.lockReason || "");
+  if (m && pidAlive(Number(m[1]))) return "locked";
+  return null;
 }
 
 function listWorktrees(cwd) {
@@ -236,13 +270,15 @@ function worktreeLastActivityMs(wtPath, headTimeMs) {
  * default branch and main/master/HEAD/origin. Local git only — no network.
  * @returns {{units:object[], defaultBranch:string, current:string, main:string|null, paths:string[]}|null}
  */
-export function scanRepo(cwd, now = Date.now()) {
+export function scanRepo(cwd, now = Date.now(), { tmpDir = os.tmpdir() } = {}) {
   const worktrees = listWorktrees(cwd);
   if (!worktrees) return null;
   const top = gitOut(["rev-parse", "--show-toplevel"], cwd);
   const current = normPath(top || cwd);
   const main = worktrees[0] ? normPath(worktrees[0].path) : null;
   const defaultBranch = defaultBranchOf(cwd);
+  // a repo that itself lives in the temp dir (test fixtures) has no temp worktrees to prune
+  const tmpRoot = main && isUnderDir(main, tmpDir) ? null : tmpDir;
   const checkedOut = new Set(worktrees.map((w) => w.branch).filter(Boolean));
 
   const refs = gitOut(["for-each-ref", "refs/heads", "--format=%(refname)%09%(objectname)%09%(committerdate:unix)%09%(upstream:track)"], cwd) || "";
@@ -272,6 +308,8 @@ export function scanRepo(cwd, now = Date.now()) {
       branch: w.branch,
       head: w.head,
       locked: w.locked,
+      lockReason: w.lockReason || null,
+      temp: Boolean(tmpRoot && isUnderDir(w.path, tmpRoot)),
       detached: w.detached,
       gone: Boolean(w.branch && gone.has(w.branch)),
       session: normPath(w.path).includes(SESSION_WORKTREE_MARKER),
@@ -399,7 +437,30 @@ export function landedVia(sha, branch, ctx) {
       if (gitOk(["merge-base", "--is-ancestor", sha, head], ctx.cwd)) return "pr";
     }
   }
+  if (ctx.merged && ctx.viaMerged && ctx.viaMerged.has(sha) && chainLanded(sha, ctx)) return "chain";
   return contentInBase(ctx.cwd, sha, ctx.baseRef, { maxFiles: TREE_CHECK_MAX_FILES }).landed ? "tree" : null;
+}
+
+/** At most this many merged PR heads are searched for one that holds a branch (chain proof). */
+const CHAIN_MAX_HEADS = 200;
+
+/**
+ * PR-chain proof (integration branch): `sha` is an ancestor of a merged PR
+ * head of ANOTHER branch (a sub-agent branch merged locally into the branch
+ * that became the PR), and that head still holds every change of `sha` — the
+ * PR did not drop or revert any. Commits made on the integration branch AFTER
+ * its PR merged are not in the merged head, so such a tip never gets here.
+ * Read-only; false when it cannot be told.
+ */
+function chainLanded(sha, ctx) {
+  let tried = 0;
+  for (const head of ctx.merged.bySha) {
+    if (tried++ >= CHAIN_MAX_HEADS) break;
+    if (!gitOk(["merge-base", "--is-ancestor", sha, head], ctx.cwd)) continue;
+    const f = filesInBase(sha, ctx, head);
+    if (f && f.filesIn === f.filesTotal) return true;
+  }
+  return false;
 }
 
 /** A throw-away index holding `baseRef`'s tree, for `git apply --cached` dry runs. */
@@ -422,7 +483,7 @@ function withTempIndex(ctx, fn) {
  * base tree (so the base contains exactly that change). null when it cannot
  * be told (too many files, git too old, unreadable).
  */
-function filesInBase(sha, ctx) {
+function filesInBase(sha, ctx, treeRef = ctx.baseRef) {
   const mb = gitOut(["merge-base", sha, ctx.baseRef], ctx.cwd);
   if (!mb) return null;
   const names = gitOut(["diff", "--name-only", "-z", mb, sha], ctx.cwd);
@@ -430,7 +491,7 @@ function filesInBase(sha, ctx) {
   const files = names.split("\0").filter(Boolean);
   if (files.length > TREE_CHECK_MAX_FILES) return null;
   if (files.length === 0) return { filesIn: 0, filesTotal: 0 };
-  return withTempIndex(ctx, (env) => {
+  return withTempIndex({ ...ctx, baseRef: treeRef }, (env) => {
     let filesIn = 0;
     for (const f of files) {
       try {
@@ -674,6 +735,12 @@ export function defaultProjectsDir() {
 
 /** Why `unit` must stay, or null when it can go. */
 function keepReason(unit, ctx) {
+  if (unit.kind === "worktree" && unit.temp && !unit.session) {
+    const held = tempHeldReason(unit, ctx.now);
+    if (held) return held;
+    if (!unit.detached && landingState(unit.head, unit.branch, ctx).state !== "landed") return "not-landed";
+    return worktreeContentReason(unit.path, ctx.mainPath) || null;
+  }
   if (unit.kind === "worktree") {
     if (!unit.session) return "not-a-session-worktree";
     if (unit.locked) return "locked";
@@ -804,7 +871,7 @@ export function classifyUnits(scan, io) {
   const open = scan.units.length ? fetchOpen(io.cwd) : null;
   const ctx = {
     cwd: io.cwd, baseRef, merged, viaMerged: reachableFromMerged(io.cwd, merged, baseRef),
-    projectsDir: io.projectsDir, mainPath: scan.main || null, paths: scan.paths, current: scan.current,
+    projectsDir: io.projectsDir, mainPath: scan.main || null, paths: scan.paths, current: scan.current, now: io.now ?? Date.now(),
   };
   const removable = [];
   const keep = [];
@@ -863,17 +930,21 @@ export function planAutoClean(scan, settings, io) {
   const minAge = settings.autoCleanMinAgeDays;
   const keepNewest = settings.autoCleanKeepNewest ?? 0;
   const maxBytes = (settings.autoCleanMaxGB ?? 0) * GB;
-  if (scan.units.length === 0) {
-    return { gateOpen: false, reason: "no leftovers", remove: [], keep: [], atRisk: [], offline: false, keptBytes: null };
+  const expiryDays = settings.backupExpiryDays ?? BACKUP_EXPIRY_DAYS;
+  if (scan.units.length === 0 && !hasBackupRefs(io.cwd)) {
+    return { gateOpen: false, reason: "no leftovers", remove: [], keep: [], atRisk: [], remoteExpire: [], offline: false, keptBytes: null };
   }
-  const { removable, keep: kept, atRisk, merged } = classifyUnits(scan, io);
+  const { ctx, removable, keep: kept, atRisk, merged } = classifyUnits(scan, io);
   const keep = kept.filter((k) => k.ageDays > minAge);
+  const remoteExpire = merged === null ? [] : expiredBackupRefs(ctx, removable, expiryDays, io.now ?? Date.now());
 
   const picked = new Map();
   const pick = (u, trigger, extra = {}) => {
     if (!picked.has(u.key)) picked.set(u.key, { ...u, trigger, ...extra });
   };
-  const newestFirst = [...removable].sort((a, b) => a.ageDays - b.ageDays);
+  // abandoned temp worktrees (evals, parity builds) go as soon as nothing holds them
+  for (const u of removable) if (u.temp && !u.session) pick(u, "temp");
+  const newestFirst = [...removable].filter((u) => !picked.has(u.key)).sort((a, b) => a.ageDays - b.ageDays);
   if (removable.some((u) => u.ageDays > gate)) {
     for (const u of removable) if (u.ageDays > minAge) pick(u, "age");
   }
@@ -914,14 +985,43 @@ export function planAutoClean(scan, settings, io) {
       : `${(keptBytes / GB).toFixed(1)} of at most ${settings.autoCleanMaxGB} GB`);
   }
   return {
-    gateOpen: remove.length > 0,
-    reason: remove.length > 0 ? null : `nothing to remove: ${rules.join(", ")}`,
+    gateOpen: remove.length > 0 || remoteExpire.length > 0,
+    reason: remove.length > 0 || remoteExpire.length > 0 ? null : `nothing to remove: ${rules.join(", ")}`,
     remove,
     keep,
     atRisk,
+    remoteExpire,
     offline: merged === null,
     keptBytes,
   };
+}
+
+/** Landed `backup/*` and `rescue/*` refs on origin are deleted after this many days. */
+export const BACKUP_EXPIRY_DAYS = 14;
+const BACKUP_PATTERNS = ["refs/remotes/origin/backup", "refs/remotes/origin/rescue"];
+
+function hasBackupRefs(cwd) {
+  return Boolean(gitOut(["for-each-ref", "--count=1", "--format=%(refname)", ...BACKUP_PATTERNS], cwd));
+}
+
+/**
+ * Remote `backup/*` / `rescue/*` refs older than `days` whose content is
+ * landed — in the default branch itself, or covered by a landed leftover
+ * (the tip is an ancestor of a removable unit's head). Read-only.
+ * @returns {{name:string, sha:string}[]}
+ */
+export function expiredBackupRefs(ctx, removable, days, now = Date.now()) {
+  const out = gitOut(["for-each-ref", "--format=%(refname)%09%(objectname)%09%(committerdate:unix)", ...BACKUP_PATTERNS], ctx.cwd) || "";
+  const res = [];
+  for (const line of out.split("\n")) {
+    const [ref, sha, ts] = line.trim().split("\t");
+    if (!ref || !sha || !ts) continue;
+    if ((now - Number(ts) * 1000) / DAY_MS <= days) continue;
+    const name = ref.slice("refs/remotes/origin/".length);
+    const covered = removable.some((u) => u.head && gitOk(["merge-base", "--is-ancestor", sha, u.head], ctx.cwd));
+    if (covered || landingState(sha, null, ctx).state === "landed") res.push({ name, sha });
+  }
+  return res;
 }
 
 /** `branch -D` after re-checking the subject; returns a skip reason or null. */
@@ -960,7 +1060,12 @@ function removeWorktree(unit, cwd, current, timeout, projectsDir, mainPath) {
   const entry = live.find((w) => normPath(w.path) === normPath(unit.path));
   if (!entry || live.indexOf(entry) === 0) return "gone";
   if (normPath(entry.path) === current) return "current";
-  if (entry.locked) return "locked";
+  if (entry.locked) {
+    // a temp worktree locked by a dead process (or left "initializing") is unlocked first
+    const free = unit.temp && !tempHeldReason({ ...entry, activityMs: 0 });
+    if (!free) return "locked";
+    if (!gitOk(["worktree", "unlock", unit.path], cwd)) return "locked";
+  }
   if (entry.head !== unit.head || entry.branch !== unit.branch) return "moved";
   const inner = nestedCheckout(unit.path, live.map((w) => normPath(w.path)), current);
   if (inner) return `holds another checkout: ${inner}`;
@@ -1030,6 +1135,19 @@ export function executeAutoClean(plan, scan, {
     if (why) skipped.push({ kind: "branch", name: u.branch, reason: why });
     else branchGone(u.branch, u.head);
   }
+  if (remotes) {
+    for (const r of plan.remoteExpire || []) {
+      const tip = gitOut(["rev-parse", "--verify", "-q", `refs/remotes/origin/${r.name}`], cwd);
+      if (tip !== r.sha) {
+        skipped.push({ kind: "remote", name: r.name, reason: tip === null ? "gone" : "remote-moved" });
+        continue;
+      }
+      // the lease makes the delete fail if someone pushed to the ref meanwhile
+      const ok = gitOk(["push", "origin", "--delete", r.name, `--force-with-lease=${r.name}:${r.sha}`], cwd, NETWORK_TIMEOUT);
+      if (ok) removed.push({ kind: "remote", name: r.name, sha: r.sha, trigger: "backup-expiry" });
+      else skipped.push({ kind: "remote", name: r.name, reason: "remote-delete-failed" });
+    }
+  }
   // a failed/timed-out removal may have left a half-deleted checkout; prune
   // would drop its registration and turn it into an unlisted orphan
   if (!damaged) gitOk(["worktree", "prune"], cwd);
@@ -1074,6 +1192,66 @@ function plural(n, one, many) {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+/** An own open PR without a worktree on its head is stale after this many days. */
+export const STALE_PR_DAYS = 5;
+
+/**
+ * The viewer's own open PRs with the data the stale check needs, via gh.
+ * null when gh is missing, unauthenticated or offline.
+ */
+export function fetchOwnOpenPrs(cwd) {
+  try {
+    const out = execFileSync("gh", ["pr", "list", "--state", "open", "--author", "@me", "--limit", "100",
+      "--json", "number,title,headRefName,headRefOid,createdAt,updatedAt,files,commits"], { windowsHide: true,
+      cwd, encoding: "utf8", timeout: NETWORK_TIMEOUT, stdio: ["pipe", "pipe", "pipe"],
+    });
+    const list = JSON.parse(out);
+    return Array.isArray(list) ? list : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Own open PRs that look abandoned, read-only: SUPERSEDED (every file the PR
+ * changes is identical on `baseRef`, or `baseRef` changed each of them after
+ * the PR's last commit) or OLD (untouched for STALE_PR_DAYS and no worktree
+ * has its head checked out). Never closes anything.
+ * @param {object[]|null} prs   fetchOwnOpenPrs() result
+ * @param {{cwd:string, baseRef:string, worktrees:{branch:string|null, head:string|null}[], now?:number}} o
+ * @returns {{number:number, title:string, reason:"superseded"|"old", days:number}[]}
+ */
+export function findStalePrs(prs, o) {
+  if (!Array.isArray(prs)) return [];
+  const now = o.now ?? Date.now();
+  const out = [];
+  for (const pr of prs) {
+    if (!pr || !pr.number) continue;
+    const commits = Array.isArray(pr.commits) ? pr.commits : [];
+    const lastIso = (commits[commits.length - 1] || {}).committedDate || pr.updatedAt || pr.createdAt;
+    const lastMs = Date.parse(lastIso || "");
+    const days = Number.isFinite(lastMs) ? (now - lastMs) / DAY_MS : 0;
+    const files = (Array.isArray(pr.files) ? pr.files : []).map((f) => f && f.path).filter(Boolean);
+    let reason = null;
+    if (files.length > 0 && files.length <= TREE_CHECK_MAX_FILES && pr.headRefOid && Number.isFinite(lastMs)) {
+      const known = gitOk(["cat-file", "-e", `${pr.headRefOid}^{commit}`], o.cwd);
+      const same = known && files.every((f) => gitOut(["rev-parse", "-q", "--verify", `${o.baseRef}:${f}`], o.cwd)
+        === gitOut(["rev-parse", "-q", "--verify", `${pr.headRefOid}:${f}`], o.cwd));
+      const later = files.every((f) => {
+        const ct = Number(gitOut(["log", "-1", "--format=%ct", o.baseRef, "--", f], o.cwd));
+        return Number.isFinite(ct) && ct > 0 && ct * 1000 > lastMs;
+      });
+      if (same || later) reason = "superseded";
+    }
+    if (!reason && days > STALE_PR_DAYS) {
+      const held = (o.worktrees || []).some((w) => (w.branch && w.branch === pr.headRefName) || (w.head && w.head === pr.headRefOid));
+      if (!held) reason = "old";
+    }
+    if (reason) out.push({ number: pr.number, title: pr.title || "", reason, days: Math.floor(days) });
+  }
+  return out;
+}
+
 /**
  * Ready-made card lines: a `tests` entry for a cleanup that ran, an `open`
  * item for the nudge — `{ text, reply }`, so the card's „Nachbessern"
@@ -1116,6 +1294,20 @@ export function cardLines(result, lang = "de") {
         reply: "Yes, branch cleanup.",
       };
   }
+  const stale = (result.stalePrs || []).map((x) => (de
+    ? {
+      text: x.reason === "superseded"
+        ? `PR #${x.number} ist überholt durch main${x.title ? ` (${x.title})` : ""} — schließen?`
+        : `PR #${x.number} seit ${x.days} Tagen unberührt, kein Worktree${x.title ? ` (${x.title})` : ""} — schließen?`,
+      reply: `PR #${x.number} schließen — überholt durch main.`,
+    }
+    : {
+      text: x.reason === "superseded"
+        ? `PR #${x.number} is superseded by main${x.title ? ` (${x.title})` : ""} — close it?`
+        : `PR #${x.number} untouched for ${x.days} days, no worktree${x.title ? ` (${x.title})` : ""} — close it?`,
+      reply: `Close PR #${x.number} — superseded by main.`,
+    }));
+  if (stale.length) out.openItems = stale;
   const risk = result.atRisk || [];
   if (risk.length) {
     const shown = risk.slice(0, 3).map((x) => {
@@ -1187,7 +1379,7 @@ export function runHygiene(p) {
     const projectsDir = p.projectsDir === undefined ? defaultProjectsDir() : p.projectsDir;
     const sizeCache = repo.sizes && typeof repo.sizes === "object" ? { ...repo.sizes } : {};
     const plan = planAutoClean(scan, settings, {
-      cwd, fetchMerged: p.fetchMerged, fetchOpen: p.fetchOpen, projectsDir, sizeCache, sizeBudgetMs: p.sizeBudgetMs,
+      cwd, now, fetchMerged: p.fetchMerged, fetchOpen: p.fetchOpen, projectsDir, sizeCache, sizeBudgetMs: p.sizeBudgetMs,
     });
     // sizes of worktrees that still exist only — a removed one would never expire
     const live = new Set(scan.units.filter((u) => u.kind === "worktree").map((u) => normPath(u.path)));
@@ -1234,6 +1426,18 @@ export function runHygiene(p) {
     }
   }
 
+  // own open PRs that look abandoned — reported only, never closed; offline → skipped
+  result.stalePrs = [];
+  try {
+    const fetchOwn = p.fetchOwnPrs || (p.fetchMerged ? () => null : fetchOwnOpenPrs);
+    const prs = fetchOwn(cwd);
+    if (prs) {
+      const originRef = `refs/remotes/origin/${scan.defaultBranch}`;
+      const baseRef = gitOk(["rev-parse", "--verify", "-q", originRef], cwd) ? originRef : `refs/heads/${scan.defaultBranch}`;
+      result.stalePrs = findStalePrs(prs, { cwd, baseRef, now, worktrees: listWorktrees(cwd) || [] });
+    }
+  } catch { /* advisory only */ }
+
   if (!result.autoClean.ran && (repo.damaged || []).length !== priorDamage.length) {
     repo.damaged = priorDamage;
     dirty = true;
@@ -1245,4 +1449,21 @@ export function runHygiene(p) {
   }
   result.card = cardLines(result, lang);
   return result;
+}
+
+/**
+ * Refresh ~/.claude/orphan-report.json after a ship: scripts/orphan-scan.js,
+ * detached, hidden window, low priority, never awaited. Any failure to start
+ * it is ignored — the ship must not depend on it.
+ */
+export function startOrphanScan(script = fileURLToPath(new URL("../../../scripts/orphan-scan.js", import.meta.url)), spawnFn = spawn) {
+  try {
+    const child = spawnFn(process.execPath, [script], { detached: true, stdio: "ignore", windowsHide: true });
+    child.on?.("error", () => { /* start failure is not the ship's problem */ });
+    try { if (child.pid) os.setPriority(child.pid, os.constants.priority.PRIORITY_LOW); } catch { /* optional */ }
+    child.unref?.();
+    return true;
+  } catch {
+    return false;
+  }
 }

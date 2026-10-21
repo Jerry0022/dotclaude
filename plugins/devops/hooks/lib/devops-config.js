@@ -49,15 +49,15 @@ const SCHEMA = Object.freeze({
       doc: 'After a successful ship, remove old leftovers that provably landed on their own (only once the age gate opens).',
     }),
     autoCleanGateDays: Object.freeze({
-      type: 'integer', default: 30, min: 1, max: 3650,
+      type: 'integer', default: 3, min: 1, max: 3650,
       doc: 'The automatic cleanup only runs once a removable leftover is older than this many days.',
     }),
     autoCleanMinAgeDays: Object.freeze({
-      type: 'integer', default: 30, min: 1, max: 3650,
+      type: 'integer', default: 3, min: 1, max: 3650,
       doc: 'The automatic cleanup removes leftovers older than this; younger ones only via the cleanup page.',
     }),
     autoCleanKeepNewest: Object.freeze({
-      type: 'integer', default: 20, min: 0, max: 100000,
+      type: 'integer', default: 5, min: 0, max: 100000,
       doc: 'Keep at most this many landed leftovers; older ones beyond it go whatever their age (0 = off).',
     }),
     autoCleanMaxGB: Object.freeze({

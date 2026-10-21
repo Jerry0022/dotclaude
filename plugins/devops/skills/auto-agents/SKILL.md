@@ -411,7 +411,9 @@ Loop until the gate says `finish`, `pause` or `stop`:
    `passes` included `redteam` and the diff is substantive → one redteam
    review of the task diff; a high-severity finding goes back to the same
    agent once (`SendMessage`). Then targeted tests for the changed modules,
-   merge the sub-branch into the integration branch, `git push -u origin
+   merge the sub-branch into the integration branch, then remove that
+   sub-agent's worktree and branch right away (see "Remove after merge"
+   below), `git push -u origin
    <integration branch>` (non-force; no PR), `B state land <id>
    --sha=<merge sha>`. The push is skipped — the merge stays local, `state
    land` gets `--pushed=false` — when the repo has no remote or the
@@ -421,6 +423,14 @@ Loop until the gate says `finish`, `pause` or `stop`:
    branch; otherwise `main` is reached only by shipping, which is the
    caller's decision (Step 7). A task that cannot be made green → `B state fail <id>
    --reason=…` (or `requeue` when the cause is external).
+   **Remove after merge** — once the merge is verified (sub tip is an
+   ancestor of the integration branch, worktree clean) the next step is
+   `node "{PLUGIN_ROOT}/scripts/integration-check.js" --integration
+   <integration-branch> --sub <sub-branch|path> --remove --now`. `--now` skips
+   only the ≥30 min idle wait; landed, clean, own-commits, live-session and
+   ignored-file checks still apply, so a worktree it keeps (listed in the
+   output) is retried by the Step 7 sweep. Do not leave agent worktrees for
+   the end of the run.
 3. **Before removing any worktree** → `B prune-check --branch=<b>
    --worktree=<w>`; exit 1 means keep it.
 4. After the loop: the full QA run as an ordinary last task (not a gate),
@@ -436,7 +446,7 @@ re-entering this loop.
 
 After the last wave (or when a `needs-decision` stops the run):
 
-0. **Integration proof** — `node "{PLUGIN_ROOT}/scripts/integration-check.js" --integration <integration-branch> --sub <parts> --remove`. Pass the run's own parts as `--sub <branch|path,...>`; `--remove` deletes only those (or branches carrying the whole run slug) and only when landed, clean, with own commits and idle ≥30 min — other runs' agent worktrees are listed, never removed. Its `open` line ("ungelandet: N Teile" + paths) goes into `open:` verbatim; unlanded or uncommitted agent work is never `done:`.
+0. **Integration proof** — `node "{PLUGIN_ROOT}/scripts/integration-check.js" --integration <integration-branch> --sub <parts> --remove`. Pass the run's own parts as `--sub <branch|path,...>`; `--remove` deletes only those (or branches carrying the whole run slug) and only when landed, clean, with own commits and idle ≥30 min (a part already removed after its merge in Step 6 is simply absent) — other runs' agent worktrees are listed, never removed. Its `open` line ("ungelandet: N Teile" + paths) goes into `open:` verbatim; unlanded or uncommitted agent work is never `done:`.
 
 1. Summarize what each agent accomplished
 2. List any unresolved findings or open questions

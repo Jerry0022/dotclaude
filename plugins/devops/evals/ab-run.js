@@ -242,6 +242,11 @@ function main(argv) {
   // listener still covers a signal that lands outside a child run.
   const onSigint = () => { for (const fn of cleanups) { try { fn(); } catch { /* best effort */ } } process.exit(130); };
   process.once("SIGINT", onSigint);
+  // Last line of defence (process.exit elsewhere, an uncaught error): the
+  // cleanups are idempotent and synchronous, so they may run again here.
+  const onExit = () => { for (const fn of cleanups) { try { fn(); } catch { /* best effort */ } } };
+  process.once("exit", onExit);
+  process.once("SIGTERM", onSigint);
   let interrupted = false;
   try {
     fs.mkdirSync(runDir, { recursive: true });
@@ -259,6 +264,8 @@ function main(argv) {
     }
   } finally {
     process.removeListener("SIGINT", onSigint);
+    process.removeListener("SIGTERM", onSigint);
+    process.removeListener("exit", onExit);
     for (const fn of cleanups) { try { fn(); } catch (err) { console.error(`[ab-run] cleanup failed: ${err.message}`); } }
   }
   const summary = summarize(results);

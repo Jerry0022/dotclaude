@@ -258,6 +258,15 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   App starten stay.
 - No `SHIP oder ÄNDERN` line anymore — the buttons say it. The terminal
   shows the question heading alone.
+- **Stale session server.** A session keeps the MCP server process it started
+  with, so a mid-day plugin update leaves it rendering with old code. When the
+  installed devops version (`installed_plugins.json`, newest user-scope entry,
+  re-read per render) is newer than the version this process loaded at startup,
+  one info line follows the budget line: `ℹ Session-Server v<old> — ein
+  Neustart der Session lädt v<new>.` (en: `ℹ Session server v<old> —
+  restarting the session loads v<new>.`). On Desktop it shares the widget's
+  info slot with the overrides line. Never in the decision box, buttons
+  unchanged, any read error draws nothing (`mcp-server/lib/server-version.js`).
 
 ## 3. Per-variant mapping
 

@@ -5,7 +5,7 @@
  * @event SessionStart
  * @plugin devops
  * @description Check for stale changes AND workspace setup issues at session
- *   start. Filters out active worktree branches to avoid false positives.
+ *   start. The unpushed check counts the current branch only.
  *   Silent when clean. Outputs structured CTAs when issues are found.
  *
  *   Findings are emitted unconditionally and instruct the assistant to carry
@@ -59,26 +59,6 @@ function run(cmd, cwd, timeout = GIT_TIMEOUT_MS) {
   } catch {
     return '';
   }
-}
-
-/**
- * Get branches currently checked out in worktrees (excluding main working tree).
- */
-function getWorktreeBranches(dir) {
-  const raw = run('git worktree list --porcelain', dir);
-  if (!raw) return new Set();
-
-  const branches = new Set();
-  let isMain = true; // first worktree entry is the main working tree
-  for (const line of raw.split('\n')) {
-    const m = line.match(/^branch\s+refs\/heads\/(.+)/);
-    if (m) {
-      if (!isMain) branches.add(m[1]);
-      isMain = false;
-    }
-    if (line === '') isMain = false; // blank line separates worktree entries
-  }
-  return branches;
 }
 
 /**
@@ -148,7 +128,6 @@ function checkRepo(dir) {
   if (!isGitRepo(dir)) return issues;
 
   const inWorktree = isLinkedWorktree(dir);
-  const worktreeBranches = getWorktreeBranches(dir);
   const remote = hasRemote(dir);
 
   // Fetch remote refs so unpushed detection is accurate.
@@ -177,38 +156,15 @@ function checkRepo(dir) {
   // Guarded as a BLOCK, not an early return — the stash check below is still
   // meaningful in a repo without a remote.
   if (remote) {
-    // In a linked worktree: only check the current branch (HEAD), not --branches.
-    // --branches is repo-wide and shows all local branches' unpushed commits,
-    // which are irrelevant noise in a worktree context.
-    const logTarget = inWorktree ? 'HEAD' : '--branches';
-    const unpushed = run(`git log ${logTarget} --not --remotes --oneline --decorate`, dir);
-    if (unpushed) {
-      const lines = unpushed.split('\n').filter(Boolean);
-      if (inWorktree) {
-        // In a worktree all returned commits belong to the current branch
-        if (lines.length > 0) {
-          issues.push({
-            type: 'unpushed',
-            count: lines.length,
-            label: `${lines.length} unpushed commit(s)`,
-          });
-        }
-      } else {
-        // In main working tree: exclude active worktree branches as before
-        const staleLines = lines.filter(line => {
-          const branchMatch = line.match(/\(([^)]+)\)/);
-          if (!branchMatch) return true;
-          const refs = branchMatch[1].split(',').map(r => r.trim().replace(/^HEAD -> /, ''));
-          return !refs.every(ref => worktreeBranches.has(ref));
-        });
-        if (staleLines.length > 0) {
-          issues.push({
-            type: 'unpushed',
-            count: staleLines.length,
-            label: `${staleLines.length} unpushed commit(s)`,
-          });
-        }
-      }
+    // Current branch (HEAD) only, in the main checkout as in a linked worktree.
+    // `--branches` counted every undecorated commit of every abandoned local
+    // branch (157 "unpushed" on an in-sync main) and sent /do-ship after work
+    // that is not this session's. Other local branches are the orphan nudge's
+    // business (ss.orphan.nudge -> /auto-cleanup).
+    const unpushed = run('git log HEAD --not --remotes --oneline', dir);
+    const count = unpushed ? unpushed.split('\n').filter(Boolean).length : 0;
+    if (count > 0) {
+      issues.push({ type: 'unpushed', count, label: `${count} unpushed commit(s)` });
     }
   }
 

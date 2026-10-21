@@ -337,3 +337,23 @@ describe("runDeployParity", () => {
     expect(r.reason).toMatch(/not a git repository/);
   });
 });
+
+describe("temp worktree registration cleanup", () => {
+  test("a half-made 'locked initializing' registration is found and removed", () => {
+    initRepo({ "a.txt": "a" });
+    const tmpRoot = mkdtempSync(join(tmpdir(), "parity-orphan-"));
+    const workdir = join(tmpRoot, "src");
+    git(["worktree", "add", "--detach", "--quiet", workdir, "HEAD"], dir);
+    git(["worktree", "lock", "--reason", "initializing", workdir], dir);
+    const admin = P.findAdminDir(dir, workdir);
+    expect(admin).toBeTruthy();
+    expect(P.removeTempWorktree(tmpRoot, admin)).toBe(true);
+    expect(existsSync(tmpRoot)).toBe(false);
+    expect(git(["worktree", "list", "--porcelain"], dir).match(/^worktree /gm)).toHaveLength(1);
+  }, SPAWN_TEST_MS);
+
+  test("findAdminDir is null for a path that was never registered", () => {
+    initRepo({ "a.txt": "a" });
+    expect(P.findAdminDir(dir, join(tmpdir(), "parity-never"))).toBeNull();
+  });
+});

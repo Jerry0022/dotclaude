@@ -101,17 +101,37 @@ function materializeRef(ref, { repoRoot, subdir = path.join("plugins", "devops")
   const root = repoRoot || execFileSync("git", ["rev-parse", "--show-toplevel"], { windowsHide: true, encoding: "utf8" }).trim();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ab-variant-"));
   fs.rmdirSync(dir);
-  execFileSync("git", ["-C", root, "worktree", "add", "--detach", dir, ref], { windowsHide: true, stdio: "pipe" });
-  const sha = execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { windowsHide: true, encoding: "utf8" }).trim();
+  const gitRoot = (args) => execFileSync("git", ["-C", root, ...args], { windowsHide: true, stdio: "pipe" });
+  let done = false;
+  // Idempotent: runs from the normal path, SIGINT and the process-exit path.
+  // Also reclaims a registration a failed/interrupted `worktree add` left
+  // "locked initializing" (unlock, remove, prune).
+  const remove = () => {
+    if (done) return;
+    done = true;
+    try { unlinkJunctions(path.join(dir, subdir, "mcp-server")); } catch { /* none */ }
+    try { gitRoot(["worktree", "unlock", dir]); } catch { /* not locked / not registered */ }
+    try { gitRoot(["worktree", "remove", "--force", dir]); } catch { /* best effort */ }
+    try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ }
+    try { gitRoot(["worktree", "prune"]); } catch { /* best effort */ }
+  };
+  let sha;
+  try {
+    gitRoot(["worktree", "add", "--detach", dir, ref]);
+    sha = execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { windowsHide: true, encoding: "utf8" }).trim();
+  } catch (err) {
+    remove();
+    throw err;
+  }
   return {
     pluginDir: path.join(dir, subdir),
     sha,
     cleanup: () => {
+      if (done) return;
       // The variant's SessionStart (ss.mcp.deps) junctions node_modules into
       // its mcp-server dirs; `worktree remove --force` would delete through
       // them into the shared plugin-data install. Drop the links first.
-      unlinkJunctions(path.join(dir, subdir, "mcp-server"));
-      try { execFileSync("git", ["-C", root, "worktree", "remove", "--force", dir], { windowsHide: true, stdio: "pipe" }); } catch { /* best effort: a locked temp worktree is left for `git worktree prune` */ }
+      remove();
     },
   };
 }

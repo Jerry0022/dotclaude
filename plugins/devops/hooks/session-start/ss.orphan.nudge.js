@@ -8,7 +8,7 @@
  *   worktrees with uncommitted changes. Reads ~/.claude/orphan-report.json
  *   (written daily by scripts/orphan-scan.js) — no git calls, no network, so
  *   it is boot-window safe. Silent without a report, with a report older than
- *   7 days, for an unknown repo, or when nothing is at risk. The report entry
+ *   24 h (the line names the report age otherwise), for an unknown repo, or when nothing is at risk. The report entry
  *   A missing or >24 h old report also starts orphan-scan.js detached (the
  *   daily refresh). The report entry is matched by path prefix (worktrees live under the main checkout).
  *   Output: additionalContext asking Claude to show the line, e.g.
@@ -21,7 +21,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const MAX_AGE_MS = 7 * 86_400_000;
+const MAX_AGE_MS = 24 * 3_600_000;
 
 function reportPath() {
   return process.env.DEVOPS_ORPHAN_REPORT || path.join(os.homedir(), '.claude', 'orphan-report.json');
@@ -49,9 +49,16 @@ function buildNudge({ cwd, lang = 'de', report, now = Date.now() }) {
   const dirty = risk.filter((r) => r.dirty > 0).length;
   const unlanded = risk.length - dirty;
   if (unlanded + dirty === 0) return null;
+  const age = formatAge(now - t);
   return lang === 'en'
-    ? `⚠ ${unlanded} unlanded ${unlanded === 1 ? 'branch' : 'branches'} / ${dirty} ${dirty === 1 ? 'worktree' : 'worktrees'} with uncommitted work → /auto-cleanup`
-    : `⚠ ${unlanded} ungelandete ${unlanded === 1 ? 'Branch' : 'Branches'} / ${dirty} ${dirty === 1 ? 'Worktree' : 'Worktrees'} mit uncommitteter Arbeit → /auto-cleanup`;
+    ? `⚠ ${unlanded} unlanded ${unlanded === 1 ? 'branch' : 'branches'} / ${dirty} ${dirty === 1 ? 'worktree' : 'worktrees'} with uncommitted work (as of ${age} ago) → /auto-cleanup`
+    : `⚠ ${unlanded} ungelandete ${unlanded === 1 ? 'Branch' : 'Branches'} / ${dirty} ${dirty === 1 ? 'Worktree' : 'Worktrees'} mit uncommitteter Arbeit (Stand vor ${age}) → /auto-cleanup`;
+}
+
+/** "3 h" from one hour on, otherwise minutes (at least 1). */
+function formatAge(ms) {
+  const h = Math.floor(ms / 3_600_000);
+  return h >= 1 ? `${h} h` : `${Math.max(1, Math.round(ms / 60_000))} min`;
 }
 
 const REFRESH_MS = 24 * 3_600_000;
