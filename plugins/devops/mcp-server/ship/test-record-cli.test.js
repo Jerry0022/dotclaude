@@ -1,6 +1,6 @@
 import { describe, test, expect, vi } from "vitest";
 import { resolve } from "node:path";
-import { main, parseArgs } from "./test-record-cli.js";
+import { main, parseArgs, scope } from "./test-record-cli.js";
 
 const K = (h) => ({ treeHash: h.repeat(40), method: "worktree" });
 
@@ -11,9 +11,57 @@ function deps({ keys = [K("a"), K("a")], code = 0 } = {}) {
     key: vi.fn(() => queue.shift() ?? null),
     record: vi.fn((cwd, r) => ({ ...r, at: "now" })),
     log: vi.fn(),
+    preRun: vi.fn(() => null),
     now: (() => { let t = 1000; return () => (t += 500); })(),
   };
 }
+
+describe("test-record-cli — load warning and scope (#762)", () => {
+  test("run prints the pre-run warning to the log before executing", () => {
+    const d = deps();
+    d.preRun = vi.fn(() => ({ note: "Machine under load before the test step: pid 9" }));
+    const order = [];
+    d.log = vi.fn((s) => order.push(`log:${s.trim()}`));
+    d.exec = vi.fn(() => { order.push("exec"); return 0; });
+    main(["run", "--cwd", "/r"], d);
+    expect(order[0]).toMatch(/^log:\[test-record\] Machine under load/);
+    expect(order[1]).toBe("exec");
+  });
+
+  test("run without load prints no warning line", () => {
+    const d = deps();
+    main(["run", "--cwd", "/r"], d);
+    expect(d.log.mock.calls.every(([s]) => !/under load/.test(s))).toBe(true);
+  });
+
+  test("a scoped run is never recorded", () => {
+    const d = deps();
+    expect(main(["run", "--cwd", "/r", "--cmd", "npx vitest related a.js --run"], d)).toBe(0);
+    expect(d.record).not.toHaveBeenCalled();
+    expect(d.preRun).not.toHaveBeenCalled();
+  });
+
+  test("scope: related command for imported JS, full for hooks, JSON, Markdown, nothing", () => {
+    expect(scope(["lib/a.js", "lib/a.test.js"])).toBe("npx vitest related lib/a.js lib/a.test.js --run");
+    expect(scope(["lib/a.js", "hooks/x.js"])).toBe("full");
+    expect(scope(["lib/a.js", "package.json"])).toBe("full");
+    expect(scope(["README.md"])).toBe("full");
+    expect(scope([])).toBe("full");
+    // root-level config is imported by no test: full suite
+    expect(scope(["vitest.config.js"])).toBe("full");
+    expect(scope(["lib/a.js", "eslint.config.mjs"])).toBe("full");
+    // a test file at the root still runs scoped
+    expect(scope(["a.test.js"])).toBe("npx vitest related a.test.js --run");
+    // paths with spaces are quoted
+    expect(scope(["my dir/a.js"])).toBe('npx vitest related "my dir/a.js" --run');
+  });
+
+  test("scope subcommand logs the command", () => {
+    const d = deps();
+    expect(main(["scope", "--files", "a.js,b.json"], d)).toBe(0);
+    expect(d.log).toHaveBeenCalledWith("full\n");
+  });
+});
 
 describe("test-record-cli", () => {
   test("parseArgs defaults to npm test in cwd", () => {

@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { compareVersions } from "../lib/channels.js";
 import { findGreen, recordResult, treeKey, usualDurationMs } from "../lib/test-results.js";
 import {
-  buildLoad, classifyFailure, isEnvCleanupFailure, parseFailingTests, parseLockWait, readLockHolder, sampleCpu,
+  buildLoad, buildPreRunWarning, classifyFailure, isEnvCleanupFailure, parseFailingTests, parseLockWait, readLockHolder, sampleCpu,
 } from "../lib/test-step.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -241,6 +241,8 @@ async function testStep(testCmd, cwd, limitSec, reuseGreen) {
 
   const holderAtStart = readLockHolder();
   const cpu = await sampleCpu();
+  const preRun = buildPreRunWarning({ holder: holderAtStart, cpu, usualMs: usualDurationMs(cwd, testCmd) });
+  if (preRun) console.error(`[ship_build] ${preRun.note}`);
   const started = Date.now();
   let res = runTest(testCmd, cwd, limitSec);
   let retried = null;
@@ -258,6 +260,7 @@ async function testStep(testCmd, cwd, limitSec, reuseGreen) {
   const step = { step: "test", cmd: testCmd, ...stepRes, durationMs };
   if (retried) step.retried = retried;
   const extra = {};
+  if (preRun) extra.preRunWarning = preRun;
   if (load) extra.load = load;
 
   if (res.success) {

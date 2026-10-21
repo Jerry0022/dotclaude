@@ -394,9 +394,30 @@ describe("ship_build — load signal (#762)", () => {
     expect(res.load).toMatchObject({ holder: { pid: 7 }, cpuBusyPct: 97 });
   });
 
-  test("an unloaded run carries no load field", async () => {
+  test("a live holder yields an early preRunWarning (pid, cwd, heldMs, ETA) and a stderr line", async () => {
+    readLockHolder.mockImplementation(() => ({ pid: 7, cwd: "C:/x", heldMs: 42_000 }));
+    usualDurationMs.mockImplementation(() => 120_000);
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await buildWithTests();
+    expect(res.preRunWarning).toMatchObject({ holder: { pid: 7, cwd: "C:/x" }, heldMs: 42_000, usualMs: 120_000 });
+    expect(res.preRunWarning.eta).toMatch(/120 s.*holder up for 42 s/);
+    expect(err.mock.calls.some(([m]) => /\[ship_build\].*pid 7/.test(m))).toBe(true);
+    err.mockRestore();
+    usualDurationMs.mockImplementation(() => null);
+  });
+
+  test("a busy CPU alone yields a preRunWarning", async () => {
+    sampleCpu.mockImplementation(async () => ({ busyPct: 95, cores: 8 }));
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await buildWithTests();
+    expect(res.preRunWarning).toMatchObject({ holder: null, cpuBusyPct: 95 });
+    err.mockRestore();
+  });
+
+  test("an unloaded run carries no load field and no preRunWarning", async () => {
     const res = await buildWithTests();
     expect(res.load).toBeUndefined();
+    expect(res.preRunWarning).toBeUndefined();
   });
 });
 

@@ -59,6 +59,16 @@ when it is green and the tree did not change during it; ship_build then reuses
 it (`testsReused`, see `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/build-reuse.md`).
 Targeted runs (single test files) are not recorded — they never stand in for the full suite.
 
+### Scoped runs while iterating
+
+During a fix-and-retest loop run only what the change can affect:
+`node "{PLUGIN_ROOT}/mcp-server/ship/test-record-cli.js" scope --files <a.js,b.js>` prints
+`npx vitest related <files> --run`, or `full`. Scoped runs stay unrecorded and never satisfy
+the green-result reuse. A changed file no test imports (hooks spawned via `execFile`, JSON,
+Markdown, scripts) makes `scope` answer `full` — run the full suite then. Before handoff do
+exactly one recorded full run (above). The ship gate (`ship_build`) is unchanged: full suite
+on an unrecorded tree.
+
 ## Output format
 
 ```

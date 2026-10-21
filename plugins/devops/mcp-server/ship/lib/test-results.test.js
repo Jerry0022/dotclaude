@@ -96,6 +96,12 @@ describe("store", () => {
     expect(findGreen(dir, { treeHash: T, testCmd: "npm test", now: now + REUSE_TTL_MS + 1 })).toBeNull();
   });
 
+  test("a scoped command never satisfies the reuse for the full suite", () => {
+    const now = Date.parse("2026-10-20T12:00:00Z");
+    recordResult(dir, { treeHash: T, testCmd: "npx vitest related a.js --run", passed: true, now });
+    expect(findGreen(dir, { treeHash: T, testCmd: "npm test", now })).toBeNull();
+  });
+
   test("a red record replaces the green one for the same key", () => {
     recordResult(dir, { treeHash: T, testCmd: "npm test", passed: true });
     recordResult(dir, { treeHash: T, testCmd: "npm test", passed: false });

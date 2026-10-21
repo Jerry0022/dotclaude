@@ -39,6 +39,19 @@ load: { lockWaitMs, lockGaveUp, holder: { pid, cwd } | null, cpuBusyPct, loadAvg
 
 Relay `load.note` to the user — it is the "why did this take so long" answer.
 
+Before the suite starts, a live foreign lock holder or CPU ≥ 85 % busy yields
+`preRunWarning: { holder, heldMs, cpuBusyPct, usualMs, eta, note }` (also on the server's
+stderr; `test-record-cli.js run` prints the same note to stderr). The ETA is the usual green
+duration plus "remaining time unknown, holder up for N s". No load → no field, no output.
+
+## Scoped runs (agent loops only)
+
+qa / feature iterate with `npx vitest related <files> --run` (`test-record-cli.js scope`) and
+do one recorded full run before handoff. Scoped runs are never recorded and a different
+command never matches `findGreen`. A changed file no test imports (hooks, JSON, Markdown,
+`execFile`-spawned scripts) → `scope` answers `full`. ship_build never scopes: it runs the
+full suite on an unrecorded tree (the import graph is blind to dynamic/spawned dependencies).
+
 ## Red test step
 
 - An EPERM / EBUSY / ENOTEMPTY on a temp or cleanup path triggers one retry
