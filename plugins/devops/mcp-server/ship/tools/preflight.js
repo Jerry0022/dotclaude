@@ -22,7 +22,7 @@ import { repoKey, readRecord, describeRecord } from "../lib/ci-quota.js";
 
 export const schema = z.object({
   base: z.string().optional().describe("Base branch to ship into. Omit to auto-detect: parent branch (from sub-branch naming) or the repository's default branch (origin/HEAD, typically 'main' or 'master')."),
-  outOfBandGlobs: z.array(z.string()).nullable().default(null).describe("Override globs for out-of-band deploy detection (#243). Paths that a code merge does NOT deploy — DB migrations, edge/serverless functions. Omit/null to use the stack-agnostic defaults (**/migrations/**, supabase/migrations/**, supabase/functions/**). The do-ship skill passes these from the project ship-extension reference.md `outOfBandDeploy:` field."),
+  outOfBandGlobs: z.array(z.string()).nullable().default(null).describe("Override globs for out-of-band deploy detection (#243): paths a code merge does NOT deploy (DB migrations, edge/serverless functions). Omit/null for the defaults (**/migrations/**, supabase/migrations/**, supabase/functions/**). do-ship passes these from the ship-extension reference.md `outOfBandDeploy:` field."),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
 

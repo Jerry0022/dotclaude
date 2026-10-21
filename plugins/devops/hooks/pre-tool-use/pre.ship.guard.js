@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.ship.guard
- * @version 0.4.2
+ * @version 0.4.3
  * @event PreToolUse
  * @plugin devops
  * @description Block manual PR creation/merging via Bash.
@@ -57,8 +57,11 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
+  // Parseable rule tag (plugin-audit splits blocked ship attempts by it); the
+  // human text and the session-grader signal 'BLOCKED: Manual PR creation' stay.
+  const tag = shipAlive ? '[ship-guard:manual-pr-tools-deferred]' : '[ship-guard:manual-pr-server-down]';
   const lines = [
-    'BLOCKED: Manual PR creation/merging detected. Use /do-ship for shipping.',
+    tag + ' BLOCKED: Manual PR creation/merging detected. Use /do-ship for shipping.',
     'The ship pipeline ensures build-ID, safety checks, version bumps, and proper completion cards.',
     '',
   ];

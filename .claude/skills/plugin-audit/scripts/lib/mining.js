@@ -40,6 +40,8 @@ const path = require('path');
 const readline = require('readline');
 const { tokensOfChars } = require('./util');
 
+// pre.ship.guard refusals carry `[ship-guard:<rule>]`; refusals without it count as 'untagged'.
+const SHIP_GUARD_TAG_RE = /\[ship-guard:([a-z0-9-]+)\]/;
 const MAX_FILE_BYTES = 200 * 1024 * 1024;
 
 /**
@@ -85,10 +87,15 @@ function createSession(project, gate) {
   const s = {
     project, usageById: new Map(), compactions: 0, pluginTokens: { hookContext: 0, skillLoads: 0, mcpResults: 0 },
     subagents: [], toolNames: new Map(), bashFail: new Map(), autoFix: 0, frustration: 0, tokenGuardBlocks: 0,
-    gate: {}, firstTs: null, lastTs: null, version: null, spawnModels: new Map(),
+    gate: {}, shipBlocks: {}, firstTs: null, lastTs: null, version: null, spawnModels: new Map(),
   };
   const countGate = (text) => {
     if (TOKEN_GUARD_RE.test(text)) s.tokenGuardBlocks++;
+    const tagged = SHIP_GUARD_TAG_RE.exec(text);
+    if (tagged || text.includes('BLOCKED: Manual PR creation')) {
+      const rule = tagged ? tagged[1] : 'untagged';
+      s.shipBlocks[rule] = (s.shipBlocks[rule] || 0) + 1;
+    }
     if (!gate) return;
     for (const r of gate) if (r.res.some((re) => re.test(text))) s.gate[r.id] = (s.gate[r.id] || 0) + 1;
   };
@@ -164,7 +171,7 @@ function createSession(project, gate) {
       plugin: { ...s.pluginTokens, subagentTokens: s.subagents.reduce((n, a) => n + a.tokens, 0), total: hookCtx + s.pluginTokens.skillLoads + s.pluginTokens.mcpResults },
       subagents: s.subagents,
       rework: { repeatedBashFailures: [...s.bashFail.values()].filter((n) => n >= 2).length, autoFixLoads: s.autoFix, frustrationPrompts: s.frustration },
-      tokenGuardBlocks: s.tokenGuardBlocks, gate: s.gate, firstTs: s.firstTs, lastTs: s.lastTs, version: s.version,
+      tokenGuardBlocks: s.tokenGuardBlocks, gate: s.gate, shipBlocks: s.shipBlocks, firstTs: s.firstTs, lastTs: s.lastTs, version: s.version,
     };
   };
   return s;
@@ -272,6 +279,8 @@ function summarize(sessions, { sinceMs, now, skipped, notes, files, savings = nu
     const p = (byProject[s.project] = byProject[s.project] || { sessions: 0, tokens: 0, pluginTokens: 0 });
     p.sessions++; p.tokens += s.tokens; p.pluginTokens += s.plugin.total;
   }
+  const shipBlocks = {};
+  for (const s of sessions) for (const [k, v] of Object.entries(s.shipBlocks || {})) shipBlocks[k] = (shipBlocks[k] || 0) + v;
   const gate = {};
   for (const s of sessions) for (const [k, v] of Object.entries(s.gate)) gate[k] = (gate[k] || 0) + v;
   const subagents = sessions.flatMap((s) => s.subagents);
@@ -309,6 +318,7 @@ function summarize(sessions, { sinceMs, now, skipped, notes, files, savings = nu
         perSession: sessions.length ? Number((sum((s) => s.rework.repeatedBashFailures + s.rework.autoFixLoads + s.rework.frustrationPrompts) / sessions.length).toFixed(2)) : 0,
       },
       gateCatches: { kind: 'frequency', note: 'how often a guard refused the model - a frequency, NOT a token saving', byRule: gate, total: Object.values(gate).reduce((n, v) => n + v, 0) },
+      shipBlocksByRule: { kind: 'frequency', note: 'blocked manual-ship attempts per [ship-guard:<rule>] tag; untagged = refusal without a tag', byRule: shipBlocks, total: Object.values(shipBlocks).reduce((n, v) => n + v, 0) },
     },
   };
 }

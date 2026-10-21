@@ -26,4 +26,24 @@ describe('netEstimate', () => {
     expect(n.estimate).toBeNull();
     expect(n.comparable).toBe(false);
   });
+
+  it('adds savings-log estimates, never block counts, and becomes comparable', () => {
+    const m = mining(3, 900, 100);
+    m.benefit.tokenGuard = { estimated: true, blocks: 50, avoidedEstimate: 400 };
+    m.benefit.localLlm = { estimated: true, estTokens: 250 };
+    const n = netEstimate(footprint, m);
+    expect(n.comparable).toBe(true);
+    expect(n.benefitTokens).toBe(750);
+    expect(n.estimate).toBe(750 - 900);
+    expect(n.breakdown.estimatedBenefitTokens).toBe(650);
+    expect(n.uncertainty).toBeTruthy();
+  });
+
+  it('ignores unestimated guard entries (frequency only)', () => {
+    const m = mining(3, 900, 100);
+    m.benefit.tokenGuard = { measurable: false, blocks: 50 };
+    const n = netEstimate(footprint, m);
+    expect(n.comparable).toBe(false);
+    expect(n.benefitTokens).toBe(100);
+  });
 });

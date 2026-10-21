@@ -39,6 +39,16 @@ describe('plugin-audit mining', () => {
     expect(m.benefit.localLlm.measurable).toBe(false);
   });
 
+  it('counts blocked ship attempts per [ship-guard:<rule>] tag, untagged otherwise', () => {
+    const s = createSession('p', null);
+    const res = (id, text) => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: true, content: text }] } });
+    s.add(res('a', '[ship-guard:manual-pr-server-down] BLOCKED: Manual PR creation/merging detected.'));
+    s.add(res('b', '[ship-guard:manual-pr-server-down] BLOCKED: Manual PR creation/merging detected.'));
+    s.add(res('c', '[ship-guard:manual-pr-tools-deferred] BLOCKED: Manual PR creation/merging detected.'));
+    s.add(res('d', 'BLOCKED: Manual PR creation/merging detected.'));
+    expect(s.finish().shipBlocks).toEqual({ 'manual-pr-server-down': 2, 'manual-pr-tools-deferred': 1, untagged: 1 });
+  });
+
   it('an empty window yields zero sessions without failing', async () => {
     const m = await mine({ root: repoRoot, projectsDir: path.join(here, '__fixtures__/transcripts'), savingsLog: NO_LOG, since: '2999-01-01' });
     expect(m.totals.sessions).toBe(0);
