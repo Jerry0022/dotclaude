@@ -43,6 +43,7 @@ service-account*.json
 **/.claude/*.log
 **/.claude/token-config.json
 **/.claude/concept-active.json
+**/.claude/concept-waker-*.json
 **/.claude/concepts/
 **/.claude/session-opened-files.json
 **/.claude/scheduled_tasks.lock
@@ -77,6 +78,7 @@ service-account*.json
 **/.claude/batch-handoff.json
 **/.claude/.ship-in-progress
 **/.claude/.ship-checkpoint.json
+**/.claude/.ship-cli-last.json
 **/.claude/.ship-carddata-*.json
 **/.claude/.ship-lockout
 **/.claude/.ship-queue

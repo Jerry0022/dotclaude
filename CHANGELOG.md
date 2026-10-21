@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.281.3] — 2026-10-21
+
+The concept pickup waker's beat file (`.claude/concept-waker-<port>.json`, new in v0.280.0) was not on the managed ignore list, so every open concept page left an untracked file in the repo.
+
+### Fixed
+- **The waker beat file is plugin runtime state.** `.claude/concept-waker-*.json` joins the managed `.gitignore` block (`hooks/lib/runtime-ignores.js`), so `git status` stays clean and `ship_release` never stages it.
+
 ## [0.281.2] — 2026-10-20
 
 A concept session started in the main checkout asked the user where to continue, although the project had decided once (`workspace.ownWorktree`): never ask, always an own worktree. The page and its bridge were written through node, which the Edit/Write branch guard never sees, and the guard's later block text still said "ask the user".
