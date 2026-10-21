@@ -57,6 +57,8 @@ export function isDesktopSession(env = process.env) {
  * `tooltip` — shown on hover, explaining what the click triggers (§ 2.6).
  * `conclude` marks the button that turns into the prepared answer to the
  * card's open points when it has any (see `CONCLUDE` / `conclusionPrompt`).
+ * `onlyOpen` drops that button when there is nothing to conclude (#784): the
+ * test card's Nachbessern shows up only with concrete open points.
  */
 export const BUTTONS = {
   de: {
@@ -90,7 +92,7 @@ export const BUTTONS = {
     ],
     test: [
       { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Test war ok — jetzt shippen." },
-      { label: "Nachbessern", icon: "bug", prompt: "Beim Testen ist mir etwas aufgefallen, das noch nicht passt — frag mich, was.", tooltip: "Hält den Ship an und fragt, was beim Testen auffiel.", conclude: true },
+      { label: "Nachbessern", icon: "bug", prompt: "Beim Testen ist mir etwas aufgefallen, das noch nicht passt — frag mich, was.", tooltip: "Hält den Ship an und fragt, was beim Testen auffiel.", conclude: true, onlyOpen: true },
     ],
     analysis: [
       { label: "Umsetzen", icon: "player-play", prompt: "Setz die Analyse jetzt um.", primary: true, tooltip: "Beginnt die Umsetzung der Analyse." },
@@ -137,7 +139,7 @@ export const BUTTONS = {
     ],
     test: [
       { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Test was fine — ship now." },
-      { label: "Rework", icon: "bug", prompt: "While testing I noticed something that is not right yet — ask me what.", tooltip: "Pauses the ship and asks what was found while testing.", conclude: true },
+      { label: "Rework", icon: "bug", prompt: "While testing I noticed something that is not right yet — ask me what.", tooltip: "Pauses the ship and asks what was found while testing.", conclude: true, onlyOpen: true },
     ],
     analysis: [
       { label: "Implement", icon: "player-play", prompt: "Implement the analysis now.", primary: true, tooltip: "Starts implementing the analysis." },
@@ -263,9 +265,10 @@ export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
   let buttons = [];
   if (Array.isArray(list)) {
     buttons = list
+      .filter((a) => !(a.onlyOpen && !conclusion))
       .filter((a) => !isPromotePrompt(a.prompt) || semver)
       .filter((a) => !(opts && opts.noShip && isShipPrompt(a.prompt)))
-      .map(({ conclude: isConclude, ...a }) => {
+      .map(({ conclude: isConclude, onlyOpen: _onlyOpen, ...a }) => {
         if (isPromotePrompt(a.prompt)) return { ...a, prompt: `${a.prompt} ${semver}` };
         if (isConclude && conclusion) return { ...a, ...concludeButton };
         return a;

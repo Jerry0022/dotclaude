@@ -243,8 +243,7 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   after the app already started.
 - **Prepared answer (`ready`, `test`, `ship-successful`)**: when the card has
   open points, a `Nachbessern` button carries the prepared answer:
-  `ready`'s `Ändern` becomes it, `test`'s own `Nachbessern` swaps its "frag
-  mich, was" prompt for it, and `ship-successful` (ring or plain merge) gets
+  `ready`'s `Ändern` becomes it, `test` shows its `Nachbessern` with it, and `ship-successful` (ring or plain merge) gets
   it after its promote verbs. It puts the answer to
   EVERY open point (also those folded into `+N weitere`) into the input box,
   assuming the user wants them all tackled: each point's `reply`
@@ -252,7 +251,11 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   auch in X machen."), else a plain "… Ja, bitte." / "… — bitte angehen."
   One point → its answer alone; two or more → an intro line, a blank line
   and one `- ` bullet per answer in card order. Final tests stay out — they
-  are the user's own steps. Without open points `ready` keeps `Ändern` and `test` its plain `Nachbessern`.
+  are the user's own steps. On `test` the partial/unmet `validation` entries
+  count as open points too ("<requirement> — <evidence> — bitte angehen.").
+  Without open points `ready` keeps `Ändern`; `test` shows **no**
+  `Nachbessern` at all (#784) — nothing to fix is no dead-end click; Ship and
+  App starten stay.
 - No `SHIP oder ÄNDERN` line anymore — the buttons say it. The terminal
   shows the question heading alone.
 
@@ -273,7 +276,7 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 | `released` → beta | `🟩 🎊 Promoted Beta — v{v} — nach Stable?` (promote only; after a merge in the same run `🟩 🎊 Released Beta — …`) | — | Promote stable | evidence = promotion facts |
 | `released` → stable | `🟩 🎊 Promoted Stable — v{v} — fertig.` (promote only; after a merge in the same run `🟩 🎊 Released Stable — …`) | — | — | state, no question |
 | `ready-files` | `👉 📦 Files — Fertig auf der Platte — noch etwas?` | final tests | — | pipeline = file line |
-| `test` | `👉 🧪 Test — Erst testen, dann shippen?` | open + userTest steps | Ship · Nachbessern (open points → prepared answer) · App starten with a launch path | unverified part = `◐` post |
+| `test` | `👉 🧪 Test — Erst testen, dann shippen?` | open + userTest steps | Ship · Nachbessern only with open points or partial/unmet requirements (→ prepared answer) · App starten with a launch path | unverified part = `◐` post |
 | `test-minimal` | `🟩 ▶️ Started — viel Spaß` | — | — | title + one line + heading; no evidence, budget, pipeline, widget — so no `App starten` either |
 | `analysis` | `🟩 📋 Analysis — gelesen — umsetzen oder Fragen?` | `open` points (with ❓/👉 icons), if any (#759) | Umsetzen · Frage (with `nextStep`: Empfehlung umsetzen — sends that step); with `open` replies + Nachbessern carrying them | pipeline = `➖ keine Änderungen`; only when nothing changed anywhere — an answer or investigation (#624). Work done outside the repo → `fallback`; implementation handed to still-running agents → `ready`/`test` + `pending`; a mode activation → its override; finished unshipped commits in a linked side session → `ready` + `open: [{ text, reply: "ship" }]`, never `analysis` (#759) |
 | `aborted` | `🟥 📦 Aborted — abgebrochen wegen {reason} — anders versuchen?`; a named abort (`cta.activity`: ship, promote, test, concept, batch, analysis, agents) keeps its activity: `🟥 🚀 Ship — …` | — | Nochmal | context line = alternatives |

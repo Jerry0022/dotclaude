@@ -1543,6 +1543,21 @@ function openReplies(input, lang) {
   });
 }
 
+/**
+ * The test card's prepared answers (#784): its open points, then every
+ * partial/unmet requirement — the concrete points its Nachbessern button
+ * carries. Empty means nothing is open, and the button is left out.
+ */
+function testReplies(input, lang) {
+  const F = OPEN_REPLY_FALLBACK[lang] || OPEN_REPLY_FALLBACK.de;
+  const replies = openReplies(input, lang);
+  for (const d of deviations(input, lang)) {
+    const reply = F.point(d.text.replace(/s+$/, '').replace(/[.!]$/, ''));
+    if (!replies.includes(reply)) replies.push(reply);
+  }
+  return replies;
+}
+
 /** The decision-box point for a deliberate verification skip (#612), or null. */
 function verificationSkipPoint(input, lang) {
   const reason = input.vv && input.vv.unverified && input.vv.skipReason;
@@ -1947,7 +1962,9 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // The replies ride on the conclude button of the ready, test and
   // ship-successful cards — all open points, also those folded into
   // "+N weitere"; the (final) tests are the user's own to run.
-  const replies = CONCLUDE_KEYS.has(key) ? openReplies(input, lang) : [];
+  const replies = CONCLUDE_KEYS.has(key)
+    ? (key === 'test' ? testReplies(input, lang) : openReplies(input, lang))
+    : [];
 
   // #693: the close-out card promotes like a plain ship-successful card —
   // the page, not a button, is where the close-out runs.

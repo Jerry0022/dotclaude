@@ -1667,6 +1667,43 @@ describe("render_completion_card — a pending question replaces the ship offer 
   });
 });
 
+describe("render_completion_card — test card's Nachbessern only when something is open (#784)", () => {
+  const labels = async (d, lang = "de") => {
+    const { buttonsFor } = await import("./lib/card-widget.js");
+    return buttonsFor(d.buttonsKey, lang, { replies: d.replies, noShip: d.noShip }).map(b => b.label);
+  };
+  const state = { mode: "git" };
+
+  test.each(["de", "en"])("a clean test card offers Ship without Nachbessern (%s)", async (lang) => {
+    const mod = await import("./index.js");
+    const d = mod.buildDecisionBlock({ variant: "test", summary: "x", userTest: ["App öffnen"] }, lang, "test", {}, state);
+    expect(d.replies).toEqual([]);
+    expect(await labels(d, lang)).toEqual(["Ship"]);
+  });
+
+  test("a partial requirement becomes the button's prompt", async () => {
+    const mod = await import("./index.js");
+    const input = {
+      variant: "test", summary: "x",
+      validation: [{ requirement: "Dark mode toggle", status: "partial", evidence: "Kontrast im Menü zu schwach" }],
+    };
+    const d = mod.buildDecisionBlock(input, "de", "test", {}, state);
+    expect(d.replies).toEqual(["Dark mode toggle — Kontrast im Menü zu schwach — bitte angehen."]);
+    const { buttonsFor } = await import("./lib/card-widget.js");
+    const nach = buttonsFor(d.buttonsKey, "de", { replies: d.replies }).find(b => b.label === "Nachbessern");
+    expect(nach.prompt).toContain("Kontrast im Menü zu schwach");
+    expect(nach.prompt).not.toMatch(/frag mich, was/);
+  });
+
+  test("open points keep their own replies and come first", async () => {
+    const mod = await import("./index.js");
+    const input = { variant: "test", summary: "x", open: [{ text: "Logo zu groß?", reply: "Ja, Logo verkleinern." }] };
+    const d = mod.buildDecisionBlock(input, "de", "test", {}, state);
+    expect(d.replies).toEqual(["Ja, Logo verkleinern."]);
+    expect(await labels(d)).toContain("Nachbessern");
+  });
+});
+
 describe("render_completion_card — analysis card shows open items and their replies (#759)", () => {
   const open = [{ text: "Build-ID-Fix liegt committet im Side-Branch — weder gepusht noch gemergt", reply: "Ja, shippe den Build-ID-Fix." }];
   const labels = async (d, lang) => {
