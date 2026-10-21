@@ -1695,6 +1695,13 @@ describe("render_completion_card — test card's Nachbessern only when something
     expect(nach.prompt).not.toMatch(/frag mich, was/);
   });
 
+  test("a requirement text ending in 's' keeps its last letter; trailing spaces go", async () => {
+    const mod = await import("./index.js");
+    const input = { variant: "test", summary: "x", validation: [{ requirement: "Alle Buttons ", status: "unmet" }] };
+    const d = mod.buildDecisionBlock(input, "de", "test", {}, state);
+    expect(d.replies).toEqual(["Alle Buttons — bitte angehen."]);
+  });
+
   test("open points keep their own replies and come first", async () => {
     const mod = await import("./index.js");
     const input = { variant: "test", summary: "x", open: [{ text: "Logo zu groß?", reply: "Ja, Logo verkleinern." }] };

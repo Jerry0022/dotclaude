@@ -1552,7 +1552,7 @@ function testReplies(input, lang) {
   const F = OPEN_REPLY_FALLBACK[lang] || OPEN_REPLY_FALLBACK.de;
   const replies = openReplies(input, lang);
   for (const d of deviations(input, lang)) {
-    const reply = F.point(d.text.replace(/s+$/, '').replace(/[.!]$/, ''));
+    const reply = F.point(d.text.replace(/\s+$/, '').replace(/[.!]$/, ''));
     if (!replies.includes(reply)) replies.push(reply);
   }
   return replies;
