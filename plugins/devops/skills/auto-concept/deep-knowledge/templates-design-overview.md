@@ -187,6 +187,10 @@ returns — the single-design page is untouched.
       color: (d.dataset.designColor || '').trim() || PALETTE[idx % PALETTE.length]
     };
   }
+  // A view's short nav title — the layout's viewNavTitle() (§ Views
+  // (optional) → Nav title); the full question stays in the tooltip.
+  const viewTitle = v => (typeof window.viewNavTitle === 'function'
+    ? window.viewNavTitle(v) : (v.dataset.navLabel || v.dataset.view));
   function setTip(node, label, key) {
     node.dataset.tip = label;
     node.dataset.tipTier = 'info';
@@ -492,7 +496,7 @@ returns — the single-design page is untouched.
       seg.type = 'button';
       seg.dataset.viewId = v.dataset.view;
       seg.appendChild(iconEl('question', { size: 's', kind: 'plain' }));
-      seg.appendChild(el('span', 'design-quick-name', v.dataset.navLabel || v.dataset.view));
+      seg.appendChild(el('span', 'design-quick-name', viewTitle(v)));
       setTip(seg, v.dataset.navLabel || v.dataset.view, i < 9 ? '⇧+' + (i + 1) : '');
       seg.addEventListener('click', () => { if (typeof closePanel === 'function') closePanel(); window.showView(v.dataset.view); });
       vrow.appendChild(seg);
@@ -676,7 +680,7 @@ returns — the single-design page is untouched.
       } else if (md === 'view') {
         const v = it.querySelector(':scope > section[data-view][data-view-active="true"]');
         H.iconSlot.appendChild(iconEl('question', { kind: 'plain' }));
-        H.name.textContent = v ? (v.dataset.navLabel || v.dataset.view) : '';
+        H.name.textContent = v ? viewTitle(v) : '';
         H.star.textContent = '';
       } else if (m) {
         header.style.setProperty('--dz-color', m.color);
@@ -1311,7 +1315,11 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
   box-shadow: inset 0 -2px 0 var(--dz-color, var(--accent-color));
 }
 .design-quick-star { color: var(--warning-color, #d29922); }
-.design-quick-view { padding: 0.1rem 0.55rem; font-size: 0.75rem; }
+.design-quick-view { padding: 0.1rem 0.55rem; font-size: 0.75rem; max-width: 100%; overflow: hidden; }
+.design-quick-view .design-quick-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Questions wrap to further rows instead of squeezing into one: a squeezed
+   segment never clipped its label, so neighbouring titles ran over each other. */
+.design-quick-views { flex-wrap: wrap; justify-content: center; }
 .design-quick-view[data-active="true"] { color: var(--text, #e6edf3); background: var(--border-color, #30363d); }
 .design-quick-views:empty { display: none; }
 body.panel-open .design-quick, body.panel-open .design-header { opacity: 0; pointer-events: none; }

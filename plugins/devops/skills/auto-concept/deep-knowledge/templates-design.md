@@ -377,6 +377,15 @@ its own entry in the switcher and the panel TOC.
   thin `.switcher-divider`, then view segments (`.view-switch-item`) — one
   click from anywhere, no detour through the ☰ panel. Both are
   auto-populated by `buildDesignUI()`, exactly like the design-only case.
+- **Nav title.** The full question is written once, on the view itself (its
+  `<h2>`). Every nav surface — the switcher / quick-nav segment, the ☰ row,
+  the indicator and the dock label — shows only a `?` glyph plus the short
+  title from `viewNavTitle()`: `data-nav-short` when authored, else
+  `data-nav-label`, a leading "Frage ·" / "Question ·" dropped (the `?` says
+  it) and cut to 28 characters on a word boundary with "…". The tooltip
+  keeps the full `data-nav-label`. Author `data-nav-label` as that short
+  form of the question ("Kapitän sieht Wellen?"), never the question
+  sentence — the cut is a safety net, not the title.
 - **`data-view-for="{designId}"` (optional, all view kinds).** A view that
   is *about one variant* names it: `buildDesignUI()` then nests the view's
   `.screen-nav-view-item` inside that design's `.screen-nav-group`, after

@@ -55,6 +55,8 @@ function build() {
       "function showDesign() {} function showView() {} function showScreen() {} function closePanel() {}",
       "function buildDesignTextareas() {} function buildScreenTextareas() {} function buildViewTextareas() {}",
       "function updateScreenScope() {} function liveIterationId() { return '1'; }",
+      "const VIEW_NAV_TITLE_MAX = 28;",
+      slice("  function viewNavTitle("),
       slice("  function navRowLabel("),
       slice("  function navRowMarker("),
       slice("  function buildDesignUI("),
@@ -75,7 +77,9 @@ describe("screen-nav labels stay text (AUD-018)", () => {
     const screen = nav.querySelector(".screen-nav-item");
     const view = nav.querySelector(".screen-nav-view-item");
     expect(heading.firstElementChild.textContent).toBe(EVIL_TEXT);
-    expect(view.firstElementChild.textContent).toBe(EVIL_TEXT);
+    expect(view.dataset.tip).toBe(EVIL_TEXT);
+    expect(view.querySelector(".screen-idx").textContent).toBe("?");
+    expect(view.firstElementChild.textContent).toBe("?" + w.viewNavTitle({ dataset: { navLabel: EVIL_TEXT } }));
     expect(screen.firstElementChild.textContent).toBe("1." + EVIL_TEXT);
     expect(screen.querySelector(".screen-idx").textContent).toBe("1.");
   });
@@ -91,5 +95,37 @@ describe("screen-nav labels stay text (AUD-018)", () => {
   test("no navLabel reaches an innerHTML template anywhere in the engine", () => {
     const sinks = md.split("\n").filter(l => /innerHTML\s*=.*navLabel/.test(l));
     expect(sinks).toEqual([]);
+  });
+});
+
+describe("view nav title: ? + short title, full question only on the page", () => {
+  const w = build();
+  const t = (navLabel, navShort) => w.viewNavTitle({ dataset: { navLabel, navShort, view: "v" } });
+
+  test("a short label stays as it is", () => {
+    expect(t("Kapitän sieht Wellen?")).toBe("Kapitän sieht Wellen?");
+  });
+
+  test("a leading Frage · / Question · is dropped — the ? glyph says it", () => {
+    expect(t("Frage · Ist das eine Sendung?")).toBe("Ist das eine Sendung?");
+    expect(t("Question: Merge the rows?")).toBe("Merge the rows?");
+  });
+
+  test("a long question is cut on a word boundary to ≤ 28 chars with …", () => {
+    const out = t("Frage · Sieht der Kapitän unterschiedliche Wellen gleichzeitig auf der Karte?");
+    expect(out.length).toBeLessThanOrEqual(28);
+    expect(out.endsWith("…")).toBe(true);
+    expect(out).toBe("Sieht der Kapitän…");
+  });
+
+  test("data-nav-short wins over the label", () => {
+    expect(t("Frage · Sieht der Kapitän unterschiedliche Wellen gleichzeitig?", "Wellen gleichzeitig?")).toBe("Wellen gleichzeitig?");
+  });
+
+  test("the switcher segment shows ? + short title, the tooltip the full label", () => {
+    const seg = w.document.querySelector(".view-switch-item");
+    expect(seg.textContent.startsWith("? ")).toBe(true);
+    expect(seg.textContent.length).toBeLessThanOrEqual(30);
+    expect(seg.dataset.tip).toBe(EVIL_TEXT);
   });
 });

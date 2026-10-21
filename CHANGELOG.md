@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.284.6] — 2026-10-21
+
+Question views in a design round show a `?` and a short title in the navigation; the full question stands only on the question page itself.
+
+### Fixed
+- **Short question titles in the concept navigation.** The quick nav, the top-centre switcher and the ☰ panel printed each view's full `data-nav-label` ("Frage · Sieht der Kapitän …"), so the second quick-nav row ran its titles over each other. A new `viewNavTitle()` in the design layout returns `data-nav-short` when authored, else the label without a leading "Frage ·" / "Question ·", cut to 28 characters on a word boundary with "…". Switcher segment, quick-nav segment, ☰ row (now with a `?` glyph), screen indicator, overview header and dock label use it; the app tooltip (`data-tip`) keeps the full label. The quick-nav question row now clips each label and wraps instead of squeezing. `templates-design.md` § Views → *Nav title* tells authors to write the short form as the nav label and the full question in the view's heading. Pinned in `nav-label-escape.test.js`.
+
 ## [0.284.5] — 2026-10-21
 
 The answer block in the completion card reads like the rest of the card: normal weight, 14 px, paragraph gaps, list bullets.
