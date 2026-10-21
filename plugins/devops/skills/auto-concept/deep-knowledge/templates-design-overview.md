@@ -375,7 +375,21 @@ returns — the single-design page is untouched.
     H.sep = el('span', 'design-header-sep');
     H.iconSlot = el('span', 'design-header-icon');
     H.name = el('strong', 'design-header-name');
-    H.star = el('span', 'design-header-star');
+    // The star is a control like the eye and the pin next to it: on a design
+    // page it toggles that design's favourite (☆ / ★, same as F); on the
+    // overview "★ <name>" opens the favourite.
+    H.star = el('button', 'design-header-star');
+    H.star.type = 'button';
+    H.star.addEventListener('click', () => {
+      const it = visibleIteration();
+      if (mode() === 'overview') {
+        const fav = validFavorite(it, readState(it));
+        if (fav) { closeHeader(); window.showDesign(fav); }
+        return;
+      }
+      const d = activeDesignOf(it);
+      if (d) toggleFavorite(d.dataset.design);
+    });
     H.eye = el('span', 'design-header-eye');
     // Comment pin: an icon next to the eye, drawn like it (round, ringed),
     // its label lives in the tooltip. Shown on a live design page only.
@@ -653,6 +667,10 @@ returns — the single-design page is untouched.
         H.iconSlot.appendChild(iconEl('grid'));
         H.name.textContent = L.overview;
         H.star.textContent = favMeta ? '★ ' + favMeta.label : '';
+        H.star.dataset.kind = 'label';
+        H.star.disabled = false;
+        H.star.removeAttribute('aria-pressed');
+        if (favMeta) setTip(H.star, L.open + ': ' + favMeta.label);
         motto = L.count.replace('{n}', String(metas.length));
         note = fav ? L.hintSet : L.hintNone;
       } else if (md === 'view') {
@@ -664,7 +682,13 @@ returns — the single-design page is untouched.
         header.style.setProperty('--dz-color', m.color);
         H.iconSlot.appendChild(iconEl(m.icon, { color: m.color }));
         H.name.textContent = m.label;
-        H.star.textContent = fav === m.id ? '★' : '';
+        const isFav = fav === m.id;
+        H.star.textContent = isFav ? '★' : '☆';
+        H.star.dataset.kind = 'icon';
+        H.star.disabled = !live;
+        H.star.setAttribute('aria-pressed', String(isFav));
+        H.star.setAttribute('aria-label', isFav ? L.favUnset : L.favSet);
+        setTip(H.star, isFav ? L.favUnset : L.favSet, 'F');
         motto = m.motto;
         showFav = true;
         const screens = [...d.querySelectorAll('section[data-screen][id]')];
@@ -1177,7 +1201,23 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 }
 .design-header-icon:empty { display: none; }
 .design-header-title:has(.design-header-icon:empty) { padding-left: 0.65rem; }
-.design-header-star { color: var(--warning-color, #d29922); white-space: nowrap; }
+.design-header-star {
+  flex: none; border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer;
+  color: var(--warning-color, #d29922); white-space: nowrap;
+}
+.design-header-star[hidden] { display: none; }
+.design-header-star[data-kind="label"]:hover { text-decoration: underline; }
+/* Same round shape as the eye and the pin beside it, in the favourite colour. */
+.design-header-star[data-kind="icon"] {
+  width: 24px; height: 24px; border-radius: 50%; line-height: 1; font-size: 0.85rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--warning-color, #d29922);
+  background: var(--anno-bubble-bg, var(--panel-bg, #161b22));
+  transition: transform 0.15s;
+}
+.design-header-star[data-kind="icon"]:hover:not(:disabled) { transform: scale(1.08); }
+.design-header-star[data-kind="icon"][aria-pressed="true"] { background: var(--warning-color, #d29922); color: var(--panel-bg, #0d1117); }
+.design-header-star:disabled { opacity: 0.55; cursor: default; }
 .design-header-back {
   display: inline-flex; align-items: center; gap: 0.3rem; flex: none;
   border: 0; background: transparent; color: var(--text-secondary, #8b949e);
