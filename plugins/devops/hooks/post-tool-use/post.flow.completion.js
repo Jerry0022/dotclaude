@@ -979,12 +979,14 @@ function cardContractLines(hook, scheduledTask) {
     NO_OUTPUT_NUDGE_REPLY,
     'NO RECAP before the card either: the card IS the summary of the work — never restate in',
     'prose what it already shows (changes, tests, version, PR, open items, restart hints).',
-    'The ANSWER to the user\'s question is no recap: write it in full as text before the card —',
-    'the card never carries it, its summary is a title, not the answer (#642). A report the',
+    'The ANSWER to the user\'s question is no recap: pass it in full as `answer` to',
+    'render_completion_card — the card draws it above its body (#757). Prose written before the',
+    'card is followed by further tool calls and the app may collapse it, so the answer never',
+    'lives only there; the summary is a title, not the answer (#642). A report the',
     'running skill requires (e.g. auto-fix: root cause with file:line) is part of that answer,',
-    'even where the card\'s `changes` names the same fix. Text before the',
-    'card is also for other topics of the user\'s prompt, points beyond the card\'s three, and',
-    'hook blocks still marked for the user.',
+    'even where the card\'s `changes` names the same fix; so are other topics of the user\'s',
+    'prompt and points beyond the card\'s three. Hook blocks still marked for the user stay text',
+    'before the card.',
   );
   return lines;
 }

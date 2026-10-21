@@ -66,12 +66,12 @@ Desktop app the user does not see it. Write it to a script (self-elevating
 `.ps1` when it needs admin), hand it over as above and send it with
 `SendUserFile`.
 
-The answer to the user's question is written in full as text before the
-completion card — the card summarises the work, it never carries the answer,
-and "no recap" never means leaving the answer out. On Opus 5.5, Sonnet 5.5, Fable 5 and Mythos 5 that
-text stays verbatim only with `CLAUDE_CODE_THINKING_DISPLAY_UPDATES=0`
-(devops `ss.thinking.display` sets it); otherwise Claude Code returns text
-written before a further tool call as a rephrased progress summary.
+The answer to the user's question goes in full into the completion card's
+`answer` field — the card draws it above its body, and "no recap" never means
+leaving the answer out. Prose written before the card is followed by further
+tool calls, and the Desktop app can collapse it (seen even with
+`CLAUDE_CODE_THINKING_DISPLAY_UPDATES=0`), so the answer never lives only
+there. A turn without a card answers in plain text as its last output.
 
 The completion card ends the turn — nothing after it: no summary, no "the
 card is above". On the Desktop app the card is a widget call, and the app

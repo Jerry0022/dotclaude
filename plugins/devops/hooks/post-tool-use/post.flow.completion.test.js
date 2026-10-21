@@ -110,11 +110,14 @@ describe("post.flow.completion — completion-card instruction completeness", ()
   // #642: "text before the card only for side questions" read as "the main
   // answer belongs on the card" — two Q&A turns ended with a bare analysis
   // card and no answer at all. The rule must keep the answer as prose.
-  test("keeps the answer to the user's question as text before the card (#642)", () => {
+  // #757: prose before the card was collapsed by the Desktop app — a user saw
+  // no explanation twice in a row. The answer goes into the card's `answer`.
+  test("keeps the answer to the user's question, routed into the card's answer field (#642, #757)", () => {
     const dir = project();
     const out = runHook(dir, "s-answer");
     expect(out).toContain("The ANSWER to the user's question is no recap");
-    expect(out).toContain("the card never carries it");
+    expect(out).toContain("pass it in full as `answer`");
+    expect(out).not.toContain("write it in full as text before the card");
     expect(out).not.toContain("answers to side questions");
     cleanup(dir);
   });
