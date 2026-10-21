@@ -412,6 +412,22 @@ describe("☰ overview row, the eye on the overview, draggable pins", () => {
     expect(document.body.classList.contains("anno-hidden")).toBe(false);
   }, BOOT_TIMEOUT);
 
+  test("a digit / quick-nav switch keeps the page; a missing page falls back to the first", async () => {
+    const html = page(3).replace(/<section id="d2b-s3"[\s\S]*?<\/section>/, "");
+    const { window, document, errors } = await boot(html);
+    expect(errors).toEqual([]);
+    window.showDesign("d2", "d2-s2");
+    key(window, document.body, { key: "2", code: "Digit2" });
+    expect(activeDesign(document).dataset.design).toBe("d2b");
+    expect(document.getElementById("d2b-s2").hidden).toBe(false);
+    document.querySelector('#design-quick .design-quick-seg[data-design-id="d2c"]').click();
+    expect(document.getElementById("d2c-s2").hidden).toBe(false);
+    window.showDesign("d2", "d2-s3");
+    key(window, document.body, { key: "2", code: "Digit2" });
+    expect(activeDesign(document).dataset.design).toBe("d2b");
+    expect(document.getElementById("d2b-s1").hidden, "d2b has no page 3 → its first page").toBe(false);
+  }, BOOT_TIMEOUT);
+
   test("a dragged pin keeps its spot across a reload", async () => {
     const html = withAnno();
     const a = await boot(html);

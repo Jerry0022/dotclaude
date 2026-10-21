@@ -417,6 +417,41 @@ returns — the single-design page is untouched.
   }
   function closeHeader() { if (header) header.dataset.open = 'false'; }
 
+  // ── Variant switch that keeps the page ────────────────────────────────
+  // Comparing variants means looking at the SAME page in each: on design A
+  // page 2, key 2 / the quick-nav segment opens design B page 2. A design
+  // without that page opens on its first page. A question view tied to a
+  // design (data-view-for) maps the same way, by its position among that
+  // design's views. From the overview or a free view the design opens where
+  // it was last left (plain showDesign()).
+  function showDesignAligned(id) {
+    const it = visibleIteration();
+    const target = designsOf(it).find(d => d.dataset.design === id);
+    if (!target) return;
+    const md = mode();
+    const cur = activeDesignOf(it);
+    if (md === 'design' && cur && cur !== target) {
+      const idx = [...cur.querySelectorAll('section[data-screen][id]')].indexOf(activeScreenOf(cur));
+      const screens = [...target.querySelectorAll('section[data-screen][id]')];
+      const sec = screens[idx] || screens[0];
+      window.showDesign(id, sec ? sec.id : undefined);
+      return;
+    }
+    if (md === 'view') {
+      const v = it.querySelector(':scope > section[data-view][data-view-active="true"]');
+      const from = v && v.dataset.viewFor;
+      if (from && from !== id && designsOf(it).some(d => d.dataset.design === from)) {
+        const own = f => viewsOf(it).filter(x => x.dataset.viewFor === f);
+        const match = own(id)[own(from).indexOf(v)];
+        if (match) { window.showView(match.dataset.view); return; }
+        const first = target.querySelector('section[data-screen][id]');
+        window.showDesign(id, first ? first.id : undefined);
+        return;
+      }
+    }
+    window.showDesign(id);
+  }
+
   // ── Quick nav ──────────────────────────────────────────────────────────
   function buildQuick(it, metas) {
     if (!quick) return;
@@ -433,7 +468,7 @@ returns — the single-design page is untouched.
       star.hidden = true;
       seg.appendChild(star);
       setTip(seg, m.label, String(m.n));
-      seg.addEventListener('click', () => { if (typeof closePanel === 'function') closePanel(); window.showDesign(m.id); });
+      seg.addEventListener('click', () => { if (typeof closePanel === 'function') closePanel(); showDesignAligned(m.id); });
       row.appendChild(seg);
     });
     quick.appendChild(row);
@@ -931,7 +966,7 @@ returns — the single-design page is untouched.
     }
     if (n) {
       const d = designsOf(it)[n - 1];
-      if (d) { e.preventDefault(); window.showDesign(d.dataset.design); }
+      if (d) { e.preventDefault(); showDesignAligned(d.dataset.design); }
       return;
     }
     if (e.key === '?') { e.preventDefault(); toggleSheet(); return; }

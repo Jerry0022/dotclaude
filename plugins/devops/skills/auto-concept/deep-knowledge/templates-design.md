@@ -759,7 +759,10 @@ icon, or when the traits are not exactly three (`concept-gate.js`
 - **Hotkeys** — `Esc` overview · `1`–`9` design N · `Shift`+`1`–`9` view N ·
   `Tab` next page of the current design (only while nothing is focused) ·
   `F` favourite · `Alt`+`1`–`9` iteration tab · `?` shortcut sheet ·
-  `Ctrl`+`Enter` submit · `N` notes dock. None fires while focus is in a text
+  `Ctrl`+`Enter` submit · `N` notes dock. A digit or quick-nav switch keeps
+  the page: design A page 2 → design B page 2 (B's first page when it has
+  none); a view tied to a design maps to the target design's view at the
+  same position. None fires while focus is in a text
   field, the dock, a bubble or a user-pin editor. The hint is ONE app tooltip
   per element carrying label + keycap ("Cockpit [1]", `data-tip-key`,
   § App Tooltips), Info tier.
