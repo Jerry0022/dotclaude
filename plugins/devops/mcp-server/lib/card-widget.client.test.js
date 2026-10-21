@@ -5,12 +5,14 @@ import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import {
+  CARD_CLIENT_RETRY_MS,
   CARD_CLIENT_SOURCE,
   cardClientUrl,
   cardWidgetData,
   cardWidgetHtml,
   cardWidgetTemplate,
   pluginVersion,
+  warmCardClient,
 } from "./card-widget.js";
 import { batchGuide } from "./mode-state.js";
 
@@ -107,8 +109,10 @@ describe("card-widget.client — template + data", () => {
     });
   }
 
-  test("widget_code stays small: ~1.5k characters, the heavy test card (2 bars, open link, conclude) under 1.9k", () => {
-    for (const [name, max] of [["ready", 1500], ["test", 1900], ["pending", 1500]]) {
+  // +150 over the original 1.5k / 1.9k: the onerror handler's one CDN retry
+  // (a cold jsDelivr tag answers 503 once — the 0.284.6 card stayed a bare title).
+  test("widget_code stays small: ~1.65k characters, the heavy test card (2 bars, open link, conclude) under 2.05k", () => {
+    for (const [name, max] of [["ready", 1650], ["test", 2050], ["pending", 1650]]) {
       const len = cardWidgetTemplate(CARDS[name], "https://github.com/o/r", desktop).length;
       expect(len, name).toBeLessThan(max);
       expect(len * 4, `${name}: a fraction of the inline HTML`).toBeLessThan(cardWidgetHtml(CARDS[name], "https://github.com/o/r").length);
@@ -132,15 +136,32 @@ describe("card-widget.client — template + data", () => {
     expect(cardClientUrl({ DOTCLAUDE_CARD_CLIENT_URL: "http://evil.test/x.js" })).not.toContain("evil");
   });
 
-  test("a missing CDN file never leaves the widget empty: onerror draws a text card", () => {
+  test("a missing CDN file never leaves the widget empty: one retry, then a text card", async () => {
     const dom = new JSDOM(`<body>${cardWidgetTemplate(CARDS.pending, "", desktop)}</body>`, { runScripts: "dangerously" });
     const doc = dom.window.document;
-    doc.querySelector("script[src]").dispatchEvent(new dom.window.Event("error"));
+    const first = doc.querySelector("script[src]");
+    first.dispatchEvent(new dom.window.Event("error"));
+    expect(doc.querySelectorAll("#dc-card p").length, "a failed load is retried first, no text yet").toBe(0);
+    first.dispatchEvent(new dom.window.Event("error"));
+    await new Promise((r) => setTimeout(r, CARD_CLIENT_RETRY_MS + 200));
+    const retry = doc.querySelectorAll("script#dc-retry");
+    expect(retry.length, "exactly one retry").toBe(1);
+    expect(retry[0].src).toBe(first.src);
+    retry[0].dispatchEvent(new dom.window.Event("error"));
     const text = doc.getElementById("dc-card").textContent;
     expect(text).toContain(CARDS.pending.title);
     for (const s of [...CARDS.pending.resultLines, CARDS.pending.heading, ...CARDS.pending.points]) expect(text).toContain(s);
-    doc.querySelector("script[src]").dispatchEvent(new dom.window.Event("error"));
     expect(doc.querySelectorAll("#dc-card p").length, "runs once").toBe(4);
+  }, CARD_CLIENT_RETRY_MS + 5000);
+
+  test("warmCardClient retries a cold-tag 503 until jsDelivr answers 200, and never throws", async () => {
+    const seen = [];
+    const answers = [503, 503, 200];
+    const fetchImpl = async (url) => { seen.push(url); return { status: answers[seen.length - 1], ok: answers[seen.length - 1] === 200 }; };
+    expect(await warmCardClient({ url: "https://cdn.test/x.js", fetchImpl, delayMs: 1 })).toEqual({ ok: true, status: 200, attempts: 3 });
+    expect(seen).toEqual(["https://cdn.test/x.js", "https://cdn.test/x.js", "https://cdn.test/x.js"]);
+    const down = await warmCardClient({ url: "https://cdn.test/x.js", fetchImpl: async () => { throw new Error("offline"); }, attempts: 2, delayMs: 1 });
+    expect(down).toEqual({ ok: false, status: null, attempts: 2 });
   });
 
   test("a client that does not know the data schema hands over to the same fallback", () => {

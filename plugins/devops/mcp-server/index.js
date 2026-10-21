@@ -55,7 +55,7 @@ import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePendin
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
 import { batchGuide, conceptCloseoutOnly, conceptUrl, readBatch, readRunContractLine, sameProjectRoot, titlePrefixFor, titleInstruction, currentSessionTitle, titleStateForKey, hasMandatoryStep, TITLE_SCHEME } from "./lib/mode-state.js";
-import { cardWidgetInstruction, isDesktopSession, safeSessionId, writeCardWidgetFile } from "./lib/card-widget.js";
+import { cardWidgetInstruction, isDesktopSession, safeSessionId, warmCardClient, writeCardWidgetFile } from "./lib/card-widget.js";
 import { detectLaunchPath } from "./lib/launch-path.js";
 import { archiveDecision, archiveInstruction, writeArchiveFlag } from "./lib/session-archive.js";
 import { readToolCallCount, resolveSessionFile } from "./lib/tool-call-count.js";
@@ -3071,4 +3071,8 @@ bootMs = Math.round(process.uptime() * 1000);
 // and issues servers. Not under vitest: the card tests import this module,
 // and a worker must not register itself (or its SIGINT exit) as the server.
 if (!process.env.VITEST) registerHeartbeat(SERVER_NAME);
+// Pull this version's card client into jsDelivr's cache now, in the
+// background, so the first Desktop card does not hit the cold-tag 503
+// (card-widget.js#warmCardClient). Never awaited, never fatal.
+if (!process.env.VITEST) warmCardClient().catch(() => {});
 console.error(`[${SERVER_NAME}-mcp] Server started on stdio (boot ${bootMs}ms)`);

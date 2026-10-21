@@ -542,14 +542,47 @@ export function cardClientUrl(env = process.env, version = pluginVersion()) {
 }
 
 /**
+ * Request the client script once so jsDelivr caches it before the first card
+ * needs it: the first request for a freshly pushed `alpha/v<version>` tag gets
+ * a 503 while jsDelivr fetches the file from GitHub. Retries a non-2xx answer
+ * up to `attempts` times; never throws.
+ *
+ * @returns {Promise<{ ok: boolean, status: number|null, attempts: number }>}
+ */
+export async function warmCardClient({ url = cardClientUrl(), fetchImpl = globalThis.fetch, attempts = 3, delayMs = 3000, timeoutMs = 8000 } = {}) {
+  let status = null;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      const res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
+      status = res.status;
+      if (res.ok) return { ok: true, status, attempts: i };
+    } catch {
+      status = null;
+    }
+    if (i < attempts) await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return { ok: false, status, attempts };
+}
+
+/**
  * Inline fallback when the client never runs (tag without the file, jsDelivr
  * down, CSP refusal) or reports a schema it does not know: the result lines,
  * the decision heading and the points as plain text under the title the
  * template already shows — the widget is never empty. Runs once.
+ *
+ * A failed LOAD (a real `error` event) is retried once after
+ * CARD_CLIENT_RETRY_MS first: jsDelivr answers the first request for a
+ * freshly pushed tag with 503 while it pulls the file from GitHub, and that
+ * cold miss left the 0.284.6 ship card as a bare title (2026-10-21). The
+ * client's own schema hand-over calls `onerror()` without an event and goes
+ * straight to the text.
  */
+export const CARD_CLIENT_RETRY_MS = 2000;
 const TEMPLATE_FALLBACK_JS =
-  "if(this.f)return;this.f=1;var D=document,d=JSON.parse(D.getElementById('dc-card-data').text),m=D.getElementById('dc-card');" +
-  "[].concat(d.r,d.h,d.pt).forEach(function(x){if(x)m.appendChild(D.createElement('p')).textContent=x})";
+  "var t=this,D=document,g=function(){var d=JSON.parse(D.getElementById('dc-card-data').text),m=D.getElementById('dc-card');" +
+  "[].concat(d.r,d.h,d.pt).forEach(function(x){if(x)m.appendChild(D.createElement('p')).textContent=x})};" +
+  "if(t.f)return;t.f=1;if(!event||t.id)return g();" +
+  `setTimeout(function(){var s=D.createElement('script');s.id='dc-retry';s.onerror=g;s.src=t.src;t.after(s)},${CARD_CLIENT_RETRY_MS})`;
 
 const BACKSLASH = String.fromCharCode(92);
 

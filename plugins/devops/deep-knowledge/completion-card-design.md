@@ -446,6 +446,12 @@ stable?`, `🟩 🎊 Promoted Stable — v0.179.0 — done.`, `⏳ 🤖 Agents �
   CSP refusal) its `onerror` adds the result lines, the heading and the
   points as plain text under the title; the client calls the same handler
   when it meets an unknown data schema (`v`). The widget is never empty.
+  **Cold tag:** jsDelivr answers the first request for a freshly pushed tag
+  with 503 while it pulls the file from GitHub — the 0.284.6 ship card stayed
+  a bare title that way (2026-10-21). So a failed load is retried once after
+  2 s before the text fallback, and the completion server requests its own
+  client URL in the background right after it connects
+  (`card-widget.js#warmCardClient`), so the first card finds it cached.
   The offline renderer (`--render-card`, MCP server never connected) keeps
   the full inline HTML — no network dependency on that path.
 - The old CTA-actions widget (buttons above the card) is replaced by the body
