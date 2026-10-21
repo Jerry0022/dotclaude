@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.291.0] — 2026-10-22
+
+The card's decision line no longer starts with the `┃` title bar, a delegated ship no longer loses the background plugin audit, and the plugin now records what it saves so the audit can weigh benefit against cost. Implements the 11 suggestions of the v0.290.0 plugin audit.
+
+Root causes: `headingOf` reused the session-title bar, so the card's decision line started with `┃`. After the v0.290.0 delegated ship the subagent started `audit.js` as its own background task; the completion notice went to the subagent that had already ended, so plugin-audit steps 2–5 never ran.
+
+### Added
+- **Version marker.** SessionStart prints `[devops] version=X`, so a transcript shows which plugin version ran.
+- **Savings log.** `pre.tokens.guard` (block/release) and local-llm (delegation) append labelled estimate lines to `~/.claude/devops-savings.jsonl` (override `DEVOPS_SAVINGS_LOG`, 256 KB cap). Estimates only, never a gate.
+- **`[agent-model]` spawn marker** and **`[ship-guard:<rule>]` tags** on `pre.ship.guard` refusals, so the audit can count blocks per rule.
+- **Plugin audit reads them.** Mining and the net estimate use the savings log and the markers. The net estimate mixes Opus-equivalent delegation tokens with raw estimates, and its uncertainty note stays.
+
+### Changed
+- **Card decision heading without `┃`** (`hooks/lib/title-scheme.js` `headingOf`). The title-matrix test asserts it.
+- **Delegated ship hands the audit to the parent.** On a decade boundary the subagent puts the `audit.js` start in `afterRender`, and the parent starts it after showing the card (`skills/do-ship/modes/delegated.md`, project `plugin-audit-trigger.md`).
+- **hooks.json** quotes every `${CLAUDE_PLUGIN_ROOT}` path. It sets `onFailure: "block"` only on `pre.ship.guard`, `pre.main.guard`, `pre.cleanup.gate`, `pre.governor.gate` and `pre.run.contract`.
+- **`prompt.skill.enforce`** recognises raw `/devops:<skill>` prompts before expansion (Claude Code 2.1.299). Bare `/skill` prose prompts keep the skill mandate (#235 regression test).
+- Shorter MCP tool descriptions (completion card, `ship_release`, `ship_preflight`). Clearer card-guard wording with the same rules. `agent-proactivity.md` trimmed (7149 → 6626 bytes, every rule kept). Dead references fixed. The plugin-audit `report.js` runs `init` with `--allow-main`.
+
+### Not changed
+- SessionStart hooks stay synchronous: nothing in the repo shows that an async field is supported.
+- `git-sync.midcheckout.test.js` keeps main's version. A strict variant without the fallback branch still fails under load, on the `another process holds index.lock` path, and so does main's version.
+- npm audit: the 2 moderate findings (GHSA-82fw-gwwq-j7x9 via `@vitest/mocker`) only close with vitest 5. That major bump is left for its own branch, together with eslint 10 and jsdom.
+
 ## [0.290.2] — 2026-10-21
 
 The concept page's design header stays one compact row.
