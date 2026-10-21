@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.288.1] — 2026-10-21
+## [0.288.2] — 2026-10-21
 
 Session titles drop the invisible padding and recover from stacked prefixes; three red tests are green again.
 
