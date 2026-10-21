@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.286.1] — 2026-10-21
+
+The Desktop completion card no longer stays a bare title right after a ship: a cold jsDelivr tag gets a second try, and the completion server warms the client file when it starts.
+
+### Fixed
+- **Completion card survives a cold CDN tag.** The Desktop card widget loads its renderer from `cdn.jsdelivr.net/gh/Jerry0022/dotclaude@alpha/v<version>/…/card-widget.client.js`. For a freshly pushed tag jsDelivr answers the first request with HTTP 503 while it pulls the file from GitHub (observed for v0.284.6: 503, then 200 on the same URL minutes later), so the ship card fell back to a bare title. The widget template's `onerror` in `mcp-server/lib/card-widget.js` now retries the script load once after `CARD_CLIENT_RETRY_MS` (2000 ms) before the plain-text fallback; the client's own schema hand-over (`onerror()` without an event) still goes straight to text. A new `warmCardClient({ url, fetchImpl, attempts, delayMs, timeoutMs })` (never throws) is fired in the background by `mcp-server/index.js` after `server.connect`, so jsDelivr has the file cached before the first card. Warming in `ship_release` was rejected: that tool runs in every consumer project, while the completion server always knows its own client URL. `completion-card-design.md` § Fallback gets a *Cold tag* paragraph; `card-widget.client.test.js` covers one retry then text, and `warmCardClient` on 503 → 503 → 200 and offline. The `widget_code` size budget rises by 150 chars (ready/pending 1650, test 2050).
+
 ## [0.286.0] — 2026-10-21
 
 The red panel after each collected batch note is short: one status line, a blank line and three icon-led command lines instead of a 13-line mode summary.
