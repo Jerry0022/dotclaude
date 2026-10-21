@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.290.2] — 2026-10-21
+
+The concept page's design header stays one compact row.
+
+### Changed
+- **No second header row.** The design header (top left) no longer grows on hover, focus or tap into a second row with page tabs, a ☆ Favourite button and the favourite hint. It keeps one row (Übersicht · name · ★ · eye · pin) and only turns opaque on hover; pages stay in the quick nav, the favourite on ★ or `F` (`templates-design-overview.md`).
+
 ## [0.290.1] — 2026-10-21
 
 Session titles no longer stack `┃ Solo 🤖` heads turn after turn.

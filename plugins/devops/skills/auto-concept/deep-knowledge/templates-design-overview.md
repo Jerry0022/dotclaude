@@ -544,7 +544,7 @@ returns — the single-design page is untouched.
     H.back.appendChild(svgFromPaths(ICONS.grid));
     H.back.appendChild(el('span', '', L.overview));
     setTip(H.back, L.back, 'Esc');
-    H.back.addEventListener('click', () => { closeHeader(); window.showOverview(); });
+    H.back.addEventListener('click', () => window.showOverview());
     H.sep = el('span', 'design-header-sep');
     H.iconSlot = el('span', 'design-header-icon');
     H.name = el('strong', 'design-header-name');
@@ -557,7 +557,7 @@ returns — the single-design page is untouched.
       const it = visibleIteration();
       if (mode() === 'overview') {
         const fav = validFavorite(it, readState(it));
-        if (fav) { closeHeader(); window.showDesign(fav); }
+        if (fav) window.showDesign(fav);
         return;
       }
       const d = activeDesignOf(it);
@@ -578,31 +578,10 @@ returns — the single-design page is untouched.
     H.pill = el('span', 'design-header-title');
     H.pill.append(H.iconSlot, H.name);
     H.main.append(H.back, H.sep, H.pill, H.star, H.eye, H.pin);
-    H.more = el('div', 'design-header-more');
-    H.actions = el('div', 'design-header-actions');
-    H.tabs = el('div', 'design-header-tabs');
-    H.tabs.setAttribute('role', 'tablist');
-    H.fav = el('button', 'design-fav-btn');
-    H.fav.type = 'button';
-    H.fav.addEventListener('click', () => {
-      const d = activeDesignOf(visibleIteration());
-      if (d) toggleFavorite(d.dataset.design);
-    });
-    H.note = el('div', 'design-header-note');
-    H.actions.append(H.tabs, H.fav);
-    H.more.append(H.actions, H.note);
-    header.append(H.main, H.more);
-    // Touch path (R6): a tap on the card's own surface opens it the way a
-    // hover does; a tap elsewhere closes it again.
-    H.main.addEventListener('click', e => {
-      if (e.target.closest('button')) return;
-      header.dataset.open = header.dataset.open === 'true' ? 'false' : 'true';
-    });
-    document.addEventListener('pointerdown', e => {
-      if (header.dataset.open === 'true' && !header.contains(e.target)) closeHeader();
-    });
+    // One row only: pages live in the quick nav, the favourite on ★ — the
+    // header never grows a second row over the content.
+    header.append(H.main);
   }
-  function closeHeader() { if (header) header.dataset.open = 'false'; }
 
   // ── Variant switch that keeps the page ────────────────────────────────
   // Comparing variants means looking at the SAME page in each: on design A
@@ -1047,9 +1026,8 @@ returns — the single-design page is untouched.
       H.back.hidden = md === 'overview' || !hasOverview;
       H.sep.hidden = H.back.hidden;
       H.iconSlot.innerHTML = '';
-      H.tabs.innerHTML = '';
       header.style.removeProperty('--dz-color');
-      let motto = '', note = '', showTabs = false, showFav = false;
+      let motto = '';
       if (md === 'overview') {
         H.iconSlot.appendChild(iconEl('grid'));
         H.name.textContent = L.overview;
@@ -1059,7 +1037,6 @@ returns — the single-design page is untouched.
         H.star.removeAttribute('aria-pressed');
         if (favMeta) setTip(H.star, L.open + ': ' + favMeta.label);
         motto = L.count.replace('{n}', String(metas.length));
-        note = fav ? L.hintSet : '';
       } else if (md === 'view') {
         const v = it.querySelector(':scope > section[data-view][data-view-active="true"]');
         H.iconSlot.appendChild(iconEl('question', { kind: 'plain' }));
@@ -1078,41 +1055,13 @@ returns — the single-design page is untouched.
         setTip(H.star, isFav ? L.favUnset : L.favSet, 'F');
         if (!hasOverview) H.star.textContent = '';
         motto = m.motto;
-        showFav = hasOverview;
-        const screens = [...d.querySelectorAll('section[data-screen][id]')];
-        const cur = activeScreenOf(d);
-        if (screens.length > 1) {
-          showTabs = true;
-          screens.forEach(sec => {
-            const tab = el('button', 'design-header-tab', sec.dataset.navLabel || sec.id);
-            tab.type = 'button';
-            tab.setAttribute('role', 'tab');
-            tab.dataset.active = String(sec === cur);
-            tab.setAttribute('aria-selected', String(sec === cur));
-            if (sec !== cur && screens.indexOf(sec) === (screens.indexOf(cur) + 1) % screens.length) setTip(tab, L.next, 'Tab');
-            tab.addEventListener('click', () => window.showScreen(sec.id));
-            setDot(tab, unseenOf(it).screens(m.id).includes(sec.id));
-            H.tabs.appendChild(tab);
-          });
-        }
       }
       H.star.hidden = !H.star.textContent;
       // The motto is the name's tooltip, not a line of its own.
       if (motto) setTip(H.name, motto);
       else { delete H.name.dataset.tip; delete H.name.dataset.tipTier; }
-      H.note.textContent = note;
-      H.note.hidden = !note;
-      H.tabs.hidden = !showTabs;
-      H.fav.hidden = !showFav;
-      H.fav.disabled = !live;
-      const pressed = !!(m && fav === m.id);
-      H.fav.setAttribute('aria-pressed', String(pressed));
-      H.fav.textContent = (pressed ? '★ ' : '☆ ') + L.fav;
-      setTip(H.fav, pressed ? L.favUnset : L.favSet, 'F');
       H.pin.hidden = !(md === 'design' && live);
       H.pin.setAttribute('aria-pressed', String(armed === 'tap'));
-      H.actions.hidden = H.tabs.hidden && H.fav.hidden;
-      H.more.hidden = H.actions.hidden && H.note.hidden;
     }
     renderQuick(it);
     renderQuestionsCard(it);
@@ -1162,7 +1111,7 @@ returns — the single-design page is untouched.
       if (notes) notes.textContent = '💬 ' + notesCount(it, card.dataset.designId, st);
     });
   });
-  document.addEventListener('iteration:changed', () => { closeHeader(); toggleSheet(false); });
+  document.addEventListener('iteration:changed', () => toggleSheet(false));
 
   // ── User pins (Ctrl + click) ───────────────────────────────────────────
   let armed = null;   // 'ctrl' while the key is held, 'tap' after the header button
@@ -1379,7 +1328,6 @@ returns — the single-design page is untouched.
     if (e.key === 'Escape') {
       if (sheet && !sheet.hidden) { toggleSheet(false); e.preventDefault(); return; }
       if (armed) { disarm(); e.preventDefault(); return; }
-      if (header && header.dataset.open === 'true') { closeHeader(); e.preventDefault(); return; }
       if (panelOpen || dockOpen) return;
       if (mode() !== 'overview') { e.preventDefault(); window.showOverview(); }
       return;
@@ -1617,7 +1565,7 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-fav-btn[aria-pressed="true"] { background: var(--warning-color, #d29922); color: var(--panel-bg, #0d1117); }
 .design-fav-btn:disabled { opacity: 0.55; cursor: default; }
 
-/* ── Header — one card, grows over the content ── */
+/* ── Header — one compact row, never grows ── */
 .design-header {
   position: fixed; top: 1rem; left: 1rem; z-index: 99;
   flex-direction: column; box-sizing: border-box;
@@ -1630,20 +1578,13 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
   color: var(--text-secondary, #8b949e); font-size: 0.85rem;
   backdrop-filter: blur(6px);
   opacity: 0.6;
-  transition: opacity 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+  transition: opacity 0.16s ease, background 0.16s ease;
 }
-.design-header:hover, .design-header:focus-within, .design-header[data-open="true"] {
-  opacity: 1; background: var(--panel-bg, #161b22);
-  max-width: calc(100vw - 8rem);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-}
+.design-header:hover, .design-header:focus-within { opacity: 1; background: var(--panel-bg, #161b22); }
 .design-header-main { display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; min-width: 0; min-height: 28px; }
-/* The name carries its OWN cap, identical at rest and expanded: when only
-   the header's max-width capped it, hover lifted the cap, the name
-   un-truncated and every icon right of it (★, eye, pin) jumped sideways.
-   19rem ≈ everything else on the row (back, pill chrome, ★, eye, pin, gaps,
-   padding), so the row never exceeds the resting cap and the expanded state
-   cannot reflow it. */
+/* The name carries its OWN cap: 19rem ≈ everything else on the row (back,
+   pill chrome, ★, eye, pin, gaps, padding), so the row never exceeds the
+   header's cap; the full name and motto live in its tooltip. */
 .design-header-name {
   color: var(--text, #e6edf3); font-weight: 600; min-width: 0;
   max-width: max(3rem, min(12rem, calc(var(--dz-head-cap) - 19rem)));
@@ -1685,20 +1626,6 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 /* The eye moves in here (wireDesignOverview) — same control, inline size. */
 .design-header .anno-toggle-fab { position: static; flex: none; width: 24px; height: 24px; border-width: 1px; box-shadow: none; }
 .design-header .anno-toggle-fab svg { width: 13px; height: 13px; }
-.design-header-more { display: none; flex-direction: column; gap: 0.5rem; margin-top: 0.45rem; padding: 0.45rem 0 0.15rem; border-top: 1px solid var(--border-color, #30363d); }
-.design-header:hover .design-header-more,
-.design-header:focus-within .design-header-more,
-.design-header[data-open="true"] .design-header-more { display: flex; }
-.design-header-more:empty { display: none !important; }
-.design-header-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-.design-header-note { max-width: 320px; white-space: normal; color: var(--text-color, #c9d1d9); }
-.design-header-tabs { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; border-radius: 8px; background: color-mix(in srgb, var(--panel-bg, #0d1117) 60%, var(--border-color, #30363d)); }
-.design-header-tab {
-  border: 0; background: transparent; color: var(--text-secondary, #8b949e);
-  padding: 0.2rem 0.6rem; border-radius: 6px; font: inherit; font-size: 0.8rem; cursor: pointer;
-}
-.design-header-tab:hover { color: var(--text, #e6edf3); }
-.design-header-tab[data-active="true"] { background: var(--border-color, #30363d); color: var(--text, #e6edf3); font-weight: 700; }
 .design-header-name[data-tip] { cursor: help; }
 /* Same shape as the header eye (.design-header .anno-toggle-fab). */
 .design-header-pin {
