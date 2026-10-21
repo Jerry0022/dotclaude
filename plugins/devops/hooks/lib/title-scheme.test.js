@@ -31,6 +31,18 @@ describe("title-scheme — new grammar", () => {
     expect(S.classify("⏳ ┃ " + HAIR.repeat(24) + "Solo 🤖 Fix")).toBe("work");
     expect(S.stripPrefixes("🟩 ┃ " + HAIR.repeat(19) + "Alpha 🚀 Login")).toBe("Login");
   });
+
+  test("the fill the Desktop app stored as plain spaces is recognised too", () => {
+    // Observed 2026-10-21: the app keeps the hair-space fill as U+0020, the
+    // heads were missed and stacked one per turn.
+    const fill = " ".repeat(25);
+    expect(S.classify("⏳ ┃" + fill + "Concept 🧭 Anno")).toBe("process");
+    expect(S.stripPrefixes(
+      "👉 🧪 Test – ┃ Solo 🤖 ┃" + fill + "Solo 🤖 ┃" + fill + "Solo 🤖 Dritte Ebene funktioniert nicht",
+    )).toBe("Dritte Ebene funktioniert nicht");
+    expect(S.stripPrefixes("🟩 📋 Analysis – ┃" + fill + "Solo 🤖 Fix")).toBe("Fix");
+    expect(S.stripPrefixes("⏳ Fix  Login")).toBe("Fix  Login");
+  });
 });
 
 describe("title-scheme — tolerant matching", () => {
