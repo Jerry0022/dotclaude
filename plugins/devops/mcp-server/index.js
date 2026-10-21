@@ -1323,7 +1323,7 @@ function renderChannelLadderMd(ladder, lang) {
 // The localized SENTENCE of each heading. The head in front of it — status
 // icon, activity icon, English keyword — comes from the title scheme
 // (hooks/lib/title-scheme.js) via `cardHead`, the same state id the session
-// title gets: title `👉 ┃ Ready 📦 X` ↔ heading `👉 ┃ Ready 📦 — Shippen?`.
+// title gets: title `👉 ┃ Ready 📦 X` ↔ heading `👉 Ready 📦 — Shippen?`.
 const HEADINGS = {
   de: {
     // #714: ship is offered only when nothing is open — an `open` point or a
@@ -2909,7 +2909,7 @@ server.registerTool(
           filesModified: z.number().optional().describe("file-only mode: how many files changed on disk. Replaces the commit count."),
           delivered: z.string().optional().describe("file-only / no-remote mode: what actually left the working tree ('none', 'local-commit-only', ...). Never claim a merge here."),
           kept: z.boolean().optional().describe("Ship cleanup was skipped — branch + worktree preserved for follow-up work. Switches the ship-successful decision heading to '{version} — weiter in `{branch}`?'."),
-          deployPending: z.boolean().optional().describe("Out-of-band deploy artifacts (DB migrations / edge functions) were merged but NOT deployed (#243). Flips the ship-successful decision heading to '👉 ┃ Not deployed ⚠️ — Gemergt, aber nicht live — Migration jetzt deployen?' (noch nicht live)'. Pair with the top-level `deployGate` list naming each artifact."),
+          deployPending: z.boolean().optional().describe("Out-of-band deploy artifacts (DB migrations / edge functions) were merged but NOT deployed (#243). Flips the ship-successful decision heading to '👉 Not deployed ⚠️ — Gemergt, aber nicht live — Migration jetzt deployen?' (noch nicht live)'. Pair with the top-level `deployGate` list naming each artifact."),
         }).optional(),
       ).describe("Repository state"),
       cta: z.preprocess(
@@ -2971,7 +2971,7 @@ server.registerTool(
             url: z.string().optional().describe("Override for the page URL shown above the CTA while the phase is 'waiting' (no link while iterating or implementing). Normally NOT needed: pass `cwd` and the card reads port + html_path from the project's .claude/concept-active.json — the URL the page is already open at."),
           }),
         ]).optional(),
-      ).describe("A /auto-concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '👉 ┃ Concept 🧭 — {phase}' ('⏳ ┃ Concept 🧭 — …' while iterating or implementing, like the session title), where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work (content agents, a workflow) still goes into `pending` and follows the phase as its own sentence ('⏳ ┃ Concept 🧭 — in Implementierung. 2 Agenten arbeiten — ich melde mich'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: while the phase is 'waiting' the card then shows the page's http://localhost:{port}/… link above the CTA — iterating and implementing cards carry no link."),
+      ).describe("A /auto-concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '👉 Concept 🧭 — {phase}' ('⏳ Concept 🧭 — …' while iterating or implementing, like the session title), where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work (content agents, a workflow) still goes into `pending` and follows the phase as its own sentence ('⏳ Concept 🧭 — in Implementierung. 2 Agenten arbeiten — ich melde mich'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: while the phase is 'waiting' the card then shows the page's http://localhost:{port}/… link above the CTA — iterating and implementing cards carry no link."),
       pause: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({

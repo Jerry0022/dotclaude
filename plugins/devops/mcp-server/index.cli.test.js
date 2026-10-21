@@ -83,7 +83,7 @@ describe("--render-card CLI fallback", () => {
 
     expect(out).toMatch(/^### \*\*✨✨✨ Karte ohne MCP-Server ✨✨✨\*\*/m);
     expect(out).toContain("› Rendert auch ohne MCP");
-    expect(out).toMatch(/^## 🟩 ┃ Analysis 📊 — gelesen/m);
+    expect(out).toMatch(/^## 🟩 Analysis 📊 — gelesen/m);
   });
 
   test("the override loader's record shows as ONE card line and is marked rendered", async () => {
@@ -186,7 +186,7 @@ describe("--render-card CLI fallback", () => {
     // as a second, empty card header; every hidden marker (HTML comment #443,
     // `[//]: #` definition #470) showed as a literal stray line.
     expect(terminal.stdout).toMatch(/^› y$/m);
-    expect(terminal.stdout).toMatch(/^## 👉 ┃ Ready 📦 — Shippen\?$/m);
+    expect(terminal.stdout).toMatch(/^## 👉 Ready 📦 — Shippen\?$/m);
     expect(terminal.stdout).toMatch(/^### \*\*✨✨✨ CTA-Test ✨✨✨\*\*/m);
     expect(desktop.stdout.trim()).toBe("");
     expect(desktop.stderr).toContain("IS the whole card");
@@ -288,7 +288,7 @@ describe("--render-card CLI fallback", () => {
     expect(stderr).not.toContain('data-prompt="ship"');
     // The terminal asks the top point as the heading and lists the rest.
     const term = await renderCard(payload);
-    expect(term).toMatch(/^## 👉 ┃ Question ❓ — Soll die Änderung auch im Terminal-Renderer rein \+1 weitere\?$/m);
+    expect(term).toMatch(/^## 👉 Question ❓ — Soll die Änderung auch im Terminal-Renderer rein \+1 weitere\?$/m);
     expect(term).toMatch(/^1\. ❓ Doku zur Card nachziehen\?$/m);
   });
 
@@ -299,7 +299,7 @@ describe("--render-card CLI fallback", () => {
       open: ["Doku nachziehen?", "Config prüfen?"],
     };
     const term = await renderCard(card);
-    expect(term).toMatch(/^## 👉 ┃ Test 🧪/m);
+    expect(term).toMatch(/^## 👉 Test 🧪/m);
     expect(term).not.toMatch(/weitere/);
     for (const [i, s] of ["Schritt A", "Schritt B", "Schritt C", "Schritt D"].entries()) {
       expect(term).toMatch(new RegExp(`^${i + 1}\\. 🧪 ${s}$`, "m"));
@@ -324,8 +324,8 @@ describe("--render-card CLI fallback", () => {
     expect(testWidget).not.toContain("frag mich, was");
     // the steps to test lead under the Test heading, the open points follow (#750)
     const testTerm = await renderCard(test);
-    expect(testTerm).not.toMatch(/^## 👉 ┃ Question ❓/m);
-    expect(testTerm).toMatch(/^## 👉 ┃ Test 🧪/m);
+    expect(testTerm).not.toMatch(/^## 👉 Question ❓/m);
+    expect(testTerm).toMatch(/^## 👉 Test 🧪/m);
     expect(testTerm).toMatch(/^1\. 🧪 Seite öffnen$/m);
     expect(testTerm).toMatch(/^2\. ❓ Auch im Terminal\?$/m);
     expect(testTerm).toMatch(/^3\. ❓ Doku nachziehen\?$/m);
@@ -362,7 +362,7 @@ describe("--render-card CLI fallback", () => {
       { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" },
     );
     expect(desktop.stdout).toMatch(/^› läuft auf Port 3000$/m);
-    expect(desktop.stdout).toMatch(/^## 🟩 ┃ Started 💡 — viel Spaß$/m);
+    expect(desktop.stdout).toMatch(/^## 🟩 Started 💡 — viel Spaß$/m);
   });
 
   test("test-minimal never rides the card-widget instruction, even on Desktop", async () => {
@@ -434,9 +434,9 @@ describe("--render-card CLI fallback", () => {
       session_id: S("pending"),
       pending: JSON.stringify([{ name: "devops:frontend", doing: "Farbstil" }]),
     });
-    expect(out).toMatch(/^## ⏳ ┃ Team 🤖 — noch nicht fertig/m);
+    expect(out).toMatch(/^## ⏳ Team 🤖 — noch nicht fertig/m);
     expect(out).toContain("devops:frontend");
-    expect(out).not.toMatch(/^## 👉 ┃ Ready 📦 — Shippen/m);
+    expect(out).not.toMatch(/^## 👉 Ready 📦 — Shippen/m);
   });
 
   test("writes the pending-attested flag so the Stop gate is satisfied", async () => {
@@ -592,7 +592,7 @@ describe("--render-card CLI — V&V while a background test run is in flight", (
     flag("light-pending", sid, "a.js");
     flag("light-bgrun", sid, `b68oycrr6 ${Date.now()}`);
     const out = await renderCard({ variant: "ready", summary: "x", lang: "de", session_id: sid });
-    expect(out).toMatch(/^## ⏳ ┃ Testing 🧪 — Test läuft noch — Ergebnis abwarten\?$/m);
+    expect(out).toMatch(/^## ⏳ Testing 🧪 — Test läuft noch — Ergebnis abwarten\?$/m);
     expect(out).toContain("◐ Test läuft noch im Hintergrund");
     expect(out).not.toContain("kein Test lief");
   });
@@ -617,7 +617,7 @@ describe("--render-card CLI — V&V while a background test run is in flight", (
       variant: "ready", summary: "x", lang: "de", session_id: sid,
       pending: [{ name: "npx vitest run", kind: "task", doing: "Suite" }],
     });
-    expect(out).toMatch(/^## ⏳ ┃ Team 🤖 — noch nicht fertig — .+$/m);
+    expect(out).toMatch(/^## ⏳ Team 🤖 — noch nicht fertig — .+$/m);
     expect(out).toContain("◐ Test läuft noch im Hintergrund");
     expect(out).not.toContain("kein Test lief");
   });
@@ -626,14 +626,14 @@ describe("--render-card CLI — V&V while a background test run is in flight", (
     const plain = S("vv-plain");
     flag("light-pending", plain, "a.js");
     const out = await renderCard({ variant: "ready", summary: "x", lang: "de", session_id: plain });
-    expect(out).toMatch(/^## 👉 ┃ Unverified ⚠️ — Ungeprüft shippen\?$/m);
+    expect(out).toMatch(/^## 👉 Unverified ⚠️ — Ungeprüft shippen\?$/m);
     expect(out).toContain("⚠ ungeprüft — kein Test lief");
 
     const stale = S("vv-stale");
     flag("light-pending", stale, "a.js");
     flag("light-bgrun", stale, `b68oycrr6 ${Date.now() - 31 * 60 * 1000}`);
     expect(await renderCard({ variant: "ready", summary: "x", lang: "de", session_id: stale }))
-      .toMatch(/^## 👉 ┃ Unverified ⚠️ — Ungeprüft shippen\?$/m);
+      .toMatch(/^## 👉 Unverified ⚠️ — Ungeprüft shippen\?$/m);
   });
 
   test("a verified run shows neither", async () => {
@@ -642,7 +642,7 @@ describe("--render-card CLI — V&V while a background test run is in flight", (
     flag("light-verified", sid, "background run");
     flag("light-bgrun", sid, `b68oycrr6 ${Date.now()}`);
     const out = await renderCard({ variant: "ready", summary: "x", lang: "de", session_id: sid });
-    expect(out).toMatch(/^## 👉 ┃ Ready 📦 — Shippen\?$/m);
+    expect(out).toMatch(/^## 👉 Ready 📦 — Shippen\?$/m);
     expect(out).not.toContain("Test läuft noch");
     expect(out).not.toContain("ungeprüft");
   });
@@ -683,7 +683,7 @@ describe("--render-card CLI — a deliberate verification skip (#612)", () => {
     flag("light-pending", sid, "a.js");
     const out = await renderCard({ variant: "ready", summary: "x", lang: "de", session_id: sid, verification: skip });
     written.push(join(tmpdir(), `dotclaude-devops-light-skipped-${sid}`));
-    expect(out).toMatch(/^## 👉 ┃ Unverified ⚠️ — Ungeprüft shippen\?$/m);
+    expect(out).toMatch(/^## 👉 Unverified ⚠️ — Ungeprüft shippen\?$/m);
     expect(out).toContain("⚠ ungeprüft — übersprungen: Plugin-Hook ohne startbare Oberfläche");
     expect(out).toContain("Verifikation übersprungen: Plugin-Hook ohne startbare Oberfläche");
     expect(out).not.toContain("kein Test lief");

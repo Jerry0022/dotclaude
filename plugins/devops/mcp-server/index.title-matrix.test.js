@@ -189,8 +189,10 @@ describe("title = CTA — every completion-card variant × every heading/prefix 
           expect(m[3], "activity icon").toBe(activity);
           expect(title).toBe(prefix);
         }
-        // Title = CTA: the heading starts with the same two icons and keyword.
-        expect(heading.startsWith(head + " — "), heading).toBe(true);
+        // Title = CTA: the heading starts with the same two icons and keyword,
+        // without the title's ┃ bar (it read as a line starting with "|").
+        expect(heading.startsWith(`${status} ${word} ${activity} — `), heading).toBe(true);
+        expect(heading).not.toContain("┃");
         expect(heading).not.toMatch(/LIVE/);
         expect(heading.startsWith("✅")).toBe(false);
       });
@@ -211,19 +213,19 @@ describe("title = CTA — every completion-card variant × every heading/prefix 
 
   test("an optional promote offer keeps 🟩, a mandatory step makes it 👉 — the heading follows", () => {
     const optional = evaluate({ variant: "ship-successful", state: SHIPPED, delivery: ring("alpha") }, "de");
-    expect(optional.heading).toBe("🟩 ┃ Alpha 🚀 — v0.1.0 — nach Beta promoten?");
+    expect(optional.heading).toBe("🟩 Alpha 🚀 — v0.1.0 — nach Beta promoten?");
     const mandatory = evaluate({ variant: "ship-successful", state: SHIPPED, delivery: ring("alpha"), userFinalTest: FINAL }, "en");
-    expect(mandatory.heading).toBe("👉 ┃ Alpha 🚀 — v0.1.0 — promote to beta?");
+    expect(mandatory.heading).toBe("👉 Alpha 🚀 — v0.1.0 — promote to beta?");
     expect(mandatory.title).toBe("👉 ┃ Alpha 🚀 ");
   });
 
   test("worked examples from the concept read exactly", () => {
-    expect(evaluate({ variant: "ready" }, "de").heading).toBe("👉 ┃ Ready 📦 — Shippen?");
-    expect(evaluate({ variant: "ready" }, "en").heading).toBe("👉 ┃ Ready 📦 — Ship?");
-    expect(evaluate({ variant: "test-minimal" }, "de").heading).toBe("🟩 ┃ Started 💡 — viel Spaß");
+    expect(evaluate({ variant: "ready" }, "de").heading).toBe("👉 Ready 📦 — Shippen?");
+    expect(evaluate({ variant: "ready" }, "en").heading).toBe("👉 Ready 📦 — Ship?");
+    expect(evaluate({ variant: "test-minimal" }, "de").heading).toBe("🟩 Started 💡 — viel Spaß");
     expect(evaluate({ variant: "paused", pause: { reason: "usage-reset", resetAt: "14:00" } }, "de").heading)
-      .toBe("🟦 ┃ Limit reset 🔋 — weiter nach dem Limit-Reset (14:00)");
+      .toBe("🟦 Limit reset 🔋 — weiter nach dem Limit-Reset (14:00)");
     expect(evaluate({ variant: "aborted", cta: { reason: "Konflikt", activity: "ship" } }, "en").heading)
-      .toBe("🟥 ┃ Ship 🚀 — aborted because of Konflikt — try differently?");
+      .toBe("🟥 Ship 🚀 — aborted because of Konflikt — try differently?");
   });
 });

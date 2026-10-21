@@ -38,7 +38,7 @@ etwas?") stay 🟩.
 
 **Title = CTA.** The card's CTA heading starts with the same status, keyword and
 activity as the title (`👉 ┃ Ready 📦 X` →
-`👉 ┃ Ready 📦 — Shippen?`); both come from one table so they cannot drift.
+`👉 Ready 📦 — Shippen?`); both come from one table so they cannot drift.
 The card's component line uses 🧩.
 
 **F5 Interrupted.** A turn that ends WITHOUT a card while the title is
