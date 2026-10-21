@@ -14,7 +14,7 @@ describe("title-scheme — new grammar", () => {
 
   test("head and heading carry the same parts", () => {
     expect(S.head("ready").text).toBe("👉 ┃ Ready 📦");
-    expect(S.headingOf("ready", "Shippen?")).toBe("👉 ┃ Ready 📦 — Shippen?");
+    expect(S.headingOf("ready", "Shippen?")).toBe("👉 Ready 📦 — Shippen?");
     expect(S.head("released-alpha").text).toBe("🟩 ┃ Alpha 🚀");
     expect(S.head("released-alpha", { mandatory: true }).text).toBe("👉 ┃ Alpha 🚀");
     expect(S.head("paused-restart").text).toBe("🟦 ┃ Restart 🔌");

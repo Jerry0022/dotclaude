@@ -324,3 +324,21 @@ describe("announce text on progress-update models", () => {
     expect(on.endsWith("---\nCARD\n---")).toBe(true);
   });
 });
+
+describe("audit model marker", () => {
+  const mod = createRequire(import.meta.url)("./pre.agent.announce.js");
+
+  test("an invocation override wins and the marker is one parseable line", () => {
+    const m = mod.modelMarker({ subagent_type: "devops:core", model: "haiku" }, os.tmpdir(), null, "toolu_01ABC");
+    expect(m).toMatch(/^\[agent-model\] id=toolu_01ABC type=devops:core model=haiku /);
+    expect(m).not.toMatch(/\n/);
+  });
+
+  test("an agent without model falls back to inherit when no transcript names one", () => {
+    expect(mod.effectiveModel({ subagent_type: "no-such-agent" }, os.tmpdir(), null)).toBe("inherit");
+  });
+
+  test("no tool_use_id means no marker", () => {
+    expect(mod.modelMarker({ subagent_type: "x" }, os.tmpdir(), null, undefined)).toBeNull();
+  });
+});

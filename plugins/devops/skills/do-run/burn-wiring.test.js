@@ -69,7 +69,7 @@ describe("the chain router → burn → autonomous → auto-agents carries the b
 describe("limit stops: asked on a manual nudge, policy on an automatic resume", () => {
   test("prompt.burn.resume is registered for UserPromptSubmit", () => {
     const cmds = hooks.hooks.UserPromptSubmit.flatMap((e) => e.hooks.map((h) => h.command));
-    expect(cmds.some((c) => c.endsWith("prompt.burn.resume.js"))).toBe(true);
+    expect(cmds.some((c) => /prompt.burn.resume.js"?$/.test(c))).toBe(true);
   });
 
   test("the router routes BURN_RESUME and asks F7", () => {

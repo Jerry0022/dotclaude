@@ -67,7 +67,7 @@ defect in the code: a job that was never started ("The job was not started
 because … spending limit …"), or a green test job whose `upload-artifact` step
 failed ("Artifact storage quota has been hit"). `ship_release` reads the
 failure annotations of every red Actions check
-(`lib/ci-account-limits.js`) and, when ALL of them match a limit, returns
+(`mcp-server/ship/lib/ci-account-limits.js`) and, when ALL of them match a limit, returns
 `checks.status: "account-limited"` + `ciAccountLimited: { kinds, checks }`
 instead of a plain failure. One real failure annotation ("Process completed
 with exit code 1"), an unreadable annotation or a non-Actions check (Vercel)

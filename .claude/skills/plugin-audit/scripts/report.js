@@ -242,7 +242,10 @@ function build(inDir, { stateDirOverride, noBuild, repoRoot } = {}) {
   const builder = findConceptBuild(repoRoot || process.cwd());
   if (!builder) return { error: 'concept-build.js not found (installed cache or repo copy)' };
   fs.rmSync(src, { recursive: true, force: true });
-  const init = run('node', [builder, 'init', src, '--title', `Plugin-Audit v${results.version}`, '--subtitle', results.ranAt.slice(0, 10), '--locale', 'de', '--mode', 'free'], { timeout: 60000 });
+  // --allow-main: the source folder lives in the git-ignored audit state dir of
+  // the main checkout, which a ship-triggered run sits in; init's main-checkout
+  // refusal targets concept pages that land in the repo, not this one.
+  const init = run('node', [builder, 'init', src, '--title', `Plugin-Audit v${results.version}`, '--subtitle', results.ranAt.slice(0, 10), '--locale', 'de', '--mode', 'free', '--allow-main'], { timeout: 60000 });
   if (!init.ok) return { error: `concept-build init failed: ${(init.stderr || init.stdout).trim().slice(0, 300)}` };
   fs.mkdirSync(path.join(src, 'rounds'), { recursive: true });
   fs.writeFileSync(path.join(src, 'rounds', '01.html'), renderFragment(results, suggestions, history));

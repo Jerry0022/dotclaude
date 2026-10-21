@@ -181,9 +181,14 @@ function prefixOf(id, opts) {
   return head(id, opts).text + ' ';
 }
 
-/** `👉 ┃ Ready 📦 — Shippen?` — the CTA heading of a state. */
+/**
+ * `👉 Ready 📦 — Shippen?` — the CTA heading of a state. No `┃`: the bar
+ * aligns the word column of session titles; on the card it read as a line
+ * starting with "|" (2026-10-21).
+ */
 function headingOf(id, sentence, opts) {
-  const h = head(id, opts).text;
+  const { status, word, activity } = head(id, opts);
+  const h = `${status} ${word} ${activity}`;
   const s = String(sentence ?? '').trim();
   return s ? `${h} — ${s}` : h;
 }

@@ -106,6 +106,25 @@ const MODE_KEYED = new Set(['do-run', 'do-ship']);
 const NAMESPACE = 'devops';
 
 /**
+ * Skill a RAW prompt opens with in the explicit plugin form (`/devops:auto-harden x`)
+ * when it is an existing plugin skill: the harness loads it this turn, so no
+ * mandate is needed. Bare, foreign-namespace and unknown names → null.
+ * @param {string} message
+ * @param {string[]} knownSkills
+ * @returns {string|null}
+ */
+function rawSlashSkill(message, knownSkills) {
+  const m = /^\s*\/([\w.:-]+)(?=\s|$)/.exec(message);
+  if (!m) return null;
+  const raw = m[1].toLowerCase();
+  const idx = raw.lastIndexOf(':');
+  // Only the explicit plugin form: a bare `/skill prose` keeps its mandate (#235).
+  if (idx === -1 || raw.slice(0, idx) !== NAMESPACE) return null;
+  const name = raw.slice(idx + 1);
+  return (knownSkills || []).some(s => String(s).toLowerCase() === name) ? name : null;
+}
+
+/**
  * Extract inline skill mentions from a user prompt (outside code/quotes).
  * @param {string} message — raw user prompt
  * @param {string[]} knownSkills — existing skill directory names
@@ -115,6 +134,9 @@ function detectInlineSkillMentions(message, knownSkills) {
   if (typeof message !== 'string' || !message) return [];
   // Already-expanded slash command → the skill is loaded this turn.
   if (message.includes('<command-name>')) return [];
+  // Raw typed form (Claude Code >= 2.1.299 runs this hook BEFORE the command
+  // expands): `/skill args` or `/devops:skill args` loads that skill itself.
+  if (rawSlashSkill(message, knownSkills)) return [];
   // Machine turns are not the user typing (observed 2026-09-14: a red-team
   // report mentioning four run-* skills demanded four Skill loads).
   if (isNonUserPrompt(message)) return [];
@@ -464,6 +486,8 @@ function run(hook) {
 
   const cwd = typeof hook.cwd === 'string' && hook.cwd ? hook.cwd : process.cwd();
   if (message.includes('<command-name>')) return runExpandedCommand(message, cwd);
+  // Raw typed `/skill` (hook runs before expansion, 2.1.299+): it loads itself.
+  if (rawSlashSkill(message, listPluginSkills())) return '';
   const parts = [];
 
   const mentions = detectInlineSkillMentions(message, listPluginSkills());

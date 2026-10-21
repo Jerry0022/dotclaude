@@ -56,9 +56,10 @@ function tally(list) {
  * Cost = plugin text measured in the transcripts (the static footprint is already
  * part of it, so it is only the fallback when no session was mined); benefit =
  * the delegation price saving, the one benefit proxy that is a token figure.
- * Guard and local-llm savings are not logged anywhere, so cost and benefit are
- * NOT comparable: `estimate` stays null instead of a net number that would only
- * subtract the measurable half of the benefit from the whole cost.
+ * Without savings-log estimates cost and benefit are NOT comparable: `estimate`
+ * stays null instead of a net number that would only subtract the measurable half
+ * of the benefit from the whole cost. With estimated guard/local-llm savings in
+ * the window (and mined sessions for the cost) they are added and `comparable` is true.
  */
 function netEstimate(footprint, mining) {
   const sessions = mining.totals.sessions;
@@ -66,10 +67,24 @@ function netEstimate(footprint, mining) {
   const injected = mining.totals.pluginInContextTokens;
   const costTokens = sessions > 0 ? injected : staticPerSession;
   const benefitTokens = mining.benefit.delegation.savedOpusEquivalentTokens;
-  return {
-    costTokens, benefitTokens, estimate: null, comparable: false,
+  // Labelled estimates from the savings log (same mining window as the cost).
+  // Gate catches (blocks) stay frequencies and are never added.
+  const tg = mining.benefit.tokenGuard;
+  const ll = mining.benefit.localLlm;
+  const guardEst = tg && tg.estimated ? Number(tg.avoidedEstimate) || 0 : 0;
+  const llmEst = ll && ll.estimated ? Number(ll.estTokens) || 0 : 0;
+  const hasEstimates = (tg && tg.estimated) || (ll && ll.estimated);
+  const base = {
+    costTokens, benefitTokens,
     breakdown: { staticPerSession, sessions, injectedInTranscripts: injected, delegationSavedOpusEquivalent: benefitTokens },
     uncertainty: UNCERTAINTY,
+  };
+  if (!hasEstimates || sessions <= 0) return { ...base, estimate: null, comparable: false };
+  const estimatedBenefitTokens = guardEst + llmEst;
+  const total = benefitTokens + estimatedBenefitTokens;
+  return {
+    ...base, benefitTokens: total, estimate: total - costTokens, comparable: true,
+    breakdown: { ...base.breakdown, estimatedBenefitTokens, tokenGuardAvoidedEstimate: guardEst, localLlmEstTokens: llmEst },
   };
 }
 
@@ -98,7 +113,7 @@ async function collectAll(a) {
 function summaryLine(r, out) {
   const i = tally(r.integrity); const h = tally(r.hygiene);
   const fmt = (t) => `${t.green}g/${t.yellow}y/${t.red}r/${t.skipped}s`;
-  return `plugin-audit: v${r.version} | footprint ~${r.footprint.totalTokens} tok | integrity ${fmt(i)} | hygiene ${fmt(h)} | cost ~${r.net.costTokens} tok / measured benefit ~${r.net.benefitTokens} tok (not comparable) | ${out}`;
+  return `plugin-audit: v${r.version} | footprint ~${r.footprint.totalTokens} tok | integrity ${fmt(i)} | hygiene ${fmt(h)} | cost ~${r.net.costTokens} tok / ${r.net.comparable ? `benefit incl. estimates ~${r.net.benefitTokens} tok (net ~${r.net.estimate} tok, estimate)` : `measured benefit ~${r.net.benefitTokens} tok (not comparable)`} | ${out}`;
 }
 
 /** Step 5: record the finished run (after cc-currency merge + report). */

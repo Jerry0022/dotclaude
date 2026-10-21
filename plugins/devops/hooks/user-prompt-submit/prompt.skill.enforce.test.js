@@ -69,6 +69,19 @@ describe("detectInlineSkillMentions — inline /devops-* references (#235)", () 
     ).toEqual([]);
   });
 
+  test("raw typed /skill and /devops:skill prompts (pre-expansion hook, 2.1.299) are skipped", () => {
+    // bare form keeps its mandate (#235 incident case above)
+    expect(detectInlineSkillMentions("/auto-harden src/", KNOWN)).toEqual(["auto-harden"]);
+    expect(detectInlineSkillMentions("/devops:auto-harden src/", KNOWN)).toEqual([]);
+    // a foreign namespace is not ours: never skipped as "ours" (and no mention either)
+    expect(detectInlineSkillMentions("/other:auto-harden bitte", KNOWN)).toEqual([]);
+  });
+
+  test("run(): a raw /devops:skill prompt is silent, like the expanded <command-name> form", () => {
+    expect(run({ prompt: "/devops:auto-harden src/", session_id: "raw-ns", cwd: process.cwd() })).toBe("");
+    expect(run({ prompt: "<command-name>/devops:auto-harden</command-name>", session_id: "raw-ns", cwd: process.cwd() })).toBe("");
+  });
+
   test("case-insensitive, normalized to lowercase", () => {
     expect(detectInlineSkillMentions("Bitte /Auto-Harden ausführen", KNOWN)).toEqual([
       "auto-harden",

@@ -309,6 +309,15 @@ server.registerTool(
       };
     }
 
+    // Savings log for the plugin audit: output Claude did not have to write
+    // (estimate, ~3.5 chars/token). Fail-silent.
+    try {
+      require(join(LIB_ROOT, "savings-log.js")).record(
+        "local-llm", "delegated", Math.ceil(String(result.content || "").length / 3.5),
+        { localTokensUsed: result.tokensUsed ?? null },
+      );
+    } catch { /* never blocks */ }
+
     return {
       content: [{
         type: "text",

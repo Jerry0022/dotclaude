@@ -68,9 +68,9 @@ in this order — the first match is usually most of the overage.
 |-----------------------------------------|---------------------------------------------------|
 | Code block longer than ~5 lines         | `deep-knowledge/<topic>.md`, or a script           |
 | Step-by-step procedure                  | A skill, or `<skill>/deep-knowledge/<topic>.md`    |
-| Architecture description                | `deep-knowledge/architecture.md`                   |
-| API docs, endpoint or option lists       | `deep-knowledge/api.md`                            |
-| Environment / setup walkthrough         | `deep-knowledge/setup.md`                          |
+| Architecture description                | `deep-knowledge/<topic>.md` (architecture topic)   |
+| API docs, endpoint or option lists       | `deep-knowledge/<topic>.md` (API topic)            |
+| Environment / setup walkthrough         | `deep-knowledge/project-setup.md`                  |
 | Rationale, history, "why we chose X"    | `deep-knowledge/<topic>.md`                        |
 
 What stays behind is the part a reader needs *before* deciding to open anything:

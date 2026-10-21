@@ -259,9 +259,9 @@ with the one statement that is true:
 
 | `concept.phase` | When | CTA (DE) | Session title |
 |---|---|---|---|
-| `waiting` (default) | Page is open, next step is the user's submission | `👉 ┃ Concept 🧭 — wartet auf deine Entscheidungen` | `👉 ┃ Concept 🧭 ` |
-| `iterating` | A submission was processed and the next iteration is still being produced (e.g. by background agents) | `⏳ ┃ Concept 🧭 — in Iteration — ich melde mich` | `⏳ ┃ Concept 🧭 ` |
-| `implementing` | An `implement` submission is being executed and the turn hands back before it lands | `⏳ ┃ Concept 🧭 — in Implementierung — ich melde mich` | `⏳ ┃ Concept 🧭 ` |
+| `waiting` (default) | Page is open, next step is the user's submission | `👉 Concept 🧭 — wartet auf deine Entscheidungen` | `👉 ┃ Concept 🧭 ` |
+| `iterating` | A submission was processed and the next iteration is still being produced (e.g. by background agents) | `⏳ Concept 🧭 — in Iteration — ich melde mich` | `⏳ ┃ Concept 🧭 ` |
+| `implementing` | An `implement` submission is being executed and the turn hands back before it lands | `⏳ Concept 🧭 — in Implementierung — ich melde mich` | `⏳ ┃ Concept 🧭 ` |
 
 The card's `[SESSION TITLE]` block carries the prefix of the phase — apply it
 every time, exactly like any other card's title instruction. This is what lets

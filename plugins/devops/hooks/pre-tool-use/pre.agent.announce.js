@@ -124,6 +124,32 @@ function resolve(input, cwd, transcriptPath) {
   return { model, effort };
 }
 
+/**
+ * The raw effective model of a spawn (invocation override, else frontmatter,
+ * else the session's model id; `inherit` when that is unknown) - one token,
+ * no spaces, for the audit marker.
+ */
+function effectiveModel(input, cwd, transcriptPath) {
+  const override = typeof input.model === 'string' && input.model ? input.model : null;
+  if (override) return override;
+  const file = findAgentFile(input.subagent_type || 'general-purpose', cwd);
+  const fm = (file && readFrontmatter(file)) || {};
+  if (fm.model && fm.model !== 'inherit') return fm.model;
+  return sessionModel(transcriptPath) || 'inherit';
+}
+
+/**
+ * Parseable one-liner for the plugin audit (mining.js reads it from the
+ * transcript's hook context): `[agent-model] id=<tool_use_id> type=<t> model=<m>`.
+ * Null without a tool_use_id - nothing to join the spawn on.
+ */
+function modelMarker(input, cwd, transcriptPath, toolUseId) {
+  if (!toolUseId) return null;
+  const type = String(input.subagent_type || 'general-purpose').replace(/\s+/g, '_');
+  const model = effectiveModel(input, cwd, transcriptPath).replace(/\s+/g, '_');
+  return `[agent-model] id=${toolUseId} type=${type} model=${model} (audit marker - do not show)`;
+}
+
 function buildLine(input, cwd, transcriptPath) {
   const type = input.subagent_type || 'general-purpose';
   const { model, effort } = resolve(input, cwd, transcriptPath);
@@ -285,10 +311,12 @@ function main() {
       if (shipDelegateWillRefuse(prompt, hook.transcript_path)) process.exit(0);
 
       const card = buildCard(input, cwd, hook.transcript_path, hook.tool_use_id, sessionLang(hook.session_id));
+      let marker = null;
+      try { marker = modelMarker(input, cwd, hook.transcript_path, hook.tool_use_id); } catch { /* card still goes out */ }
       process.stdout.write(JSON.stringify({
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
-          additionalContext: announceText(card, progressUpdatesModel(sessionModel(hook.transcript_path))),
+          additionalContext: announceText(card, progressUpdatesModel(sessionModel(hook.transcript_path))) + (marker ? `\n${marker}` : ''),
         },
       }));
       process.exit(0);
@@ -300,4 +328,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { readFrontmatter, findAgentFile, friendlyModel, sessionModel, resolve, buildLine, batchInputs, buildCard, strictWillBlock, modelGateWillRefuse, shipDelegateWillRefuse, progressUpdatesModel, announceText };
+module.exports = { effectiveModel, modelMarker, readFrontmatter, findAgentFile, friendlyModel, sessionModel, resolve, buildLine, batchInputs, buildCard, strictWillBlock, modelGateWillRefuse, shipDelegateWillRefuse, progressUpdatesModel, announceText };

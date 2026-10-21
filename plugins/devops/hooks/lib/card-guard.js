@@ -365,12 +365,12 @@ const RESULT_LINE_SUBJECT_RE = /^(?:\S*\.(?:js|md|ts|json)\b|(?:ss|post|prompt|s
 function resultLinesViolation(lines) {
   if (!Array.isArray(lines)) return null;
   if (lines.length > 3) {
-    return `${lines.length} result lines — max 3 (design § 5.2); a 4th becomes "+1 weitere" on the last line, never dropped silently.`;
+    return `${lines.length} result lines — max 3 (design § 5.2); a 4th becomes "+1 weitere" on the last line, never dropped silently. Merge related results into one line; every line starting with "› " counts.`;
   }
   for (const line of lines) {
     const firstToken = line.split(/\s+/)[0] || '';
     if (RESULT_LINE_SUBJECT_RE.test(firstToken)) {
-      return `result line names a file/hook as its subject: "${firstToken}" — name the effect for the user instead (design § 5.2).`;
+      return `result line names a file/hook as its subject: "${firstToken}" — name the effect for the user instead (design § 5.2). The first word must not be a file name (x.js/.md/.ts/.json) or a hook name (ss./post./prompt./stop.…): write "Cards no longer lose …", not "card-guard.js now …".`;
     }
   }
   return null;
@@ -398,7 +398,7 @@ function pointsViolation(points, heading) {
     : points;
   if (counted.length <= 3) return null;
   if (/\+\d+\s+weitere/.test(heading || '')) return null;
-  return `${counted.length} points — max 3 on the card (design § 5.3); more only as "+N weitere" in the heading.`;
+  return `${counted.length} points — max 3 on the card (design § 5.3); more only as "+N weitere" in the heading. Every line starting "1. " in the decision block counts (steps and options too) — keep 3, fold the rest into the heading.`;
 }
 
 /** Rendered-line budget: 14 rows on Desktop, 24 in the terminal (design
@@ -807,6 +807,9 @@ function buildBlockReason(pluginRoot, opts = {}) {
   return [
     '[stop.flow.guard] Completion card required — not yet rendered this turn.',
     '',
+    'Order, no exceptions: (1) render the card, (2) show it — widget or verbatim markdown,',
+    '(3) end the turn on it. Nothing after the card; a text-only reply is NOT a card.',
+    '',
     ...renderLadderLines(pluginRoot, opts),
     '',
     'Variant decision (pick exactly one):',
@@ -830,12 +833,12 @@ function buildBlockReason(pluginRoot, opts = {}) {
     'PENDING (orthogonal to the variant): if background subagents, workflows or',
     'tasks you started are STILL running, also pass `pending` — [{ name, kind,',
     'doing }] with kind "agent" | "task" | "workflow" — naming each. It replaces',
-    'the CTA with "⏳ ┃ Team 🤖 — noch nicht fertig … ich melde mich", so the card never asks',
+    'the CTA with "⏳ Team 🤖 — noch nicht fertig … ich melde mich", so the card never asks',
     'the user to act on a result that does not exist yet. Never put an internal',
     'agentId in the card; use the agent type / workflow name / task label.',
     'CONCEPT (outranks pending): if a /auto-concept page is OPEN, pass `concept` —',
     '{ phase: "waiting" | "iterating" | "implementing" } — and the CTA becomes',
-    '"👉 ┃ Concept 🧭 — wartet auf deine Entscheidungen" / "⏳ ┃ Concept 🧭 — in Iteration /',
+    '"👉 Concept 🧭 — wartet auf deine Entscheidungen" / "⏳ Concept 🧭 — in Iteration /',
     'in Implementierung — ich MELDE mich". The bridge',
     'server, keepalive pulser and pickup waker are infrastructure, NOT pending —',
     'never list them; this gate ignores them.',
@@ -986,7 +989,7 @@ function buildPendingReason(names) {
     '',
     'Keep the variant and every other field as they were — the body still reports',
     'what IS true. `pending` only corrects the last line, to',
-    '"⏳ ┃ Team 🤖 — noch nicht fertig … — ich melde mich".',
+    '"⏳ Team 🤖 — noch nicht fertig … — ich melde mich".',
     '',
     'Use the names listed above. NEVER put an internal agentId in the card.',
     'If a /auto-concept page is open, ALSO pass `concept: { phase }` — the concept CTA',
@@ -1011,8 +1014,9 @@ function buildTitleStatusWordReason(word) {
   return [
     '[stop.flow.guard] Title carries a status word — the completion card must be re-rendered.',
     '',
-    `Found "${word}" in the title. Status ("läuft", "wartet", "pending", "noch nicht",`,
-    'agent counts, …) belongs in the decision heading, never the title (design § 5.1 /',
+    `Found "${word}" in the title. The gate rejects exactly these: läuft, laufen, wartet, pending,`,
+    'noch nicht, running, waiting, "N Agenten" / "N agents". Status and agent counts',
+    'belong in the decision heading, never the title (design § 5.1 /',
     'completion-card-design.md § 2.1). The title is the outcome of the turn — when',
     'something was NOT achieved, say so in plain words ("… — Resume-Pfad noch offen"),',
     'never with a status word.',

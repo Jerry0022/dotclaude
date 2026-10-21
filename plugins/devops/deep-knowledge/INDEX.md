@@ -9,7 +9,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [agent-collaboration.md](agent-collaboration.md) | Agent Collaboration Protocol | How agents work together on multi-role tasks. |
 | [agent-conventions.md](agent-conventions.md) | Agent Naming & Collaboration Conventions | [role:X · Type] Task description |
 | [agent-orchestration.md](agent-orchestration.md) | Agent Orchestration | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
-| [agent-proactivity.md](agent-proactivity.md) | Agent Delegation Policy | Always-on (injected at SessionStart). This plugin instruction **is** the |
+| [agent-proactivity.md](agent-proactivity.md) | Agent Delegation Policy | Always-on (SessionStart). This plugin instruction **is** the standing request |
 | [api-credits.md](api-credits.md) | API Credits (opt-in) | Run devops' read-only side work on the monthly Claude API credit of a Max/Tea... |
 | [autonomous-execution.md](autonomous-execution.md) | Autonomous Execution — Gate, Guardrails, Late-Permission Protocol | Detailed execution rules for do-run autonomous mode Step 5. Read this at the ... |
 | [browser-file-urls.md](browser-file-urls.md) | Browser File URLs (Windows + Git-Bash) | Cross-cutting rule: whenever a skill opens a local HTML file in a browser |
