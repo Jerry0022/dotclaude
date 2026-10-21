@@ -225,8 +225,24 @@ describe("header — expands over the content, never shifts it", () => {
     const back = document.querySelector("#design-header .design-header-back");
     expect(back.textContent.trim()).toBe("Übersicht");
     expect(back.textContent).not.toMatch(/[‹<←]/);
-    expect(document.querySelector("#design-header .design-header-star").hidden).toBe(true);
+    const star = document.querySelector("#design-header .design-header-star");
+    expect(star.hidden).toBe(false);
+    expect(star.textContent, "not the favourite → an empty star to click").toBe("☆");
     expect(document.querySelector("#design-header .design-header-name").textContent).toBe("Design 2 B");
+    // The header star is a control like the eye and the pin: it toggles.
+    star.click();
+    expect(window.collectDecisions("iterate").favorite).toBe("d2b");
+    expect(star.textContent).toBe("★");
+    expect(star.getAttribute("aria-pressed")).toBe("true");
+    star.click();
+    expect(window.collectDecisions("iterate").favorite).toBeNull();
+    // On the overview "★ <name>" opens the favourite.
+    star.click();
+    window.showOverview();
+    expect(star.textContent).toBe("★ Design 2 B");
+    star.click();
+    expect(document.body.dataset.overviewActive).toBe("false");
+    expect(activeDesign(document).dataset.design).toBe("d2b");
   }, BOOT_TIMEOUT);
 });
 
