@@ -148,7 +148,9 @@ gh issue list --state open --limit 30 \
 owners and write-level collaborators — resolved per repo at runtime, never a
 hardcoded login list. This runner implements and ships unsupervised, so a
 stranger's issue must never enter the queue. Rule, fallbacks, and the `🚫 fremd`
-reporting format: `{PLUGIN_ROOT}/deep-knowledge/issue-trust.md`.
+reporting format: `{PLUGIN_ROOT}/deep-knowledge/issue-trust.md`. Each dropped
+issue still gets its read-only review there (already addressed? else what to
+do with it) and its verdict lands in the report.
 
 Assigned to the user → P2 (core). Unassigned → P5 (filler). Extract
 actionable items (skip discussions, questions, epics).

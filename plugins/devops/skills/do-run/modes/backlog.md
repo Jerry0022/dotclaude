@@ -98,7 +98,17 @@ fall back to "run everything". Apply the filter to milestone issues, loose
 issues, and any sub-issue created in Step 2 alike; a trusted milestone does not
 launder an untrusted author's issue inside it. Dropped issues are carried to the
 Step 5 report as `🚫 fremd (nicht im Backlog): #N <title> — @author` and are
-never commented on, labelled, or closed.
+never commented on, labelled, or closed by the runner.
+
+**Review every dropped issue** (read-only, right after the gate, before the
+selection question): is it already addressed — a linked PR/commit, a fix since
+the version it reports, an own duplicate, current code that no longer behaves
+that way — and if not, what to do with it (carry over, reject, ask). One
+verdict + recommendation per issue, procedure and verdict table:
+`{PLUGIN_ROOT}/deep-knowledge/issue-trust.md` → "Reviewing a dropped issue".
+Show the reviewed list once in the presence phase above the selection
+question; a "carry over" or "close" happens only on the user's yes there.
+A presence-timeout run does the review at Step 5 instead.
 
 **Presence-timeout autostart — arm before the first question.** The user may walk
 away anywhere in this Präsenz phase (selection, triage, or the gate), so the
@@ -412,8 +422,10 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
    `skills/do-run/modes/autonomous/deep-knowledge/html-report.md`) to the project root: per item
    `shipped` / `parked` / `blocked` (+ reason + branch), milestone progress, the
    list of shipped PRs, and a separate `🚫 fremd` section listing every open issue
-   dropped by the Step 1 trust gate (`#N <title> — @author`) so a shortened queue
-   is never mistaken for an empty backlog. Open it in Edge (convert the path with
+   dropped by the Step 1 trust gate, each with its review verdict and
+   recommendation (`#N <title> — @author → <verdict>: <recommendation>
+   (<evidence>)`, `issue-trust.md` → "Reviewing a dropped issue") so a shortened
+   queue is never mistaken for an empty backlog. Open it in Edge (convert the path with
    `cygpath -m` first — see `{PLUGIN_ROOT}/deep-knowledge/browser-file-urls.md`) and track it
    via `scripts/session-open-tracker.js`.
 2. **Blocked / parked → chat thread** — for each blocked or parked item, emit
