@@ -116,6 +116,23 @@ design round has: the three row builders and the ordering of stash → rebuild
     const it = visibleIteration();
     return it ? it.querySelector('section[data-view][data-view-active="true"]:not([hidden])') : null;
   }
+  // Nav title of a view (§ Views (optional) → Nav title): the short form of
+  // the question for every nav surface — switcher, quick nav, ☰ rows,
+  // indicator, dock label. `data-nav-short` when authored, else
+  // `data-nav-label` without a leading "Frage ·" / "Question ·" (the `?`
+  // glyph in front says it), capped at VIEW_NAV_TITLE_MAX characters on a
+  // word boundary with "…". The full question lives only on the view itself
+  // and in the tooltip.
+  const VIEW_NAV_TITLE_MAX = 28;
+  function viewNavTitle(v) {
+    const raw = (v.dataset.navShort || v.dataset.navLabel || v.dataset.view || '')
+      .replace(/^\s*(?:Frage|Question)\s*\d*\s*[·:–—-]\s*/i, '').trim();
+    if (raw.length <= VIEW_NAV_TITLE_MAX) return raw;
+    const cut = raw.slice(0, VIEW_NAV_TITLE_MAX - 1);
+    const space = cut.lastIndexOf(' ');
+    return (space > VIEW_NAV_TITLE_MAX / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:·–—-]+$/, '') + '…';
+  }
+  window.viewNavTitle = viewNavTitle;
 
   // Label + note marker of one screen-nav row, built as DOM nodes. Never
   // innerHTML: `dataset.navLabel` hands back the DECODED attribute, so a label
@@ -190,7 +207,8 @@ design round has: the three row builders and the ordering of stash → rebuild
         btn.type = 'button';
         btn.dataset.viewId = v.dataset.view;
         btn.dataset.active = 'false';
-        btn.textContent = v.dataset.navLabel || v.dataset.view;
+        btn.textContent = '? ' + viewNavTitle(v);
+        btn.dataset.tip = v.dataset.navLabel || v.dataset.view;
         btn.addEventListener('click', () => { showView(v.dataset.view); });
         switcher.appendChild(btn);
       });
@@ -207,7 +225,8 @@ design round has: the three row builders and the ordering of stash → rebuild
       btn.className = 'screen-nav-view-item';
       btn.type = 'button';
       btn.dataset.viewId = v.dataset.view;
-      navRowLabel(btn, v.dataset.navLabel || v.dataset.view, null);
+      navRowLabel(btn, viewNavTitle(v), '?');
+      btn.dataset.tip = v.dataset.navLabel || v.dataset.view;
       navRowMarker(btn, 'viewNoteMarker', v.dataset.view);
       btn.addEventListener('click', () => { showView(v.dataset.view); closePanel(); });
       return btn;
@@ -881,7 +900,7 @@ design round has: the three row builders and the ordering of stash → rebuild
     document.querySelectorAll('#feedback-dock [data-view-comment]').forEach(ta => {
       ta.hidden = ta.dataset.viewComment !== viewId;
     });
-    const label = target.dataset.navLabel || viewId;
+    const label = viewNavTitle(target);
     const dockViewLabel = document.getElementById('dock-view-label');
     if (dockViewLabel) dockViewLabel.textContent = label;
     document.body.dataset.viewActive = 'true';
@@ -1040,7 +1059,7 @@ design round has: the three row builders and the ordering of stash → rebuild
       viewLabelEl.hidden = !activeView;
       if (activeView) {
         const labelEl = document.getElementById('active-view-label');
-        if (labelEl) labelEl.textContent = activeView.dataset.navLabel || activeView.dataset.view;
+        if (labelEl) labelEl.textContent = viewNavTitle(activeView);
       }
     }
   }
