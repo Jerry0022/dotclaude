@@ -12,7 +12,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { detectRepoMode, refusesGitWrites, probeTimeoutError } from "../lib/repo-mode.js";
-import { runHygiene } from "../lib/hygiene.js";
+import { runHygiene, startOrphanScan } from "../lib/hygiene.js";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -35,5 +35,7 @@ export async function handler(params) {
     return { success: true, skipped: true, reason: mode === "none" ? "file-only-mode" : "foreign-repo-root", card: {} };
   }
   const { values } = config.load(cwd);
-  return runHygiene({ cwd, trigger, lang, settings: values.cleanup, stateKey: config.mainCheckoutRoot(cwd) });
+  const result = runHygiene({ cwd, trigger, lang, settings: values.cleanup, stateKey: config.mainCheckoutRoot(cwd) });
+  if (trigger === "ship" && result && result.success) startOrphanScan();
+  return result;
 }

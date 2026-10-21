@@ -63,6 +63,8 @@ recommended option and is listed under `assumptions`.
 - After each wave, merge its sub-branches into your integration branch
   (`git merge --no-ff <sub-branch>`, conflicts per
   `{PLUGIN_ROOT}/deep-knowledge/merge-safety.md`) before the next wave starts.
+  Right after each verified merge remove that sub-agent's worktree and branch:
+  `node "{PLUGIN_ROOT}/scripts/integration-check.js" --integration <integration-branch> --sub <sub-branch> --remove --now`.
 
 ## Phase 3 — Verify
 

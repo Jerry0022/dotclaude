@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.290.0] — 2026-10-21
+
+Leftover branches and worktrees no longer pile up: landed work is recognised through integration chains and cleaned within days, and the session-start checks stop raising false alarms.
+
+Audit background: the repo had 45 worktrees and 62 local branches (nothing at risk). 22 sub-agent branches landed through an integration branch squash-merged as #774; main then changed the same files, so the content proof said "partial" and they were never removable. The old defaults (keep the 20 newest, 30-day gate) could not keep up with ~10 ships a day, temp runs left worktrees behind, `ss.git.check` counted every abandoned local branch as unpushed (157 "unpushed" commits while main was in sync) and the orphan nudge read a two-day-old report.
+
+### Added
+- **Chain landing in `ship_hygiene`.** A branch reachable from a merged PR head that still holds its changes counts as landed.
+- **Remote backup expiry.** `backup/*` and `rescue/*` refs expire 14 days after their content landed (`--force-with-lease`); dead temp worktrees are pruned.
+- **Stale own PRs on the card.** Open PRs of your own that main already superseded show as `card.openItems` with a ready reply ("PR #n schließen — überholt durch main."); the tool never closes a PR itself. `do-ship` passes them into the card's open list.
+- **Fresh orphan report.** `orphan-scan.js` starts detached (hidden window) after every ship.
+- **Stale-server line on the card.** When the installed plugin is newer than the running MCP server, the card shows "ℹ Session-Server vX — ein Neustart der Session lädt vY." (`mcp-server/lib/server-version.js`). This explains why a fixed card (e.g. #801's hidden Nachbessern button) still renders the old way in a session started before the update.
+- **`integration-check.js --remove --now`** removes an agent worktree right after its merge; `auto-agents` and the feature agent call it there.
+
+### Changed
+- **Stricter auto-clean defaults:** `autoCleanKeepNewest` 5 (was 20), `autoCleanGateDays` and `autoCleanMinAgeDays` 3 (were 30/7). Only landed or backed-up content is ever removed.
+- **`ss.git.check`** counts only the current HEAD's unpushed commits.
+- **`ss.orphan.nudge`** names the report's age and stays silent once it is older than 24 h.
+- **Temp worktrees of `evals/ab-run.js` and `deploy-parity`** are torn down on every exit path.
+
+### Known gaps
+- Archived Desktop sessions cannot be detected as "not live" (the plugin cannot read the archive state); their worktrees are cleaned by the regular gates. The Ctrl-C/SIGTERM teardown paths of ab-run and deploy-parity are not covered by automated tests.
+
 ## [0.289.0] — 2026-10-21
 
 A test run now warns before it starts when the machine is busy, and agent iteration loops can run only the tests their change touches.

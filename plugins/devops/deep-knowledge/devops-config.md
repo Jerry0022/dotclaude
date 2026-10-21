@@ -42,13 +42,30 @@ hand. Confirm the change in one line with the new effective value.
 | Key | Default | Meaning |
 |---|---|---|
 | `autoClean` | `true` | After a successful ship, remove old leftovers on its own (branches, clean session worktrees and a removed branch's same-commit twin on origin, all only when their content provably landed). |
-| `autoCleanGateDays` | `30` | The automatic cleanup only runs once a removable leftover is older than this. |
-| `autoCleanMinAgeDays` | `30` | …and then removes every removable leftover older than this; younger ones only via the cleanup page. Worktree removal never touches a session's conversation — transcripts follow Claude Code's own `cleanupPeriodDays`. |
-| `autoCleanKeepNewest` | `20` | Count trigger: more removable leftovers than this → all but the newest 20 go, whatever their age. A busy repo (~10 sessions a day) never reaches the age gate; the newest 20 stay as recent reference. `0` = off. |
+| `autoCleanGateDays` | `3` | The automatic cleanup only runs once a removable leftover is older than this. |
+| `autoCleanMinAgeDays` | `3` | …and then removes every removable leftover older than this; younger ones only via the cleanup page. Worktree removal never touches a session's conversation — transcripts follow Claude Code's own `cleanupPeriodDays`. |
+| `autoCleanKeepNewest` | `5` | Count trigger: more removable leftovers than this → all but the newest 5 go, whatever their age. A busy repo (~10 sessions a day) never reaches the age gate; the newest 5 stay as recent reference. `0` = off. |
 | `autoCleanMaxGB` | `10` | Disk trigger: the kept removable session worktrees, summed newest first, above this many GB → the one crossing the line and every older one lose their checkout (mostly `node_modules`); their branch stays. Sizes are measured at most 30 s per ship and cached in `~/.claude/devops-hygiene.json`. `0` = off. |
 | `nudge` | `true` | After a successful ship or promote, suggest the cleanup page when too much piles up. |
 | `nudgeThreshold` | `50` | Suggest it when more than this many branches/worktrees lie around. |
 | `nudgeCooldownDays` | `7` | Days of silence after a suggestion (0 = after every ship above the threshold). |
+
+Also part of every automatic cleanup (not separate settings):
+
+- **Landed proof via PR chain.** A branch counts as landed when its tip is an
+  ancestor of a merged PR's head (an integration branch that collected
+  sub-agent branches) and that head still holds all of the branch's changes.
+  Commits made on the integration branch after its PR merged keep it unlanded.
+  Needs `gh`; offline the old proof applies.
+- **Backup expiry.** `backup/*` and `rescue/*` branches on origin older than
+  14 days whose content is landed (or covered by a landed leftover) are
+  deleted from origin (`trigger: "backup-expiry"` in the removal log).
+- **Temp worktrees.** Registered worktrees below the OS temp dir (eval
+  variants, deploy-parity builds), idle over 1 h and not locked by a live
+  process, are removed once clean and landed (or detached).
+- **Stale own PRs.** The card gets a ⚠ OFFEN item per own open PR that is
+  superseded by main or untouched for over 5 days with no worktree on its
+  head. Nothing is closed automatically.
 
 Calibration of the defaults (plugin source repo, heavy single-project use):
 19 / 25 / 32 PRs in the ISO weeks 36–38 of 2026, 52 in the first four days of

@@ -129,6 +129,8 @@ To ensure agents work on the correct branch, every isolated agent MUST follow th
    sub-branch name to use (see § Branch naming).
 4. After each sub-agent completes, merge its branch back:
    `git merge --no-ff <sub-agent-branch>`
+5. Once the merge is verified, remove that sub-agent's worktree and branch at once:
+   `node "{PLUGIN_ROOT}/scripts/integration-check.js" --integration <integration-branch> --sub <sub-agent-branch> --remove --now`
 
 ### For every isolated Sub-Agent (first action after spawn)
 

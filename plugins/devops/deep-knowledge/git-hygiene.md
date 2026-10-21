@@ -227,6 +227,20 @@ commit's subject and date. A parked entry older than 30 days gets the nudge
 "behalten, integrieren oder verwerfen" in the orphan report. Stashes are
 listed per repo in the same report.
 
+**Landed proof by PR chain, expiry, temp worktrees.** A branch whose tip is an
+ancestor of a merged PR's head counts as landed when that head still holds all
+its changes (an integration branch collecting sub-agent branches); commits on
+the integration branch after its PR merged keep it unlanded. Origin
+`backup/*` / `rescue/*` refs expire 14 days after their content landed (the
+auto-clean deletes them, log trigger `backup-expiry`). A registered worktree
+under the OS temp dir, idle over 1 h and not locked by a live pid (a dead pid
+or a stale "initializing" lock counts as dead), is pruned once clean. Desktop
+session archive state is not readable from the CLI: live-session detection
+stays transcript based. Own open PRs superseded by main, or older than 5 days
+with no worktree on their head, are listed as open items on the ship card —
+never closed automatically. After each ship `scripts/orphan-scan.js` refreshes
+the orphan report in a detached, low-priority process.
+
 **Shipped or landed branches are never parked.** They are landed leftovers;
 hygiene removes them automatically (and `orphan-scan --clean-landed` does it
 on demand). The orphan report drops a landed branch from `parked` even when it

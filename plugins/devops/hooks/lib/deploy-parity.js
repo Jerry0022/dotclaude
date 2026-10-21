@@ -574,6 +574,26 @@ function hasDocker() {
   try { execFileSync('docker', ['version', '--format', '{{.Server.Version}}'], { windowsHide: true, stdio: 'ignore', timeout: 10_000 }); return true; } catch { return false; }
 }
 
+/**
+ * The admin dir (`<common-dir>/worktrees/<id>`) registered for `workdir`, or
+ * null. A failed `worktree add` leaves it behind "locked initializing" with no
+ * way to ask the checkout for it, so it is found by its `gitdir` back-pointer.
+ */
+function findAdminDir(top, workdir) {
+  const fwd = (x) => path.resolve(x).replace(/\\/g, '/').toLowerCase();
+  try {
+    const common = path.resolve(top, git(['rev-parse', '--git-common-dir'], top));
+    const root = path.join(common, 'worktrees');
+    for (const id of fs.readdirSync(root)) {
+      try {
+        const ptr = fs.readFileSync(path.join(root, id, 'gitdir'), 'utf8').trim();
+        if (fwd(path.dirname(ptr)) === fwd(workdir)) return path.join(root, id);
+      } catch { /* not ours */ }
+    }
+  } catch { /* no registry */ }
+  return null;
+}
+
 function removeTempWorktree(tmpRoot, adminDir) {
   let removed = true;
   try { fs.rmSync(tmpRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { removed = false; }
@@ -623,11 +643,24 @@ async function runDeployParity(o) {
   const workdir = path.join(tmpRoot, 'src');
   let adminDir = null;
   let result;
+  // Ctrl-C / SIGTERM / process.exit mid-run must not strand the registration:
+  // removal is synchronous, so it also works from an 'exit' handler.
+  const sweep = () => {
+    const admin = adminDir || findAdminDir(top, workdir);
+    if (admin) { try { git(['worktree', 'unlock', workdir], top, 10_000); } catch { /* not locked */ } }
+    return removeTempWorktree(tmpRoot, admin);
+  };
+  const onInt = () => { sweep(); process.exit(130); };
+  const onTerm = () => { sweep(); process.exit(143); };
+  process.once('SIGINT', onInt);
+  process.once('SIGTERM', onTerm);
+  process.once('exit', sweep);
   try {
     try {
       git(['worktree', 'add', '--detach', '--quiet', workdir, sha], top, 120_000);
       adminDir = git(['rev-parse', '--absolute-git-dir'], workdir);
     } catch (e) {
+      adminDir = findAdminDir(top, workdir); // half-made registration: unlocked and removed in finally
       result = finish({ status: 'inconclusive', sha, reason: `could not create a clean checkout: ${String(e.stderr || e.message).trim().split('\n')[0]}` });
       return result;
     }
@@ -683,7 +716,10 @@ async function runDeployParity(o) {
     result = finish({ ...meta, steps, status: 'passed', withheldCount: withheldAll.length });
     return result;
   } finally {
-    const cleaned = removeTempWorktree(tmpRoot, adminDir);
+    process.removeListener('SIGINT', onInt);
+    process.removeListener('SIGTERM', onTerm);
+    process.removeListener('exit', sweep);
+    const cleaned = sweep();
     if (result) result.cleanup = { removed: cleaned, path: tmpRoot };
   }
 }
@@ -692,5 +728,5 @@ module.exports = {
   DEFAULT_TIMEOUT_SEC, DETECTORS,
   detectBuildPlan, nodePlan, packageManager, tomlValue, yamlScalar,
   buildEnv, dotenvNames, localOnlyEnvNames, classifyFailure, meaningfulNames,
-  toolOf, runCmd, runDeployParity,
+  toolOf, runCmd, runDeployParity, findAdminDir, removeTempWorktree,
 };

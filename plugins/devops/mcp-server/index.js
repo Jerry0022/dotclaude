@@ -55,6 +55,7 @@ import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePendin
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
 import { batchGuide, conceptCloseoutOnly, conceptUrl, readBatch, readRunContractLine, sameProjectRoot, titlePrefixFor, titleInstruction, currentSessionTitle, titleStateForKey, hasMandatoryStep, TITLE_SCHEME } from "./lib/mode-state.js";
+import { staleServerLine } from "./lib/server-version.js";
 import { cardWidgetInstruction, isDesktopSession, safeSessionId, warmCardClient, writeCardWidgetFile } from "./lib/card-widget.js";
 import { detectLaunchPath } from "./lib/launch-path.js";
 import { archiveDecision, archiveInstruction, writeArchiveFlag } from "./lib/session-archive.js";
@@ -2099,7 +2100,8 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     pipeline: renderPipelineLine(input, lang, buildId),
     pipelinePr: state.pr || null,
     runContract: renderRunContractLine(input, lang),
-    overrides: input._overridesLine || null,
+    // The stale-server notice shares the widget's one info slot (`ov`).
+    overrides: [input._overridesLine, input._staleServerLine].filter(Boolean).join(' · ') || null,
     ladder: buildChannelLadder(input),
     heading: decision.heading,
     context: decision.context,
@@ -2160,6 +2162,7 @@ function renderCard(input, usageData, delta5h, deltaWk, healthLine, buildId, { t
     if (ladderLine) parts.push(ladderLine);
     const budgetLine = renderBudgetLineMd(buildBudgetModel(usageData, delta5h, deltaWk, healthLine, lang));
     if (budgetLine) parts.push(budgetLine);
+    if (input._staleServerLine) parts.push(input._staleServerLine);
   } else if (resultLines[0]) {
     parts.push('› ' + resultLines[0]);
   }
@@ -2549,6 +2552,9 @@ function buildCompletionCard(params) {
 
   // 3c. Skill overrides the loader injected since the last card (one line).
   params._overridesLine = hasBody(params.variant) ? readOverridesLine(params, params.lang || 'de') : null;
+
+  // 3d. This server process older than the installed plugin: one info line.
+  params._staleServerLine = hasBody(params.variant) ? staleServerLine(params.lang || 'de') : null;
 
   // 4. Render the full card, and stash the same structured model + repoUrl on
   //    `params` so ctaActionsNote (the Desktop widget) can reuse it without a
