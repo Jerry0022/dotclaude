@@ -113,6 +113,12 @@ The recommendation is the **content** call — what to do with the issue, not
 **3. Report line** — the plain `🚫 fremd` line grows the verdict:
 `🚫 fremd: #N <title> — @author → <verdict>: <recommendation> (<evidence: PR/commit/version/#M>)`.
 
+**4. Decision page** — in a backlog run the reviewed issues also get an
+`/auto-concept` page, opened automatically after the last presence question
+and in parallel with the implementation (`skills/do-run/modes/backlog.md`
+Step 1). Each card carries the verdict, the evidence and the recommendation,
+with the recommended option first; a pick there is the user's yes below.
+
 **Acting on it stays with the user.** Closing, commenting, or labelling a
 third-party issue is outward-facing: an autonomous runner never does it; in
 the presence phase Claude does it only on the user's explicit yes for that

@@ -110,6 +110,20 @@ Show the reviewed list once in the presence phase above the selection
 question; a "carry over" or "close" happens only on the user's yes there.
 A presence-timeout run does the review at Step 5 instead.
 
+**Then open a decision page for them — automatically, in parallel.** Right
+after the last presence question (Step 3's gate answered, before the Step 4
+loop starts), when at least one issue was dropped, start `/auto-concept` with
+the reviewed issues as its subject: one card per issue with verdict, evidence,
+the recommendation and the options (carry over · close with reply · reject ·
+ask the author), recommended option first. No question asks whether to open
+it — a dropped issue always gets its page. It runs beside the implementation
+of the trusted queue and never blocks it: the loop starts at once, the page
+waits for the user (under "Autonom" until they return). Its answers are the
+per-issue yes that `issue-trust.md` requires; carry-overs become own issues
+via `/auto-issue` and enter the next run. Why: a `🚫 fremd` line in the report
+leaves the user to research every issue later (2026-10-21, user's request).
+No dropped issue → no page.
+
 **Presence-timeout autostart — arm before the first question.** The user may walk
 away anywhere in this Präsenz phase (selection, triage, or the gate), so the
 timeout must cover all of it, not just the final confirmation. Immediately after
