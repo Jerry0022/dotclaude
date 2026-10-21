@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.284.6**
+**Version: 0.285.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -674,8 +674,8 @@ skill; a prompt that mentions them gets a one-line pointer to the doc.
 | `/auto-usage` | `usage.md` | the `get_usage` MCP tool (the card fetches by itself); "refresh usage", "wie viel hab ich verbraucht" |
 | `/claude-strict` | `strict.md` | the strict hooks and do-run's "Strikt" answer |
 
-**Strict mode** — the deliverable is exactly what the prompt names; unnamed
-attributes are chosen and reported; it propagates to agents, skills and concept
+**Strict mode** — the deliverable is exactly what the prompt names, complete
+with the tests, docs and callers of the changed thing; unnamed attributes are chosen and reported; it propagates to agents, skills and concept
 iterations. Switch it with plain words (the whole prompt):
 
 | Type | Effect |

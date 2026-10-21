@@ -1,6 +1,6 @@
 # Strict Mode — Literal Scope, Discretionary Parameters
 
-The deliverable is exactly what the prompt names, nothing wider; attributes the prompt leaves open are Claude's call and every such choice is reported. Former `claude-strict` skill (skill restructure PR 3).
+The deliverable is exactly what the prompt names, nothing wider — and complete: the tests, docs and callers of the changed thing come with it. Attributes the prompt leaves open are Claude's call and every such choice is reported. Former `claude-strict` skill (skill restructure PR 3).
 
 Spec: `docs/superpowers/specs/2026-09-04-claude-strict-design.md`
 
@@ -8,6 +8,12 @@ The user says what may change. That set is closed. What the user does NOT
 say about it (the colour of the border, the exact pixel value, the wording of
 a label) is yours to decide — and to report, so a wrong guess is a one-word
 correction instead of a wrong diff.
+
+Literal means the *content*, not a partial diff. The tests that cover the
+changed thing, the docs that describe it and the callers that use it belong
+to the change: a strict run never leaves a stale doc line or an untested new
+behaviour behind. What stays closed is everything else — extra features,
+neighbouring fixes, refactors, docs and tests about other things.
 
 Strict is **not a skill** any more. State lives in `.claude/strict-mode.json`
 of the **current worktree**. The hooks `prompt.strict.enforce` (switch +
@@ -73,20 +79,20 @@ read it as binding, not as advice.
 ```
 [claude-strict contract]
 SCOPE IS LITERAL — measured in the vocabulary of the request.
-- Only what the request names changes. No refactor, rename, doc update, new
-  test, reformatting of untouched lines, "while I'm here", new file /
-  dependency / abstraction.
-- Visual request ("the box border") → only that visible element changes; the
-  technical route (import, selector) is yours if nothing else visible changes.
-  Technical request ("rename fn X") → only that symbol.
+- Only what the request names changes. No extra feature, refactor, rename,
+  "while I'm here", reformatting, new dependency / abstraction.
+- COMPLETE, not partial: the tests, docs and callers of the changed thing
+  are part of it: update them, add the test the change needs.
+- Visual request → only that visible element changes; the route (import,
+  selector) is yours. Technical ("rename fn X") → that symbol.
 DISCRETION covers ATTRIBUTES the request leaves open (colour, px, wording),
 never the OBJECT. Ambiguous object: interactive → ask; autonomous → touch the
 single most probable one; lead the report with the assumption.
-TESTS: an assertion pinning the exact old value may be updated. Any other
-failure → apply nothing, revert, report.
-PRECEDENCE (scope only): overrides doc-maintenance, pre-mortem outputs, "make
-reasonable decisions independently", concept zero-prompt invariant. Completion
-card, do-ship docs-sync and auto-polish approval stay.
+TESTS: a test of the changed thing is updated or added. Any other failure →
+apply nothing, revert, report.
+PRECEDENCE (scope only): overrides pre-mortem outputs, "make reasonable
+decisions independently", concept zero-prompt invariant. Completion card,
+do-ship docs-sync and auto-polish approval stay.
 PROPAGATION: put this block verbatim at the top of every Agent prompt and
 every skill you invoke; it binds concept iterations and autonomous resumes.
 REPORT (≤4 lines, before the card, omit empty lines):
@@ -106,8 +112,9 @@ level the user spoke. "Make the box border thinner" is a visual request: the
 border is the scope, and whether you edit a CSS variable, a class, or add the
 one import that the change needs is your business — as long as no other
 visible thing changes. "Rename `fetchUser` to `loadUser`" is a technical
-request: the symbol is the scope, its call sites are the same symbol, its
-docstring is not. Never translate a visual request into a technical scope
+request: the symbol is the scope, and its call sites, its docstring, its
+tests and the docs naming it are the same symbol — they come with it. An
+unrelated function in the same file is not. Never translate a visual request into a technical scope
 that is wider than the visual one ("the border is in a shared mixin, so I
 updated the mixin" changes every box — that is not the request).
 
@@ -117,6 +124,8 @@ updated the mixin" changes every box — that is not the request).
 |---|---|
 | The change needs a syntactic companion (import, export entry, existing registry line) | In scope. Report it under `done`. A new file, dependency or abstraction is NOT a companion — that is out. |
 | A test asserts the exact old value | Update that assertion; it IS the requested change. Report it. |
+| The change adds or alters behaviour no test covers | Add the test for exactly that behaviour. Report it under `done`. |
+| A doc, README or comment describes the changed thing | Update it to the new state. Report it under `done`. Docs about other things stay closed. |
 | Any other test fails | Apply nothing, revert what you tried, report under `untouched` with the failing test's name. The consequence is the user's call. |
 | The named element would become invisible or non-functional | Stop before applying and report. Malicious compliance is not compliance. |
 | An adjacent element now looks off | Do the change; the neighbour goes to `untouched`. |
@@ -128,8 +137,9 @@ updated the mixin" changes every box — that is not the request).
 1. Read the task text (the remainder after the switch word, or the whole
    prompt for a literal-scope phrase). Identify the **objects** (closed set)
    and the **open attributes** (your call).
-2. Do the work. Apply the pre-mortem as thinking only — its outputs (extra
-   guards, extra tests, narrowed scope) are diff and go to `untouched`.
+2. Do the work, including the tests, docs and callers of the changed thing.
+   Apply the pre-mortem as thinking only — its outputs (extra guards, tests
+   beyond the changed thing, narrowed scope) are diff and go to `untouched`.
 3. **Propagation — mandatory, mechanical:**
    - **Agent** tool: the prompt starts with the contract block, verbatim.
      The gate refuses a spawn without it; on refusal, prepend and retry — do
@@ -158,9 +168,9 @@ around it:
 
 ```
 strict — requested: box border thinner
-done: src/box.css:12 border-width 2px → 1px
+done: src/box.css:12 border-width 2px → 1px; docs/ui.md:40 2px → 1px
 chosen: border-color #3a3a3a (unspecified — was inherited grey)
-untouched: focus ring now overlaps the border; docs/ui.md still says 2px
+untouched: focus ring now overlaps the border
 ```
 
 - `requested` — the literal ask in the user's words.
@@ -168,11 +178,12 @@ untouched: focus ring now overlaps the border; docs/ui.md still says 2px
   are listed here, not hidden.
 - `chosen` — every attribute you decided. No line when nothing was open.
 - `untouched` — everything you noticed and deliberately did not change:
-  doc debt, adjacent glitches, failing tests, refactor bait. Before writing
-  this line, grep the repo for the OLD value you replaced (`4px`, the old
-  colour, the old name): every hit outside `done` — a doc, a test, a sibling
-  selector — is an `untouched` entry. Reading is free under strict; only
-  the diff is closed.
+  adjacent glitches, failing tests, refactor bait, doc debt about other
+  things. Before writing this line, grep the repo for the OLD value you
+  replaced (`4px`, the old colour, the old name): a hit in a doc or test
+  that describes the changed thing belongs in `done` (update it); a hit
+  that means something else — a sibling selector, an unrelated use of the
+  same value — is an `untouched` entry.
 
 Then render the completion card as usual (the card is output, not diff).
 

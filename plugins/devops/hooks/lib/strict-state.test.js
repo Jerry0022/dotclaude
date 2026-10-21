@@ -316,7 +316,7 @@ describe("contract", () => {
     expect(S.CONTRACT_BLOCK.startsWith(S.CONTRACT_OPEN)).toBe(true);
     expect(S.CONTRACT_BLOCK.trimEnd().endsWith(S.CONTRACT_CLOSE)).toBe(true);
     expect(S.CONTRACT_BLOCK.length).toBeLessThanOrEqual(1400);
-    for (const must of ["SCOPE IS LITERAL", "DISCRETION", "TESTS", "PRECEDENCE", "PROPAGATION", "REPORT", "auto-polish", "untouched"]) {
+    for (const must of ["SCOPE IS LITERAL", "COMPLETE, not partial", "DISCRETION", "TESTS", "PRECEDENCE", "PROPAGATION", "REPORT", "auto-polish", "untouched"]) {
       expect(S.CONTRACT_BLOCK).toContain(must);
     }
   });
