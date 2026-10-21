@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.287.1] — 2026-10-21
+
+Foreign issues dropped by the backlog trust gate now get their own decision page instead of a bare list line.
+
+### Changed
+- **Decision page for foreign issues** — /do-run backlog opens a concept page for every trust-gate-dropped issue after the presence questions, in parallel to the implementation. Before, dropped issues only appeared as `🚫 fremd` lines (plus a read-only review list), so the user had to research and decide each one later in chat. `skills/do-run/modes/backlog.md` Step 1 now starts /auto-concept automatically after the last presence question when at least one issue was dropped: one card per reviewed issue (verdict, evidence, recommendation; options carry over · close with reply · reject · ask author), never blocking the implementation loop; its picks are the per-issue yes `issue-trust.md` requires. No dropped issue → no page. `deep-knowledge/issue-trust.md` gains point "4. Decision page" pointing at that step.
+
 ## [0.287.0] — 2026-10-21
 
 Session titles get a calmer two-icon layout: a status square, a bar, then a right-aligned word with the activity emoji forming a column in the Desktop sidebar.
