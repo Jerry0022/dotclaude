@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.287.4] — 2026-10-21
+## [0.288.1] — 2026-10-21
 
 A ship whose PR is merged and whose tag is verified counts as done; a cleanup that was blocked afterwards is reported as a leftover instead of resuming the ship.
 
