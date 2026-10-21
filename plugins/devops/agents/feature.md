@@ -66,6 +66,12 @@ recommended option and is listed under `assumptions`.
 
 ## Phase 3 — Verify
 
+- While iterating (yours and your implementers') run scoped tests:
+  `node "{PLUGIN_ROOT}/mcp-server/ship/test-record-cli.js" scope --files <changed files>`
+  prints `npx vitest related <files> --run` or `full` (a changed file no test imports —
+  hooks, JSON, Markdown, `execFile`-spawned scripts — needs the full suite). Scoped runs are
+  never recorded. Before handoff one recorded full run via `test-record-cli.js run`
+  (`qa` does it); the ship gate stays full-suite.
 - Spawn `qa` on the integration branch (tests, build, browser check for UI).
 - Whenever acceptance criteria exist, spawn `po` with `Review:` and the
   criteria — for UI or game work with `Lens: customer` and qa's screenshot

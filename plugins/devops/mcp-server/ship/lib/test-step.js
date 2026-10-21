@@ -160,3 +160,26 @@ export function buildLoad({ lockWait = null, holderAtStart = null, cpu = null, d
     note: `Machine under load — the test step ${parts.join("; ")}.`,
   };
 }
+
+/**
+ * Pre-run warning (#762 A), or null when neither a live foreign lock holder
+ * nor a busy CPU is seen. Names holder pid/cwd and how long it has held the
+ * lock, and gives an ETA range: the usual green duration, plus the holder's
+ * uptime — the holder reports no remaining time, so that part is "unknown".
+ */
+export function buildPreRunWarning({ holder = null, cpu = null, usualMs = null } = {}) {
+  const busy = cpu?.busyPct != null && cpu.busyPct >= BUSY_PCT;
+  if (!holder && !busy) return null;
+  const heldS = holder ? Math.round(holder.heldMs / 1000) : null;
+  const usual = usualMs > 0 ? `${Math.round(usualMs / 1000)} s` : "unknown";
+  const parts = [];
+  if (holder) parts.push(`another full test run holds the machine-wide test lock (pid ${holder.pid}${holder.cwd ? `, ${holder.cwd}` : ""}, up for ${heldS} s)`);
+  if (busy) parts.push(`CPU ${cpu.busyPct}% busy`);
+  const eta = holder
+    ? `own run usually ${usual}, starting once the holder finishes (remaining time unknown, holder up for ${heldS} s)`
+    : `usual run ${usual}, likely slower under load`;
+  return {
+    holder, heldMs: holder?.heldMs ?? null, cpuBusyPct: cpu?.busyPct ?? null, usualMs: usualMs ?? null, eta,
+    note: `Machine under load before the test step: ${parts.join("; ")}. ETA: ${eta}.`,
+  };
+}

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   stripAnsi, parseFailingTests, isEnvCleanupFailure, classifyFailure, parseLockWait,
-  readLockHolder, busyPct, sampleCpu, buildLoad,
+  readLockHolder, busyPct, sampleCpu, buildLoad, buildPreRunWarning,
 } from "./test-step.js";
 
 const ESC = String.fromCharCode(27);
@@ -99,6 +99,23 @@ describe("readLockHolder", () => {
     expect(readLockHolder({ file: write({ pid: process.pid, since: Date.now() }) })).toBeNull();
     expect(readLockHolder({ file: write({ pid: process.ppid, since: 0 }) })).toBeNull();
     expect(readLockHolder({ file: write({ pid: 2 ** 30, since: Date.now() }) })).toBeNull();
+  });
+});
+
+describe("buildPreRunWarning", () => {
+  test("no holder and calm CPU → null", () => {
+    expect(buildPreRunWarning({})).toBeNull();
+    expect(buildPreRunWarning({ cpu: { busyPct: 40 }, usualMs: 90_000 })).toBeNull();
+  });
+  test("holder with usual duration → pid, cwd, held time, ETA", () => {
+    const w = buildPreRunWarning({ holder: { pid: 5, cwd: "C:/o", heldMs: 61_000 }, usualMs: 100_000 });
+    expect(w).toMatchObject({ heldMs: 61_000, usualMs: 100_000 });
+    expect(w.note).toMatch(/pid 5, C:\/o, up for 61 s/);
+    expect(w.eta).toMatch(/usually 100 s.*remaining time unknown, holder up for 61 s/);
+  });
+  test("holder without history → usual duration unknown; busy CPU alone is enough", () => {
+    expect(buildPreRunWarning({ holder: { pid: 5, cwd: null, heldMs: 1000 } }).eta).toMatch(/usually unknown/);
+    expect(buildPreRunWarning({ cpu: { busyPct: 90 } }).note).toMatch(/CPU 90% busy/);
   });
 });
 

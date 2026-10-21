@@ -13,6 +13,10 @@
  *            during the run. Exit code = the command's exit code.
  *   key    — prints the current tree key as `[test-record] {"treeHash":…}` on
  *            stderr (capture it BEFORE a run you start yourself).
+ *   scope  — --files a,b: prints `npx vitest related <files> --run`, or "full"
+ *            when any file is not imported by a test (hooks/scripts spawned
+ *            via execFile, JSON, Markdown). Agent loops only; scoped runs are
+ *            never recorded, the ship gate always runs the full suite.
  *   record — records a run you already finished green; refused (exit 3) when
  *            the current tree no longer matches --tree.
  *
@@ -23,21 +27,55 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { recordResult, treeKey } from "./lib/test-results.js";
+import { recordResult, treeKey, usualDurationMs } from "./lib/test-results.js";
+import { buildPreRunWarning, readLockHolder } from "./lib/test-step.js";
 
 const DEFAULT_CMD = "npm test";
 
 export function parseArgs(argv) {
   const [sub, ...rest] = argv;
-  const out = { sub, cwd: process.cwd(), cmd: DEFAULT_CMD, tree: null };
+  const out = { sub, cwd: process.cwd(), cmd: DEFAULT_CMD, tree: null, files: [] };
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     if (a === "--cwd") out.cwd = rest[++i];
     else if (a === "--cmd") out.cmd = rest[++i];
     else if (a === "--tree") out.tree = rest[++i];
+    else if (a === "--files") out.files = String(rest[++i] || "").split(",");
   }
   out.cwd = resolve(out.cwd || ".");
   return out;
+}
+
+/** A command that runs only part of the suite — never recorded. */
+export function isScopedCmd(cmd) {
+  return /\bvitest\s+related\b|--changed\b|\.test\.[cm]?[jt]sx?\b/.test(String(cmd));
+}
+
+const TEST_FILE = /\.test\.[cm]?[jt]sx?$/;
+const IMPORTABLE = /\.[cm]?[jt]sx?$/;
+const SPAWNED_DIRS = /(^|[\\/])(hooks|scripts)[\\/]/;
+const IN_DIR = /[\\/]/;
+
+const quote = (f) => (/[\s"]/.test(f) ? `"${f.replace(/"/g, '\\"')}"` : f);
+
+/**
+ * Command for an iteration run over `files`: `npx vitest related <files> --run`
+ * when every file is JS/TS outside hooks/scripts (or is a test file itself),
+ * otherwise "full" — the import graph is blind to execFile-spawned scripts,
+ * JSON and Markdown, and to root-level config files (vitest.config.js,
+ * eslint.config.js) that change every run without being imported.
+ */
+export function scope(files) {
+  const list = (files || []).map((f) => String(f).trim()).filter(Boolean);
+  if (list.length === 0) return "full";
+  const covered = (f) => TEST_FILE.test(f) || (IMPORTABLE.test(f) && IN_DIR.test(f) && !SPAWNED_DIRS.test(f));
+  return list.every(covered) ? `npx vitest related ${list.map(quote).join(" ")} --run` : "full";
+}
+
+/** Pre-run load warning from the lock file (the CLI's run path is synchronous: no CPU sample). */
+function defaultPreRun(cwd, cmd) {
+  const holder = readLockHolder();
+  return holder ? buildPreRunWarning({ holder, usualMs: usualDurationMs(cwd, cmd) }) : null;
 }
 
 function say(log, obj) {
@@ -46,7 +84,7 @@ function say(log, obj) {
 
 /** Returns the exit code. `deps` exists for tests. */
 export function main(argv, { exec = (cmd, cwd) => spawnSync(cmd, { windowsHide: true, cwd, shell: true, stdio: "inherit" }).status ?? 1,
-  key = treeKey, record = recordResult, log = (s) => process.stderr.write(s), now = () => Date.now() } = {}) {
+  key = treeKey, record = recordResult, preRun = defaultPreRun, log = (s) => process.stderr.write(s), now = () => Date.now() } = {}) {
   const a = parseArgs(argv);
   if (a.sub === "key") {
     const k = key(a.cwd);
@@ -66,11 +104,19 @@ export function main(argv, { exec = (cmd, cwd) => spawnSync(cmd, { windowsHide: 
     say(log, { ok: !!rec, recorded: rec });
     return rec ? 0 : 1;
   }
+  if (a.sub === "scope") {
+    log(`${scope(a.files)}\n`);
+    return 0;
+  }
   if (a.sub === "run") {
+    const scoped = isScopedCmd(a.cmd);
+    const warning = scoped ? null : preRun(a.cwd, a.cmd);
+    if (warning) log(`[test-record] ${warning.note}\n`);
     const before = key(a.cwd);
     const started = now();
     const code = exec(a.cmd, a.cwd);
     if (code !== 0) { say(log, { ok: false, reason: `command exited ${code} — nothing recorded` }); return code; }
+    if (scoped) { say(log, { ok: true, scoped: true, reason: "scoped run — not recorded" }); return 0; }
     const after = key(a.cwd);
     if (!before || !after || before.treeHash !== after.treeHash) {
       say(log, { ok: false, reason: "tree changed during the run (or no git tree) — green run not recorded" });
