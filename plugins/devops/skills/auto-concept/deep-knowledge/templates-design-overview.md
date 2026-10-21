@@ -85,7 +85,8 @@ returns — the single-design page is untouched.
     palette: ['M12 3a9 9 0 1 0 0 18c1 0 2-1 2-2s-1-2 0-3 2 0 4 0 3-2 3-4c0-5-4-9-9-9z', 'M7.5 11.5h.01', 'M10 7.5h.01', 'M15 7.5h.01'],
     game: ['M6 9h12a4 4 0 0 1 0 8c-2 0-3-2-6-2s-4 2-6 2a4 4 0 0 1 0-8z', 'M8 11v4', 'M6 13h4', 'M15.5 12.5h.01', 'M17.5 14h.01'],
     list: ['M8 6h12', 'M8 12h12', 'M8 18h12', 'M4 6h.01', 'M4 12h.01', 'M4 18h.01'],
-    question: ['M9 9a3 3 0 1 1 4 2.8c-.8.4-1 1-1 1.7V15', 'M12 18h.01']
+    question: ['M9 9a3 3 0 1 1 4 2.8c-.8.4-1 1-1 1.7V15', 'M12 18h.01'],
+    pin: ['M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z', 'M12 10h.01']
   };
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const SVG_TAGS = new Set(['svg', 'g', 'path', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'rect']);
@@ -376,9 +377,21 @@ returns — the single-design page is untouched.
     H.name = el('strong', 'design-header-name');
     H.star = el('span', 'design-header-star');
     H.eye = el('span', 'design-header-eye');
-    H.main.append(H.back, H.sep, H.iconSlot, H.name, H.star, H.eye);
+    // Comment pin: an icon next to the eye, drawn like it (round, ringed),
+    // its label lives in the tooltip. Shown on a live design page only.
+    H.pin = el('button', 'design-header-pin');
+    H.pin.type = 'button';
+    H.pin.setAttribute('aria-pressed', 'false');
+    H.pin.setAttribute('aria-label', L.upinArm);
+    H.pin.appendChild(svgFromPaths(ICONS.pin));
+    setTip(H.pin, L.upinArm, L.ctrl + '+' + L.keysClick);
+    H.pin.addEventListener('click', () => (armed === 'tap' ? disarm() : arm('tap')));
+    // Icon + name sit in one pill, the same shape as the active quick-nav
+    // segment, so the header reads as "this variant", not as loose text.
+    H.pill = el('span', 'design-header-title');
+    H.pill.append(H.iconSlot, H.name);
+    H.main.append(H.back, H.sep, H.pill, H.star, H.eye, H.pin);
     H.more = el('div', 'design-header-more');
-    H.motto = el('div', 'design-header-motto');
     H.actions = el('div', 'design-header-actions');
     H.tabs = el('div', 'design-header-tabs');
     H.tabs.setAttribute('role', 'tablist');
@@ -388,14 +401,9 @@ returns — the single-design page is untouched.
       const d = activeDesignOf(visibleIteration());
       if (d) toggleFavorite(d.dataset.design);
     });
-    H.pin = el('button', 'design-header-pin', '📍 ' + L.upinArm);
-    H.pin.type = 'button';
-    H.pin.setAttribute('aria-pressed', 'false');
-    setTip(H.pin, L.upinArm, L.ctrl + '+' + L.keysClick);
-    H.pin.addEventListener('click', () => (armed === 'tap' ? disarm() : arm('tap')));
     H.note = el('div', 'design-header-note');
-    H.actions.append(H.tabs, H.fav, H.pin);
-    H.more.append(H.motto, H.actions, H.note);
+    H.actions.append(H.tabs, H.fav);
+    H.more.append(H.actions, H.note);
     header.append(H.main, H.more);
     // Touch path (R6): a tap on the card's own surface opens it the way a
     // hover does; a tap elsewhere closes it again.
@@ -408,6 +416,41 @@ returns — the single-design page is untouched.
     });
   }
   function closeHeader() { if (header) header.dataset.open = 'false'; }
+
+  // ── Variant switch that keeps the page ────────────────────────────────
+  // Comparing variants means looking at the SAME page in each: on design A
+  // page 2, key 2 / the quick-nav segment opens design B page 2. A design
+  // without that page opens on its first page. A question view tied to a
+  // design (data-view-for) maps the same way, by its position among that
+  // design's views. From the overview or a free view the design opens where
+  // it was last left (plain showDesign()).
+  function showDesignAligned(id) {
+    const it = visibleIteration();
+    const target = designsOf(it).find(d => d.dataset.design === id);
+    if (!target) return;
+    const md = mode();
+    const cur = activeDesignOf(it);
+    if (md === 'design' && cur && cur !== target) {
+      const idx = [...cur.querySelectorAll('section[data-screen][id]')].indexOf(activeScreenOf(cur));
+      const screens = [...target.querySelectorAll('section[data-screen][id]')];
+      const sec = screens[idx] || screens[0];
+      window.showDesign(id, sec ? sec.id : undefined);
+      return;
+    }
+    if (md === 'view') {
+      const v = it.querySelector(':scope > section[data-view][data-view-active="true"]');
+      const from = v && v.dataset.viewFor;
+      if (from && from !== id && designsOf(it).some(d => d.dataset.design === from)) {
+        const own = f => viewsOf(it).filter(x => x.dataset.viewFor === f);
+        const match = own(id)[own(from).indexOf(v)];
+        if (match) { window.showView(match.dataset.view); return; }
+        const first = target.querySelector('section[data-screen][id]');
+        window.showDesign(id, first ? first.id : undefined);
+        return;
+      }
+    }
+    window.showDesign(id);
+  }
 
   // ── Quick nav ──────────────────────────────────────────────────────────
   function buildQuick(it, metas) {
@@ -425,7 +468,7 @@ returns — the single-design page is untouched.
       star.hidden = true;
       seg.appendChild(star);
       setTip(seg, m.label, String(m.n));
-      seg.addEventListener('click', () => { if (typeof closePanel === 'function') closePanel(); window.showDesign(m.id); });
+      seg.addEventListener('click', () => { if (typeof closePanel === 'function') closePanel(); showDesignAligned(m.id); });
       row.appendChild(seg);
     });
     quick.appendChild(row);
@@ -445,6 +488,26 @@ returns — the single-design page is untouched.
 
   // ── ☰ panel: icon prefix + hover keycap per design row ─────────────────
   function decorateNav(metas) {
+    // The overview is the first top-level item, so it is the first ☰ row too.
+    // Its own class, not .screen-nav-design-heading: every design-row loop
+    // (active state, note markers, keycaps) must keep seeing designs only.
+    const nav = document.getElementById('screen-nav');
+    if (nav && !nav.querySelector('.screen-nav-overview-item')) {
+      const row = el('button', 'screen-nav-overview-item');
+      row.type = 'button';
+      const label = el('span');
+      label.append(iconEl('grid', { size: 's' }), document.createTextNode(L.overview));
+      const k = el('kbd', 'app-kbd screen-nav-kbd', 'Esc');
+      k.setAttribute('aria-hidden', 'true');
+      row.append(label, k);
+      row.addEventListener('click', () => {
+        if (typeof closePanel === 'function') closePanel();
+        window.showOverview();
+      });
+      const group = el('div', 'screen-nav-group screen-nav-overview-group');
+      group.appendChild(row);
+      nav.insertBefore(group, nav.firstChild);
+    }
     document.querySelectorAll('#screen-nav .screen-nav-design-heading').forEach(h => {
       const m = metas.find(x => x.id === h.dataset.designId);
       if (!m) return;
@@ -530,10 +593,34 @@ returns — the single-design page is untouched.
     updateChrome();
     requestAnimationFrame(fitPreviews);
   };
+  // Fit the clone's CONTENT, not its 1000px virtual canvas: a phone mock
+  // (max-width ~420px) scaled by box/1000 shrank to an unreadable strip in
+  // the middle of a wide card. The content's horizontal extent is measured
+  // at scale 1 (union of the first two levels), then scaled to fill the box
+  // and centred; wide desktop mocks still fall back to box/1000.
   function fitPreviews() {
     document.querySelectorAll('.design-ov-preview').forEach(p => {
       const w = p.clientWidth;
-      if (w > 0) p.style.setProperty('--dz-ov-scale', String(w / 1000));
+      const wrap = p.querySelector('.design-ov-scale');
+      if (!(w > 0) || !wrap) return;
+      wrap.style.setProperty('--dz-ov-scale', '1');
+      wrap.style.setProperty('--dz-ov-x', '0px');
+      const origin = wrap.getBoundingClientRect().left;
+      let left = Infinity, right = -Infinity;
+      wrap.querySelectorAll(':scope > *, :scope > * > *').forEach(n => {
+        const r = n.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        left = Math.min(left, r.left - origin);
+        right = Math.max(right, r.right - origin);
+      });
+      const PAD = 24;
+      const content = right > left ? Math.min(1000, right - left + 2 * PAD) : 1000;
+      const from = right > left ? Math.max(0, left - PAD) : 0;
+      const scale = Math.min(1, w / content);
+      wrap.style.removeProperty('--dz-ov-scale');
+      wrap.style.removeProperty('--dz-ov-x');
+      p.style.setProperty('--dz-ov-scale', String(scale));
+      p.style.setProperty('--dz-ov-x', ((w - content * scale) / 2 - from * scale).toFixed(1) + 'px');
     });
   }
   window.addEventListener('resize', () => requestAnimationFrame(fitPreviews));
@@ -544,11 +631,14 @@ returns — the single-design page is untouched.
     const it = visibleIteration();
     const active = on() && !!overviewOf(it);
     placeEye(active);
+    const navOv = document.querySelector('#screen-nav .screen-nav-overview-group');
+    if (navOv) navOv.hidden = !active;
     if (!active) { if (hint) hint.hidden = true; return; }
     const st = readState(it);
     const fav = validFavorite(it, st);
     const live = isLive(it) && !body.classList.contains('viewing-frozen');
     const md = mode();
+    if (navOv) navOv.firstElementChild.dataset.active = String(md === 'overview');
     const d = activeDesignOf(it);
     const m = d && metas.find(x => x.id === d.dataset.design);
     const favMeta = fav && metas.find(x => x.id === fav);
@@ -594,8 +684,9 @@ returns — the single-design page is untouched.
         }
       }
       H.star.hidden = !H.star.textContent;
-      H.motto.textContent = motto;
-      H.motto.hidden = !motto;
+      // The motto is the name's tooltip, not a line of its own.
+      if (motto) setTip(H.name, motto);
+      else { delete H.name.dataset.tip; delete H.name.dataset.tipTier; }
       H.note.textContent = note;
       H.note.hidden = !note;
       H.tabs.hidden = !showTabs;
@@ -607,8 +698,8 @@ returns — the single-design page is untouched.
       setTip(H.fav, pressed ? L.favUnset : L.favSet, 'F');
       H.pin.hidden = !(md === 'design' && live);
       H.pin.setAttribute('aria-pressed', String(armed === 'tap'));
-      H.actions.hidden = H.tabs.hidden && H.fav.hidden && H.pin.hidden;
-      H.more.hidden = H.motto.hidden && H.actions.hidden && H.note.hidden;
+      H.actions.hidden = H.tabs.hidden && H.fav.hidden;
+      H.more.hidden = H.actions.hidden && H.note.hidden;
     }
     if (quick) {
       quick.querySelectorAll('.design-quick-seg').forEach(seg => {
@@ -875,7 +966,7 @@ returns — the single-design page is untouched.
     }
     if (n) {
       const d = designsOf(it)[n - 1];
-      if (d) { e.preventDefault(); window.showDesign(d.dataset.design); }
+      if (d) { e.preventDefault(); showDesignAligned(d.dataset.design); }
       return;
     }
     if (e.key === '?') { e.preventDefault(); toggleSheet(); return; }
@@ -947,8 +1038,8 @@ html:not([data-template="design"]) .upin-hint { display: none !important; }
 body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-ov-grid {
   display: grid; gap: 1.25rem; align-items: stretch;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-  max-width: 1320px; margin: 0 auto;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  max-width: 1680px; margin: 0 auto;
   /* Room for the favourite's lift + badge so neither is clipped (R8). */
   padding-top: 0.75rem;
 }
@@ -989,7 +1080,8 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-ov-head:hover .design-ov-name { text-decoration: underline; }
 .design-ov-motto { margin: 0; font-size: 1.45rem; line-height: 1.15; font-weight: 700; color: var(--text, #e6edf3); }
 .design-ov-preview {
-  position: relative; display: block; width: 100%; height: 220px;
+  /* Tall enough to read the mock, not just recognise it (was 220px). */
+  position: relative; display: block; width: 100%; height: clamp(300px, 48vh, 600px);
   border-radius: 12px; overflow: hidden; cursor: zoom-in;
   border: 1px solid var(--border-color, #30363d);
   background: var(--bg-secondary, var(--panel-bg, #0d1117));
@@ -1000,7 +1092,7 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
    the mock's own controls out of reach — the preview is one button. */
 .design-ov-scale {
   position: absolute; top: 0; left: 0; width: 1000px;
-  transform: scale(var(--dz-ov-scale, 0.28)); transform-origin: 0 0;
+  transform: translateX(var(--dz-ov-x, 0px)) scale(var(--dz-ov-scale, 0.28)); transform-origin: 0 0;
   pointer-events: none; padding: 1.5rem; box-sizing: border-box;
 }
 .design-ov-scale > * { width: 100%; }
@@ -1049,7 +1141,8 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-header {
   position: fixed; top: 1rem; left: 1rem; z-index: 99;
   flex-direction: column; box-sizing: border-box;
-  width: max-content; max-width: min(calc(33vw - 1.5rem), 280px);
+  --dz-head-cap: min(calc(33vw - 1.5rem), 30rem);
+  width: max-content; max-width: var(--dz-head-cap);
   padding: 0.35rem 0.7rem; border-radius: 12px;
   background: color-mix(in srgb, var(--panel-bg, #161b22) 70%, transparent);
   border: 1px solid var(--border-color, #30363d);
@@ -1065,7 +1158,25 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 .design-header-main { display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; min-width: 0; min-height: 28px; }
-.design-header-name { color: var(--text, #e6edf3); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* The name carries its OWN cap, identical at rest and expanded: when only
+   the header's max-width capped it, hover lifted the cap, the name
+   un-truncated and every icon right of it (★, eye, pin) jumped sideways.
+   19rem ≈ everything else on the row (back, pill chrome, ★, eye, pin, gaps,
+   padding), so the row never exceeds the resting cap and the expanded state
+   cannot reflow it. */
+.design-header-name {
+  color: var(--text, #e6edf3); font-weight: 600; min-width: 0;
+  max-width: max(3rem, min(12rem, calc(var(--dz-head-cap) - 19rem)));
+  overflow: hidden; text-overflow: ellipsis;
+}
+.design-header-title {
+  display: inline-flex; align-items: center; gap: 0.4rem; min-width: 0;
+  padding: 0.15rem 0.65rem 0.15rem 0.2rem; border-radius: 999px;
+  background: color-mix(in srgb, var(--border-color, #30363d) 80%, transparent);
+  box-shadow: inset 0 -2px 0 var(--dz-color, var(--accent-color));
+}
+.design-header-icon:empty { display: none; }
+.design-header-title:has(.design-header-icon:empty) { padding-left: 0.65rem; }
 .design-header-star { color: var(--warning-color, #d29922); white-space: nowrap; }
 .design-header-back {
   display: inline-flex; align-items: center; gap: 0.3rem; flex: none;
@@ -1083,7 +1194,6 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-header:focus-within .design-header-more,
 .design-header[data-open="true"] .design-header-more { display: flex; }
 .design-header-more:empty { display: none !important; }
-.design-header-motto { font-style: italic; color: var(--text-secondary, #8b949e); white-space: normal; }
 .design-header-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .design-header-note { max-width: 320px; white-space: normal; color: var(--text-color, #c9d1d9); }
 .design-header-tabs { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; border-radius: 8px; background: color-mix(in srgb, var(--panel-bg, #0d1117) 60%, var(--border-color, #30363d)); }
@@ -1093,12 +1203,20 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 }
 .design-header-tab:hover { color: var(--text, #e6edf3); }
 .design-header-tab[data-active="true"] { background: var(--border-color, #30363d); color: var(--text, #e6edf3); font-weight: 700; }
+.design-header-name[data-tip] { cursor: help; }
+/* Same shape as the header eye (.design-header .anno-toggle-fab). */
 .design-header-pin {
-  border: 1px dashed var(--border-color, #30363d); background: transparent;
-  color: var(--text-secondary, #8b949e); border-radius: 8px;
-  padding: 0.3rem 0.6rem; font: inherit; font-size: 0.8rem; cursor: pointer;
+  flex: none; width: 24px; height: 24px; padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--anno-accent, var(--accent-color, #58a6ff));
+  background: var(--anno-bubble-bg, var(--panel-bg, #161b22));
+  color: var(--anno-accent, var(--accent-color, #58a6ff));
+  cursor: pointer; transition: transform 0.15s;
 }
-.design-header-pin[aria-pressed="true"] { border-color: #f78166; color: var(--text, #e6edf3); }
+.design-header-pin:hover { transform: scale(1.08); }
+.design-header-pin[hidden] { display: none; }
+.design-header-pin svg { width: 13px; height: 13px; display: block; }
+.design-header-pin[aria-pressed="true"] { border-color: #f78166; background: #f78166; color: #fff; }
 
 /* ── Quick nav — top centre ── */
 .design-quick {
@@ -1138,6 +1256,18 @@ body.panel-open .design-quick, body.panel-open .design-header { opacity: 0; poin
 }
 
 /* ── ☰ panel: icon prefix + hover keycap on design rows ── */
+.screen-nav-overview-group[hidden] { display: none; }
+.screen-nav-overview-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.5rem 0.85rem; border-radius: 8px; border: none;
+  background: transparent; color: var(--text); font: inherit; font-size: 0.9rem;
+  font-weight: 700; cursor: pointer; text-align: left; transition: background 0.15s;
+}
+.screen-nav-overview-item:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.screen-nav-overview-item[data-active="true"] { color: var(--accent-color); }
+.screen-nav-overview-item > span:first-child { display: inline-flex; align-items: center; min-width: 0; }
+.screen-nav-overview-item .dz-icon { margin-right: 0.5rem; }
+.screen-nav-overview-item:hover .screen-nav-kbd { opacity: 1; transition-delay: 1.5s; }
 .screen-nav-design-heading > span:first-child { display: inline-flex; align-items: center; min-width: 0; }
 .screen-nav-design-heading .dz-icon { margin-right: 0.5rem; }
 .screen-nav-kbd { opacity: 0; transition: opacity 0.14s ease 0s; margin-left: auto; }

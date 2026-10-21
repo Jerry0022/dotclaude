@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.282.0] — 2026-10-21
+
+Concept design pages: annotation pins can be moved, the variant overview is readable, and the design header no longer jumps on hover.
+
+### Added
+- **Draggable annotation pins.** A pin that sits on what it asks about can be dragged aside. The drag starts only after 10 px, so a click that wobbles a little still opens the bubble. The new spot is stored as a percent of the layer, survives a reload (`annoPos` in the page state) and is respected by the automatic placement.
+- **Variant switch keeps the page.** On design A page 2, key `2` or the quick-nav segment opens design B page 2 (B's first page when it has none). A question view tied to a design maps to the target design's view at the same position.
+- **Overview is the first ☰ menu row.**
+
+### Changed
+- **Larger overview previews.** Each preview fits the mock's content width instead of the 1000 px canvas (a phone mock no longer shrinks to a strip), is taller (300–600 px) and the grid grows to 1680 px.
+- **Design header.** The motto is the name's tooltip instead of its own line; the comment pin is a round icon next to the eye, styled like it; icon and name sit in one pill like the active quick-nav segment.
+
+### Fixed
+- **The eye toggle stays on the overview.** It was hidden because the overview itself has no pins, so one click made it vanish for good.
+- **Header icons no longer shift on hover.** The name has its own fixed width cap; before, hover lifted the header's cap, the name un-truncated and ★/eye/pin jumped sideways.
+
+### Known gaps
+- The auto-concept `templates-*.md` files stay over the 600-line doc budget (pre-existing, grew slightly).
+
 ## [0.281.3] — 2026-10-21
 
 The concept pickup waker's beat file (`.claude/concept-waker-<port>.json`, new in v0.280.0) was not on the managed ignore list, so every open concept page left an untracked file in the repo.

@@ -80,6 +80,7 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
   function anchorToTarget(anno) {
     const sel = anno.dataset.annoTarget;
     if (!sel) return;                       // authored --anno-x/--anno-y wins
+    if (anno.dataset.annoMoved) return;     // the user dragged it — their spot wins
     const screen = anno.closest('section[data-screen]');
     const layer = annoLayerOf(anno);
     if (!screen || !layer) return;
@@ -299,7 +300,15 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     all.forEach(anno => recomputeAnswered(anno));
     all.forEach(anchorToTarget);
     layoutAnnos(all);
-    toggle.hidden = all.length === 0;
+    // On the overview the eye sits in the header and still owns the
+    // show/hide preference for every design of the round — hiding it there
+    // because the overview itself carries no pin made one click on it final
+    // (reported: the eye vanished and could not be switched back on).
+    const onOverview = document.body.dataset.overviewActive === 'true';
+    const it = document.querySelector('section[data-iteration]:not([hidden])');
+    toggle.hidden = onOverview
+      ? !(it && it.querySelector('section[data-design] [data-anno]'))
+      : all.length === 0;
     const hidden = document.body.classList.contains('anno-hidden');
     const label = (hidden ? toggle.dataset.labelShow : toggle.dataset.labelHide) || '';
     if (label) { toggle.setAttribute('aria-label', label); toggle.setAttribute('data-tip', label); }
@@ -318,6 +327,8 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
   // handler's data-screen-link lookup — guarded there directly (§
   // Click-through Handler), not by relying on event ordering here.
   document.addEventListener('click', e => {
+    // The click that ends a pin drag is not a click on the pin.
+    if (suppressPinClick) { suppressPinClick = false; if (e.target.closest('[data-anno-pin]')) return; }
     const trigger = e.target.closest('[data-anno-pin], [data-anno-summary]');
     if (trigger) {
       const id = trigger.dataset.annoPin || trigger.dataset.annoSummary;
@@ -335,6 +346,66 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeAllBubbles();
   });
+
+  // --- moving a pin --------------------------------------------------------
+  // Reported from a real page: a pin sometimes sits right on what it asks
+  // about, and hiding the whole layer to see it loses every other pin. So a
+  // single pin can be dragged aside. A press only turns into a drag once the
+  // pointer has travelled PIN_DRAG_THRESHOLD px — a click that wobbles a few
+  // pixels still opens the bubble instead of nudging the pin. The new spot is
+  // stored as --anno-x/--anno-y (percent of the layer, so it survives a
+  // resize) plus data-anno-moved, which anchorToTarget() then respects, and
+  // persisted by saveState() (`annoPos`).
+  const PIN_DRAG_THRESHOLD = 10;
+  let pinDrag = null;
+  let suppressPinClick = false;
+  document.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || document.body.classList.contains('anno-hidden')) return;
+    const pin = e.target.closest('[data-anno-pin]');
+    const anno = pin && pin.closest('[data-anno]');
+    const layer = anno && annoLayerOf(anno);
+    if (!layer) return;
+    pinDrag = { anno, pin, layer, id: e.pointerId, x0: e.clientX, y0: e.clientY, moving: false };
+  });
+  document.addEventListener('pointermove', e => {
+    if (!pinDrag || e.pointerId !== pinDrag.id) return;
+    const d = pinDrag;
+    if (!d.moving) {
+      if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < PIN_DRAG_THRESHOLD) return;
+      d.moving = true;
+      const r = d.pin.getBoundingClientRect();
+      d.offX = d.x0 - (r.left + r.width / 2);
+      d.offY = d.y0 - (r.top + r.height / 2);
+      try { d.pin.setPointerCapture(e.pointerId); } catch (err) { /* already released */ }
+      d.anno.dataset.annoDragging = 'true';
+      closeAllBubbles();
+    }
+    e.preventDefault();
+    const box = d.layer.getBoundingClientRect();
+    if (!box.width || !box.height) return;
+    const x = Math.max(0, Math.min(100, ((e.clientX - d.offX - box.left) / box.width) * 100));
+    const y = Math.max(0, Math.min(100, ((e.clientY - d.offY - box.top) / box.height) * 100));
+    d.anno.style.marginLeft = '';
+    d.anno.style.marginTop = '';
+    d.anno.style.setProperty('--anno-x', x.toFixed(2) + '%');
+    d.anno.style.setProperty('--anno-y', y.toFixed(2) + '%');
+    d.anno.dataset.annoMoved = x.toFixed(2) + ',' + y.toFixed(2);
+  });
+  function endPinDrag(e) {
+    if (!pinDrag || e.pointerId !== pinDrag.id) return;
+    const d = pinDrag;
+    pinDrag = null;
+    if (!d.moving) return;
+    delete d.anno.dataset.annoDragging;
+    // pointerup is followed by a click on the pin in the same task; the
+    // flag is cleared again right after, so it never eats a later click.
+    suppressPinClick = true;
+    setTimeout(() => { suppressPinClick = false; }, 0);
+    layoutAnnos(annotationsInScreen(activeScreen()));
+    if (typeof saveState === 'function') saveState();
+  }
+  document.addEventListener('pointerup', endPinDrag);
+  document.addEventListener('pointercancel', endPinDrag);
 
   document.addEventListener('input', e => {
     if (!e.target.matches('textarea[data-annotation]')) return;
@@ -372,6 +443,7 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
   // design -> view transition (the reverse works only by accident, because
   // showDesign() routes through showScreen()).
   document.addEventListener('view:changed', updateAnnoUI);
+  document.addEventListener('overview:changed', updateAnnoUI);
   // A resize moves every anchored pin and can push a bubble off-screen;
   // scrolling the canvas moves pins against its clip edge; opening the
   // panel or dock (body class change) puts new chrome over the layer. All

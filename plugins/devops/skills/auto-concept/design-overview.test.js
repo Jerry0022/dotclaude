@@ -370,3 +370,95 @@ describe("bake + gate", () => {
     }
   });
 });
+
+describe("☰ overview row, the eye on the overview, draggable pins", () => {
+  const ANNO = '<div class="anno-layer" data-anno-layer><div class="anno" data-anno="a1" data-anno-side="right" style="--anno-x:40%;--anno-y:40%">'
+    + '<button class="anno-pin" type="button" data-anno-pin="a1" aria-expanded="false">1</button>'
+    + '<div class="anno-bubble" data-anno-bubble="a1" data-open="false"><button type="button" class="anno-bubble-summary" data-anno-summary="a1">'
+    + '<span class="anno-bubble-question">Q?</span></button><div class="anno-bubble-body">'
+    + '<textarea class="anno-answer" data-comment="anno-a1" data-annotation="a1"></textarea></div></div></div></div>';
+  const withAnno = () => page(3).replace(/<section id="d2-s1"[^>]*>/, (m) => m + ANNO);
+
+  test("the overview is the first ☰ row, marks itself active and opens the overview", async () => {
+    const { window, document, errors } = await boot(page(3));
+    expect(errors).toEqual([]);
+    const row = document.querySelector("#screen-nav").firstElementChild.querySelector(".screen-nav-overview-item");
+    expect(row).not.toBeNull();
+    expect(row.textContent).toContain("Übersicht");
+    expect(row.dataset.active).toBe("true");
+    window.showDesign("d2b");
+    expect(row.dataset.active).toBe("false");
+    row.click();
+    expect(document.body.dataset.overviewActive).toBe("true");
+    expect(row.dataset.active).toBe("true");
+  }, BOOT_TIMEOUT);
+
+  test("a single-design round shows no overview row", async () => {
+    const { document } = await boot(page(1, { attrs: false }));
+    const g = document.querySelector("#screen-nav .screen-nav-overview-group");
+    expect(!g || g.hidden).toBe(true);
+  }, BOOT_TIMEOUT);
+
+  test("the eye in the overview header switches the layer off AND on again", async () => {
+    const { document, errors } = await boot(withAnno());
+    expect(errors).toEqual([]);
+    expect(document.body.dataset.overviewActive).toBe("true");
+    const eye = document.getElementById("anno-toggle");
+    expect(eye.hidden).toBe(false);
+    eye.click();
+    expect(document.body.classList.contains("anno-hidden")).toBe(true);
+    expect(eye.hidden, "the eye must stay reachable to bring the layer back").toBe(false);
+    eye.click();
+    expect(document.body.classList.contains("anno-hidden")).toBe(false);
+  }, BOOT_TIMEOUT);
+
+  test("a digit / quick-nav switch keeps the page; a missing page falls back to the first", async () => {
+    const html = page(3).replace(/<section id="d2b-s3"[\s\S]*?<\/section>/, "");
+    const { window, document, errors } = await boot(html);
+    expect(errors).toEqual([]);
+    window.showDesign("d2", "d2-s2");
+    key(window, document.body, { key: "2", code: "Digit2" });
+    expect(activeDesign(document).dataset.design).toBe("d2b");
+    expect(document.getElementById("d2b-s2").hidden).toBe(false);
+    document.querySelector('#design-quick .design-quick-seg[data-design-id="d2c"]').click();
+    expect(document.getElementById("d2c-s2").hidden).toBe(false);
+    window.showDesign("d2", "d2-s3");
+    key(window, document.body, { key: "2", code: "Digit2" });
+    expect(activeDesign(document).dataset.design).toBe("d2b");
+    expect(document.getElementById("d2b-s1").hidden, "d2b has no page 3 → its first page").toBe(false);
+  }, BOOT_TIMEOUT);
+
+  test("a question view tied to a design maps to the target design's view at the same position", async () => {
+    const views = '<section data-view="qa" data-view-for="d2" data-nav-label="Frage A" hidden><p>A</p></section>'
+      + '<section data-view="qb" data-view-for="d2b" data-nav-label="Frage B" hidden><p>B</p></section>';
+    const html = page(3).replace(/<section data-design="d2" /, (m) => views + m);
+    const { window, document, errors } = await boot(html);
+    expect(errors).toEqual([]);
+    window.showView("qa");
+    expect(document.body.dataset.viewActive).toBe("true");
+    key(window, document.body, { key: "2", code: "Digit2" });
+    expect(document.querySelector('section[data-view="qb"]').hidden, "d2b's own view at the same position").toBe(false);
+    key(window, document.body, { key: "3", code: "Digit3" });
+    expect(document.body.dataset.viewActive, "d2c has no view → its first page").toBe("false");
+    expect(activeDesign(document).dataset.design).toBe("d2c");
+    expect(document.getElementById("d2c-s1").hidden).toBe(false);
+  }, BOOT_TIMEOUT);
+
+  test("a dragged pin keeps its spot across a reload", async () => {
+    const html = withAnno();
+    const a = await boot(html);
+    const anno = a.document.querySelector('[data-anno="a1"]');
+    anno.dataset.annoMoved = "70.00,80.00";
+    a.window.saveState();
+    const saved = stateOf(a.window);
+    expect(JSON.parse(saved.blob).annoPos).toEqual({ "2:a1": "70.00,80.00" });
+    const b = await boot(html, saved);
+    const restored = b.document.querySelector('[data-anno="a1"]');
+    expect(restored.dataset.annoMoved).toBe("70.00,80.00");
+    expect(restored.style.getPropertyValue("--anno-x")).toBe("70.00%");
+    // Engine anchors: the threshold that keeps a wobbly click a click, and
+    // anchorToTarget() yielding to the user's spot.
+    expect(md).toContain("const PIN_DRAG_THRESHOLD = 10;");
+    expect(md).toContain("if (anno.dataset.annoMoved) return;");
+  }, BOOT_TIMEOUT);
+});

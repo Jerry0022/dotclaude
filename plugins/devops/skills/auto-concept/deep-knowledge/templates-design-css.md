@@ -360,6 +360,12 @@ body.panel-open .anno-toggle-fab { opacity: 0; pointer-events: none; }
   transition: transform 0.15s;
 }
 .anno-pin:hover { transform: scale(1.08); }
+/* A pin can be dragged aside (wireAnnotationLayer() § moving a pin):
+   touch-action keeps a touch drag from scrolling the canvas instead, and
+   user-select keeps the drag from selecting the mock's text. */
+.anno-pin { touch-action: none; user-select: none; -webkit-user-select: none; }
+.anno[data-anno-dragging="true"] { z-index: 3; }
+.anno[data-anno-dragging="true"] .anno-pin { cursor: grabbing; transform: scale(1.12); transition: none; }
 /* Answered pins invert to a filled state — visibly different at a glance
    from the still-open questions. Recomputed on every input, never only at
    generation time (see wireAnnotationLayer()). */
