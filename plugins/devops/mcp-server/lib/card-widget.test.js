@@ -894,6 +894,9 @@ describe("cardWidgetInstruction", () => {
     expect(text).toMatch(/no recap of the card/);
     expect(text).toMatch(/Before the widget: the full answer to the user's question/);
     expect(text).toMatch(/the card never carries it/);
+    // An answer written before render_completion_card sat in a message that
+    // further tool calls followed; the app collapsed it and the user saw none.
+    expect(text).toMatch(/SAME message as the show_widget call/);
   });
 
   test("names the saved widget file when one was written, and only then", () => {
