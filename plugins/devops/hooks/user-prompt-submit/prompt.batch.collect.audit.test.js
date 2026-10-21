@@ -85,7 +85,7 @@ describe("AUD-C006 — an image-only prompt without its image is never erased", 
     fs.writeFileSync(path.join(imagesDir, "1.png"), "png-bytes");
     const r = runHook({ prompt: "", session_id: SID });
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("Notiz #1 gespeichert");
+    expect(r.stderr).toContain("Notiz #1 abgelegt");
     expect(readNotes(cwd)[0].text).toMatch(/^\[Anhang-Datei\] /);
   });
 });
@@ -136,7 +136,7 @@ describe("AUD-C032 — an image pasted with the activating prompt is kept at act
 
 describe("AUD-C057 / C058 — panel and hand-off text", () => {
   test("the rearm panel names a kept image", () => {
-    expect(buildRearmAck(3, ">>", true, {}, 1)).toContain("Das Bild ist mit der Notiz gespeichert");
+    expect(buildRearmAck(3, ">>", true, {}, 1)).toContain("🖼️ mit Bild");
     expect(buildRearmAck(3, ">>", false, {}, 0)).not.toContain("📎");
   });
 
@@ -145,7 +145,7 @@ describe("AUD-C057 / C058 — panel and hand-off text", () => {
     fs.writeFileSync(path.join(imagesDir, "1.png"), "png-bytes");
     const r = runHook({ prompt: "<command-name>/do-batch</command-name><command-args></command-args>", session_id: SID });
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("Das Bild ist mit der Notiz gespeichert");
+    expect(r.stderr).toContain("🖼️ mit Bild");
   });
 
   test("the marker merge context carries the 4.9 hand-off template", () => {

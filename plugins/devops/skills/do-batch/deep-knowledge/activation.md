@@ -109,7 +109,7 @@ the image to `<tmp>/claude/<project-slug>/<session_id>/images/`; the hook
 copies every image whose mtime matches the prompt (up to 10 s before the
 hook ran, 3 s after) to
 `.claude/batch-assets/<note-timestamp>-<n>.<ext>` and appends
-`[Anhang-Datei] <copy>` to the note. The panel says "📎 Das Bild ist mit der
-Notiz gespeichert". The same holds for `/do-batch <text>` while collecting;
+`[Anhang-Datei] <copy>` to the note. The panel's status line says
+"🖼️ mit Bild". The same holds for `/do-batch <text>` while collecting;
 an image with a bare `/do-batch` still becomes a note of its own. Nothing for you to do; the copies are never moved, so
 archived notes keep valid paths.

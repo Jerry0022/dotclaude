@@ -66,14 +66,14 @@ describe("mode on — collecting", () => {
   test("an ordinary prompt is blocked and stored", () => {
     const r = runHook({ prompt: "Der Button im Header ist verrutscht" });
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("Notiz #1 gespeichert");
+    expect(r.stderr).toContain("Notiz #1 abgelegt");
     expect(readNotes(cwd).map(n => n.text)).toEqual(["Der Button im Header ist verrutscht"]);
   });
 
   test("the counter advances across prompts", () => {
     runHook({ prompt: "erste" });
     const r = runHook({ prompt: "zweite" });
-    expect(r.stderr).toContain("Notiz #2 gespeichert");
+    expect(r.stderr).toContain("Notiz #2 abgelegt");
     expect(readNotes(cwd)).toHaveLength(2);
   });
 
@@ -349,7 +349,7 @@ describe("failsafe — collection cannot trap the user", () => {
 describe("message builders", () => {
   test("the acknowledgement names the count and both exits", () => {
     const ack = buildAck(3, ">>", false);
-    expect(ack).toContain("Notiz #3 gespeichert");
+    expect(ack).toContain("Notiz #3 abgelegt");
     expect(ack).toContain('">> <text>"');
     expect(ack).toContain("/do-batch off");
     expect(ack).not.toContain("Frage");
@@ -513,9 +513,8 @@ describe("mode on — a re-activation is absorbed, never a turn", () => {
     // paying a turn for "already active" is the cost the mode exists to avoid.
     const r = runHook({ prompt: expanded(args) });
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("läuft bereits");
+    expect(r.stderr).toContain("läuft schon");
     expect(r.stderr).toContain("kein Fehler");
-    expect(r.stderr).toContain("Sammelmodus AKTIV");
     expect(r.stderr).toContain("/do-batch off");
     expect(r.stderr).toContain("/do-batch go");
     expect(readNotes(cwd)).toEqual([]);
@@ -525,7 +524,7 @@ describe("mode on — a re-activation is absorbed, never a turn", () => {
   test("free text through the command becomes a note", () => {
     const r = runHook({ prompt: expanded("der Header ist rot") });
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("Notiz #1 gespeichert");
+    expect(r.stderr).toContain("Notiz #1 abgelegt");
     expect(readNotes(cwd).map(n => n.text)).toEqual(["der Header ist rot"]);
   });
 
@@ -537,7 +536,7 @@ describe("mode on — a re-activation is absorbed, never a turn", () => {
   test.each(["off", "go", "status", "marker"])("the exit `%s` still reaches the skill", (args) => {
     const r = runHook({ prompt: expanded(args) });
     expect(r.code).toBe(0);
-    expect(r.stderr).not.toContain("läuft bereits");
+    expect(r.stderr).not.toContain("läuft schon");
     expect(readNotes(cwd)).toEqual([]);
   });
 
@@ -561,11 +560,10 @@ describe("the collected-prompt panel carries the mode summary", () => {
 
   test("every blocked prompt explains the mode with the pinned bounds", () => {
     const r = runHook({ prompt: "der Button ist verrutscht" });
-    expect(r.stderr).toContain("Notiz #1 gespeichert");
-    expect(r.stderr).toContain("Sammelmodus AKTIV · 1 Notiz(en) · Marker \">go\"");
+    expect(r.stderr).toContain("Notiz #1 abgelegt");
     expect(r.stderr).toContain("\">go <text>\"");
     expect(r.stderr).toContain("/do-batch off");
-    expect(r.stderr).toContain("3 Stunden oder 50 Notizen");
+    expect(r.stderr).toContain("3 h oder 50 Notizen");
   });
 });
 
@@ -601,9 +599,23 @@ describe("firing the merge brings main in first", () => {
 
 describe("message builders — 0.4.0", () => {
   test("the rearm ack names the stored note only when there was one", () => {
-    expect(buildRearmAck(3, ">>", true)).toContain("Notiz #3 gespeichert");
+    expect(buildRearmAck(3, ">>", true)).toContain("Notiz #3 abgelegt");
     expect(buildRearmAck(3, ">>", false)).toContain("Aufruf ignoriert");
-    expect(buildRearmAck(3, ">>", false)).toContain("Sammelmodus AKTIV · 3 Notiz(en)");
+    expect(buildRearmAck(3, ">>", false)).toContain("3 Notizen");
+  });
+
+  test("the ack is short: status line, blank line, three command lines", () => {
+    const lines = buildAck(4, ">>", false, { expiryHours: 8, maxNotes: 100 }).split("\n");
+    expect(lines).toHaveLength(5);
+    expect(lines[0]).toContain("Notiz #4 abgelegt");
+    expect(lines[1]).toBe("");
+  });
+
+  test("question and near-auto-end lines sit above the blank line", () => {
+    const lines = buildAck(97, ">>", true, { expiryHours: 8, maxNotes: 100 }).split("\n");
+    expect(lines[1]).toContain("Klang nach Frage");
+    expect(lines[2]).toContain("Nur noch 3 Notizen");
+    expect(lines[3]).toBe("");
   });
 
   test("the ack still opens with the all-clear and names both exits", () => {
@@ -611,7 +623,7 @@ describe("message builders — 0.4.0", () => {
     expect(ack.split("\n")[0]).toContain("kein Fehler");
     expect(ack).toContain("\">start <text>\"");
     expect(ack).toContain("/do-batch off");
-    expect(ack).toContain("8 Stunden oder 100 Notizen");
+    expect(ack).toContain("8 h oder 100 Notizen");
   });
 
   test("a conflicting sync is flagged as resolve-first", () => {
@@ -670,7 +682,7 @@ describe("help — the long form, free of charge while collecting", () => {
     expect(r.stderr).toContain("A) Was DU machst");
     expect(r.stderr).toContain("B) Was CLAUDE macht");
     expect(r.stderr).toContain("\">start <text>\"");
-    expect(r.stderr).not.toContain("läuft bereits");
+    expect(r.stderr).not.toContain("läuft schon");
     expect(readNotes(cwd)).toEqual([]);
     expect(isModeActive(cwd)).toBe(true);
   });
@@ -684,9 +696,7 @@ describe("help — the long form, free of charge while collecting", () => {
   test("the collected-prompt panel names status, marker and help", () => {
     activate(cwd, { marker: ">>" });
     const r = runHook({ prompt: "der Rand ist zu dick" });
-    expect(r.stderr).toContain("marker (Marker ändern)");
-    expect(r.stderr).toContain("help");
-    expect(r.stderr).toContain("auch nach dem Auto-Ende");
+    expect(r.stderr).toContain("status · marker · help");
   });
 });
 
@@ -718,7 +728,7 @@ describe("mode on — a pasted Desktop image is kept with its note (#490)", () =
     fs.writeFileSync(path.join(imagesDir, "1.png"), "png-bytes");
     const r = runHook({ prompt: "siehe Bild in rot eingezeichnet", session_id: SID }, tmpEnv());
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("Das Bild ist mit der Notiz gespeichert");
+    expect(r.stderr).toContain("🖼️ mit Bild");
     const [note] = readNotes(cwd);
     expect(note.text).toContain("siehe Bild in rot eingezeichnet");
     const line = note.text.split("\n").find(l => l.startsWith("[Anhang-Datei] "));
@@ -825,7 +835,7 @@ describe("image tracking — the cases seen in real batch sessions (2026-10-03)"
     fs.utimesSync(img, before, before);
     const r = runHook({ prompt: "Rotationsicon näher ans Label", session_id: SID }, tmpEnv());
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("Das Bild ist mit der Notiz gespeichert");
+    expect(r.stderr).toContain("🖼️ mit Bild");
     expect(readNotes(cwd)[0].text).toContain("[Anhang-Datei] ");
   });
 
@@ -885,7 +895,7 @@ describe("`/do-batch <text>` with a pasted image keeps the image (#490)", () => 
   test("an image with a bare `/do-batch` still becomes a note", () => {
     const r = runHook({ prompt: expanded(""), session_id: SID }, env());
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("als Notiz #1 gespeichert");
+    expect(r.stderr).toContain("als Notiz #1 abgelegt");
     expect(readNotes(cwd)[0].text).toMatch(/^\[Anhang-Datei\] /);
   });
 });
