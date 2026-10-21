@@ -16,7 +16,7 @@ const results = {
   },
   integrity: [check('references', 'yellow', [{ msg: 'dead link', file: 'a.md', line: 3 }]), check('deps', 'green')],
   hygiene: [check('ci', 'red', [{ msg: 'red run' }])],
-  net: { costTokens: 2000, benefitTokens: 500, estimate: -1500, uncertainty: 'Schätzung: Unsicherheit' },
+  net: { costTokens: 2000, benefitTokens: 500, estimate: null, comparable: false, uncertainty: 'Schätzung: Unsicherheit' },
 };
 
 describe('plugin-audit report fragment', () => {

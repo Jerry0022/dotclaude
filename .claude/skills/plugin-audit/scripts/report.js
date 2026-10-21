@@ -157,9 +157,9 @@ function renderFragment(results, suggestions, history = []) {
     ${tile('Integrität', worst(results.integrity), `${results.integrity.filter((c) => c.status === 'green').length}/${results.integrity.length} Checks grün`)}
     ${tile('Repo- &amp; Ship-Hygiene', worst(results.hygiene), `${results.hygiene.filter((c) => c.status === 'green').length}/${results.hygiene.length} Checks grün`)}
     ${tile('Statischer Footprint', 'skipped', `~${fmt(fp.totalTokens)} Tokens je Session`)}
-    ${tile('Netto (Schätzung)', net.estimate >= 0 ? 'green' : 'yellow', `${net.estimate >= 0 ? '+' : ''}${fmt(net.estimate)} Tokens`)}
+    ${tile('Kosten vs. messbarer Nutzen', 'skipped', `~${fmt(net.costTokens)} / ~${fmt(net.benefitTokens)} Tokens`)}
   </div>
-  <p><strong>Kosten</strong> ~${fmt(net.costTokens)} Tokens · <strong>Nutzen</strong> ~${fmt(net.benefitTokens)} Tokens (nur Delegation, Opus-Äquivalent).</p>
+  <p><strong>Kosten</strong> ~${fmt(net.costTokens)} Tokens (Plugin-Text in den Transkripten) · <strong>messbarer Nutzen</strong> ~${fmt(net.benefitTokens)} Tokens (nur Delegation, Opus-Äquivalent). Kein Netto-Wert: Guard- und local-llm-Ersparnis werden nirgends protokolliert, ein Saldo würde nur den messbaren Teil des Nutzens gegen die ganzen Kosten rechnen.</p>
   <p class="d1-warn">${esc(net.uncertainty)}</p>
   <h3>Top-Vorschläge</h3>
   <ol class="d1-list">${top3.map((s) => `<li><strong>${esc(s.title)}</strong> - ${esc(s.change || '')}</li>`).join('') || '<li>Keine Befunde.</li>'}</ol>
