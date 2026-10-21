@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.287.3] — 2026-10-21
+
+The stop guard counts only live work this session's model started as pending, and lets the model dismiss a false hit with a stated reason.
+
+### Fixed
+- **Pending detection counts only live model-started work (#807, carried over from #788).** `hooks/lib/pending-tasks.js` no longer counts hook-spawned installs (`uv tool install … graphify`; `npm install graphify-foo` still counts), the delegated ship's own agent on ship cards (exact launch labels only: `devops:do-ship` / `do-ship`, a description starting "Ship im Subagenten" / "Ship in subagent", or containing `--delegated` — "ship the fix" or ship-watcher agents still count), or tasks already ended via TaskStop or a completion notification (completed/failed/killed). A task without a recorded command is labelled "background command (no command recorded)" instead of a bare "task".
+- **Gate text and override.** `card-guard.js` `buildPendingReason` and `card-pregate.js` tell the model to check each task's output first and offer three outcomes (still running and mine / already finished / not mine). `render_completion_card` accepts `pendingDismissed: "<reason, at least 20 chars>"` once (pending-attested flag); the card then shows an italic trace line naming up to three dismissed items and the reason.
+- **No invented pending entries.** The `[pending]` note in `post.flow.completion.js` and the MCP field descriptions forbid inventing a `pending` entry just to pass the gate. `stop.flow.guard.js` passes `windowsHide: true` to its git `execFileSync`.
+
 ## [0.287.2] — 2026-10-21
 
 /do-learn no longer files one issue for two independent topics.
