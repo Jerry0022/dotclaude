@@ -51,6 +51,11 @@ returns — the single-design page is untouched.
     chNew: '{{design.change_new}}', chChanged: '{{design.change_changed}}',
     chSame: '{{design.change_same}}', chPreview: '{{design.change_preview}}',
     chDot: '{{design.change_dot}}',
+    qLabel: '{{design.questions}}', qOpen: '{{design.questions_open}}',
+    qProgress: '{{design.questions_progress}}', qAllDone: '{{design.questions_all_done}}',
+    qSubmit: '{{design.questions_submit_hint}}', qJump: '{{design.questions_jump}}',
+    qOpen1: '{{design.questions_open_one}}', qSubmit1: '{{design.questions_submit_hint_one}}',
+    pagesOf: '{{design.pages_of}}',
     keysTitle: '{{design.keys_title}}', keysDesign: '{{design.keys_design}}',
     keysView: '{{design.keys_view}}', keysNext: '{{design.keys_next}}',
     keysRound: '{{design.keys_round}}', keysNotes: '{{design.keys_notes}}',
@@ -100,6 +105,11 @@ returns — the single-design page is untouched.
     'data-attachable', 'autofocus', 'tabindex', 'title', 'for', 'aria-controls', 'aria-describedby', 'aria-labelledby'];
 
   const body = document.body;
+  // The page builds itself up in stages on load (CSS § Intro): content,
+  // header, quick nav, then the FABs. The class goes again afterwards, so
+  // a later tab switch or display toggle never replays it.
+  body.classList.add('dz-intro');
+  setTimeout(() => body.classList.remove('dz-intro'), 2200);
   const header = document.getElementById('design-header');
   const quick = document.getElementById('design-quick');
   const hint = document.getElementById('upin-hint');
@@ -396,7 +406,6 @@ returns — the single-design page is untouched.
     document.querySelectorAll('#screen-nav .screen-nav-design-heading').forEach(h => setDot(h, u.design(h.dataset.designId)));
     document.querySelectorAll('#screen-nav .screen-nav-item').forEach(b =>
       setDot(b, u.screens(b.dataset.designId).includes(b.dataset.screenId)));
-    if (quick) quick.querySelectorAll('.design-quick-seg').forEach(seg => setDot(seg, u.design(seg.dataset.designId)));
     document.querySelectorAll('.design-ov-card').forEach(card => {
       const id = card.dataset.designId;
       card.querySelectorAll('.design-ov-chip').forEach(chip => setDot(chip, u.screens(id).includes(chip.dataset.screenId)));
@@ -630,38 +639,239 @@ returns — the single-design page is untouched.
     window.showDesign(id);
   }
 
+  // ── Questions (views) ──────────────────────────────────────────────────
+  // A question view counts as answered once the user left anything in it: a
+  // note (inline or in the dock) or a bi-state they actually clicked
+  // (`data-touched`, set by the change listener of § Submit). The default
+  // "include" alone is not an answer.
+  function viewAnswered(v) {
+    const filled = ta => !!(ta && (ta.value || '').trim());
+    if ([...v.querySelectorAll('textarea')].some(filled)) return true;
+    if (v.querySelector('input[data-touched]')) return true;
+    return filled(document.querySelector(`#feedback-dock [data-view-comment="${CSS.escape(v.dataset.view)}"]`));
+  }
+  function questionsOf(it) {
+    return viewsOf(it).map(v => ({ v, id: v.dataset.view, title: viewTitle(v), done: viewAnswered(v) }));
+  }
+  window.designOpenQuestions = it => questionsOf(it || visibleIteration()).filter(q => !q.done);
+  function goQuestion(id) {
+    if (typeof closePanel === 'function') closePanel();
+    window.showView(id);
+  }
+  function progressBar(done, total) {
+    const bar = el('div', 'design-quick-qbar');
+    const fill = el('i');
+    fill.style.width = (total ? Math.round((done / total) * 100) : 100) + '%';
+    bar.appendChild(fill);
+    return bar;
+  }
+  function questionItem(q, onPick) {
+    const item = el('button', 'design-quick-qitem');
+    item.type = 'button';
+    item.dataset.done = String(q.done);
+    item.append(el('span', 'design-quick-qstate', q.done ? '✓' : ''), el('span', 'design-quick-qtitle', q.title));
+    item.addEventListener('click', onPick);
+    return item;
+  }
+
   // ── Quick nav ──────────────────────────────────────────────────────────
-  function buildQuick(it, metas) {
+  // One row: the designs, then the questions. On a design page the active
+  // design fans its pages out inside its own segment and every other design
+  // shrinks to its icon (name in the tooltip); on the overview and on a
+  // question view every design keeps its name and no pages show. When the
+  // row does not fit between the header and the ☰ FAB, the pages fold into
+  // one "2 / 7 ▾" chip that opens downwards. The questions segment counts the
+  // unanswered views and carries their list as a tab hanging off it.
+  let quickCompact = false;
+  function quickSeg(m, named, u, fav) {
+    const seg = el('button', 'design-quick-seg');
+    seg.type = 'button';
+    seg.dataset.designId = m.id;
+    seg.style.setProperty('--dz-color', m.color);
+    if (!named) seg.dataset.iconOnly = 'true';
+    seg.appendChild(iconEl(m.icon, { color: m.color }));
+    seg.appendChild(el('span', 'design-quick-name', m.label));
+    if (fav === m.id) seg.appendChild(el('span', 'design-quick-star', '★'));
+    setTip(seg, m.label, m.n <= 9 ? String(m.n) : '');
+    seg.addEventListener('click', () => { if (typeof closePanel === 'function') closePanel(); showDesignAligned(m.id); });
+    if (u) setDot(seg, u.design(m.id));
+    return seg;
+  }
+  function quickGroup(d, m, u, fav) {
+    const g = el('span', 'design-quick-group');
+    g.style.setProperty('--dz-color', m.color);
+    const head = quickSeg(m, true, null, fav);
+    head.dataset.active = 'true';
+    g.appendChild(head);
+    const screens = [...d.querySelectorAll('section[data-screen][id]')];
+    if (screens.length < 2) return g;
+    const cur = activeScreenOf(d);
+    const idx = screens.indexOf(cur);
+    const fresh = u.screens(m.id);
+    g.appendChild(el('span', 'design-quick-sep'));
+    const pageBtn = (sec, i, cls) => {
+      const b = el('button', cls);
+      b.type = 'button';
+      b.dataset.screenId = sec.id;
+      b.dataset.active = String(sec === cur);
+      b.append(el('span', 'design-quick-num', String(i + 1)), el('span', 'design-quick-name', sec.dataset.navLabel || sec.id));
+      setDot(b, fresh.includes(sec.id));
+      setTip(b, sec.dataset.navLabel || sec.id, sec !== cur && i === (idx + 1) % screens.length ? 'Tab' : '');
+      b.addEventListener('click', () => {
+        if (typeof closePanel === 'function') closePanel();
+        window.showScreen(sec.id);
+      });
+      return b;
+    };
+    if (!quickCompact) {
+      screens.forEach((sec, i) => g.appendChild(pageBtn(sec, i, 'design-quick-page')));
+      return g;
+    }
+    const wrap = el('span', 'design-quick-morewrap');
+    const chip = el('button', 'design-quick-more');
+    chip.type = 'button';
+    chip.setAttribute('aria-haspopup', 'true');
+    chip.setAttribute('aria-expanded', 'false');
+    chip.append(el('span', '', (idx + 1) + ' / ' + screens.length), el('span', 'design-quick-caret', '▾'));
+    setDot(chip, fresh.length > 0);
+    setTip(chip, L.pagesOf.replace('{label}', m.label));
+    chip.addEventListener('click', () => {
+      wrap.dataset.open = wrap.dataset.open === 'true' ? 'false' : 'true';
+      chip.setAttribute('aria-expanded', wrap.dataset.open);
+    });
+    const list = el('div', 'design-quick-vlist');
+    list.setAttribute('role', 'menu');
+    screens.forEach((sec, i) => {
+      const b = pageBtn(sec, i, 'design-quick-vitem');
+      b.setAttribute('role', 'menuitem');
+      list.appendChild(b);
+    });
+    wrap.append(chip, list);
+    g.appendChild(wrap);
+    return g;
+  }
+  function quickQuestions(it, qs, md) {
+    const open = qs.filter(q => !q.done);
+    const wrap = el('span', 'design-quick-qwrap');
+    const btn = el('button', 'design-quick-q');
+    btn.type = 'button';
+    btn.dataset.state = open.length ? 'open' : 'done';
+    const viewOn = md === 'view' ? it.querySelector(':scope > section[data-view][data-view-active="true"]') : null;
+    btn.dataset.active = String(!!viewOn);
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.appendChild(el('span', 'design-quick-qmark', '?'));
+    if (md !== 'design') btn.appendChild(el('span', 'design-quick-name', L.qLabel));
+    btn.appendChild(open.length ? el('span', 'design-quick-badge', String(open.length)) : el('span', 'design-quick-qok', '✓'));
+    setTip(btn, open.length ? (open.length === 1 ? L.qOpen1 : L.qOpen.replace('{n}', String(open.length))) : L.qAllDone);
+    btn.addEventListener('click', () => {
+      wrap.dataset.open = wrap.dataset.open === 'true' ? 'false' : 'true';
+      btn.setAttribute('aria-expanded', wrap.dataset.open);
+    });
+    const pop = el('div', 'design-quick-qpop');
+    pop.setAttribute('role', 'menu');
+    const head = el('div', 'design-quick-qhead');
+    head.append(el('strong', '', L.qLabel),
+      el('span', '', L.qProgress.replace('{done}', String(qs.length - open.length)).replace('{n}', String(qs.length))));
+    pop.append(head, progressBar(qs.length - open.length, qs.length));
+    qs.forEach((q, i) => {
+      const item = questionItem(q, () => { wrap.dataset.open = 'false'; goQuestion(q.id); });
+      item.setAttribute('role', 'menuitem');
+      item.dataset.active = String(viewOn === q.v);
+      setTip(item, q.v.dataset.navLabel || q.id, i < 9 ? '⇧+' + (i + 1) : '');
+      pop.appendChild(item);
+    });
+    wrap.append(btn, pop);
+    return wrap;
+  }
+  function renderQuick(it) {
     if (!quick) return;
     quick.innerHTML = '';
+    if (!it || !metas.length) return;
+    const md = mode();
+    const d = md === 'design' ? activeDesignOf(it) : null;
+    const u = unseenOf(it);
+    const fav = validFavorite(it, readState(it));
     const row = el('div', 'design-quick-row design-quick-designs');
     metas.forEach(m => {
-      const seg = el('button', 'design-quick-seg');
-      seg.type = 'button';
-      seg.dataset.designId = m.id;
-      seg.style.setProperty('--dz-color', m.color);
-      seg.appendChild(iconEl(m.icon, { color: m.color }));
-      seg.appendChild(el('span', 'design-quick-name', m.label));
-      const star = el('span', 'design-quick-star', '★');
-      star.hidden = true;
-      seg.appendChild(star);
-      setTip(seg, m.label, String(m.n));
-      seg.addEventListener('click', () => { if (typeof closePanel === 'function') closePanel(); showDesignAligned(m.id); });
-      row.appendChild(seg);
+      if (d && d.dataset.design === m.id) row.appendChild(quickGroup(d, m, u, fav));
+      else row.appendChild(quickSeg(m, md !== 'design', u, fav));
     });
+    const qs = questionsOf(it);
+    if (qs.length) row.appendChild(quickQuestions(it, qs, md));
     quick.appendChild(row);
-    const vrow = el('div', 'design-quick-row design-quick-views');
-    viewsOf(it).forEach((v, i) => {
-      const seg = el('button', 'design-quick-view');
-      seg.type = 'button';
-      seg.dataset.viewId = v.dataset.view;
-      seg.appendChild(iconEl('question', { size: 's', kind: 'plain' }));
-      seg.appendChild(el('span', 'design-quick-name', viewTitle(v)));
-      setTip(seg, v.dataset.navLabel || v.dataset.view, i < 9 ? '⇧+' + (i + 1) : '');
-      seg.addEventListener('click', () => { if (typeof closePanel === 'function') closePanel(); window.showView(v.dataset.view); });
-      vrow.appendChild(seg);
+    quick.dataset.compact = String(quickCompact);
+    // Measured right away (the read forces layout): a requestAnimationFrame
+    // never fires in a background tab, which left the row overflowing.
+    if (!quickCompact && d && row.scrollWidth > quick.getBoundingClientRect().width + 1) {
+      quickCompact = true;
+      renderQuick(it);
+    }
+  }
+  function buildQuick(it) { quickCompact = false; renderQuick(it); }
+  window.addEventListener('resize', () => {
+    if (!on()) return;
+    quickCompact = false;
+    renderQuick(visibleIteration());
+  });
+  document.addEventListener('pointerdown', e => {
+    document.querySelectorAll('.design-quick-qwrap[data-open="true"], .design-quick-morewrap[data-open="true"]').forEach(w => {
+      if (!w.contains(e.target)) w.dataset.open = 'false';
     });
-    quick.appendChild(vrow);
+  });
+  // Never forget the questions: every arrival on the overview (the boot
+  // included) pulses the questions segment while any of them is open.
+  document.addEventListener('overview:changed', () => {
+    if (mode() !== 'overview') return;
+    const q = quick && quick.querySelector('.design-quick-q[data-state="open"]');
+    if (!q) return;
+    q.dataset.pulse = 'false';
+    void q.offsetWidth;
+    q.dataset.pulse = 'true';
+    q.addEventListener('animationend', () => { q.dataset.pulse = 'false'; }, { once: true });
+  });
+
+  // ── Questions card (overview) + submit hint ────────────────────────────
+  function renderQuestionsCard(it) {
+    const card = overviewOf(it)?.querySelector('.design-ov-qcard');
+    if (!card) return;
+    const qs = questionsOf(it);
+    const open = qs.filter(q => !q.done);
+    card.innerHTML = '';
+    card.dataset.state = open.length ? 'open' : 'done';
+    const head = el('div', 'design-ov-qhead');
+    head.append(el('span', 'design-ov-qmark', '?'), el('strong', '', L.qLabel));
+    card.append(head, el('p', 'design-ov-qprogress', open.length
+      ? L.qProgress.replace('{done}', String(qs.length - open.length)).replace('{n}', String(qs.length))
+      : L.qAllDone), progressBar(qs.length - open.length, qs.length));
+    qs.forEach(q => card.appendChild(questionItem(q, () => goQuestion(q.id))));
+  }
+  function renderSubmitHint(it) {
+    const ready = document.getElementById('panel-ready');
+    const split = ready && ready.querySelector('.submit-split');
+    if (!split) return;
+    let hintEl = ready.querySelector('.submit-open-questions');
+    const open = on() && isLive(it) && !body.classList.contains('viewing-frozen')
+      ? questionsOf(it).filter(q => !q.done) : [];
+    if (!open.length) { if (hintEl) hintEl.hidden = true; return; }
+    if (!hintEl) {
+      hintEl = el('p', 'submit-open-questions');
+      ready.insertBefore(hintEl, split);
+    }
+    hintEl.hidden = false;
+    hintEl.textContent = '';
+    hintEl.appendChild(el('span', '', '⚠ ' + (open.length === 1 ? L.qSubmit1 : L.qSubmit.replace('{n}', String(open.length))) + ' '));
+    const jump = el('button', 'link-btn', L.qJump);
+    jump.type = 'button';
+    jump.addEventListener('click', () => goQuestion(open[0].id));
+    hintEl.appendChild(jump);
+  }
+  function refreshQuestions() {
+    if (!on()) return;
+    const it = visibleIteration();
+    renderQuick(it);
+    renderQuestionsCard(it);
+    renderSubmitHint(it);
   }
 
   // ── ☰ panel: icon prefix + hover keycap per design row ─────────────────
@@ -746,28 +956,36 @@ returns — the single-design page is untouched.
     const old = overviewOf(it);
     if (old) old.remove();
     const all = designsOf(it);
-    if (all.length < 2) {
+    if (!all.length) {
       metas = [];
       if (quick) quick.innerHTML = '';
       placeEye(false);
       disarm();
-      noteVisit(it);
-      paintChanges(it);
       return;
     }
+    // Header and quick nav on every design round; the overview grid (and
+    // with it favourite and Esc-to-overview) only where there is something
+    // to compare.
     metas = all.map(metaOf);
-    ensureStore(it);
-    const ov = el('div', 'design-ov');
-    ov.dataset.designOverview = '';
-    ov.hidden = true;
-    ov.setAttribute('role', 'region');
-    ov.setAttribute('aria-label', L.overview);
-    const grid = el('div', 'design-ov-grid');
-    all.forEach((d, i) => grid.appendChild(buildCard(it, d, metas[i])));
-    ov.appendChild(grid);
-    it.insertBefore(ov, all[0]);
+    if (all.length >= 2) {
+      ensureStore(it);
+      const ov = el('div', 'design-ov');
+      ov.dataset.designOverview = '';
+      ov.hidden = true;
+      ov.setAttribute('role', 'region');
+      ov.setAttribute('aria-label', L.overview);
+      const grid = el('div', 'design-ov-grid');
+      all.forEach((d, i) => grid.appendChild(buildCard(it, d, metas[i])));
+      if (viewsOf(it).length) {
+        const qcard = el('article', 'design-ov-qcard');
+        qcard.setAttribute('aria-label', L.qLabel);
+        grid.appendChild(qcard);
+      }
+      ov.appendChild(grid);
+      it.insertBefore(ov, all[0]);
+    }
     buildHeader();
-    buildQuick(it, metas);
+    buildQuick(it);
     buildSheet();
     decorateNav(metas);
     updateChrome();
@@ -811,11 +1029,12 @@ returns — the single-design page is untouched.
     const it = visibleIteration();
     noteVisit(it);
     paintChanges(it);
-    const active = on() && !!overviewOf(it);
+    const active = on() && metas.length > 0;
+    const hasOverview = !!overviewOf(it);
     placeEye(active);
     const navOv = document.querySelector('#screen-nav .screen-nav-overview-group');
-    if (navOv) navOv.hidden = !active;
-    if (!active) { if (hint) hint.hidden = true; return; }
+    if (navOv) navOv.hidden = !(active && hasOverview);
+    if (!active) { if (hint) hint.hidden = true; renderSubmitHint(it); return; }
     const st = readState(it);
     const fav = validFavorite(it, st);
     const live = isLive(it) && !body.classList.contains('viewing-frozen');
@@ -825,8 +1044,8 @@ returns — the single-design page is untouched.
     const m = d && metas.find(x => x.id === d.dataset.design);
     const favMeta = fav && metas.find(x => x.id === fav);
     if (header && H.main) {
-      H.back.hidden = md === 'overview';
-      H.sep.hidden = md === 'overview';
+      H.back.hidden = md === 'overview' || !hasOverview;
+      H.sep.hidden = H.back.hidden;
       H.iconSlot.innerHTML = '';
       H.tabs.innerHTML = '';
       header.style.removeProperty('--dz-color');
@@ -857,8 +1076,9 @@ returns — the single-design page is untouched.
         H.star.setAttribute('aria-pressed', String(isFav));
         H.star.setAttribute('aria-label', isFav ? L.favUnset : L.favSet);
         setTip(H.star, isFav ? L.favUnset : L.favSet, 'F');
+        if (!hasOverview) H.star.textContent = '';
         motto = m.motto;
-        showFav = true;
+        showFav = hasOverview;
         const screens = [...d.querySelectorAll('section[data-screen][id]')];
         const cur = activeScreenOf(d);
         if (screens.length > 1) {
@@ -894,17 +1114,9 @@ returns — the single-design page is untouched.
       H.actions.hidden = H.tabs.hidden && H.fav.hidden;
       H.more.hidden = H.actions.hidden && H.note.hidden;
     }
-    if (quick) {
-      quick.querySelectorAll('.design-quick-seg').forEach(seg => {
-        seg.dataset.active = String(md === 'design' && !!d && seg.dataset.designId === d.dataset.design);
-        const star = seg.querySelector('.design-quick-star');
-        if (star) star.hidden = seg.dataset.designId !== fav;
-      });
-      const v = md === 'view' && it.querySelector(':scope > section[data-view][data-view-active="true"]');
-      quick.querySelectorAll('.design-quick-view').forEach(seg => {
-        seg.dataset.active = String(!!v && seg.dataset.viewId === v.dataset.view);
-      });
-    }
+    renderQuick(it);
+    renderQuestionsCard(it);
+    renderSubmitHint(it);
     const grid = overviewOf(it)?.querySelector('.design-ov-grid');
     if (grid) {
       grid.dataset.hasFavorite = String(!!fav);
@@ -928,6 +1140,19 @@ returns — the single-design page is untouched.
   window.updateDesignChrome = updateChrome;
   function refresh() { if (on()) updateChrome(); }
   window.refreshDesignOverview = refresh;
+  // Answering a question updates badge, list, card and submit hint — but
+  // only when an answered state actually flipped, so typing never rebuilds
+  // a quick nav the pointer is resting on.
+  let answeredKey = '';
+  function onAnswerChange() {
+    if (!on()) return;
+    const key = questionsOf(visibleIteration()).map(q => q.done ? 1 : 0).join('');
+    if (key === answeredKey) return;
+    answeredKey = key;
+    refreshQuestions();
+  }
+  document.addEventListener('input', onAnswerChange);
+  document.addEventListener('change', () => setTimeout(onAnswerChange, 0));
   document.addEventListener('input', e => {
     if (!on() || (e.target && e.target.dataset && e.target.dataset.engineStore)) return;
     const it = visibleIteration();
@@ -1489,45 +1714,199 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-header-pin svg { width: 13px; height: 13px; display: block; }
 .design-header-pin[aria-pressed="true"] { border-color: #f78166; background: #f78166; color: #fff; }
 
-/* ── Quick nav — top centre ── */
+/* ── Quick nav — top centre, one row ── */
 .design-quick {
   position: fixed; top: 0.75rem; left: 50%; transform: translateX(-50%); z-index: 95;
-  flex-direction: column; align-items: center; gap: 4px;
-  max-width: 34vw; opacity: 0.6; transition: opacity 0.16s ease;
+  flex-direction: column; align-items: center;
+  /* The band between the header (left) and the ☰ FAB (right). */
+  max-width: calc(100vw - 2 * (1rem + min(33vw - 1.5rem, 280px) + 0.75rem));
+  opacity: 0.8; transition: opacity 0.16s ease;
 }
-.design-quick:hover, .design-quick:focus-within { opacity: 1; z-index: 98; max-width: calc(100vw - 2 * (1rem + min(33vw - 1.5rem, 280px) + 0.75rem)); }
-.design-quick-row { display: flex; gap: 3px; max-width: 100%; }
+.design-quick:hover, .design-quick:focus-within { opacity: 1; z-index: 98; }
+.design-quick-row { display: flex; align-items: center; gap: 3px; max-width: 100%; }
 .design-quick-designs {
   padding: 3px; border-radius: 999px;
-  background: color-mix(in srgb, var(--panel-bg, #161b22) 70%, transparent);
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 80%, transparent);
   border: 1px solid var(--border-color, #30363d); backdrop-filter: blur(6px);
 }
-.design-quick-seg, .design-quick-view {
-  display: inline-flex; align-items: center; gap: 0.4rem; min-width: 0;
+.design-quick-seg {
+  position: relative; display: inline-flex; align-items: center; gap: 0.4rem; flex: none;
   border: 0; background: transparent; cursor: pointer; white-space: nowrap;
-  border-radius: 999px; font: inherit; color: var(--text-secondary, #8b949e);
+  border-radius: 999px; font: inherit; font-size: 0.8rem; color: var(--text-secondary, #8b949e);
+  padding: 0.2rem 0.65rem 0.2rem 0.25rem; transition: background 0.15s, color 0.15s;
 }
-.design-quick-seg { padding: 0.2rem 0.65rem 0.2rem 0.25rem; font-size: 0.8rem; }
-.design-quick-seg .design-quick-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.design-quick-seg:hover, .design-quick-view:hover { color: var(--text, #e6edf3); background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
-.design-quick-seg[data-active="true"] {
-  color: var(--text, #e6edf3); font-weight: 700;
-  background: color-mix(in srgb, var(--border-color, #30363d) 80%, transparent);
-  box-shadow: inset 0 -2px 0 var(--dz-color, var(--accent-color));
-}
+.design-quick-seg:hover { color: var(--text, #e6edf3); background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.design-quick-seg[data-icon-only="true"] { padding: 0.2rem; }
+.design-quick-seg[data-icon-only="true"] .design-quick-name { display: none; }
+.design-quick-seg[data-icon-only="true"] .dz-new-dot { position: absolute; top: 1px; right: 1px; margin: 0; }
 .design-quick-star { color: var(--warning-color, #d29922); }
-.design-quick-view { padding: 0.1rem 0.55rem; font-size: 0.75rem; max-width: 100%; overflow: hidden; }
-.design-quick-view .design-quick-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* Questions wrap to further rows instead of squeezing into one: a squeezed
-   segment never clipped its label, so neighbouring titles ran over each other. */
-.design-quick-views { flex-wrap: wrap; justify-content: center; }
-.design-quick-view[data-active="true"] { color: var(--text, #e6edf3); background: var(--border-color, #30363d); }
-.design-quick-views:empty { display: none; }
+/* The active design: its pages fan out of its own segment. */
+.design-quick-group {
+  display: inline-flex; align-items: center; gap: 2px; flex: none; padding-right: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dz-color, var(--accent-color)) 16%, var(--panel-bg, #161b22));
+  box-shadow: inset 0 -2px 0 var(--dz-color, var(--accent-color)),
+              inset 0 0 0 1px color-mix(in srgb, var(--dz-color, var(--accent-color)) 40%, transparent);
+  /* No fill: a clip-path left in place would clip the "2 / 7" list. */
+  animation: dz-quick-fan 0.32s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.design-quick-group > .design-quick-seg { color: var(--text, #e6edf3); font-weight: 700; }
+.design-quick-group > .design-quick-seg:hover { background: transparent; }
+.design-quick-sep { width: 1px; height: 16px; margin: 0 2px; flex: none; background: color-mix(in srgb, var(--dz-color, var(--border-color)) 45%, var(--border-color, #30363d)); }
+.design-quick-page, .design-quick-vitem {
+  display: inline-flex; align-items: center; gap: 0.3rem; flex: none;
+  border: 0; background: transparent; cursor: pointer; white-space: nowrap;
+  font: inherit; font-size: 0.76rem; color: var(--text-secondary, #8b949e);
+  padding: 0.18rem 0.55rem; border-radius: 999px; transition: background 0.15s, color 0.15s;
+}
+.design-quick-page:hover, .design-quick-vitem:hover { color: var(--text, #e6edf3); background: color-mix(in srgb, var(--dz-color, var(--accent-color)) 24%, transparent); }
+.design-quick-page[data-active="true"] { background: var(--dz-color, var(--accent-color)); color: var(--panel-bg, #0d1117); font-weight: 700; }
+.design-quick-num { font-size: 0.68rem; opacity: 0.7; font-variant-numeric: tabular-nums; }
+@keyframes dz-quick-fan {
+  from { clip-path: inset(0 100% 0 0 round 999px); }
+  to { clip-path: inset(0 0 0 0 round 999px); }
+}
+/* Not enough room: the pages fold into one "2 / 7 ▾" chip. */
+.design-quick-morewrap { position: relative; display: inline-flex; flex: none; }
+.design-quick-more {
+  display: inline-flex; align-items: center; gap: 0.3rem; border: 0; cursor: pointer;
+  padding: 0.18rem 0.6rem; border-radius: 999px; font: inherit; font-size: 0.76rem; font-weight: 700;
+  background: var(--dz-color, var(--accent-color)); color: var(--panel-bg, #0d1117);
+}
+.design-quick-morewrap:hover .design-quick-more,
+.design-quick-morewrap[data-open="true"] .design-quick-more { border-radius: 10px 10px 0 0; }
+.design-quick-vlist {
+  display: none; position: absolute; top: 100%; left: 0; z-index: 3; min-width: 180px;
+  flex-direction: column; gap: 2px; padding: 6px; border-radius: 0 10px 10px 10px;
+  background: var(--panel-bg, #161b22); border: 1px solid var(--dz-color, var(--accent-color));
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
+}
+.design-quick-morewrap:hover .design-quick-vlist,
+.design-quick-morewrap[data-open="true"] .design-quick-vlist { display: flex; }
+.design-quick-vitem { border-radius: 7px; }
+.design-quick-vitem[data-active="true"] { color: var(--text, #e6edf3); font-weight: 700; background: color-mix(in srgb, var(--dz-color, var(--accent-color)) 25%, transparent); }
+/* Questions: the last segment; their list hangs off it as one tab. */
+.design-quick-qwrap { --q: var(--warning-color, #d29922); position: relative; display: inline-flex; flex: none; margin-left: 2px; }
+.design-quick-qwrap:has(.design-quick-q[data-state="done"]) { --q: var(--success-color, #3fb950); }
+.design-quick-q {
+  position: relative; display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer;
+  padding: 0.15rem 0.5rem; border-radius: 999px; border: 1px solid var(--q);
+  background: color-mix(in srgb, var(--q) 14%, transparent); color: var(--q);
+  font: inherit; font-size: 0.78rem; font-weight: 700; white-space: nowrap;
+  transition: border-radius 0.15s ease, background 0.15s ease;
+}
+.design-quick-q[data-active="true"] { background: var(--q); color: var(--panel-bg, #0d1117); }
+.design-quick-qmark { font-weight: 900; }
+.design-quick-badge {
+  min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px;
+  display: inline-grid; place-items: center;
+  background: var(--q); color: var(--panel-bg, #0d1117); font-size: 0.66rem; font-weight: 800;
+}
+.design-quick-q[data-active="true"] .design-quick-badge { background: var(--panel-bg, #0d1117); color: var(--q); }
+.design-quick-qok { font-weight: 900; }
+.design-quick-qwrap:hover .design-quick-q,
+.design-quick-qwrap[data-open="true"] .design-quick-q {
+  z-index: 4; border-radius: 12px 12px 0 0; border-bottom-color: transparent;
+  background: var(--panel-bg, #161b22); color: var(--q);
+}
+/* Covers the list's top border under the button: button and list read as
+   one surface, the tab growing out of the segment. */
+.design-quick-qwrap::after {
+  content: ""; display: none; position: absolute; left: 1px; right: 1px; bottom: -2px; height: 3px;
+  background: var(--panel-bg, #161b22); z-index: 5;
+}
+.design-quick-qwrap:hover::after, .design-quick-qwrap[data-open="true"]::after { display: block; }
+.design-quick-qpop {
+  display: none; position: absolute; top: calc(100% - 1px); right: 0; z-index: 3;
+  width: max-content; min-width: 260px; max-width: min(360px, 80vw);
+  flex-direction: column; gap: 2px; padding: 10px 8px 8px;
+  border: 1px solid var(--q); border-radius: 12px 0 12px 12px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--q) 9%, var(--panel-bg, #161b22)), var(--panel-bg, #161b22) 60px);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5), 0 0 0 4px color-mix(in srgb, var(--q) 10%, transparent);
+  transform-origin: top right;
+}
+.design-quick-qwrap:hover .design-quick-qpop,
+.design-quick-qwrap[data-open="true"] .design-quick-qpop { display: flex; animation: dz-qpop-in 0.18s ease-out; }
+@keyframes dz-qpop-in { from { opacity: 0; transform: scaleY(0.85); } }
+.design-quick-qhead {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 0 6px 6px;
+  color: var(--q); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+}
+.design-quick-qhead span { color: var(--text-secondary, #8b949e); text-transform: none; letter-spacing: 0; }
+.design-quick-qbar { height: 4px; margin: 0 6px 6px; border-radius: 2px; overflow: hidden; background: var(--border-color, #30363d); }
+.design-quick-qbar i { display: block; height: 100%; background: var(--success-color, #3fb950); transition: width 0.3s ease; }
+.design-quick-qitem {
+  display: flex; align-items: center; gap: 0.55rem; width: 100%; box-sizing: border-box;
+  padding: 0.42rem 0.5rem; border: 0; border-radius: 8px; background: transparent; cursor: pointer;
+  color: var(--text, #e6edf3); font: inherit; font-size: 0.82rem; text-align: left;
+}
+.design-quick-qitem:hover { background: color-mix(in srgb, var(--q, #d29922) 14%, transparent); }
+.design-quick-qitem[data-active="true"] { background: color-mix(in srgb, var(--q, #d29922) 22%, transparent); font-weight: 700; }
+.design-quick-qitem[data-done="true"] { color: var(--text-secondary, #8b949e); }
+.design-quick-qstate {
+  flex: none; width: 14px; height: 14px; box-sizing: border-box; border-radius: 50%;
+  border: 2px solid var(--q, #d29922); display: grid; place-items: center;
+  font-size: 9px; font-weight: 900; color: var(--panel-bg, #0d1117);
+}
+.design-quick-qitem[data-done="true"] .design-quick-qstate { background: var(--success-color, #3fb950); border-color: var(--success-color, #3fb950); }
+.design-quick-qtitle { min-width: 0; overflow-wrap: anywhere; }
+/* Every arrival on the overview pulses the questions while any is open. */
+.design-quick-q[data-pulse="true"] { animation: dz-q-pulse 1.1s ease-out 2; }
+@keyframes dz-q-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--q) 65%, transparent); }
+  100% { box-shadow: 0 0 0 14px transparent; }
+}
 body.panel-open .design-quick, body.panel-open .design-header { opacity: 0; pointer-events: none; }
 @media (max-width: 900px) {
   /* Icons only — the tooltip still names each design. */
   .design-quick-seg .design-quick-name { display: none; }
   .design-quick-seg { padding: 0.2rem; }
+}
+
+/* ── Questions card (overview grid) ── */
+.design-ov-qcard {
+  --q: var(--warning-color, #d29922);
+  display: flex; flex-direction: column; gap: 0.5rem; align-self: start;
+  padding: 1.1rem; border-radius: 16px;
+  border: 2px solid color-mix(in srgb, var(--q) 55%, var(--border-color, #30363d));
+  background: color-mix(in srgb, var(--q) 7%, var(--panel-bg, #161b22));
+}
+.design-ov-qcard[data-state="done"] { --q: var(--success-color, #3fb950); }
+.design-ov-qhead { display: flex; align-items: center; gap: 0.5rem; color: var(--q); font-size: 1.05rem; }
+.design-ov-qmark {
+  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--q); color: var(--panel-bg, #0d1117); font-weight: 900;
+}
+.design-ov-qprogress { margin: 0; font-size: 0.85rem; color: var(--text-secondary, #8b949e); }
+.design-ov-qcard .design-quick-qbar { margin: 0 0 0.25rem; }
+
+/* ── Submit hint: open questions, never a blocker ── */
+.submit-open-questions {
+  margin: 0 0 0.4rem; padding: 0.35rem 0.6rem; border-radius: 8px; font-size: 0.78rem; line-height: 1.35;
+  border: 1px solid var(--warning-color, #d29922); color: var(--warning-color, #d29922);
+  background: color-mix(in srgb, var(--warning-color, #d29922) 12%, transparent);
+}
+.submit-open-questions[hidden] { display: none; }
+.submit-open-questions .link-btn { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+
+/* ── Intro: the page builds itself up (wireDesignOverview adds .dz-intro
+   for ~2 s) — content, header, quick nav with a bounce, then the FABs.
+   From-only keyframes end on the element's own resting values. ── */
+@keyframes dz-intro-fade { from { opacity: 0; } }
+@keyframes dz-intro-slide { from { opacity: 0; transform: translateX(-28px); } }
+@keyframes dz-intro-quick {
+  0% { opacity: 0; transform: translate(-50%, -48px) scale(0.55); filter: blur(10px); }
+  55% { opacity: 1; transform: translate(-50%, 8px) scale(1.1); filter: blur(0); }
+  78% { transform: translate(-50%, -3px) scale(0.97); }
+}
+body.dz-intro .concept-content { animation: dz-intro-fade 0.45s ease both; }
+body.dz-intro #design-header { animation: dz-intro-slide 0.4s ease 0.3s both; }
+body.dz-intro #design-quick { animation: dz-intro-quick 0.75s cubic-bezier(0.2, 0.8, 0.2, 1) 0.6s both; }
+body.dz-intro .panel-fab, body.dz-intro .feedback-fab { animation: dz-intro-fade 0.5s ease 1.3s both; }
+@media (prefers-reduced-motion: reduce) {
+  body.dz-intro .concept-content, body.dz-intro #design-header, body.dz-intro #design-quick,
+  body.dz-intro .panel-fab, body.dz-intro .feedback-fab,
+  .design-quick-group, .design-quick-qpop, .design-quick-q[data-pulse="true"] { animation: none !important; }
 }
 
 /* ── ☰ panel: icon prefix + hover keycap on design rows ── */

@@ -171,10 +171,11 @@ design round has: the three row builders and the ordering of stash → rebuild
     // to hide the switcher + design-level feedback row, mirroring
     // body[data-single-screen] below.
     document.body.dataset.singleDesign = allDesigns.length <= 1 ? 'true' : 'false';
-    // Variant overview mode (§ Variant overview (≥2 designs)): the CSS gate
-    // for the header, the quick nav and the overview itself. A single-design
-    // round never sets it, so its chrome stays what it was.
-    document.body.dataset.overview = allDesigns.length >= 2 ? 'true' : 'false';
+    // Design chrome (§ Variant overview): the CSS gate for the header and
+    // the quick nav — on every design round, one design included, so the
+    // page looks the same whether or not there are variants to compare. The
+    // overview grid itself still needs ≥2 designs (buildDesignOverview()).
+    document.body.dataset.overview = allDesigns.length >= 1 ? 'true' : 'false';
     if (allDesigns.length < 2) document.body.dataset.overviewActive = 'false';
 
     // Design switcher (ghost bar) — one segment per design.

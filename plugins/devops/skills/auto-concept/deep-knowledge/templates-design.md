@@ -761,10 +761,23 @@ icon, or when the traits are not exactly three (`concept-gate.js`
   The motto is the name's tooltip. Semi-transparent at rest, opaque on
   hover; hover, keyboard focus or a tap grows it as ONE card over the
   content (fixed, so nothing below moves) with the page tabs and ☆ Favourite.
-- **Quick nav** (top centre, replaces `#design-switcher`) — one segment per
-  design with its icon (uniform accent tint on the design colour), `★` on the
-  favourite; a second, smaller row of `?` segments only when the round has
-  `section[data-view]`s. Semi-transparent until hovered.
+- **Quick nav** (top centre, replaces `#design-switcher`) — one row. On a
+  design page the active design fans its pages out inside its own segment
+  (fan-out animation) and every other design shrinks to its icon (name in
+  the tooltip); on the overview and on a question view every design keeps
+  its name. Too little room between header and ☰ FAB → the pages fold into
+  a "2 / 7 ▾" chip that opens downwards. `★` on the favourite. With
+  `section[data-view]`s, a trailing amber `?` segment counts the unanswered
+  questions (a note or a clicked bi-state answers one) and carries their
+  list as a tab hanging off it (ring = open, ✓ = answered, progress bar);
+  it pulses on every arrival on the overview. The overview grid gets a
+  questions card, and the panel's submit area a non-blocking "N Fragen noch
+  offen — zur ersten springen" line.
+- **Every design round, one design included,** gets the header and the quick
+  nav; only the overview grid, the favourite and `Esc`-to-overview need ≥2
+  designs. The page builds itself up on load: content, header, quick nav
+  (with a bounce), then the FABs (`body.dz-intro`, ~2 s, off under reduced
+  motion).
 - **Hotkeys** — `Esc` overview · `1`–`9` design N · `Shift`+`1`–`9` view N ·
   `Tab` next page of the current design (only while nothing is focused) ·
   `F` favourite · `Alt`+`1`–`9` iteration tab · `?` shortcut sheet ·
@@ -938,8 +951,8 @@ icon, or when the traits are not exactly three (`concept-gate.js`
            ★ · eye · pin icon (motto = the name's tooltip); hover / focus /
            tap grows it over the content (fixed, so nothing below shifts)
            with page tabs and ☆ favourite.
-         #design-quick — top-centre quick nav: one icon segment per design,
-           a second row of `?` segments only when the round has views.
+         #design-quick — top-centre quick nav: one row — designs (the active
+           one with its pages), then a `?` segment when the round has views.
          #upin-hint — bottom-centre hint while Ctrl is held (user pins).
          #design-keys — the `?` shortcut sheet. -->
     <div class="design-header" id="design-header" data-open="false"></div>

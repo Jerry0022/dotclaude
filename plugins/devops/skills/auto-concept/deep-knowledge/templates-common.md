@@ -212,6 +212,15 @@ must see their own language. The locale hint is authoritative.
 | `design.change_same`           | Unchanged                       | Unverändert |
 | `design.change_preview`        | Preview: {page}                 | Vorschau: {page} |
 | `design.change_dot`            | New since the last round        | Neu seit der letzten Runde |
+| `design.questions`             | Questions                       | Fragen |
+| `design.questions_open`        | {n} questions still open        | {n} Fragen noch offen |
+| `design.questions_progress`    | {done} of {n} answered          | {done} von {n} beantwortet |
+| `design.questions_all_done`    | All questions answered          | Alle Fragen beantwortet |
+| `design.questions_submit_hint` | {n} questions still open —      | {n} Fragen noch offen — |
+| `design.questions_jump`        | go to the first                 | zur ersten springen |
+| `design.questions_open_one`    | 1 question still open           | 1 Frage noch offen |
+| `design.questions_submit_hint_one` | 1 question still open —     | 1 Frage noch offen — |
+| `design.pages_of`              | Pages of {label}                | Seiten von {label} |
 | `design.keys_title`            | Keyboard shortcuts              | Tastenkürzel |
 | `design.keys_design`           | Design 1–9                      | Design 1–9 |
 | `design.keys_view`             | Question 1–9                    | Frage 1–9 |

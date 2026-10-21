@@ -83,15 +83,60 @@ function key(window, target, init) {
   return ev;
 }
 
+describe("variant overview — quick nav pages and open questions", () => {
+  const VIEWS =
+    '<section data-view="q1" data-view-kind="decision" data-nav-label="Zeitleiste im Tutorial?" hidden><textarea data-comment="q1-note"></textarea></section>' +
+    '<section data-view="q2" data-view-kind="decision" data-nav-label="Wie lang ist eine Phase?" hidden><textarea data-comment="q2-note"></textarea></section>';
+  const withViews = (designs) => page(designs).replace('<section data-design="d2"', VIEWS + '<section data-design="d2"');
+
+  test("the questions segment counts open views, the overview carries a questions card, the panel a submit hint", async () => {
+    const { window, document, errors } = await boot(withViews(2));
+    expect(errors).toEqual([]);
+    const badge = () => document.querySelector("#design-quick .design-quick-badge");
+    expect(badge().textContent).toBe("2");
+    expect(document.querySelector("[data-design-overview] .design-ov-qcard").querySelectorAll(".design-quick-qitem").length).toBe(2);
+    const hint = () => document.querySelector("#panel-ready .submit-open-questions");
+    expect(hint().hidden).toBe(false);
+    const answer = (id, text) => {
+      const ta = live(document).querySelector(`section[data-view="${id}"] textarea`);
+      ta.value = text;
+      ta.dispatchEvent(new window.Event("input", { bubbles: true }));
+    };
+    answer("q1", "ja");
+    expect(badge().textContent).toBe("1");
+    expect(hint().textContent).toContain("1");
+    answer("q2", "kurz");
+    expect(badge()).toBeNull();
+    expect(document.querySelector("#design-quick .design-quick-q").dataset.state).toBe("done");
+    expect(hint().hidden).toBe(true);
+  }, BOOT_TIMEOUT);
+
+  test("on a design page the active design fans out its pages, the others shrink to icons", async () => {
+    const { window, document, errors } = await boot(withViews(2));
+    expect(errors).toEqual([]);
+    const id = live(document).querySelector(":scope > section[data-design]").dataset.design;
+    window.showDesign(id);
+    const group = document.querySelector("#design-quick .design-quick-group");
+    expect(group).not.toBeNull();
+    const pages = live(document).querySelectorAll(`:scope > section[data-design="${id}"] section[data-screen][id]`).length;
+    expect(group.querySelectorAll(".design-quick-page, .design-quick-more").length).toBe(pages > 1 ? pages : 0);
+    const others = [...document.querySelectorAll("#design-quick .design-quick-designs > .design-quick-seg")];
+    expect(others.length).toBe(1);
+    expect(others.every((s) => s.dataset.iconOnly === "true")).toBe(true);
+  }, BOOT_TIMEOUT);
+});
+
 describe("variant overview — generated only for ≥2 designs", () => {
-  test("a single-design round renders as before: no overview, no header, the eye stays where the markup put it", async () => {
+  test("a single-design round keeps header and quick nav, but has no overview grid and no favourite", async () => {
     const { document, errors } = await boot(page(1, { attrs: false }));
     expect(errors).toEqual([]);
-    expect(document.body.dataset.overview).toBe("false");
+    expect(document.body.dataset.overview).toBe("true");
     expect(document.querySelector("[data-design-overview]")).toBeNull();
-    expect(document.getElementById("design-header").children.length).toBe(0);
-    expect(document.getElementById("design-quick").children.length).toBe(0);
-    expect(document.getElementById("anno-toggle").parentElement.classList.contains("design-header-eye")).toBe(false);
+    expect(document.getElementById("design-header").children.length).toBeGreaterThan(0);
+    expect(document.querySelector(".design-header-back").hidden).toBe(true);
+    expect(document.querySelector(".design-header-star").hidden).toBe(true);
+    expect(document.querySelectorAll("#design-quick .design-quick-group").length).toBe(1);
+    expect(document.getElementById("anno-toggle").parentElement.classList.contains("design-header-eye")).toBe(true);
     expect(document.body.dataset.overviewActive).not.toBe("true");
     const payload = document.defaultView.collectDecisions("iterate");
     expect(payload.favorite).toBeNull();
