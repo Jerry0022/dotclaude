@@ -47,6 +47,12 @@ work before they are a rule:
   **each**. Rules that land in the same target repo go into **one**
   `/auto-issue` call (it takes several issues); local writes are grouped per
   file. Never let one learning's branch decide the others'.
+- **One learning, two independent topics** (a symptom report naming two
+  defects that do not share a fix, e.g. "login window and console pop-ups"):
+  split it like several learnings — each topic gets its own rule and, in
+  branch B / D, its **own issue** (Split rule in
+  `{PLUGIN_ROOT}/skills/auto-issue/deep-knowledge/issue-rules.md`). Never
+  hand `/auto-issue` one issue that bundles them.
 
 Otherwise **mine the conversation before asking** — a bare invocation almost
 always follows a moment where Claude did something the user did not expect.
