@@ -145,7 +145,7 @@ line still names the merge target (`state.merged`); there is no separate
 
 When Step 4d raised the gate, pass `state.deployPending: true` and the `deployGate`
 array (§ deployGate example). This is stronger than a `userFinalTest` item: the decision heading itself flips to
-`👉 Not deployed ⚠️ — Gemergt, aber nicht live — Migration jetzt deployen?` and a
+`👉 ⚠️ Not deployed — Gemergt, aber nicht live — Migration jetzt deployen?` and a
 gate block names each undeployed artifact — so a merged-but-undeployed ship is never mistaken for done.
 
 ## Delivery rules

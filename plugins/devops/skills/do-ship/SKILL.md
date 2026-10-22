@@ -135,13 +135,13 @@ Check whether this session still has work in progress: background agents still r
 Mark the session as mid-ship, like `/auto-concept` and `/do-batch` do — the prefixes are `SESSION_PREFIX` in `mcp-server/lib/mode-state.js`. Hooks compute the exact title from the transcript tail (`hooks/lib/session-title.js`), so this step normally costs no API call of its own — no `get_session`:
 
 - **`/do-ship` typed by the user:** `prompt.flow.title-work` marks a ship prompt itself (same classifier as `prompt.ship.detect`) — it arrives here already marked.
-- **Skill loaded via the Skill tool** (an affirmation after a card, a queue in auto-cleanup or `/do-run backlog`): `post.flow.title-mode` answers the load with a `[post.flow.title-mode]` block carrying the exact `⏳ ┃ Shipping 🚀 {title}` — call `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and that title **in the same message as your next tool call** (parallel, e.g. with `ship_preflight`). No block → the title is already right: done.
-- **Fallback — only when the block says the title is unknown:** read `deep-knowledge/session-title.md` § Fallback and follow it (get the title, strip every devops prefix, set `⏳ ┃ Shipping 🚀 {stripped title}`).
+- **Skill loaded via the Skill tool** (an affirmation after a card, a queue in auto-cleanup or `/do-run backlog`): `post.flow.title-mode` answers the load with a `[post.flow.title-mode]` block carrying the exact `⏳ ┃ 🚀 Shipping {title}` — call `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and that title **in the same message as your next tool call** (parallel, e.g. with `ship_preflight`). No block → the title is already right: done.
+- **Fallback — only when the block says the title is unknown:** read `deep-knowledge/session-title.md` § Fallback and follow it (get the title, strip every devops prefix, set `⏳ ┃ 🚀 Shipping {stripped title}`).
 
 Desktop app only — deferred tools are loaded, not skipped; in a terminal, an unattended run or on any failure skip silently (`deep-knowledge/session-title.md` § Desktop only). The rename is a courtesy, never a gate.
 
 > **Sentinel hygiene (every exit path).** `ship_preflight` writes a ship-in-progress sentinel that makes the main-branch Edit guards (`pre.main.guard` / `pre.edit.branch`) stand down for the ship's duration. It is cleared by `ship_cleanup` on a *successful* ship — but a **ship-blocked / abort** return (any `render_completion_card` variant `ship-blocked` below) skips cleanup and would leave the sentinel stranded, silently disarming main-branch protection until it ages out. **Rule:** before rendering ANY `ship-blocked` card, first call `ship_cleanup({ branch, cwd, keep: true })` — keep-mode deletes no branch/worktree, it only clears the sentinel (main-branch protection resumes immediately) and the `.claude/.ship-lockout` marker (the next ship starts interactive).
-> The `ship-blocked` card's `[SESSION TITLE]` block then swaps the sidebar prefix to `👉 ┃ Blocked 🚧 ` (Step 6 → *Session title on exit*).
+> The `ship-blocked` card's `[SESSION TITLE]` block then swaps the sidebar prefix to `👉 ┃ 🚧 Blocked ` (Step 6 → *Session title on exit*).
 
 ## Step 0 — Load Extensions
 
@@ -414,15 +414,15 @@ Call `render_completion_card` MCP tool (dotclaude-completion server) with data f
 
 ### Session title on exit (carried by the card result)
 
-Pre-Step C put `⏳ ┃ Shipping 🚀 ` on the session title. The outcome prefix is **not** chosen here: `render_completion_card` returns a `[SESSION TITLE]` block next to the card markdown (stderr on the `--render-card` CLI path) that names the prefix for the variant rendered — execute it **before** outputting the card (the card stays the last output of the turn). What it resolves to:
+Pre-Step C put `⏳ ┃ 🚀 Shipping ` on the session title. The outcome prefix is **not** chosen here: `render_completion_card` returns a `[SESSION TITLE]` block next to the card markdown (stderr on the `--render-card` CLI path) that names the prefix for the variant rendered — execute it **before** outputting the card (the card stays the last output of the turn). What it resolves to:
 
 | Outcome | Title |
 |---------|-------|
-| `ship-successful` — final (`state.merged` = main, normal **or** keep-mode) or intermediate ship (feature branch) | `🟩 ┃ Alpha 🚀 {title}` — the finished form of `⏳ ┃ Shipping 🚀 `; the next card that ends a turn replaces the marker |
-| `ship-blocked` (any gate, build, checks, PR not merged) | `👉 ┃ Blocked 🚧 {title}` — same two icons as the card headline (title = CTA) |
+| `ship-successful` — final (`state.merged` = main, normal **or** keep-mode) or intermediate ship (feature branch) | `🟩 ┃ 🚀 Alpha {title}` — the finished form of `⏳ ┃ 🚀 Shipping `; the next card that ends a turn replaces the marker |
+| `ship-blocked` (any gate, build, checks, PR not merged) | `👉 ┃ 🚧 Blocked {title}` — same two icons as the card headline (title = CTA) |
 | `released` (Step 5d promoted, with or without a ship before it) | `🟩 🎊 Released <Beta\|Stable> – {title}` (promote only: `🟩 🎊 Promoted <Beta\|Stable> – `) |
 
-The block also strips a stale `⏳ ┃ Shipping 🚀 ` when the title carries one. A title with none of the devops prefixes is left untouched — the user renamed it meanwhile, and that name wins. Desktop app only (deferred is not unavailable — load both tools via `ToolSearch` first, `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`); skip silently elsewhere or on any failure.
+The block also strips a stale `⏳ ┃ 🚀 Shipping ` when the title carries one. A title with none of the devops prefixes is left untouched — the user renamed it meanwhile, and that name wins. Desktop app only (deferred is not unavailable — load both tools via `ToolSearch` first, `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`); skip silently elsewhere or on any failure.
 
 ### Session archive on exit (carried by the card result, #632)
 

@@ -5,24 +5,24 @@ const HAIR = String.fromCharCode(0x200A);
 const FE0F = String.fromCharCode(0xFE0F);
 
 describe("title-scheme — new grammar", () => {
-  test("prefix shape: status, bar, word, activity, one space — no fill", () => {
+  test("prefix shape: status, bar, activity, word, one space — no fill", () => {
     // The sidebar drops whitespace runs, so a hair-space fill never renders.
-    expect(S.prefixOf("aborted-ship")).toBe("🟥 ┃ Ship 🚀 ");
-    expect(S.prefixOf("interrupted")).toBe("👉 ┃ Interrupted ⚡ ");
+    expect(S.prefixOf("aborted-ship")).toBe("🟥 ┃ 🚀 Ship ");
+    expect(S.prefixOf("interrupted")).toBe("👉 ┃ ⚡ Interrupted ");
     expect(S.prefixOf("ready")).not.toContain(HAIR);
   });
 
   test("head and heading carry the same parts", () => {
-    expect(S.head("ready").text).toBe("👉 ┃ Ready 📦");
-    expect(S.headingOf("ready", "Shippen?")).toBe("👉 Ready 📦 — Shippen?");
-    expect(S.head("released-alpha").text).toBe("🟩 ┃ Alpha 🚀");
-    expect(S.head("released-alpha", { mandatory: true }).text).toBe("👉 ┃ Alpha 🚀");
-    expect(S.head("paused-restart").text).toBe("🟦 ┃ Restart 🔌");
-    expect(S.head("agents").text).toBe("⏳ ┃ Team 🤖");
+    expect(S.head("ready").text).toBe("👉 ┃ 📦 Ready");
+    expect(S.headingOf("ready", "Shippen?")).toBe("👉 📦 Ready — Shippen?");
+    expect(S.head("released-alpha").text).toBe("🟩 ┃ 🚀 Alpha");
+    expect(S.head("released-alpha", { mandatory: true }).text).toBe("👉 ┃ 🚀 Alpha");
+    expect(S.head("paused-restart").text).toBe("🟦 ┃ 🔌 Restart");
+    expect(S.head("agents").text).toBe("⏳ ┃ 🤖 Team");
   });
 
   test("the generic work prefix is Solo and classifies as work", () => {
-    expect(S.WORK_PREFIX).toBe("⏳ ┃ Solo 🤖 ");
+    expect(S.WORK_PREFIX).toBe("⏳ ┃ 🤖 Solo ");
     expect(S.classify(S.WORK_PREFIX + "Fix")).toBe("work");
     expect(S.stripPrefixes(S.WORK_PREFIX + "Fix")).toBe("Fix");
   });
@@ -43,16 +43,28 @@ describe("title-scheme — new grammar", () => {
     expect(S.stripPrefixes("🟩 📋 Analysis – ┃" + fill + "Solo 🤖 Fix")).toBe("Fix");
     expect(S.stripPrefixes("⏳ Fix  Login")).toBe("Fix  Login");
   });
+
+  test("the word-first order of v0.287–v0.291 is still recognised", () => {
+    expect(S.classify("⏳ ┃ Shipping 🚀 X")).toBe("shipping");
+    expect(S.classify("👉 ┃ Concept 🧭 X")).toBe("concept-waiting");
+    expect(S.classify("⏳ ┃ Solo 🤖 X")).toBe("work");
+    expect(S.stripPrefixes("🟩 ┃ Started 💡 Spiel")).toBe("Spiel");
+    expect(S.stripPrefixes("⏳ ┃ 🤖 Solo 👉 ┃ Ready 📦 Login")).toBe("Login");
+  });
+
+  test("Started carries the sparkles, not the light bulb", () => {
+    expect(S.prefixOf("started")).toBe("🟩 ┃ ✨ Started ");
+  });
 });
 
 describe("title-scheme — tolerant matching", () => {
   test("FE0F and any number of hair spaces still match a new prefix", () => {
-    const plain = "👉 ┃ Red tests ⚠️ Fix";
+    const plain = "👉 ┃ ⚠️ Red tests Fix";
     const variants = [
       plain,
-      "👉 ┃ Red tests ⚠ Fix",
-      "👉 ┃ " + HAIR.repeat(3) + "Red tests ⚠" + FE0F + " Fix",
-      "👉 ┃ " + HAIR.repeat(40) + "Red tests ⚠ Fix",
+      "👉 ┃ ⚠️ Red tests Fix",
+      "👉 ┃ " + HAIR.repeat(3) + "⚠️ Red tests" + FE0F + " Fix",
+      "👉 ┃ " + HAIR.repeat(40) + "⚠️ Red tests Fix",
     ];
     for (const v of variants) {
       expect(S.stripPrefixes(v), JSON.stringify(v)).toBe("Fix");
@@ -61,10 +73,10 @@ describe("title-scheme — tolerant matching", () => {
   });
 
   test("a title with a different fill count still classifies", () => {
-    expect(S.classify("⏳ ┃ " + HAIR.repeat(2) + "Shipping 🚀 X")).toBe("shipping");
-    expect(S.classify("👉 ┃ Concept 🧭 X")).toBe("concept-waiting");
-    expect(S.classify("⏳ ┃ Concept 🧭 X")).toBe("process");
-    expect(S.classify("🟦 ┃ Batch 📚 X")).toBe("batch");
+    expect(S.classify("⏳ ┃ " + HAIR.repeat(2) + "🚀 Shipping X")).toBe("shipping");
+    expect(S.classify("👉 ┃ 🧭 Concept X")).toBe("concept-waiting");
+    expect(S.classify("⏳ ┃ 🧭 Concept X")).toBe("process");
+    expect(S.classify("🟦 ┃ 📚 Batch X")).toBe("batch");
   });
 });
 
@@ -87,10 +99,10 @@ describe("title-scheme — legacy generation", () => {
   });
 
   test("a status-less head left by an older plugin's stacking is stripped", () => {
-    expect(S.stripPrefixes("⏳ 🧭 Concept – ┃ Shipping 🚀 DevOps backlog")).toBe("DevOps backlog");
-    expect(S.stripPrefixes("⏳ 🤖 Agents – ┃ " + " ".repeat(9) + "Shipping 🚀 Dev start")).toBe("Dev start");
-    expect(S.stripPrefixes("┃ Solo 🤖 Anno")).toBe("Anno");
-    expect(S.classify("┃ Solo 🤖 Anno")).toBe("plain");
+    expect(S.stripPrefixes("⏳ 🧭 Concept – ┃ 🚀 Shipping DevOps backlog")).toBe("DevOps backlog");
+    expect(S.stripPrefixes("⏳ 🤖 Agents – ┃ " + " ".repeat(9) + "🚀 Shipping Dev start")).toBe("Dev start");
+    expect(S.stripPrefixes("┃ 🤖 Solo Anno")).toBe("Anno");
+    expect(S.classify("┃ 🤖 Solo Anno")).toBe("plain");
     expect(S.stripPrefixes("┃ not a head")).toBe("┃ not a head");
   });
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.292.0] — 2026-10-22
+
+Session titles and card headings put the activity icon right after the bar, so both icons sit together: `⏳ ┃ 🤖 Solo Fix Login`, `👉 📦 Ready — Shippen?`. The "Started" state shows ✨ instead of 💡.
+
+### Changed
+- **Icon order.** `<status> ┃ <activity> <Word>` replaces `<status> ┃ <Word> <activity>` in titles, CTA headings, hooks and docs — all built from the one table in `hooks/lib/title-scheme.js`.
+- **Started ✨.** The light bulb is gone; the sparkles read as "fresh, ready to try" for any kind of app.
+
+### Compatibility
+- Titles written in the word-first order of v0.287–v0.291 (`👉 ┃ Ready 📦`, `🟩 ┃ Started 💡`) are still recognised, classified and stripped, so they are replaced on the next turn instead of stacking.
+
 ## [0.291.2] — 2026-10-22
 
 The answer to "GitHub Actions minutes used up — merge without CI or wait?" is asked once per quota period and GitHub account, and no card asks to catch up CI after the reset anymore.

@@ -1,11 +1,12 @@
 /**
  * @module title-scheme
- * @version 2.1.1
+ * @version 2.2.0
  * @description The ONE table behind the session title and the completion
  *   card's CTA heading (concept 2026-10-21 "title-iconography").
  *
- *   Grammar: `<STATUS> ┃ <Word> <ACTIVITY> <title>` — a status icon, a heavy
- *   bar (U+2503), the English keyword and the activity emoji. The CTA heading
+ *   Grammar: `<STATUS> ┃ <ACTIVITY> <Word> <title>` — a status icon, a heavy
+ *   bar (U+2503), the activity emoji and the English keyword (2.2: the
+ *   activity follows the bar directly, so both icons sit together). The CTA heading
  *   of every card starts with the SAME parts, followed by ` — ` and the
  *   localized sentence — both are built here from one state id, so they
  *   cannot drift. No fill: 2.0.0 right-aligned the word with U+200A hair
@@ -18,7 +19,8 @@
  *
  *   Matching is FE0F-tolerant and hair-space-tolerant (any number of U+200A
  *   anywhere) and strips ONLY known prefixes: every status x keyword x
- *   activity combination of the current grammar, the LEGACY generation
+ *   activity combination of the current grammar, the 2.0/2.1 order
+ *   (`<STATUS> ┃ <Word> <ACTIVITY> `, Started 💡 included), the LEGACY generation
  *   (`<STATUS> <ACTIVITY> <Word> – `, old keywords/icons, old ⏸️ status), the
  *   bare ⏳ and every single-icon prefix (`LEGACY_PREFIXES`). Free text such as
  *   "Fix Login – Bug" after a bare ⏳ is the title and stays (F6).
@@ -76,7 +78,7 @@ const STATES = Object.freeze({
   'promoted-beta': ['done', 'Beta', '🎊'],
   'promoted-stable': ['done', 'Stable', '🎊'],
   committed: ['done', 'Committed', '📦'],
-  started: ['done', 'Started', '💡'],
+  started: ['done', 'Started', '✨'],
   analysis: ['done', 'Analysis', '📊'],
   system: ['done', 'System', '🖥' + FE0F],
   // 🟥 aborted — generic; a named abort keeps its activity (ABORT_ACTIVITY).
@@ -148,20 +150,25 @@ function pausedState(reason) {
   return STATES['paused-' + r] && r !== 'user' ? 'paused-' + r : 'paused-user';
 }
 
-/** `cta.activity` → aborted state id; unknown → the generic `🟥 ┃ Aborted 📦`. */
+/** `cta.activity` → aborted state id; unknown → the generic `🟥 ┃ 📦 Aborted`. */
 function abortedState(activity) {
   const a = String(activity ?? '').trim().toLowerCase();
   return ABORT_ACTIVITIES.includes(a) ? 'aborted-' + a : 'aborted';
 }
 
-/** `👉 ┃ Ready 📦` for a status icon, keyword and activity. */
+/** `👉 ┃ 📦 Ready` for a status icon, keyword and activity. */
 function compose(status, word, activity) {
+  return `${status} ${BAR} ${activity} ${word}`;
+}
+
+/** The 2.0/2.1 order `👉 ┃ Ready 📦` — recognised, never emitted. */
+function composeWordFirst(status, word, activity) {
   return `${status} ${BAR} ${word} ${activity}`;
 }
 
 /**
  * The head of a state: status, keyword, activity and the joined text
- * (`👉 ┃ Ready 📦`, no fill). `mandatory` raises a `done` state to the
+ * (`👉 ┃ 📦 Ready`, no fill). `mandatory` raises a `done` state to the
  * user's move.
  *
  * @param {string} id key of STATES
@@ -176,24 +183,24 @@ function head(id, { mandatory = false } = {}) {
   return { id, status, activity: s[2], word: s[1], text: compose(status, s[1], s[2]) };
 }
 
-/** `👉 ┃ Ready 📦 ` — the session-title prefix of a state. */
+/** `👉 ┃ 📦 Ready ` — the session-title prefix of a state. */
 function prefixOf(id, opts) {
   return head(id, opts).text + ' ';
 }
 
 /**
- * `👉 Ready 📦 — Shippen?` — the CTA heading of a state. No `┃`: the bar
+ * `👉 📦 Ready — Shippen?` — the CTA heading of a state. No `┃`: the bar
  * aligns the word column of session titles; on the card it read as a line
  * starting with "|" (2026-10-21).
  */
 function headingOf(id, sentence, opts) {
   const { status, word, activity } = head(id, opts);
-  const h = `${status} ${word} ${activity}`;
+  const h = `${status} ${activity} ${word}`;
   const s = String(sentence ?? '').trim();
   return s ? `${h} — ${s}` : h;
 }
 
-/** Generic work: `⏳ ┃ Solo 🤖 ` — what a bare unnamed turn gets. */
+/** Generic work: `⏳ ┃ 🤖 Solo ` — what a bare unnamed turn gets. */
 const WORK_PREFIX = compose(STATUS.work, 'Solo', '🤖') + ' ';
 /** The pre-2.0 bare hourglass — still recognised as generic work. */
 const BARE_WORK = STATUS.work + ' ';
@@ -262,12 +269,17 @@ const KNOWN = [];
   const pairs = new Map();
   for (const [, word, act] of Object.values(STATES)) pairs.set(word + ' ' + act, [word, act]);
   pairs.set('Solo 🤖', ['Solo', '🤖']);
-  for (const st of Object.values(STATUS)) {
-    for (const [word, act] of pairs.values()) {
-      const p = compose(st, word, act) + ' ';
-      if (word === 'Solo') { add(p, st === STATUS.work ? 'work' : 'outcome'); continue; }
-      add(p, pick(st, word, st === STATUS.work && word === 'Shipping' && act === '🚀',
-        st === STATUS.user && word === 'Concept'));
+  // The 2.0/2.1 word-first order, with the icons it used (Started 💡).
+  const wordFirst = new Map([...pairs, ['Started 💡', ['Started', '💡']]]);
+  for (const [build, list] of [[compose, pairs], [composeWordFirst, wordFirst]]) {
+    for (const st of Object.values(STATUS)) {
+      for (const [word, act] of list.values()) {
+        const p = build(st, word, act) + ' ';
+        if (CATEGORY.has(p)) continue;
+        if (word === 'Solo') { add(p, st === STATUS.work ? 'work' : 'outcome'); continue; }
+        add(p, pick(st, word, st === STATUS.work && word === 'Shipping' && act === '🚀',
+          st === STATUS.user && word === 'Concept'));
+      }
     }
   }
   // Previous two-slot generation, old keywords and icons, old ⏸️ status.
@@ -371,10 +383,10 @@ function stripPrefixes(title) {
 /**
  * The state of a title, read off its leading prefix (either generation):
  * - 'plain'      no known prefix
- * - 'work'       `⏳ ┃ Solo 🤖 ` (or the bare ⏳ / legacy `⏳ Working – `)
- * - 'shipping'   `⏳ ┃ Shipping 🚀 ` (or the legacy forms)
+ * - 'work'       `⏳ ┃ 🤖 Solo ` (or the bare ⏳ / legacy `⏳ Working – `)
+ * - 'shipping'   `⏳ ┃ 🚀 Shipping ` (or the legacy forms)
  * - 'batch'      any status + Batch
- * - 'concept-waiting' `👉 ┃ Concept 🧭 ` (or the legacy forms)
+ * - 'concept-waiting' `👉 ┃ 🧭 Concept ` (or the legacy forms)
  * - 'process'    any other ⏳ prefix (Concept working, Team, Testing)
  * - 'outcome'    any other known prefix (a card's outcome, legacy included)
  *

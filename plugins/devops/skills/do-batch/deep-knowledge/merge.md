@@ -115,12 +115,12 @@ exact result, so no `get_session` is needed:
 
 Call `mcp__ccd_session_mgmt__set_session_title` `self` with that title in the
 same message as your next tool call. No title line / no block → the title
-carries no `👉 ┃ Batch 📚 ` and is left alone — the user renamed it meanwhile,
+carries no `👉 ┃ 📚 Batch ` and is left alone — the user renamed it meanwhile,
 and that name wins.
 
 **Fallback — only when the context or block says the title is unknown:**
 `mcp__ccd_session_mgmt__get_session` `self`; if the `title` starts with
-`👉 ┃ Batch 📚 `, call `mcp__ccd_session_mgmt__set_session_title` `self` with
+`👉 ┃ 📚 Batch `, call `mcp__ccd_session_mgmt__set_session_title` `self` with
 that prefix removed (a legacy `📥 Batch – ` without the hand is stripped the same way). Desktop app only (deferred is not unavailable — load the tools via `ToolSearch` first, `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`); skip silently elsewhere.
 
 ## Hand-off gate (Step 4.9)

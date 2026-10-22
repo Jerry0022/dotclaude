@@ -6,7 +6,7 @@
  * @plugin devops
  * @description Marks a session as "being worked on" in the sidebar: on the
  *   first real prompt of a session — and on the first prompt after every
- *   completion card — it asks Claude to put the generic `⏳ ┃ Solo 🤖 ` (no
+ *   completion card — it asks Claude to put the generic `⏳ ┃ 🤖 Solo ` (no
  *   word — `SESSION_PREFIX.work` in mcp-server/lib/mode-state.js) in front of
  *   the session title, replacing whatever outcome prefix the last card left
  *   (📦 Ready, 🧪 Test, …). The hourglass is ONE state — "Claude works, not
@@ -84,7 +84,7 @@ const { STATUS, BARE_WORK } = require('../lib/title-scheme');
 
 /**
  * The prefix a prompt puts on the title: the process it starts when it
- * starts one (a ship → `⏳ ┃ Shipping 🚀 `), the bare hourglass otherwise. The
+ * starts one (a ship → `⏳ ┃ 🚀 Shipping `), the bare hourglass otherwise. The
  * hourglass is the fallback, never the override.
  */
 function prefixFor(prompt, cwd) {

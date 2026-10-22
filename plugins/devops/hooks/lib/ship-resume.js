@@ -5,7 +5,7 @@
  * @plugin devops
  * @description Is this prompt the user picking up an interrupted ship?
  *   Shared by prompt.ship.detect (which then emits the resume mandate) and
- *   prompt.flow.title-work (which then marks `⏳ ┃ Shipping 🚀 `, never the
+ *   prompt.flow.title-work (which then marks `⏳ ┃ 🚀 Shipping `, never the
  *   hourglass): after a usage limit or a crash the user types "weiter", not
  *   "ship", and the session must still read as shipping in the title and
  *   end with a ship card.

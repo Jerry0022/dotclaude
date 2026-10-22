@@ -4,7 +4,7 @@
  * @description The one ship-intent classifier for user prompts. Shared by
  *   `prompt.ship.detect` (which turns the intent into a Skill('devops:do-ship')
  *   instruction) and `prompt.flow.title-work` (which marks the sidebar with
- *   `⏳ ┃ Shipping 🚀 ` instead of the bare `⏳ ` when the prompt IS a ship).
+ *   `⏳ ┃ 🚀 Shipping ` instead of the bare `⏳ ` when the prompt IS a ship).
  *   One list, so the two hooks can never disagree about what a ship prompt is.
  *
  *   Only the direct keywords live here. The "affirmation after a completion

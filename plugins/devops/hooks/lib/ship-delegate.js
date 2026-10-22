@@ -263,7 +263,7 @@ function shipResumeInstruction({ resume, delegate, pluginRoot, sessionId = '', n
       : '',
     ...how,
     decisions,
-    'The session title stays "⏳ ┃ Shipping 🚀 " and the turn ends with the ship\'s own card (Released / Blocked).',
+    'The session title stays "⏳ ┃ 🚀 Shipping " and the turn ends with the ship\'s own card (Released / Blocked).',
   ].filter(Boolean).join('\n');
 }
 
