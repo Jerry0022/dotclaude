@@ -149,7 +149,7 @@ describe("--render-card CLI fallback", () => {
     const { stdout, stderr } = await renderCardFull({ variant: "ready", summary: "Titel-Test", session_id: S("title"), changes: [{ area: "x", description: "y" }] });
     expect(stdout).not.toContain("SESSION TITLE");
     expect(stderr).toContain("[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]");
-    expect(stderr).toContain('"' + "👉 ┃ 📦 Ready " + '" + <stripped title>');
+    expect(stderr).toContain('"' + "👉 ➜ 📦 Ready ┃ " + '" + <stripped title>');
   });
 
   test("a title readable from the transcript yields the exact set call — no get_session", async () => {
@@ -164,7 +164,7 @@ describe("--render-card CLI fallback", () => {
         { HOME: home, USERPROFILE: home },
       );
       expect(stdout).not.toContain("SESSION TITLE");
-      expect(stderr).toContain('mcp__ccd_session_mgmt__set_session_title {session_id:"self", title:' + JSON.stringify("👉 ┃ 📦 Ready CLI task") + "}");
+      expect(stderr).toContain('mcp__ccd_session_mgmt__set_session_title {session_id:"self", title:' + JSON.stringify("👉 ➜ 📦 Ready ┃ CLI task") + "}");
       expect(stderr).not.toContain("mcp__ccd_session_mgmt__get_session");
     } finally {
       rmSync(home, { recursive: true, force: true });

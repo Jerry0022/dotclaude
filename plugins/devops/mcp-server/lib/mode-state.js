@@ -41,12 +41,12 @@ export function hookRequire(...parts) {
 }
 
 /** The one table behind titles and CTA headings (hooks/lib/title-scheme.js):
- *  `<STATUS> ┃ <FILL><Word> <ACTIVITY> <title>`, `⏳ ┃ 🤖 Solo ` for generic work. */
+ *  `<STATUS> ➜ <ACTIVITY> <Word> ┃ <title>`, `⏳ ➜ 🤖 Solo ┃ ` for generic work. */
 export const TITLE_SCHEME = hookRequire("lib", "title-scheme.js");
 const S = TITLE_SCHEME;
 
 /** Session-title prefixes — every named state of the scheme, keyed by its
- *  state id (`ready` → `👉 ┃ 📦 Ready `), plus `work`, the Solo prefix
+ *  state id (`ready` → `👉 ➜ 📦 Ready ┃ `), plus `work`, the Solo prefix
  *  prompt.flow.title-work sets for generic work. A state whose base status
  *  is 🟩 reads 👉 when its card carries a mandatory user step — see
  *  `TITLE_SCHEME.prefixOf(id, { mandatory: true })`. `concept-waiting` /
@@ -83,8 +83,8 @@ export const VARIANT_TITLE_STATE = Object.freeze({
 const CHANNELS = Object.freeze(["Alpha", "Beta", "Stable"]);
 
 /** The title prefix of a merged ship or a promotion reaching `channel`:
- *  alpha → `🟩 ┃ 🚀 Released Alpha `; beta/stable → `🟩 ┃ 🚀 Released Beta ` / `🟩 ┃ 🚀 Released Stable `;
- *  after a ship in the same run, `🟩 ┃ 🎊 Beta ` for a promote-only
+ *  alpha → `🟩 ➜ 🚀 Released Alpha ┃ `; beta/stable → `🟩 ➜ 🚀 Released Beta ┃ ` / `🟩 ➜ 🚀 Released Stable ┃ `;
+ *  after a ship in the same run, `🟩 ➜ 🎊 Beta ┃ ` for a promote-only
  *  run (`{ promoted: true }`). Unknown channel → Alpha. */
 export function releasedPrefix(channel, { promoted = false, mandatory = false } = {}) {
   const c = String(channel ?? "").trim().toLowerCase();
@@ -94,10 +94,10 @@ export function releasedPrefix(channel, { promoted = false, mandatory = false } 
 }
 
 /** `pause.reason` values the paused title names (#583); `user` and an
- *  unknown reason read `🟦 ┃ ✋ Paused `. */
+ *  unknown reason read `🟦 ➜ ✋ Paused ┃ `. */
 export const PAUSE_REASONS = Object.freeze(["restart", "reboot", "usage-reset", "user"]);
 
-/** `🟦 ┃ 🔌 Restart ` — the paused prefix per reason. */
+/** `🟦 ➜ 🔌 Restart ┃ ` — the paused prefix per reason. */
 export function pausedPrefix(reason) {
   return S.prefixOf(S.pausedState(reason));
 }
@@ -194,9 +194,9 @@ function variantOutcome(params) {
  * title — strip ours, leave the rest" (an unknown variant).
  *
  * A card that carries the `concept` field follows the phase (#416): while the
- * page `waiting`s for decisions the title says `👉 ┃ 🧭 Concept ` — stated
+ * page `waiting`s for decisions the title says `👉 ➜ 🧭 Concept ┃ ` — stated
  * every time, so a session that comes back from a round of work returns to
- * it; `iterating` and `implementing` are Claude's move: `⏳ ┃ 🧭 Concept `.
+ * it; `iterating` and `implementing` are Claude's move: `⏳ ➜ 🧭 Concept ┃ `.
  *
  * Without the field, a live `concept-active.json` in `cwd` means a page
  * waits in this project — but not necessarily for THIS session (a sibling
@@ -206,12 +206,12 @@ function variantOutcome(params) {
  * session — or the turn that closes the concept out — gets the plain outcome.
  *
  * A running ship outranks a waiting concept (#785): while the current title
- * is `⏳ ┃ 🚀 Shipping ` (also a delegated ship in a subagent), a card that
+ * is `⏳ ➜ 🚀 Shipping ┃ ` (also a delegated ship in a subagent), a card that
  * does not end the ship never puts the compass back — the waiting prefix
  * becomes `null` ("leave it"). A ship-ending card (`SHIP_ENDING_VARIANTS`)
  * and an unknown current title keep the rules above.
  *
- * Pending background work outranks the outcome: `⏳ ┃ 🤖 Team `.
+ * Pending background work outranks the outcome: `⏳ ➜ 🤖 Team ┃ `.
  * Otherwise the outcome is `deps.outcome(params)` — the card computes it from
  * the same decision key its CTA heading uses (title = CTA) — or, without it,
  * the variant's state.
@@ -318,7 +318,7 @@ export function titleInstruction(prefix, current = null) {
   if (prefix === null) return "";
   if (typeof current === "string" && current.trim()) return knownTitleInstruction(prefix, current);
   const list =
-    `every "<status> ┃ <Word> <activity> " prefix (hair-space fill before the word) whose status icon is one of ${Object.values(S.STATUS).join(" ")} ` +
+    `every "<status> ➜ <activity> <Word> ┃ " prefix (or the older "<status> ┃ <activity> <Word> " form) whose status icon is one of ${Object.values(S.STATUS).join(" ")} ` +
     `(e.g. "${SESSION_PREFIX.ready}", "${SESSION_PREFIX["released-alpha"]}", "${SESSION_PREFIX["concept-waiting"]}"), ` +
     `the generic "${S.WORK_PREFIX}", the older "<status> <activity> <Word> – " two-icon form, the bare "${S.BARE_WORK}", and the legacy ` + LEGACY_PREFIXES.map((p) => `"${p}"`).join(", ") +
     ` — never free text that only looks like one`;

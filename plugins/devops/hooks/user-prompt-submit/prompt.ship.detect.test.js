@@ -402,7 +402,7 @@ describe("prompt.ship.detect — resume an interrupted ship", () => {
     expect(r.stdout).toContain("bump 1.0.0 → 1.1.0 ✓");
     expect(r.stdout).toContain('with args "--resume"');
     expect(r.stdout).not.toContain(INLINE + " to execute the full shipping pipeline");
-    expect(r.stdout).toContain("┃ 🚀 Shipping ");
+    expect(r.stdout).toContain("➜ 🚀 Shipping ┃ ");
   });
 
   test("a large context resumes it in the subagent with the stored brief and decisions", async () => {
@@ -433,7 +433,7 @@ describe("prompt.ship.detect — resume an interrupted ship", () => {
     expect(r.stdout).toContain("keep: true");
     expect(r.stdout).not.toContain("[ship-resume]");
     expect(r.stdout).not.toContain("--resume\"");
-    expect(r.stdout).not.toContain("┃ 🚀 Shipping ");
+    expect(r.stdout).not.toContain("➜ 🚀 Shipping ┃ ");
     expect(r.stdout).not.toContain("← next");
   });
 });

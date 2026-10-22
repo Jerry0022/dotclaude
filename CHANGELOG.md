@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.297.0] — 2026-10-22
+## [0.298.0] — 2026-10-22
 
 The README matches the plugin again, and the completion-card examples in it are now drawn by the real card renderer, so they cannot fall behind the card design anymore.
 
@@ -13,6 +13,29 @@ Why: ship kept only the counts, the hook roster and the table rows current; Docs
 
 ### Fixed
 - **README content.** Completion-card section, do-run and delegation text, project structure and hook categories reflect the current plugin. Removed: a "self-calibration every 10 min" in the token math that does not exist, the retired `/run-*` skills, `/auto-agents` listed as a do-run mode, and "autonomous never ships" (it ships when chosen at the start).
+
+## [0.297.0] — 2026-10-22
+
+Session titles now read `⏳ ➜ 🤖 Solo ┃ Topic`: an arrow between the status and the activity icon, and the bar after the keyword, between the whole head and the topic.
+
+Why: the bar after the status cut the head in two; it reads better as the separator before the topic. The keyword column cannot be padded to one width: the Desktop sidebar collapses every whitespace run and refuses invisible fillers such as U+2800 (checked 2026-10-22).
+
+### Changed
+- **Title grammar.** `<STATUS> ➜ <ACTIVITY> <Word> ┃ <title>` replaces `<STATUS> ┃ <ACTIVITY> <Word> <title>` in `title-scheme.js` and in every skill, hook and doc that names a prefix. The card's CTA heading is unchanged.
+- **Older titles still match.** The 2.2/2.3 bar-first order is a recognised legacy prefix, so titles written by earlier versions are stripped and classified as before.
+
+## [0.296.3] — 2026-10-22
+
+While `/auto-cleanup` is armed, the gate now refuses every shell command it cannot read in full, instead of letting it through.
+
+Why: the automated security reviews of 0.296.1 (#829) found more fail-open paths in the shell-wrapper parsing. Refusing an unreadable command in an armed cleanup session is safe; passing one could delete a worktree unconfirmed.
+
+### Fixed
+- **PowerShell.** A positional command without an explicit `-Command` is refused, because the value-taking parameter prefixes (`-Exec`, `-ep`, …) cannot all be modeled. `/Command` and other slash switches count as `-Command`. A `-Command -` payload (stdin) and a payload that starts with an option are refused.
+- **Prefixes.** `env -S`, bundled forms such as `-iS` and every prefix of `--split-string` are refused. A prefix option value that is itself a command line (`sudo -u "rm -rf x"`) and a quoted command line after a prefix (`nohup "rm -rf x"`) are refused.
+- **Shells without an inline command.** A shell with no `-c`, `-Command` or `/c` runs a script or reads stdin (pipe, `|&`, `<`, `<<<`, here-doc); every such shell is refused while armed. `|&` counts as a pipe, and `bash -c -- "…"` skips the `--`.
+
+Accepted cost: `bash script.sh` and `powershell "…"` without `-Command` are refused while `/auto-cleanup` is armed. Everyday commands (`git status`, `powershell -NoProfile -Command "…"`, `bash -lc "npm test"`, `sudo -u root ls`, `git log | head`) pass unchanged.
 
 ## [0.296.2] — 2026-10-22
 

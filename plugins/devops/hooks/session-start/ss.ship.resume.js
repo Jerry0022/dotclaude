@@ -78,10 +78,10 @@ function buildResumeInstruction({ cwd, source }) {
     const next = source === 'compact'
       ? ['Only the first 5,000 tokens of the do-ship skill survived the compaction. If this turn is still shipping,',
         're-invoke Skill("devops:do-ship", "--resume") before the next ship step — it continues at the step marked next',
-        '(the title stays "⏳ ┃ 🚀 Shipping " and the turn ends with the ship card). Otherwise the next "weiter" / "continue" /',
+        '(the title stays "⏳ ➜ 🚀 Shipping ┃ " and the turn ends with the ship card). Otherwise the next "weiter" / "continue" /',
         'ship prompt resumes it (prompt.ship.detect sends a [ship-resume] block — follow it).']
       : ['The next "weiter" / "continue" / ship prompt resumes it at the step marked next (prompt.ship.detect sends a',
-        '[ship-resume] block — follow it; the title stays "⏳ ┃ 🚀 Shipping " and the turn ends with the ship card).'];
+        '[ship-resume] block — follow it; the title stays "⏳ ➜ 🚀 Shipping ┃ " and the turn ends with the ship card).'];
     return [
       `[ss.ship.resume] An interrupted /do-ship of branch ${cp.branch || '?'} is waiting in ${cwd} and ${when}.`,
       `Progress: ${describeCheckpoint(cp)}`,

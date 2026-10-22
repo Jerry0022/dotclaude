@@ -1,12 +1,13 @@
 /**
  * @module title-scheme
- * @version 2.3.0
+ * @version 2.4.0
  * @description The ONE table behind the session title and the completion
  *   card's CTA heading (concept 2026-10-21 "title-iconography").
  *
- *   Grammar: `<STATUS> ┃ <ACTIVITY> <Word> <title>` — a status icon, a heavy
- *   bar (U+2503), the activity emoji and the English keyword (2.2: the
- *   activity follows the bar directly, so both icons sit together). The CTA heading
+ *   Grammar: `<STATUS> ➜ <ACTIVITY> <Word> ┃ <title>` — a status icon, an
+ *   arrow (U+279C), the activity emoji, the English keyword and a heavy bar
+ *   (U+2503) that separates the whole head from the topic (2.4; 2.2/2.3 put
+ *   the bar between status and activity). The CTA heading
  *   of every card starts with the SAME parts, followed by ` — ` and the
  *   localized sentence — both are built here from one state id, so they
  *   cannot drift. No fill: 2.0.0 right-aligned the word with U+200A hair
@@ -19,7 +20,8 @@
  *
  *   Matching is FE0F-tolerant and hair-space-tolerant (any number of U+200A
  *   anywhere) and strips ONLY known prefixes: every status x keyword x
- *   activity combination of the current grammar, the 2.0/2.1 order
+ *   activity combination of the current grammar, the 2.2/2.3 bar-first order
+ *   (`<STATUS> ┃ <ACTIVITY> <Word> `), the 2.0/2.1 order
  *   (`<STATUS> ┃ <Word> <ACTIVITY> `, Started 💡 included), the LEGACY generation
  *   (`<STATUS> <ACTIVITY> <Word> – `, old keywords/icons, old ⏸️ status), the
  *   bare ⏳ and every single-icon prefix (`LEGACY_PREFIXES`). Free text such as
@@ -32,8 +34,10 @@
 const FE0F = '️';
 /** U+200A — built from the code point, the raw char is invisible in source. */
 const HAIR = String.fromCharCode(0x200A);
-/** U+2503 — the bar between status and word. */
+/** U+2503 — the bar between the head and the topic. */
 const BAR = String.fromCharCode(0x2503);
+/** U+279C — the arrow between status and activity. */
+const ARROW = String.fromCharCode(0x279C);
 
 /** First icon — the status. 🟩 (not ✅) matches the red 🟥 box. */
 const STATUS = Object.freeze({
@@ -150,14 +154,19 @@ function pausedState(reason) {
   return STATES['paused-' + r] && r !== 'user' ? 'paused-' + r : 'paused-user';
 }
 
-/** `cta.activity` → aborted state id; unknown → the generic `🟥 ┃ 📦 Aborted`. */
+/** `cta.activity` → aborted state id; unknown → the generic `🟥 ➜ 📦 Aborted ┃`. */
 function abortedState(activity) {
   const a = String(activity ?? '').trim().toLowerCase();
   return ABORT_ACTIVITIES.includes(a) ? 'aborted-' + a : 'aborted';
 }
 
-/** `👉 ┃ 📦 Ready` for a status icon, keyword and activity. */
+/** `👉 ➜ 📦 Ready ┃` for a status icon, keyword and activity. */
 function compose(status, word, activity) {
+  return `${status} ${ARROW} ${activity} ${word} ${BAR}`;
+}
+
+/** The 2.2/2.3 order `👉 ➜ 📦 Ready ┃` — recognised, never emitted. */
+function composeBarFirst(status, word, activity) {
   return `${status} ${BAR} ${activity} ${word}`;
 }
 
@@ -168,7 +177,7 @@ function composeWordFirst(status, word, activity) {
 
 /**
  * The head of a state: status, keyword, activity and the joined text
- * (`👉 ┃ 📦 Ready`, no fill). `mandatory` raises a `done` state to the
+ * (`👉 ➜ 📦 Ready ┃`, no fill). `mandatory` raises a `done` state to the
  * user's move.
  *
  * @param {string} id key of STATES
@@ -183,7 +192,7 @@ function head(id, { mandatory = false } = {}) {
   return { id, status, activity: s[2], word: s[1], text: compose(status, s[1], s[2]) };
 }
 
-/** `👉 ┃ 📦 Ready ` — the session-title prefix of a state. */
+/** `👉 ➜ 📦 Ready ┃ ` — the session-title prefix of a state. */
 function prefixOf(id, opts) {
   return head(id, opts).text + ' ';
 }
@@ -200,7 +209,7 @@ function headingOf(id, sentence, opts) {
   return s ? `${h} — ${s}` : h;
 }
 
-/** Generic work: `⏳ ┃ 🤖 Solo ` — what a bare unnamed turn gets. */
+/** Generic work: `⏳ ➜ 🤖 Solo ┃ ` — what a bare unnamed turn gets. */
 const WORK_PREFIX = compose(STATUS.work, 'Solo', '🤖') + ' ';
 /** The pre-2.0 bare hourglass — still recognised as generic work. */
 const BARE_WORK = STATUS.work + ' ';
@@ -274,7 +283,8 @@ const KNOWN = [];
   const current = new Map([...pairs, ...retired.map((wa) => [wa.join(' '), wa])]);
   // The 2.0/2.1 word-first order, with the icons it used (Started 💡).
   const wordFirst = new Map([...current, ['Started 💡', ['Started', '💡']]]);
-  for (const [build, list] of [[compose, current], [composeWordFirst, wordFirst]]) {
+  const orders = [[compose, current], [composeBarFirst, current], [composeWordFirst, wordFirst]];
+  for (const [build, list] of orders) {
     for (const st of Object.values(STATUS)) {
       for (const [word, act] of list.values()) {
         const p = build(st, word, act) + ' ';
@@ -307,12 +317,12 @@ const KNOWN = [];
 /** Every known prefix but the bare ⏳, longest first. */
 const KNOWN_PREFIXES = Object.freeze([...new Set(KNOWN)].sort((a, b) => b.length - a.length));
 
-// A current head that lost its status: an older plugin strips the leading
-// ⏳ as its own bare prefix and stacks its prefix on the rest
-// ("⏳ 🧭 Concept – ┃ Shipping 🚀 X"). Stripped, never classified — the
-// title gets a fresh head right after.
+// A head that lost its status: an older plugin strips the leading ⏳ as its
+// own bare prefix and stacks its prefix on the rest ("⏳ 🧭 Concept – ➜ 🚀
+// Shipping ┃ X", or "… – ┃ Shipping 🚀 X" for the bar-first orders).
+// Stripped, never classified — the title gets a fresh head right after.
 const ORPHAN_HEADS = Object.freeze([...new Set(
-  [...KNOWN].filter((p) => p.includes(BAR)).map((p) => p.slice(p.indexOf(BAR))),
+  [...KNOWN].filter((p) => p.includes(BAR)).map((p) => p.slice(p.includes(ARROW) ? p.indexOf(ARROW) : p.indexOf(BAR))),
 )].sort((a, b) => b.length - a.length));
 
 /**
@@ -386,10 +396,10 @@ function stripPrefixes(title) {
 /**
  * The state of a title, read off its leading prefix (either generation):
  * - 'plain'      no known prefix
- * - 'work'       `⏳ ┃ 🤖 Solo ` (or the bare ⏳ / legacy `⏳ Working – `)
- * - 'shipping'   `⏳ ┃ 🚀 Shipping ` (or the legacy forms)
+ * - 'work'       `⏳ ➜ 🤖 Solo ┃ ` (or the bare ⏳ / legacy `⏳ Working – `)
+ * - 'shipping'   `⏳ ➜ 🚀 Shipping ┃ ` (or the legacy forms)
  * - 'batch'      any status + Batch
- * - 'concept-waiting' `👉 ┃ 🧭 Concept ` (or the legacy forms)
+ * - 'concept-waiting' `👉 ➜ 🧭 Concept ┃ ` (or the legacy forms)
  * - 'process'    any other ⏳ prefix (Concept working, Team, Testing)
  * - 'outcome'    any other known prefix (a card's outcome, legacy included)
  *
@@ -417,6 +427,7 @@ module.exports = {
   FE0F,
   HAIR,
   BAR,
+  ARROW,
   STATUS,
   STATES,
   LEGACY_STATES,

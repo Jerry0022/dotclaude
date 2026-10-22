@@ -221,7 +221,7 @@ function segments(command) {
     if (c === '&' && s[i + 1] === '&') { i++; pushSeg(false); continue; }
     if (c === '&') { pushSeg(false); continue; } // cmd's `a & b`, bash background, PowerShell call operator
     if (c === '|' && s[i + 1] === '|') { i++; pushSeg(false); continue; }
-    if (c === '|') { pushSeg(true); continue; }
+    if (c === '|') { if (s[i + 1] === '&') i++; pushSeg(true); continue; } // `|&` pipes stderr too
     if (c === '{' || c === '}') { pushTok(); continue; }
     if (/\s/.test(c)) { pushTok(); continue; }
     if (c === '>' || c === '<') {
@@ -300,7 +300,6 @@ const RUNS_SOMETHING_RE = /^(git|cmd|bash|sh|zsh|dash|ksh|powershell|pwsh|rm|rmd
 const PS_COMMAND_RE = /^-c(o(m(m(a(n(d)?)?)?)?)?)?$|^--command$/i;
 const PS_ENCODED_RE = /^-e(n(c(o(d(e(d(c(o(m(m(a(n(d)?)?)?)?)?)?)?)?)?)?)?)?)?$|^-ec$/i;
 const PS_FILE_RE = /^-f(i(l(e)?)?)?$/i;
-const PS_VALUE_OPTS_RE = /^-(ex(ecutionpolicy)?|ep|w(indowstyle)?|wd|workingdirectory|v(ersion)?|if|inputformat|of|outputformat|config(urationname)?|psconsolefile)$/i;
 
 function baseName(tok) { return (tok || '').replace(/^.*[\\/]/, '').replace(/\.exe$/i, ''); }
 
@@ -314,7 +313,7 @@ function baseName(tok) { return (tok || '').replace(/^.*[\\/]/, '').replace(/\.e
  * so the gate refuses it instead of passing it.
  * @returns {string[][]}
  */
-function unwrap(tokens, depth = 0) {
+function unwrap(tokens, depth = 0, piped = false) {
   const unresolvedAs = (why) => [['__unresolved__', why]];
   let t = tokens.slice();
   let prefix = null;
@@ -330,8 +329,18 @@ function unwrap(tokens, depth = 0) {
     else if (PREFIX_CMDS.has(h)) { prefix = h; t = t.slice(1); }
     else if (/^\w+=/.test(t[0])) t = t.slice(1);
     else if (prefix && t[0].startsWith('-')) {
+      // `env -S "rm -rf X"` runs its value as a command line
+      // also bundled (`-iS`) and any prefix of --split-string (`--sp=…`)
+      if (prefix === 'env' && (/^-[^-]*S/.test(t[0]) || /^--sp(l(i(t(-(s(t(r(i(n(g)?)?)?)?)?)?)?)?)?)?(=|$)/.test(t[0]))) {
+        return unresolvedAs('env -S (a split command line)');
+      }
       const re = PREFIX_VALUE_OPTS[prefix];
-      t = t.slice(re && re.test(t[0]) ? 2 : 1);
+      const takesValue = re && re.test(t[0]);
+      const value = takesValue ? t[1] || '' : '';
+      if (/\s/.test(value) || RUNS_SOMETHING_RE.test(baseName(value))) {
+        return unresolvedAs(`a "${prefix}" option value that is a command`);
+      }
+      t = t.slice(takesValue ? 2 : 1);
     } else if (prefix === 'timeout' && /^\d+[smhd]?$/.test(t[0])) t = t.slice(1);
     else break;
   }
@@ -339,35 +348,44 @@ function unwrap(tokens, depth = 0) {
   if (prefix && !RUNS_SOMETHING_RE.test(baseName(t[0])) && t.slice(1).some(a => RUNS_SOMETHING_RE.test(baseName(a)))) {
     return unresolvedAs(`a "${prefix}" prefix with options the gate cannot read`);
   }
+  // a command word with whitespace after a prefix is a quoted command line (`nohup "rm -rf X"`)
+  if (prefix && /\s/.test(t[0] || '')) return unresolvedAs(`a "${prefix}" prefix in front of a quoted command line`);
   const name = baseName(t[0]);
   if (!SHELL_WRAP_RE.test(name)) return [t];
+  // A shell without an inline payload runs a script or reads stdin — a pipe
+  // (`| bash`, `|& bash`), a redirect (`bash < f`, `<<<`), a here-doc. The gate
+  // cannot see those commands, so it refuses every such shell while armed.
+  const fromStdin = () => unresolvedAs(`a ${name} without an inline command${piped ? ', fed from a pipe' : ' (script or stdin)'}`);
   if (depth > 3) return unresolvedAs('too deeply nested shell wrappers');
-  const open = (payload) => segments(payload).flatMap(s => unwrap(s.tokens, depth + 1));
-  const rest = t.slice(1);
+  // a payload that starts with an option (`-c -- …`, `-Command -` = stdin) is not read
+  const open = (parts) => {
+    const p = parts[0] === '--' ? parts.slice(1) : parts;
+    if (!p.length || p[0].startsWith('-')) return unresolvedAs(`a ${name} payload the gate cannot read`);
+    return segments(p.join(' ')).flatMap(s => unwrap(s.tokens, depth + 1, s.piped));
+  };
+  let rest = t.slice(1);
   if (/^cmd$/i.test(name)) {
     const c = rest.findIndex(a => /^\/[ckr]/i.test(a));
-    if (c === -1) return [t];
+    if (c === -1) return fromStdin();
     const glued = rest[c].slice(2); // `/c"rmdir …"` or `/crmdir`
-    return open([glued, ...rest.slice(c + 1)].filter(Boolean).join(' '));
+    return open([glued, ...rest.slice(c + 1)].filter(Boolean));
   }
   if (/^(powershell|pwsh)$/i.test(name)) {
+    rest = rest.map(a => a.replace(/^\/(?=[a-z])/i, '-')); // PowerShell takes `/Command` like `-Command`
     if (rest.some(a => PS_ENCODED_RE.test(a))) return unresolvedAs('an encoded command');
     if (rest.some(a => PS_FILE_RE.test(a))) return unresolvedAs('a script file');
     const c = rest.findIndex(a => PS_COMMAND_RE.test(a));
-    if (c !== -1) return open(rest.slice(c + 1).join(' '));
-    // no -Command: the first positional argument is the command
-    const payload = [];
-    for (let i = 0; i < rest.length; i++) {
-      if (payload.length) { payload.push(rest[i]); continue; }
-      if (PS_VALUE_OPTS_RE.test(rest[i])) { i++; continue; }
-      if (!rest[i].startsWith('-')) payload.push(rest[i]);
-    }
-    return payload.length ? open(payload.join(' ')) : [t];
+    if (c !== -1) return open(rest.slice(c + 1));
+    // no -Command: PowerShell runs the first positional argument, after options
+    // the gate cannot all model (any unambiguous prefix of a value parameter)
+    if (rest.some(a => !a.startsWith('-'))) return unresolvedAs('a PowerShell command without -Command');
+    return fromStdin();
   }
-  // POSIX shells: `-c`, also bundled (`-lc`, `-ec`); without it a script file runs
+  // POSIX shells: `-c`, also bundled (`-lc`, `-ec`); without it a script file
+  // runs, or the commands come from stdin (`-s`, or no argument at all)
   const c = rest.findIndex(a => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a));
-  if (c === -1) return [t];
-  return open(rest.slice(c + 1).join(' '));
+  if (c === -1) return fromStdin();
+  return open(rest.slice(c + 1));
 }
 
 /**
@@ -444,7 +462,7 @@ function parseDeletes(command, cwd) {
   const deletes = [];
   const unresolved = [];
   let dir = cwd;
-  for (const t of segments(command).flatMap(seg => unwrap(seg.tokens))) {
+  for (const t of segments(command).flatMap(seg => unwrap(seg.tokens, 0, seg.piped))) {
     if (t[0] === '__unresolved__') { unresolved.push(`a shell wrapper runs ${t[1]}`); continue; }
     if (/^(cd|Set-Location|sl|pushd)$/i.test(t[0]) && t[1] && !t[1].startsWith('-')) {
       if (literal(t[1])) dir = path.resolve(dir, t[1]);
