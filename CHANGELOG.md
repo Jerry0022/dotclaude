@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.295.1] — 2026-10-22
+
+German sessions no longer switch to English after a task notification or another prompt that the app or plugin put into the user slot.
+
+Why: the locale hook read those English prompts as the user changing language and injected `[ui-locale: en]`. That happened in 27 of 120 recent sessions, and Claude then answered in English.
+
+### Fixed
+- **Injected prompts are ignored.** `ensureLocale` no longer detects the language from, caches or announces it on `<task-notification>`, side-session and CI-monitor events, continue/nudge turns, compaction summaries, stop-hook feedback, skill bodies, `Silently run via Bash:` prompts, `AUTONOMOUS_*` prompts or messages from other sessions.
+- **Pasted material is skipped.** `<pasted_content>` blocks and system reminders are removed before detection, so a short German prompt with a pasted English log stays German.
+
 ## [0.295.0] — 2026-10-22
 
 `/auto-cleanup` removes worktrees in the background with a native recursive delete and one final `git worktree prune`, instead of a slow sequential `git worktree remove` per worktree.
