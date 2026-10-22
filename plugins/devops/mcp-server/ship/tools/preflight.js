@@ -13,7 +13,7 @@ import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { readVersion, verifyVersionFiles } from "../lib/version.js";
 import { writeSentinel } from "../lib/sentinel.js";
 import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
-import { detectOutOfBandDeploys, DEFAULT_OUT_OF_BAND_GLOBS } from "../lib/infra-deploy.js";
+import { detectOutOfBandDeploys, DEFAULT_OUT_OF_BAND_GLOBS, globToRegExp } from "../lib/infra-deploy.js";
 import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js";
 import { detectComponents } from "../lib/components.js";
 import { claudeIgnoreCheck, touchesIgnorePolicy } from "../lib/claude-ignore.js";
@@ -55,9 +55,12 @@ function pseudoCommit(mtimeMs) {
 //   1. Auto-marker counts/roster in README.md + architecture.html are current.
 //   2. Every skill/agent on disk has a (manually curated) row in the README
 //      tables — the one thing the generator deliberately does NOT auto-write.
+//   3. Hand-written README sections whose sources (docs/readme-doc-map.json)
+//      this branch changed while README.md stayed untouched — named, so
+//      Docs-Sync (Step 2.6) reads exactly those sections instead of guessing.
 // Returns check objects (with `.warning` so they flow into the warnings list).
 // Never produces errors — doc drift warns, it does not block a ship.
-function docSyncChecks(cwd) {
+function docSyncChecks(cwd, branchFiles = []) {
   const pluginDir = join(cwd, "plugins", "devops");
   if (!existsSync(pluginDir)) return []; // consumer repo — nothing to verify
   const out = [];
@@ -104,7 +107,39 @@ function docSyncChecks(cwd) {
     }
   } catch { /* README or dirs unreadable — skip silently */ }
 
+  // 3. README sections whose sources changed (curated prose the generator
+  //    cannot keep current — the completion-card section drifted for 57
+  //    design changes because no ship connected the renderer to it).
+  const sections = readmeSectionsToCheck(join(pluginDir, "docs", "readme-doc-map.json"), branchFiles);
+  if (sections.length) {
+    out.push({
+      name: "doc-readme-sections",
+      ok: true,
+      sections,
+      warning: `README sections whose sources this branch changed — check them in Docs-Sync: ${sections.join(" · ")}`,
+    });
+  }
+
   return out;
+}
+
+/**
+ * Sections of docs/readme-doc-map.json with a changed source, as long as the
+ * branch did not touch README.md itself (then the author already looked).
+ * Tests never count as a source.
+ */
+export function readmeSectionsToCheck(mapFile, branchFiles) {
+  const files = (Array.isArray(branchFiles) ? branchFiles : []).filter(Boolean);
+  if (!files.length || files.includes("README.md") || !existsSync(mapFile)) return [];
+  let map;
+  try { map = JSON.parse(readFileSync(mapFile, "utf8")); } catch { return []; }
+  const sources = files.filter((f) => !/\.test\.[cm]?js$/.test(f));
+  const hit = [];
+  for (const entry of map.sections || []) {
+    const res = (entry.sources || []).map(globToRegExp);
+    if (sources.some((f) => res.some((re) => re.test(f)))) hit.push(entry.section);
+  }
+  return hit;
 }
 
 export async function handler(params) {
@@ -444,7 +479,7 @@ export async function handler(params) {
   }
 
   // Doc-sync (plugin source repo only — no-op elsewhere). Non-blocking.
-  checks.push(...docSyncChecks(cwd));
+  checks.push(...docSyncChecks(cwd, branchFilesForInfra));
 
   // Collect warnings from checks (non-blocking issues resolved autonomously)
   const warnings = checks.filter(c => c.warning).map(c => c.warning);

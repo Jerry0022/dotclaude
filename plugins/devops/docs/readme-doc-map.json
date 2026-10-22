@@ -1,0 +1,19 @@
+{
+  "_comment": "Which hand-written README section describes which plugin source. ship_preflight diffs the branch against this map and names every section whose source changed while the README did not, so /do-ship Step 2.6 (Docs-Sync) reads exactly those sections. Paths are repo-root-relative globs. Generated blocks (counts, hook roster, card examples) are kept by gen-readme-sections.mjs and need no entry.",
+  "sections": [
+    { "section": "Token math", "sources": ["plugins/devops/hooks/pre-tool-use/pre.tokens.guard.js", "plugins/devops/hooks/session-start/ss.tokens.scan.js"] },
+    { "section": "Installation / Updates / Troubleshooting", "sources": [".claude-plugin/marketplace.json", "plugins/devops/hooks/session-start/ss.plugin.update.js", "plugins/devops/skills/auto-update/**"] },
+    { "section": "Supported Stacks", "sources": ["plugins/devops/mcp-server/ship/tools/build.js", "plugins/local-llm/**"] },
+    { "section": "Integrations — Codex", "sources": ["plugins/devops/deep-knowledge/codex-integration.md"] },
+    { "section": "Integrations — Claude API credits", "sources": ["plugins/devops/scripts/claude-api-*.js", "plugins/devops/scripts/api-credit-audit.js", "plugins/devops/deep-knowledge/api-credits.md"] },
+    { "section": "Integrations — Claude home backup", "sources": ["plugins/devops/scripts/home-backup*", "plugins/devops/deep-knowledge/home-backup.md"] },
+    { "section": "Integrations — WIP watch", "sources": ["plugins/devops/scripts/wip-watch*", "plugins/devops/deep-knowledge/wip-watch.md"] },
+    { "section": "Customization", "sources": ["plugins/devops/hooks/lib/skill-overrides.js", "plugins/devops/scripts/claude-ignore.js", "plugins/devops/deep-knowledge/skill-extension-guide.md"] },
+    { "section": "Quiet output style", "sources": ["plugins/devops/templates/output-style-quiet.md"] },
+    { "section": "Features", "sources": ["plugins/devops/skills/*/SKILL.md", "plugins/devops/deep-knowledge/agent-proactivity.md"] },
+    { "section": "Skills (table, strict mode, do-run, improve)", "sources": ["plugins/devops/skills/**", "plugins/devops/deep-knowledge/strict.md", "plugins/devops/hooks/user-prompt-submit/prompt.strict.enforce.js"] },
+    { "section": "Agents (delegation paragraph, table)", "sources": ["plugins/devops/agents/*.md", "plugins/devops/deep-knowledge/agent-proactivity.md", "plugins/devops/deep-knowledge/agent-orchestration.md"] },
+    { "section": "Completion Cards (prose around the generated examples)", "sources": ["plugins/devops/deep-knowledge/completion-card-design.md", "plugins/devops/mcp-server/lib/card-widget.js", "plugins/devops/hooks/lib/title-scheme.js"] },
+    { "section": "Project Structure", "sources": ["plugins/devops/*", "plugins/*/.claude-plugin/plugin.json"] }
+  ]
+}

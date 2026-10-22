@@ -14,8 +14,8 @@ describe("gen-readme-sections", () => {
     expect(() =>
       execFileSync(process.execPath, [SCRIPT, "--check", REPO_ROOT], { stdio: "pipe" }),
     ).not.toThrow();
-    // 30s timeout, not the default 5s: this spawns a cold `node` subprocess,
-    // which on a loaded Windows machine can run close to the 5s edge. The
-    // generator is .mjs (#476), so node no longer parses it twice.
-  }, 30000);
+    // 90s timeout, not the default 5s: the generator spawns a cold `node`
+    // per README card example (all in parallel, ~10 s on a loaded Windows
+    // machine, 35 s seen under a full parallel suite).
+  }, 90000);
 });
