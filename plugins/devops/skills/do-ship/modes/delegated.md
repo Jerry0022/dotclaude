@@ -75,7 +75,11 @@ inline that way, the largest at 951 k.
      1. If `exitWorktree` is true, call `ExitWorktree({ action: "remove" })`.
      2. Set the session title to `titlePrefix` plus the current title with
         its old devops prefix removed. This is the render result's
-        `[SESSION TITLE]` step, carried out here.
+        `[SESSION TITLE]` step, carried out here. This holds on a
+        notification turn that answers in text only too: set the title before
+        the line. If you do not, `stop.flow.guard` renames a leftover ⏳ title
+        at that turn's end (to this `titlePrefix` when the transcript holds
+        it, else Interrupted) once no background work of the session is open.
      3. On Desktop, `Read` the `widgetFile` and call `show_widget` once, as
         the last action, with `title` = `widgetTitle` verbatim
         (`completion_card_body`; never a title of your own) and
