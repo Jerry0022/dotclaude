@@ -286,6 +286,24 @@ describe("hasLanded / decide against a real repo", () => {
     test.each([[[]], [""], ["my own text"], [["feat/zzz"]]])("empty, Other or unknown records nothing (%j)", (ans) => {
       expect(run(ans).unmerged).toEqual([]);
     });
+    test("a ticked name approves exactly that branch, not one it is part of", () => {
+      const st = armed(dryRun(["- feat", "- feat-x"]), {
+        questions: [{ header: "Unmerged", question: "q", multiSelect: true, options: [{ label: "feat" }, { label: "other" }] }],
+        answer: ["feat"],
+      });
+      expect(st.unmerged).toEqual([expect.objectContaining({ scope: "feat", exact: true })]);
+      expect(decide("git branch -D feat-x", st).block).toMatch(/not in the default branch/);
+    });
+    test.each([
+      [[{ label: "feat/a, feat/c" }, { label: "feat/b" }], ["feat/a, feat/c"]],
+      [[{ label: "feat/a und feat/c" }, { label: "feat/b" }], ["feat/a und feat/c"]],
+      [[{ label: "Ja, alle löschen" }, { label: "feat/b" }], ["Ja, alle löschen"]],
+    ])("an option that is not a bare branch name voids the question (%j)", (options, ans) => {
+      const st = armed(dryRun(["- feat/a", "- feat/b", "- feat/c"]), {
+        questions: [{ header: "Unmerged", question: "q", multiSelect: true, options }], answer: ans,
+      });
+      expect(st.unmerged).toEqual([]);
+    });
     test("single-select still works and refusal points to the batch form", () => {
       expect(decide("git branch -D feat/u", armed(dryRun(["- feat/u"]), unmergedYes("feat/u")))).toBeNull();
       expect(decide("git branch -D feat/u", armed(dryRun(["- feat/u"]))).block).toMatch(/multiSelect/);

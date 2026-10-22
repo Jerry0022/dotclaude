@@ -123,6 +123,12 @@ function isYesAnswer(q, value) {
  * Accepts a list or a comma-joined string; Other/free text, empty and unknown
  * entries drop out.
  */
+const BARE_BRANCH_RE = /^[A-Za-z0-9._/-]+$/;
+/** A multiSelect option that can only mean one branch: a plain token, not a Ja/Yes-style answer. */
+function isBareBranch(label) {
+  return BARE_BRANCH_RE.test(label) && !YES_LABEL_RE.test(label) && !/^(behalten|keep|abbrechen|cancel|nein|no)$/i.test(label);
+}
+
 function pickedLabels(q, value) {
   const labels = optionLabels(q);
   const parts = [];
@@ -161,9 +167,13 @@ function recordAnswers(state, questions, answers, nowMs = Date.now()) {
     const unm = !dry && UNMERGED_HEADER_RE.test(header);
     if (!dry && !unm) continue;
     if (unm && q.multiSelect === true) {
-      // Batch form: every option is a branch name; each ticked one is its yes.
+      // Batch form: every option is a bare branch name; each ticked one is
+      // its yes, approving exactly that name. One option that is not a bare
+      // name (prose, a comma, Ja/Yes) voids the whole question.
+      const opts = optionLabels(q);
+      if (!opts.length || !opts.every(isBareBranch)) continue;
       for (const label of pickedLabels(q, answerFor(q, answers))) {
-        state.unmerged.push({ at: nowMs, scope: label });
+        state.unmerged.push({ at: nowMs, scope: label, exact: true });
       }
       continue;
     }
@@ -417,9 +427,8 @@ function decide({ command, cwd, state, gitFor }) {
       : `no Dry-Run-Confirm was answered "Ja" for ${names}.`;
     return { block: [head, `Delete refused: ${why}`, NO_ANSWER_RULE, HOW_TO_CONFIRM].join('\n') };
   }
-  const unmScopes = state.unmerged.map(a => a.scope);
   const notLanded = deletes.filter(d => d.kind !== 'worktree'
-    && !unmScopes.some(s => namesBranch(s, d.target))
+    && !state.unmerged.some(a => (a.exact ? a.scope === d.target : namesBranch(a.scope, d.target)))
     && !hasLanded(gitFor(d.dir), d));
   if (notLanded.length) {
     const names = [...new Set(notLanded.map(d => d.target))];

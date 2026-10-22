@@ -138,8 +138,8 @@ Without the page, print the Apply-Manifest (`deep-knowledge/execution.md`
 § Step 10a) as text and ask the confirm right away.
 
 - **Dry-Run-Confirm** = one `AskUserQuestion`, header `Dry-Run`, the question
-  names every branch and worktree to delete by full name, options
-  `Ja, ausführen` / `Abbrechen`.
+  names every branch and worktree by full name (never `x-{a,b}`/`x-*`),
+  options `Ja, ausführen` / `Abbrechen`.
 - **Unmerged branch** (Untersuchen — content not in the default branch) =
   additionally its own yes: one multiSelect question, header `Unmerged`,
   options = the full branch names; only ticked names count.
