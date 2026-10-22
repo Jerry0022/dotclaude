@@ -273,6 +273,28 @@ describe("pre.main.guard", () => {
   test("DEVOPS_ALLOW_MAIN=1 still passes", () => rootOnMain(() => {
     expect(commit(mainDir, {}, { DEVOPS_ALLOW_MAIN: "1" }).status).toBe(0);
   }), TIMEOUT);
+
+  // #828: deleting non-default remote branches writes neither local nor remote main.
+  const cmdOnMain = (command) => run(MAIN, { tool_name: "Bash", cwd: mainDir, tool_input: { command } });
+  test.each([
+    "git push origin --delete feat/x",
+    "git push origin -d a b",
+    "git push origin :feat/x",
+    "git -C . push origin --delete x",
+  ])("main checkout: %j passes", (command) => rootOnMain(() => {
+    expect(cmdOnMain(command).status).toBe(0);
+  }), TIMEOUT);
+
+  test.each([
+    "git push origin --delete main",
+    "git push origin :master",
+    "git push origin --delete feat/x main",
+    "git push origin main",
+    "git push --force origin --delete feat/x",
+    "git push origin --delete foo && git commit -m x",
+  ])("main checkout: %j stays blocked", (command) => rootOnMain(() => {
+    expect(cmdOnMain(command).status).toBe(2);
+  }), TIMEOUT);
 });
 
 // Audit row 1: the guards matched only `^git <sub>`, so a chained commit,

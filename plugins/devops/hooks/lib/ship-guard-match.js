@@ -1,6 +1,6 @@
 /**
  * @module ship-guard-match
- * @version 0.2.0
+ * @version 0.3.0
  * @description Pure matcher for pre.ship.guard — decides whether a Bash command
  *   is a REAL manual PR create/merge invocation that must go through /do-ship.
  *
@@ -120,7 +120,66 @@ function isManualShipCommand(cmd) {
   return PATTERNS.some((re) => re.test(stripped));
 }
 
+// Options `git push` may carry in a pure remote-branch delete. Anything else
+// (--force, --mirror, --all, --prune, --tags, -u ...) makes the push a real one.
+const DELETE_SAFE_OPTS = new Set(['-d', '--delete', '-q', '--quiet', '-v', '--verbose', '-n', '--dry-run', '--no-verify', '--porcelain']);
+// A token with shell syntax (substitution, redirect, subshell, leftover quote,
+// glob) cannot be read as a plain ref name.
+const SHELL_SYNTAX = /[$`<>(){}'"*?\\]/;
+
+/**
+ * The remote refs a command deletes, when EVERY `git push` in it is a pure
+ * delete (`git push <remote> --delete|-d <ref>...` or `git push <remote> :<ref>...`).
+ * null when a push in it does anything else, a token is not a plain ref name,
+ * or there is no push. Refs are returned without `refs/heads/` and the
+ * leading `:`; fully quoted refs are unquoted.
+ * @param {string} cmd
+ * @returns {string[]|null}
+ */
+function remoteDeleteRefs(cmd) {
+  if (!cmd || typeof cmd !== 'string') return null;
+  const masked = maskQuotedToken(cmd);
+  const pushRe = gitCommandRe(String.raw`push` + WORD_END);
+  const refs = [];
+  let pushes = 0;
+  // Split at shell separators; offsets stay aligned with the original command.
+  const sep = /&&|\|\||[;|&\n]/g;
+  let start = 0;
+  const segments = [];
+  for (let m; (m = sep.exec(masked)); start = m.index + m[0].length) segments.push([start, m.index]);
+  segments.push([start, masked.length]);
+  for (const [a, b] of segments) {
+    const seg = masked.slice(a, b);
+    const hit = pushRe.exec(seg);
+    if (!hit) continue;
+    pushes++;
+    const tokens = [];
+    const tokRe = /\S+/g;
+    tokRe.lastIndex = hit.index + hit[0].length;
+    for (let t; (t = tokRe.exec(seg));) {
+      tokens.push(cmd.slice(a + t.index, a + t.index + t[0].length).replace(/^(['"])(.*)\1$/, '$2'));
+    }
+    let del = false;
+    const pos = [];
+    for (const t of tokens) {
+      if (SHELL_SYNTAX.test(t)) return null;
+      if (t.startsWith('-')) {
+        if (!DELETE_SAFE_OPTS.has(t)) return null;
+        if (t === '-d' || t === '--delete') del = true;
+      } else pos.push(t);
+    }
+    if (pos.length < 2) return null; // remote + at least one ref
+    for (const spec of pos.slice(1)) {
+      if (!del && !spec.startsWith(':')) return null;
+      const name = spec.replace(/^:/, '').replace(/^refs\/heads\//, '');
+      if (!name || name.includes(':')) return null;
+      refs.push(name);
+    }
+  }
+  return pushes ? refs : null;
+}
+
 module.exports = {
   isManualShipCommand, stripQuoted, maskQuoted, maskQuotedToken,
-  BOUNDARY, WORD_END, gitCommandRe, matchesGitCommand,
+  BOUNDARY, WORD_END, gitCommandRe, matchesGitCommand, remoteDeleteRefs,
 };

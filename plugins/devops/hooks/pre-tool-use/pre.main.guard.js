@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.main.guard
- * @version 0.3.0
+ * @version 0.4.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Bash|PowerShell
@@ -9,7 +9,7 @@
  *
  *   Blocks Bash commands that would mutate main when HEAD is on main/master:
  *     git commit, git merge, git rebase, git cherry-pick,
- *     git push (any form targeting main), git reset --hard,
+ *     git push (any form except the remote deletes below), git reset --hard,
  *     git revert, git apply, git am
  *
  *   Bypass conditions (any one of them → exit 0):
@@ -17,6 +17,13 @@
  *     - HEAD is NOT main/master
  *     - Sentinel file .claude/.ship-in-progress exists (ship pipeline active)
  *     - DEVOPS_ALLOW_MAIN=1 in environment
+ *
+ *   Allowed on main: deleting remote branches that are not the default
+ *   branch (`git push <remote> --delete|-d <ref>...`, `git push <remote>
+ *   :<ref>`) — it writes neither local nor remote main. Protected: main,
+ *   master and the branch origin/HEAD points to. Every push in the command
+ *   must be such a pure delete (no --force/--mirror/--all/--prune); any other
+ *   write command chained in (`&& git commit`) still blocks.
  *
  *   Read-only git commands (status, log, diff, fetch, branch listing) pass
  *   through untouched.
@@ -35,10 +42,10 @@
 // A lib that fails to load (half-written during a plugin update, version skew)
 // makes this hook a silent no-op instead of a hook error on every Bash call
 // (AUD-028).
-let gitOut, sentinelActive, isLinkedWorktree, branchFix, ownWorktreeDecided, BYPASS, gitCommandRe, matchesGitCommand, WORD_END;
+let gitOut, sentinelActive, isLinkedWorktree, branchFix, ownWorktreeDecided, BYPASS, gitCommandRe, matchesGitCommand, WORD_END, remoteDeleteRefs;
 try {
   require('../lib/plugin-guard');
-  ({ gitCommandRe, matchesGitCommand, WORD_END } = require('../lib/ship-guard-match'));
+  ({ gitCommandRe, matchesGitCommand, WORD_END, remoteDeleteRefs } = require('../lib/ship-guard-match'));
   ({ gitOut } = require('../lib/git-timeout'));
   ({ isActive: sentinelActive } = require('../lib/ship-sentinel'));
   ({ isLinkedWorktree } = require('../lib/project-root'));
@@ -56,9 +63,11 @@ try {
 // mentions "git commit" is not (lib/ship-guard-match.js).
 const WRITE_PATTERNS = [
   'commit', 'merge', 'rebase', 'cherry-pick', 'revert', String.raw`reset\s+--hard`,
-  'apply', 'am', 'push', 'restore', String.raw`checkout\s+(?:--ours|--theirs|--patch|-p)`,
+  'apply', 'am', 'restore', String.raw`checkout\s+(?:--ours|--theirs|--patch|-p)`,
   'clean', String.raw`stash\s+(?:pop|drop|apply|clear)`, 'update-ref',
 ].map(rest => gitCommandRe(rest + WORD_END));
+// push is separate: a pure remote-branch delete is allowed on main (see header).
+const PUSH_PATTERN = gitCommandRe('push' + WORD_END);
 WRITE_PATTERNS.push(gitCommandRe(String.raw`checkout(?:\s+[^\n;&|]*)?\s--(?=\s)`));
 
 function currentBranch(cwd) {
@@ -96,7 +105,9 @@ process.stdin.on('end', () => {
   const cmd = (hook.tool_input || {}).command || '';
   if (!cmd) process.exit(0);
 
-  if (!matchesGitCommand(cmd, WRITE_PATTERNS)) process.exit(0);
+  const otherWrite = matchesGitCommand(cmd, WRITE_PATTERNS);
+  const push = matchesGitCommand(cmd, [PUSH_PATTERN]);
+  if (!otherWrite && !push) process.exit(0);
 
   const cwd = hook.cwd || process.cwd();
 
@@ -107,6 +118,17 @@ process.stdin.on('end', () => {
   const branch = currentBranch(cwd);
   if (!branch) process.exit(0);
   if (branch !== 'main' && branch !== 'master') process.exit(0);
+
+  // Only a push matched: a pure delete of non-default remote branches is fine.
+  if (!otherWrite) {
+    const refs = remoteDeleteRefs(cmd);
+    if (refs) {
+      const head = gitOut(cwd, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD']);
+      const def = head ? head.replace(/^[^/]+\//, '') : null;
+      const protectedRefs = new Set(['main', 'master', def].filter(Boolean));
+      if (!refs.some(r => protectedRefs.has(r))) process.exit(0);
+    }
+  }
 
   // Without an origin the remote-based fix is not executable — offer the
   // local-only equivalent instead of a command that is guaranteed to fail.

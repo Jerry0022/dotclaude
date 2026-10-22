@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { isManualShipCommand, stripQuoted, maskQuotedToken, gitCommandRe, matchesGitCommand, WORD_END } from "./ship-guard-match.js";
+import { isManualShipCommand, stripQuoted, maskQuotedToken, gitCommandRe, matchesGitCommand, WORD_END, remoteDeleteRefs } from "./ship-guard-match.js";
 
 // Audit row 1: the git matcher behind pre.main.guard / pre.worktree.split-guard.
 describe("matchesGitCommand — real git invocations at any command position", () => {
@@ -115,5 +115,45 @@ describe("stripQuoted", () => {
   });
   test("keeps unquoted tokens", () => {
     expect(stripQuoted('gh pr create')).toContain('gh pr create');
+  });
+});
+
+// #828: pure remote-branch deletes are allowed on main; anything else is not.
+describe("remoteDeleteRefs", () => {
+  test.each([
+    ["git push origin --delete feat/x", ["feat/x"]],
+    ["git push origin -d a b", ["a", "b"]],
+    ["git push origin :feat/x", ["feat/x"]],
+    ["git push origin :a :b", ["a", "b"]],
+    ["git -C dir push origin --delete x", ["x"]],
+    ['git push origin --delete "feat/x"', ["feat/x"]],
+    ["git push origin --delete refs/heads/x", ["x"]],
+    ["git push origin --delete main", ["main"]],
+    ["git push origin --delete refs/heads/main", ["main"]],
+    ["git push origin :main", ["main"]],
+    ["git push origin --delete a && git push origin --delete b", ["a", "b"]],
+  ])("%j -> %j", (cmd, refs) => {
+    expect(remoteDeleteRefs(cmd)).toEqual(refs);
+  });
+
+  test.each([
+    "git push",
+    "git push origin",
+    "git push origin main",
+    "git push origin feat/x",
+    "git push --mirror origin",
+    "git push --all origin",
+    "git push --prune origin --delete x",
+    "git push --force origin --delete x",
+    "git push -f origin :x",
+    "git push origin --delete x main:main",
+    "git push origin --delete foo && git push origin main",
+    "git push origin --delete 'ma'in",
+    "(git push origin --delete main)",
+    "git push origin --delete $(echo main)",
+    "git status",
+    "",
+  ])("%j -> null", (cmd) => {
+    expect(remoteDeleteRefs(cmd)).toBeNull();
   });
 });
