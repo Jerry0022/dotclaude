@@ -138,11 +138,11 @@ Without the page, print the Apply-Manifest (`deep-knowledge/execution.md`
 § Step 10a) as text and ask the confirm right away.
 
 - **Dry-Run-Confirm** = one `AskUserQuestion`, header `Dry-Run`, the question
-  names every branch and worktree to delete by full name, options
-  `Ja, ausführen` / `Abbrechen`.
+  names every branch and worktree to delete by full name (never `x-{a,b}`),
+  options `Ja, ausführen` / `Abbrechen`.
 - **Unmerged branch** (Untersuchen — content not in the default branch) =
-  additionally its own yes: one question per branch, header `Unmerged`, the
-  question names the branch, options `Ja, löschen` / `Behalten`.
+  additionally its own yes: one multiSelect question, header `Unmerged`,
+  options = the full branch names; only ticked names count.
 - **No answer is a no.** An error (`Answer questions?` under `claude -p`), a
   denied or unavailable tool, `Abbrechen`, `Behalten`, an Other or free-text
   reply: nothing is deleted. Do not ask "how else", do not retry another way —

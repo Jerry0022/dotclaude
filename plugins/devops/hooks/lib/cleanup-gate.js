@@ -118,6 +118,34 @@ function isYesAnswer(q, value) {
   return Boolean(hit && YES_LABEL_RE.test(hit));
 }
 
+/**
+ * multiSelect answer -> the ticked option labels (exact label matches only).
+ * Accepts a list or a comma-joined string; Other/free text, empty and unknown
+ * entries drop out.
+ */
+const BARE_BRANCH_RE = /^[A-Za-z0-9._/-]+$/;
+/** A multiSelect option that can only mean one branch: a plain token, not a Ja/Yes-style answer. */
+function isBareBranch(label) {
+  return BARE_BRANCH_RE.test(label) && !YES_LABEL_RE.test(label) && !/^(behalten|keep|abbrechen|cancel|nein|no)$/i.test(label);
+}
+
+function pickedLabels(q, value) {
+  const labels = optionLabels(q);
+  const parts = [];
+  for (const v of (Array.isArray(value) ? value : [value])) {
+    const c = clean(v);
+    if (!c) continue;
+    if (labels.some(l => l.toLowerCase() === c.toLowerCase())) parts.push(c);
+    else if (typeof v === 'string') parts.push(...v.split(',').map(clean).filter(Boolean));
+  }
+  const out = [];
+  for (const p of parts) {
+    const hit = labels.find(l => l.toLowerCase() === p.toLowerCase());
+    if (hit && !out.includes(hit)) out.push(hit);
+  }
+  return out;
+}
+
 function answerFor(q, answers) {
   if (!answers || typeof answers !== 'object') return undefined;
   if (q && typeof q.question === 'string' && Object.prototype.hasOwnProperty.call(answers, q.question)) return answers[q.question];
@@ -128,7 +156,8 @@ function answerFor(q, answers) {
 /**
  * Fold one answered AskUserQuestion into the state (mutates and returns it).
  * Dry-Run: a yes adds an approval, anything else revokes all of them.
- * Unmerged: a yes adds that question's scope; a no adds nothing.
+ * Unmerged: a yes adds that question's scope; a no adds nothing. A multiSelect
+ * Unmerged question adds one approval per ticked option label (a branch name).
  */
 function recordAnswers(state, questions, answers, nowMs = Date.now()) {
   if (!state) return state;
@@ -137,6 +166,17 @@ function recordAnswers(state, questions, answers, nowMs = Date.now()) {
     const dry = DRY_RUN_HEADER_RE.test(header);
     const unm = !dry && UNMERGED_HEADER_RE.test(header);
     if (!dry && !unm) continue;
+    if (unm && q.multiSelect === true) {
+      // Batch form: every option is a bare branch name; each ticked one is
+      // its yes, approving exactly that name. One option that is not a bare
+      // name (prose, a comma, Ja/Yes) voids the whole question.
+      const opts = optionLabels(q);
+      if (!opts.length || !opts.every(isBareBranch)) continue;
+      for (const label of pickedLabels(q, answerFor(q, answers))) {
+        state.unmerged.push({ at: nowMs, scope: label, exact: true });
+      }
+      continue;
+    }
     const yes = isYesAnswer(q, answerFor(q, answers));
     if (dry) {
       if (yes) state.dryRun.push({ at: nowMs, scope: questionScope(q) });
@@ -387,16 +427,16 @@ function decide({ command, cwd, state, gitFor }) {
       : `no Dry-Run-Confirm was answered "Ja" for ${names}.`;
     return { block: [head, `Delete refused: ${why}`, NO_ANSWER_RULE, HOW_TO_CONFIRM].join('\n') };
   }
-  const unmScopes = state.unmerged.map(a => a.scope);
   const notLanded = deletes.filter(d => d.kind !== 'worktree'
-    && !unmScopes.some(s => namesBranch(s, d.target))
+    && !state.unmerged.some(a => (a.exact ? a.scope === d.target : namesBranch(a.scope, d.target)))
     && !hasLanded(gitFor(d.dir), d));
   if (notLanded.length) {
     const names = [...new Set(notLanded.map(d => d.target))];
     return { block: [head,
       `Delete refused: ${names.join(', ')} has content that is not in the default branch (unmerged work).`,
-      'An unmerged branch needs its own yes: one AskUserQuestion per branch, header "Unmerged",',
-      'the question names the branch, options "Ja, löschen" and "Behalten". No yes → keep it.',
+      'An unmerged branch needs its own yes: one multiSelect AskUserQuestion, header "Unmerged",',
+      'options = the full branch names (max 4 per question, several questions per call); only ticked names',
+      'count. (Single form: one question naming the branch, options "Ja, löschen" / "Behalten".) No yes → keep it.',
       NO_ANSWER_RULE].join('\n') };
   }
   return null;
