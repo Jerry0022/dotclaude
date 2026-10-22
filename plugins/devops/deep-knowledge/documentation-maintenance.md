@@ -56,6 +56,15 @@ history; only living docs get rewritten.
 | New subsystem / module / top-level folder | extend or add the `docs/` section; restructure `docs/` if the current layout no longer fits |
 | Removed / renamed feature | remove or redirect the stale living doc; leave dated records intact |
 
+## Examples of rendered output
+
+A doc that shows what the tool prints (a card, a status line, a CLI report)
+must come from the code, not from a hand copy: render it with the real
+renderer in the project's doc generator, or — when that is not possible —
+list the doc section next to its source in a doc map the ship checks. A hand
+copy survives every change to the renderer unnoticed; in this plugin's own
+README the completion-card example outlived 57 design changes.
+
 ## Folder-structure changes
 
 Restructuring `docs/` is in scope — but bounded:

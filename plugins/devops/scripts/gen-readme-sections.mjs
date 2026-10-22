@@ -9,6 +9,10 @@
  *   lifecycle roster in sync with reality so they can never drift again.
  *   Called automatically by ship_build; can also be run standalone.
  *
+ *   The completion-card examples are rendered through the real card renderer
+ *   (mcp-server/index.js --render-card) from scripts/readme-card-examples.json,
+ *   so the README can no longer show a card the renderer stopped drawing.
+ *
  *   Curated prose (token math, skill/agent table descriptions) stays manual —
  *   only content between <!--devops:count:*--> and <!--devops:block:*-->
  *   markers is rewritten. Files without markers are left untouched.
@@ -24,6 +28,7 @@
 import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -41,8 +46,23 @@ const EVENTS = [
   { name: "UserPromptSubmit", key: "prompt", header: "UserPromptSubmit — runs when the user sends a message" },
   { name: "PreToolUse", key: "pre", header: "PreToolUse — runs before each tool call" },
   { name: "SubagentStart", key: "sub", header: "SubagentStart — runs when a subagent is spawned" },
+  { name: "SubagentStop", key: "substop", header: "SubagentStop — runs when a subagent finishes" },
   { name: "PostToolUse", key: "post", header: "PostToolUse — runs after each tool call" },
   { name: "Stop", key: "stop", header: "Stop — runs when Claude finishes responding" },
+];
+
+// Category view of the same roster: a hook's domain is the middle segment of
+// its id (`pre.ship.guard` → ship). A domain missing here lands in "other",
+// so a new hook is always listed, just less neatly, until it gets a home.
+const CATEGORIES = [
+  { title: "tokens & load — keep the context window and the machine free", domains: ["tokens", "governor", "crawl", "claude"] },
+  { title: "git & branches — keep work in sync and off main", domains: ["git", "main", "edit", "worktree", "orphan", "session", "cleanup"] },
+  { title: "ship — the release pipeline", domains: ["ship"] },
+  { title: "flow — completion card, verification, session title", domains: ["flow", "ask", "guide", "batch"] },
+  { title: "agents & runs — delegation, do-run contract, burn", domains: ["agent", "run", "burn"] },
+  { title: "skills & knowledge — routing, overrides, injected docs", domains: ["skill", "knowledge", "strict", "readme", "design", "concept"] },
+  { title: "plugin & MCP — updates, dependencies, server health", domains: ["plugin", "mcp", "permissions", "statusline", "thinking", "watchdog", "tmp", "project"] },
+  { title: "issues, team & graph", domains: ["issue", "team", "graphify"] },
 ];
 
 // ── Roster extraction ───────────────────────────────────────────────────────
@@ -139,19 +159,90 @@ function buildLifecycle(hooks) {
   return parts.join("\n").trimEnd();
 }
 
+function buildCategories(hooks) {
+  const seen = new Map();
+  for (const ev of EVENTS) {
+    for (const h of hooks[ev.name]) {
+      if (seen.has(h.id)) seen.get(h.id).events.push(ev.name);
+      else seen.set(h.id, { ...h, events: [ev.name] });
+    }
+  }
+  const groups = CATEGORIES.map((c) => ({ ...c, hooks: [] }));
+  const other = { title: "other", hooks: [] };
+  for (const h of seen.values()) {
+    const domain = h.id.split(".")[1];
+    (groups.find((g) => g.domains.includes(domain)) || other).hooks.push(h);
+  }
+  const parts = [];
+  for (const g of [...groups, other]) {
+    if (!g.hooks.length) continue;
+    parts.push(`#### ${g.title}`, "");
+    for (const h of g.hooks) parts.push(`- \`${h.id}\` *(${h.events.join(", ")})*`);
+    parts.push("");
+  }
+  return parts.join("\n").trimEnd();
+}
+
+// ── Completion-card examples ────────────────────────────────────────────────
+
+/**
+ * Render one card payload through the CLI renderer. Usage, the pre-check and
+ * the Desktop widget are switched off so the output is the deterministic
+ * terminal markdown; the stale-server info line ("ℹ …") depends on what is
+ * installed on this machine and is dropped. Returns null when rendering fails.
+ */
+function renderCardMarkdown(payload) {
+  const r = spawnSync(process.execPath, [join(pluginDir, "mcp-server", "index.js"), "--render-card", "-"], {
+    input: JSON.stringify({ lang: "en", session_id: "readme-card-example", ...payload }),
+    cwd: projectRoot,
+    encoding: "utf8",
+    timeout: 30_000,
+    windowsHide: true,
+    env: { ...process.env, DEVOPS_COMPLETION_NO_USAGE: "1", DEVOPS_CARD_PREGATE: "0", CLAUDE_CODE_ENTRYPOINT: "cli" },
+  });
+  if (r.status !== 0 || !r.stdout || !r.stdout.includes("---")) return null;
+  return r.stdout.replace(/\r\n/g, "\n").split("\n").filter((l) => !l.startsWith("ℹ ")).join("\n").trim();
+}
+
+/** Both card blocks, or null when the fixtures or the renderer are unavailable. */
+function buildCardBlocks() {
+  const file = join(pluginDir, "scripts", "readme-card-examples.json");
+  if (!existsSync(file)) return null;
+  const fixtures = JSON.parse(readFileSync(file, "utf8"));
+
+  const rendered = renderCardMarkdown(fixtures.example);
+  if (rendered == null) return null;
+  // The leading `&nbsp;` spacer only matters in a chat; in a fence it is noise.
+  const example = rendered.slice(rendered.indexOf("---"));
+
+  const rows = ["| Variant / state | Decision heading | When |", "|---|---|---|"];
+  for (const v of fixtures.variants || []) {
+    const md = renderCardMarkdown(v.payload);
+    if (md == null) return null;
+    const heading = (md.split("\n").find((l) => l.startsWith("## ")) || "").slice(3).trim();
+    rows.push(`| \`${v.label}\` | ${heading} | ${v.when} |`);
+  }
+  return { example: "````\n" + example + "\n````", variants: rows.join("\n") };
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
-function applyMarkers(content, counts, lifecycle) {
+function applyMarkers(content, counts, lifecycle, cards, categories) {
   let out = content;
   for (const [key, value] of Object.entries(counts)) out = replaceCount(out, key, value);
   if (lifecycle != null) out = replaceBlock(out, "hook-lifecycle", lifecycle);
+  if (categories != null) out = replaceBlock(out, "hook-categories", categories);
+  if (cards) {
+    out = replaceBlock(out, "card-example", cards.example);
+    out = replaceBlock(out, "card-variants", cards.variants);
+  }
   return out;
 }
 
-function processFile(path, counts, lifecycle, stale) {
+function processFile(path, counts, lifecycle, stale, cards = null, categories = null) {
   if (!existsSync(path)) return;
   const existing = readFileSync(path, "utf8");
-  const updated = applyMarkers(existing, counts, lifecycle);
+  const updated = applyMarkers(existing, counts, lifecycle, cards, categories);
   if (updated === existing) return;
   if (checkOnly) {
     stale.push(path);
@@ -184,8 +275,17 @@ function generate() {
   };
   const lifecycle = buildLifecycle(hooks);
 
+  // A renderer that cannot run (a broken checkout, a missing file) leaves the
+  // card blocks as they are — counts and the hook roster still refresh.
+  let cards = null;
+  try { cards = buildCardBlocks(); } catch { cards = null; }
+  if (!cards) console.error("[gen-readme-sections] card examples not rendered — README card blocks left unchanged");
+
   const stale = [];
-  processFile(join(projectRoot, "README.md"), counts, lifecycle, stale);
+  // --check must not pass on blocks it could not verify (a fixture the
+  // renderer's schema now rejects would otherwise freeze the old example).
+  if (!cards && checkOnly) stale.push("README.md card examples (renderer or fixture failed)");
+  processFile(join(projectRoot, "README.md"), counts, lifecycle, stale, cards, buildCategories(hooks));
   processFile(join(pluginDir, "docs", "architecture.html"), counts, null, stale);
 
   if (checkOnly && stale.length) {

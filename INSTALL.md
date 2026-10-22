@@ -5,7 +5,11 @@
 **CLI (recommended):**
 
 ```bash
-claude plugin add devops@Jerry0022
+claude plugin marketplace add Jerry0022/dotclaude
+```
+
+```bash
+claude plugin install devops@dotclaude
 ```
 
 **Desktop App UI:**
@@ -23,7 +27,7 @@ Start a new session for hooks to take effect. Skills are available immediately: 
 Updates are managed by the Claude Code marketplace:
 
 ```bash
-claude plugin update devops@Jerry0022
+claude plugin update devops@dotclaude
 ```
 
 Or enable auto-update via **Settings** → **Plugins** → **Marketplaces**.
@@ -107,7 +111,11 @@ The Desktop App marketplace UI recognizes third-party marketplace tabs but may n
 **Fix — use CLI:**
 
 ```bash
-claude plugin add devops@Jerry0022
+claude plugin marketplace add Jerry0022/dotclaude
+```
+
+```bash
+claude plugin install devops@dotclaude
 ```
 
 **Alternative — manual registration:**
@@ -117,20 +125,20 @@ If the CLI command is not available, register the plugin manually:
 1. Add the marketplace (Settings → Plugins → Marketplaces → `Jerry0022/dotclaude`)
 2. Copy the plugin files into the cache:
    ```bash
-   mkdir -p ~/.claude/plugins/cache/dotclaude/devops/0.30.1
+   mkdir -p ~/.claude/plugins/cache/dotclaude/devops/<version>
    cp -r ~/.claude/plugins/marketplaces/dotclaude/plugins/devops/* \
-         ~/.claude/plugins/cache/dotclaude/devops/0.30.1/
+         ~/.claude/plugins/cache/dotclaude/devops/<version>/
    cp -r ~/.claude/plugins/marketplaces/dotclaude/plugins/devops/.claude-plugin \
-         ~/.claude/plugins/cache/dotclaude/devops/0.30.1/
+         ~/.claude/plugins/cache/dotclaude/devops/<version>/
    cp    ~/.claude/plugins/marketplaces/dotclaude/plugins/devops/.mcp.json \
-         ~/.claude/plugins/cache/dotclaude/devops/0.30.1/
+         ~/.claude/plugins/cache/dotclaude/devops/<version>/
    ```
 3. Add to `~/.claude/plugins/installed_plugins.json` → `plugins` object:
    ```json
    "devops@dotclaude": [{
      "scope": "user",
-     "installPath": "<home>/.claude/plugins/cache/dotclaude/devops/0.30.1",
-     "version": "0.30.1",
+     "installPath": "<home>/.claude/plugins/cache/dotclaude/devops/<version>",
+     "version": "<version from plugins/devops/.claude-plugin/plugin.json>",
      "installedAt": "<now ISO>",
      "lastUpdated": "<now ISO>",
      "gitCommitSha": "<git rev-parse HEAD from marketplace clone>"
@@ -153,7 +161,7 @@ Verify the plugin is enabled: check `enabledPlugins` in `~/.claude/settings.json
 ## Uninstall
 
 ```bash
-claude plugin remove devops@Jerry0022
+claude plugin uninstall devops@dotclaude
 ```
 
 Or remove manually via **Settings** → **Plugins**.

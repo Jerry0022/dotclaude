@@ -464,7 +464,13 @@ canonical source — **never hand-edit the text between markers:**
 
 - **Generator:** `scripts/gen-readme-sections.mjs` reads `hooks/hooks.json`,
   `skills/*/SKILL.md`, `agents/*.md`, `deep-knowledge/*.md` and rewrites every
-  marker. Counts and the lifecycle roster can therefore never go stale.
+  marker. Counts, the lifecycle roster and the category roster
+  (`hook-categories`, domain = middle segment of the hook id, `CATEGORIES` in
+  the generator) can therefore never go stale. The completion-card example and
+  the variant-heading table (`card-example`, `card-variants`) are rendered
+  through the real renderer (`mcp-server/index.js --render-card`) from
+  `scripts/readme-card-examples.json` — a renderer change shows up in the
+  README on the next ship; only the `when` column is curated.
   No-ops outside the plugin source repo. Run standalone, or with `--check`
   (exit 1 if any marker is stale — used as a regression test + ship gate).
 - **When it runs:** `ship_build` regenerates automatically (alongside
@@ -475,6 +481,11 @@ canonical source — **never hand-edit the text between markers:**
 - **What stays manual:** curated prose — token math, and the per-skill /
   per-agent **table descriptions**. The generator never touches those; preflight
   only enforces that every skill/agent *has* a row, not what it says.
+- **Doc map for the prose:** `docs/readme-doc-map.json` pairs each curated
+  README section with the sources it describes. `ship_preflight` names every
+  section whose source the branch changed while README.md stayed untouched
+  (`doc-readme-sections`), and Docs-Sync (do-ship Step 2.6) reads exactly
+  those. A new README section gets its map entry in the same change.
 
 Three layers, three failure windows covered: generate (can't drift) →
 preflight verify (catches the un-generated tables) → session nudge (catches

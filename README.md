@@ -11,7 +11,7 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 > Work in a versioned tree. Keep backups. Read what Claude proposes before approving. **Use at your own risk.**
 
 **Token math — costs and payoff:**
-- **Costs:** ~0.7M tokens/week — hooks, prompt guards, self-calibration
+- **Costs:** ~0.7M tokens/week — hooks, prompt guards, always-on context
 - **Plan share:** 1–4% on Max plans · up to ~23% on Pro + Opus
 - **Saves (context):** ~1–4M tokens/week — token guard blocks expensive reads before they land
 - **Saves (time):** 2–4 hours/week — auto git state, ship pipeline, root-cause debug
@@ -24,11 +24,11 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 
 | Source | Tokens/week | Notes |
 |---|---|---|
-| Startup hooks (4x per session) | ~8K | Update check, git check, token scan, MCP deps |
+| SessionStart hooks (once per session) | ~8K | Update check, git check, token scan, MCP deps |
 | Prompt guards (per message) | ~150K–250K | Ship detection, issue tracking, git sync — most exit silently |
-| Tool guards (per tool call) | ~100K–200K | Token budget + ship enforcement — early-exit when clean |
-| Self-calibration (every 10 min) | ~200K–400K | Deep-knowledge rotation, skill internalization |
-| Skill invocations (~15–25/week) | ~15K–30K | Only when you call /do-ship, /auto-fix, etc. |
+| Tool guards (per tool call) | ~100K–200K | Token budget, ship and branch enforcement, agent cards — early-exit when clean |
+| Always-on context (per session) | ~200K–400K | Delegation policy, deep-knowledge index and card reminders, re-sent with every call (mostly as cache reads) |
+| Skill invocations (~15–25/week) | ~15K–30K | Only when you call /do-ship, /do-run, /auto-fix, etc. |
 | **Total** | **~500K–900K** | **~0.7M tokens/week on average** |
 
 ### Percentage of your plan
@@ -84,10 +84,14 @@ Your mileage may vary. Your sanity will not.
 
 ## Installation
 
-Add the plugin via CLI (recommended):
+Add the marketplace, then install the plugin from it (CLI, recommended):
 
 ```bash
-claude plugin add devops@Jerry0022
+claude plugin marketplace add Jerry0022/dotclaude
+```
+
+```bash
+claude plugin install devops@dotclaude
 ```
 
 > **Desktop App:** The marketplace UI shows the marketplace tab but may not list plugins for installation. Use the CLI command above, or see [`INSTALL.md`](INSTALL.md) for manual registration steps.
@@ -97,10 +101,15 @@ Start a new session for hooks to take effect. See [`INSTALL.md`](INSTALL.md) for
 ## Updates
 
 ```bash
-claude plugin update devops@Jerry0022
+claude plugin update devops@dotclaude
 ```
 
-Or enable auto-update via **Settings** → **Plugins** → **Marketplaces**. Semantic versioning — breaking changes only in major versions.
+Or enable auto-update via **Settings** → **Plugins** → **Marketplaces**, or say **"devops update"** in any session. Semantic versioning — breaking changes only in major versions.
+
+**Release channels.** Every ship lands on `alpha`; a promotion re-tags the
+same commit on `beta`, then `stable` — never a rebuild. A fresh install
+follows `stable`. Pin another channel in `~/.claude/plugins/.channels.json`
+(`{ "dotclaude": "alpha" }`) to get every ship the moment it lands.
 
 ## Supported Stacks
 
@@ -440,24 +449,27 @@ from the restored marketplaces.
 
 ## Features
 
-- **<!--devops:count:hooks-->86<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:hooks-->87<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
 - **<!--devops:count:skills-->14<!--/devops:count:skills--> Skills** — doors do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit modes), do-learn, do-batch; hidden workers auto-cleanup, auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue. README standards, graphify, usage data, strict mode and project setup are knowledge + hooks, not skills
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, PO, QA, Redteam, Research, Rethinker, Scout, Concept-Author
-- **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
-- **Ship Enforcement** — intent detection, PR command blocking, automatic /do-ship skill routing
+- **Completion Card** — mandatory card after every task (11 variants plus pending, concept and batch overrides): three result lines, evidence, one decision — on the Desktop app a widget with buttons
+- **V&V Gate** — every code change states how each requirement was verified; an unverified finish is stamped on the card
+- **Ship Pipeline** — intent detection, PR command blocking, `/do-ship` builds, bumps, merges and releases to `alpha`; promotions re-tag the same commit on `beta` / `stable`
+- **Delegation Policy** — always-on tiers decide when a task gets background agents, with a budget class from your live plan usage
 - **3-Layer Extension Model** — customize any skill or agent per-project without forking
 
 ## What it does
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->86<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->87<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
 
 ```
 SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolUse  ──>  Stop
+                                           (SubagentStart / SubagentStop around each spawned agent)
 ```
 
 <!--devops:block:hook-lifecycle-->
@@ -534,6 +546,10 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 
 - `sub.plugin.root` — Give every subagent the literal devops plugin root.
 
+#### SubagentStop — runs when a subagent finishes
+
+- `substop.agent.wip` — A finished agent that ran in an isolated worktree (.claude/worktrees/agent-*) and lef…
+
 #### PostToolUse — runs after each tool call
 
 - `post.flow.completion` — Keeps the completion-card contract in Claude's context: on the FIRST tool call of eve…
@@ -571,61 +587,118 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 <details>
 <summary><strong>By category</strong> — what does it guard?</summary>
 
-#### tokens — prevent context window waste
+<!--devops:block:hook-categories-->
+#### tokens & load — keep the context window and the machine free
 
-- `ss.tokens.scan` — Scan project for expensive files *(SessionStart)*
-- `pre.tokens.guard` — Block operations exceeding token budget *(PreToolUse)*
+- `ss.tokens.scan` *(SessionStart)*
+- `ss.governor.attach` *(SessionStart)*
+- `prompt.governor.resume` *(UserPromptSubmit)*
+- `pre.tokens.guard` *(PreToolUse)*
+- `pre.crawl.guard` *(PreToolUse)*
+- `pre.governor.gate` *(PreToolUse)*
+- `post.claude.budget` *(PostToolUse)*
+- `post.governor.clear` *(PostToolUse)*
 
-#### git — keep the working tree in sync
+#### git & branches — keep work in sync and off main
 
-- `ss.git.check` — Check for uncommitted/unpushed changes *(SessionStart)*
-- `ss.git.sync` — Start one detached background sync per worktree *(SessionStart)*
-- `stop.git.sync` — Same, throttled to 30 min, at turn end *(Stop)*
-- `prompt.git.sync` — Deliver a background sync's result, if any *(UserPromptSubmit)*
+- `ss.git.check` *(SessionStart)*
+- `ss.git.sync` *(SessionStart)*
+- `ss.orphan.nudge` *(SessionStart)*
+- `prompt.git.sync` *(UserPromptSubmit)*
+- `prompt.worktree.branch-guard` *(UserPromptSubmit)*
+- `pre.main.guard` *(PreToolUse)*
+- `pre.worktree.split-guard` *(PreToolUse)*
+- `pre.cleanup.gate` *(PreToolUse)*
+- `pre.edit.branch` *(PreToolUse)*
+- `pre.session.archive` *(PreToolUse)*
+- `post.cleanup.gate` *(PostToolUse)*
+- `post.worktree.enter` *(PostToolUse)*
+- `stop.git.sync` *(Stop)*
+- `stop.session.autosave` *(Stop)*
 
-#### ship — enforce the shipping pipeline
+#### ship — the release pipeline
 
-- `pre.ship.guard` — Block manual PR/merge via Bash *(PreToolUse)*
-- `prompt.ship.detect` — Detect ship intent, enforce /do-ship skill; above `DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (250 k tokens) runs the ship in a fresh-context subagent instead *(UserPromptSubmit)*
-- `pre.ship.delegate` — The same threshold for a do-ship started through the Skill tool (concept finalize, do-run, autonomous); refuses a delegated spawn below it *(PreToolUse)*
-- `ss.ship.verify` — Surface post-merge watcher results *(SessionStart)*
-- `ss.ship.resume` — Re-enter a ship that was mid-pipeline when the context compacted or the session paused: verify git/gh state first, never a second PR or tag *(SessionStart)*
-- `ss.run.task` — After a compaction or resume, re-inject a running do-run's task verbatim from `.claude/run-task.md`, so constraints survive an overnight run *(SessionStart)*
+- `ss.ship.verify` *(SessionStart)*
+- `ss.ship.resume` *(SessionStart)*
+- `prompt.ship.detect` *(UserPromptSubmit)*
+- `pre.ship.guard` *(PreToolUse)*
+- `pre.ship.delegate` *(PreToolUse)*
 
-#### flow — track progress toward completion
+#### flow — completion card, verification, session title
 
-- `post.flow.completion` — Track code edits, inject completion reminder *(PostToolUse)*
-- `post.flow.debug` — Mandate /auto-fix after 2+ consecutive shell failures *(PostToolUse + PostToolUseFailure)*
-- `prompt.batch.collect` — Collect prompts instead of executing them, in `/do-batch` mode *(UserPromptSubmit)*
-- `prompt.flow.appstart` — Detect app start intent, enforce completion card *(UserPromptSubmit)*
-- `prompt.flow.silent-turn` — Mark background/cron-injected turns *(UserPromptSubmit)*
-- `prompt.burn.resume` — After a usage limit stopped a burn: ask on a manual nudge, apply the chosen policy on an automatic resume *(UserPromptSubmit)*
-- `stop.flow.guard` — Enforce completion card before response ends *(Stop)*
+- `prompt.flow.open-url` *(UserPromptSubmit)*
+- `prompt.batch.collect` *(UserPromptSubmit)*
+- `prompt.flow.silent-turn` *(UserPromptSubmit)*
+- `prompt.flow.title-work` *(UserPromptSubmit)*
+- `prompt.flow.appstart` *(UserPromptSubmit)*
+- `post.flow.completion` *(PostToolUse)*
+- `post.flow.debug` *(PostToolUse)*
+- `post.ask.answers` *(PostToolUse)*
+- `post.flow.title-mode` *(PostToolUse)*
+- `stop.flow.browsertest` *(Stop)*
+- `stop.flow.guard` *(Stop)*
+- `stop.guide.handoff` *(Stop)*
 
-#### branch — protect main and worktrees
+#### agents & runs — delegation, do-run contract, burn
 
-- `pre.main.guard` — Prevent accidental writes on local main *(PreToolUse)*
-- `pre.edit.branch` — Block Edit/Write while HEAD is on main *(PreToolUse)*
-- `prompt.worktree.branch-guard` — Prevent working on main inside a worktree *(UserPromptSubmit)*
+- `ss.run.task` *(SessionStart)*
+- `prompt.run.contract` *(UserPromptSubmit)*
+- `prompt.burn.resume` *(UserPromptSubmit)*
+- `pre.agent.model` *(PreToolUse)*
+- `pre.agent.announce` *(PreToolUse)*
+- `pre.agent.relay` *(PreToolUse)*
+- `pre.run.contract` *(PreToolUse)*
+- `substop.agent.wip` *(SubagentStop)*
+- `post.agent.nudge` *(PostToolUse)*
+- `post.run.contract` *(PostToolUse)*
+- `stop.agent.relay` *(Stop)*
 
-#### plugin — updates, dependencies, and health
+#### skills & knowledge — routing, overrides, injected docs
 
-- `ss.plugin.update` — Check for plugin updates *(SessionStart)*
-- `ss.permissions.ensure` — Ensure required plugin permissions *(SessionStart)*
-- `ss.mcp.deps` — Auto-install MCP server dependencies *(SessionStart)*
-- `ss.mcp.envcheck` — Warn on MCP servers missing env vars *(SessionStart)*
-- `pre.mcp.health` — Detect dead/stale MCP servers before calls *(PreToolUse)*
+- `ss.knowledge.index` *(SessionStart)*
+- `ss.concept.resume` *(SessionStart)*
+- `prompt.knowledge.dispatch` *(UserPromptSubmit)*
+- `prompt.skill.enforce` *(UserPromptSubmit)*
+- `prompt.skill.overrides` *(UserPromptSubmit)*
+- `prompt.strict.enforce` *(UserPromptSubmit)*
+- `pre.readme.standards` *(PreToolUse)*
+- `pre.strict.agent-gate` *(PreToolUse)*
+- `post.concept.gate` *(PostToolUse)*
+- `post.design.remind` *(PostToolUse)*
+- `post.skill.marker` *(PostToolUse)*
+- `post.skill.overrides` *(PostToolUse)*
+- `stop.strict.release` *(Stop)*
 
-#### knowledge — deep-knowledge injection
+#### plugin & MCP — updates, dependencies, server health
 
-- `ss.knowledge.index` — Inject deep-knowledge index into context *(SessionStart)*
-- `prompt.knowledge.dispatch` — Inject deep-knowledge by prompt keywords *(UserPromptSubmit)*
+- `ss.plugin.update` *(SessionStart)*
+- `ss.permissions.ensure` *(SessionStart)*
+- `ss.statusline.ensure` *(SessionStart)*
+- `ss.thinking.display` *(SessionStart)*
+- `ss.mcp.deps` *(SessionStart)*
+- `ss.mcp.envcheck` *(SessionStart)*
+- `ss.mcp.verify` *(SessionStart)*
+- `ss.mcp.failcache` *(SessionStart)*
+- `ss.mcp.reap` *(SessionStart)*
+- `ss.watchdog.reap` *(SessionStart)*
+- `ss.tmp.sweep` *(SessionStart)*
+- `ss.project.setup` *(SessionStart)*
+- `prompt.plugin.scope` *(UserPromptSubmit)*
+- `pre.plugin.scope` *(PreToolUse)*
+- `pre.mcp.health` *(PreToolUse)*
+- `sub.plugin.root` *(SubagentStart)*
+- `post.project.setup` *(PostToolUse)*
+- `stop.mcp.reap` *(Stop)*
 
-#### issues & team — tracking and collaboration
+#### issues, team & graph
 
-- `prompt.issue.detect` — Track GitHub issues automatically *(UserPromptSubmit)*
-- `ss.concept.resume` — Recover an open concept session after restart *(SessionStart)*
-- `ss.team.changelog` — Summarize teammates' changes on remote main *(SessionStart)*
+- `ss.graphify` *(SessionStart)*
+- `ss.team.changelog` *(SessionStart)*
+- `prompt.issue.detect` *(UserPromptSubmit)*
+- `pre.issue.guard` *(PreToolUse)*
+- `post.graphify.query` *(PostToolUse)*
+- `post.graphify.search` *(PostToolUse)*
+<!--/devops:block:hook-categories-->
 
 </details>
 
@@ -649,7 +722,7 @@ extensions under an old name (`.claude/skills/ship/`) keep loading.
 | `/auto-cleanup` (trigger: "branch cleanup") | Hidden · Card hint + Router | Branch/worktree/PR hygiene page; open PRs are landed one after another via `/do-ship`. After each ship, `ship_hygiene` removes old leftovers that provably landed and suggests the page when too much piles up (thresholds: "devops settings") |
 | `/auto-update` | Hidden | Update the plugin to the latest version from GitHub |
 | `/auto-concept` | Hidden · Router | Interactive HTML page for analysis, plans, concepts, and prototypes |
-| `/auto-agents` | Hidden | Full-ceremony orchestration (plan → confirm → waves) for Complex-tier work; everyday delegation runs automatically via the always-on policy |
+| `/auto-agents` | Hidden · Skills | The execution path for everything that implements (do-run, auto-fix, auto-harden, auto-polish, a concept's implement step): applies the delegation tiers, shows one agent card, runs the waves; full ceremony (plan → confirm → waves) only on a yes |
 | `/do-run autonomous` | Explicit | Fully autonomous agent orchestration while user is AFK |
 | `/do-run burn` | Explicit | Turns budget that would expire this week into landed work: depth per task first, lanes only to fill time; a limit stop is asked about, never burned through |
 | `/do-run backlog` | Explicit | Milestone-centric backlog runner: refine, implement, test/QA, and ship selected milestones/issues unsupervised |
@@ -693,16 +766,19 @@ the hook sees it, so prefer the plain words. A bare "strict" arms nothing.
 #### `/do-run` — let Claude execute autonomously
 
 When you want Claude to **run autonomously or semi-autonomously to implement
-something**, reach for `/do-run`. There are two ways in:
+something**, reach for `/do-run`. Without a mode it asks one short question
+set (what · how · scope · passes) and implements your prompt through
+`auto-agents`, the multi-agent execution path, while you stay present. There
+are two ways in:
 
 - **`/do-run backlog` — Claude picks the topics itself.** It pulls the planned
   backlog (open milestones, else loose issues), then refines → implements → tests →
   **ships** each item unsupervised. An optional **budget mode** (asked at the gate,
   default *no*) adds burn depth per issue. Under the hood it composes the other
   runs, so you don't invoke them separately.
-- **You pick the topic** with the other three:
-  - **`/do-run autonomous`** — one ad-hoc task, fully AFK (never ships).
-  - **`/auto-agents`** — multi-agent orchestration while you stay present.
+- **You pick the topic** with the other modes:
+  - **`/do-run autonomous`** — one ad-hoc task, fully AFK; it ships at the end
+    only when you chose that at the start (default: you ship by hand).
   - **`/do-run burn`** — budget-driven: turns budget that would expire this
     week into landed work — stronger models and a redteam pass per task, lanes
     only to fill time, a pause instead of a hard stop at the 5-hour window.
@@ -751,11 +827,12 @@ for single-domain work, one background agent when the deliverable is a conclusio
 A budget class (plan × 5h window × week, read from the local usage snapshot)
 keeps that honest on small plans: `free` / `ask-before-parallel` (a Pro plan
 from 0 % — single agents run on sonnet, a parallel spawn asks one question per
-session) / `sonnet-only`. Explicit `/run-*` skills are never asked or downgraded.
+session) / `sonnet-only`. An explicit `/do-run` is never asked or downgraded.
 Switch it off per project or machine: `.claude/delegation.json` (or
 `~/.claude/delegation.json`) with `{"mode":"off"}` — no proactive agents, no
 offers — or `{"mode":"ask"}` — every agent tier is offered first and runs only on
-a yes. Explicit `/run-*` skills and "with agents" in a prompt always still spawn.
+a yes. An explicit `/do-run` and "with agents" in a prompt always still spawn.
+Every spawn shows an agent card (agent · task · model · effort) in the chat.
 
 | Agent | Role |
 |---|---|
@@ -775,80 +852,95 @@ a yes. Explicit `/run-*` skills and "with agents" in a prompt always still spawn
 ## Completion Cards
 
 Every task ends with a completion card — one page, three result lines that
-answer the prompt, one decision. The card is always the last thing in the
-response. Full spec: [completion-card-design.md](plugins/devops/deep-knowledge/completion-card-design.md).
+answer the prompt, one decision. It is always the last thing in the response.
+Full spec: [completion-card-design.md](plugins/devops/deep-knowledge/completion-card-design.md).
 
-**ship-successful** (ring project, alpha) — after a successful PR merge:
+**ship-successful** in a channel (ring) project — rendered by the real card
+renderer, the way a terminal shows it:
 
+<!--devops:block:card-example-->
 ````
-&nbsp;
 ---
+
 ### **✨✨✨ Filter dialog moved to settings ✨✨✨**
 › Settings now has a Filter tab with drag & drop, replacing the old dialog
-› Old dialog route still works — redirects to the new tab
-✓ 3/3 Anforderungen  ✓ 47 Tests grün  ✓ 4 Live-Checks ok
-5h ▰▰▰▰▰▰▰│▱▱▱▱▱▱ 3 h 12 m   Wk ▰▰│▱▱▱▱▱▱ 5 d 3 h
-✓ commit → ✓ push → ✓ PR #42 → ✓ merge   main → ✓ alpha → ○ beta → ○ stable · v0.8.3 · Build a3f9b21
-## 🚀 Released v0.8.3 alpha — promote to beta?
-[Promote ↗] [—]
+› The old dialog route still works and redirects to the new tab
+✓ 3/3 Requirements  ✓ 47 tests green
+✓ commit → ✓ push → ✓ PR #42 → ✓ merge   main · Build a3f9b21
+alpha **v0.8.3** › beta v0.8.1 (−2) › stable v0.7.9 (−4 · 9 d)
+
+## 🟩 🚀 Released Alpha — v0.8.3 — promote to beta?
+
 ---
 ````
+<!--/devops:block:card-example-->
 
-Two blocks, nothing between them. Block 1 ("what happened"): the title, ≤ 3
-`›` result lines naming an effect for the user (never a file or hook), the
-evidence row (requirements · tests · live check, deviations first and
-bright), the budget line, and the pipeline line. Block 2 ("what to decide"):
-a heading phrased as a question, an optional context line, ≤ 3 numbered
-points, and — Desktop app only — the `[CARD WIDGET]` buttons for the two
-verbs of the variant (`Ship` / `Ändern`, `Fix` / `Skip`, `Promote`, …); the
-terminal shows the question heading alone.
+Two blocks, nothing between them. Block 1 ("what happened"): the title, up to
+three `›` result lines naming an effect for the user (never a file or hook),
+the evidence row (requirements · tests · live check, deviations first), the
+pipeline line (commit → push → PR → merge · branch · build), the channel
+ladder in ring projects, and — once a usage window is worth a look — the
+budget line `5h ▰▰▰▰▰▰▰│▱▱▱▱▱▱ 3 h 12 m   Wk ▰▰│▱▱▱▱▱▱ 5 d 3 h` (bar =
+elapsed time, `│` = usage). Block 2 ("what to decide"): a heading that leads
+with the same status and activity icons as the session title and asks one
+question, an optional context line, and at most three numbered points.
+
+On the Claude Desktop app the whole card is one widget instead of markdown:
+the same content plus the buttons for the variant's verbs (`Ship` / `Ändern`,
+`Fix` / `Skip`, `Promote beta`, `Nachbessern` with a prepared answer,
+`App starten`, `Web-Guide starten`), each with a tooltip. The terminal shows
+the question heading alone.
 
 <details>
-<summary><strong>See all other variants</strong> — ready, ship-blocked, test, test-minimal, analysis, aborted, fallback, released, ready-files, pending, concept, batch, V&V unverified</summary>
+<summary><strong>All variants</strong> — the decision heading each one ends with</summary>
 
-| Variant / state | Decision heading | Notes |
+<!--devops:block:card-variants-->
+| Variant / state | Decision heading | When |
 |---|---|---|
-| `ready` | `📦 Shippen?` / `📦 Shippen trotz {reservation}?` | open + final tests as points |
-| `ready` + red/partial | `⚠ Trotzdem shippen mit 2 roten Tests?` | line 1 = `**Nicht erreicht:**` |
-| `ship-blocked` | `⛔ {reason} umgehen und trotzdem shippen?` | only variant with `⛔` |
-| `ship-successful` (ring) | `🚀 Released v{v} alpha — nach beta promoten?` | context line = distance to beta |
-| `ship-successful` (plain) | `🚀 Shipped v{v} → main.` | state, no buttons |
-| `released` → beta/stable | `🎊 Promoted v{v} BETA — nach stable?` / `🎊 Released v{v} LIVE — stable.` | evidence = promotion facts |
-| `ready-files` | `📂 Fertig auf der Platte — noch etwas?` | pipeline line names the file(s) |
-| `test` | `🧪 Erst testen, dann shippen?` | points = user-test steps |
-| `test-minimal` | `▶️ Läuft — viel Spaß` | title + one line + heading only, no widget |
-| `analysis` | `📋 Analyse gelesen — umsetzen oder Fragen?` | pipeline = `➖ keine Änderungen` |
-| `aborted` | `🚫 Abgebrochen wegen {reason} — anders versuchen?` | context line = alternatives |
-| `fallback` | `🔧 Erledigt — noch etwas?` | miscellaneous / default |
-| pending override | `⏳ Noch nicht fertig — {what}` | replaces the CTA of whichever variant the card carries, so it never asks you to act on a result that has not arrived |
-| concept override | `🧭 Concept wartet auf deine Entscheidungen` | context line = the page link |
-| batch override | `📥 Batch sammelt — {n} Einträge` | points = how to collect, fire and stop; context line = what happens to the next prompt |
-| V&V unverified | `⚠ Ungeprüft shippen?` | `⚠ ungeprüft` leads the evidence row |
+| `ready` | 👉 📦 Ready — Ship? | Code or doc changes, nothing open, no app to start |
+| `ready + open point` | 👉 ❓ Question — Also retry on HTTP 503? | A decision is still the user's (`open`) — Ship is not offered until it is answered |
+| `ready + red tests` | 👉 ⚠️ Red tests — Ship anyway with 2 red tests? | Tests are red or a requirement is unmet — line 1 says what was not achieved |
+| `test` | 👉 🧪 Test — Test first, then ship? | Code changed and the app can be started — the user tests first |
+| `test-minimal` | 🟩 ✨ Started — have fun | The user only asked to start the app, nothing was edited |
+| `ship-blocked` | 👉 🚧 Blocked — Bypass tsc error and ship anyway? | The ship pipeline ran but did not merge |
+| `ship-successful (plain)` | 🟩 🚀 Released Alpha — v1.4.0 → main. | Merged to main in a project without release channels |
+| `ship-successful (ring)` | 🟩 🚀 Released Alpha — v1.4.0 — promote to beta? | Merged and released to alpha in a channel (ring) project |
+| `released → beta` | 🟩 🎊 Beta — v1.4.0 — to stable? | A promotion re-tagged the same commit on beta |
+| `released → stable` | 🟩 🎊 Stable — v1.4.0 — done. | A promotion reached stable — nothing left to decide |
+| `ready-files` | 👉 📦 Files — Done on disk — anything else? | Files changed outside any git repository |
+| `analysis` | 🟩 📊 Analysis — read through — questions? | An answer or investigation — nothing changed anywhere |
+| `aborted` | 🟥 📦 Aborted — aborted because of no write access — try differently? | The task was stopped, infeasible or hit a limit |
+| `fallback` | 🟩 🖥️ System — done — anything else? | Work done outside the repo with no repo diff (a setting, a deploy, a DB operation) |
+| `paused` | 🟦 🔌 Restart — restart Claude Code | The user pauses, or the next step is a restart, a reboot or a usage-limit reset |
+| `pending (override)` | ⏳ 🤖 Team — not done yet — agent `qa` is working | Background agents still run — replaces the decision of any variant |
+<!--/devops:block:card-variants-->
 
-English strings mirror these one to one (`Ship anyway despite 2 red tests?`,
-`Released v0.179.0 alpha — promote to beta?`, …) — see the design doc § 3 for
-the full mapping.
+Headings follow the user's language; this table is the English rendering.
+The session title in the Desktop sidebar carries the same status and
+activity icons (`👉` your move · `⏳` Claude works · `🟩` done · `🟥`
+aborted · `🟦` paused).
 
 </details>
-
-In the Claude Desktop app the buttons live inside the card's own widget
-(`[CARD WIDGET]`, Desktop-only, skipped silently elsewhere): one button per
-verb of the variant (Ship / Ändern, Fix / Skip, Promote, …), each with a
-tooltip explaining what it triggers. Terminal sessions get the identical
-markdown card, minus the buttons.
 
 ## Project Structure
 
 ```
-devops/
-├── .claude-plugin/plugin.json     ← Plugin manifest
-├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->86<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
-├── skills/                        ← <!--devops:count:skills-->14<!--/devops:count:skills--> skill definitions (SKILL.md)
-├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
-├── deep-knowledge/                ← Cross-cutting reference docs
-├── templates/                     ← Output format templates
-└── scripts/                       ← Utility scripts (build-id, usage)
+plugins/
+├── devops/                        ← the core plugin
+│   ├── .claude-plugin/plugin.json ← Plugin manifest (SemVer, tags v0.x.y)
+│   ├── .mcp.json                  ← MCP servers: completion card, ship, issues
+│   ├── CONVENTIONS.md             ← Naming, versioning, extension rules
+│   ├── hooks/                     ← <!--devops:count:hooks-->87<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+│   ├── skills/                    ← <!--devops:count:skills-->14<!--/devops:count:skills--> skill definitions (SKILL.md)
+│   ├── agents/                    ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
+│   ├── mcp-server/                ← Card renderer + Desktop widget, ship tools, issue matching
+│   ├── deep-knowledge/            ← Cross-cutting reference docs (<!--devops:count:dk-->56<!--/devops:count:dk--> topics)
+│   ├── scheduled-tasks/           ← Runbooks for opt-in background jobs
+│   ├── evals/                     ← Behavioral evals and skill A/B runs (ab-run.js)
+│   ├── templates/                 ← Output style, changelog and release templates
+│   ├── scripts/                   ← CLI helpers (README generator, burn plan, API credit, …)
+│   └── docs/                      ← Architecture page and design notes
+└── local-llm/                     ← Optional token saver backed by AnythingLLM
 ```
 
 ## Troubleshooting
@@ -858,15 +950,17 @@ devops/
 Claude Code caches plugin marketplace data globally. If `claude plugin update` reports no update available despite a new version being published, clear the global marketplace cache:
 
 ```bash
-# Windows (Git Bash / WSL)
-rm -rf ~/.claude/plugins/cache/dotclaude
-rm -rf ~/.claude/plugins/marketplaces/dotclaude
-rm -f ~/.claude/plugins/install-counts-cache.json
-
-# macOS / Linux
+# Git Bash on Windows, WSL, macOS, Linux
 rm -rf ~/.claude/plugins/cache/dotclaude
 rm -rf ~/.claude/plugins/marketplaces/dotclaude
 rm -f ~/.claude/plugins/install-counts-cache.json
 ```
 
-Then run `claude plugin update devops@Jerry0022` again. Start a new session for changes to take effect.
+Then add the marketplace and install again (see [Installation](#installation)). Start a new session for changes to take effect.
+
+### Update installed but the session still runs the old version
+
+A session keeps the MCP servers it started with. When the card shows
+`ℹ Session server v<old> — restarting the session loads v<new>.`, start a new
+session. On a `stable` pin a fresh ship does not reach you until it is
+promoted — see [Updates](#updates).
