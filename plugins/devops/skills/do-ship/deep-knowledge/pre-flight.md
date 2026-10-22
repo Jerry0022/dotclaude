@@ -114,4 +114,4 @@ no cleanup, preserve all branches/worktrees.
 
 ## CI quota (#752)
 
-`ship_preflight` adds `ciQuota` (and a `ci-quota` check with a warning, never an error) when any session on this machine recorded an exhausted Actions-minutes block for the repo. See `release-results.md` § Account-limited CI.
+`ship_preflight` adds `ciQuota` (and a `ci-quota` check with a warning, never an error) when any session on this machine recorded an exhausted Actions-minutes block for the repo's GitHub account (shared by all its repos). With `ciQuota.decision` set, the answer is already given for this period: never ask it again, and put no "catch up CI" item on the card. See `release-results.md` § Account-limited CI.

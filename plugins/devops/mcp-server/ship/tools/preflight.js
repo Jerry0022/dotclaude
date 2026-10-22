@@ -18,7 +18,7 @@ import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js
 import { detectComponents } from "../lib/components.js";
 import { claudeIgnoreCheck, touchesIgnorePolicy } from "../lib/claude-ignore.js";
 import { scanWorkflows } from "../lib/workflow-hygiene.js";
-import { repoKey, readRecord, describeRecord } from "../lib/ci-quota.js";
+import { quotaKey, readRecord, describeRecord } from "../lib/ci-quota.js";
 
 export const schema = z.object({
   base: z.string().optional().describe("Base branch to ship into. Omit to auto-detect: parent branch (from sub-branch naming) or the repository's default branch (origin/HEAD, typically 'main' or 'master')."),
@@ -466,11 +466,11 @@ export async function handler(params) {
   // ship_release re-detects it (ci-account-limits) and never applies it to a real red check.
   let ciQuota = null;
   if (!noRemote) {
-    const rec = readRecord(repoKey(cwd));
+    const rec = readRecord(quotaKey(cwd));
     if (rec) {
       ciQuota = describeRecord(rec);
       const stored = rec.decision
-        ? `stored decision "${rec.decision.value}" (${rec.decision.decidedAt}) is applied without re-asking`
+        ? `stored decision "${rec.decision.value}" (${rec.decision.decidedAt}, valid until ${rec.decision.expiresAt}) is applied without re-asking — no question, no re-run item on the card`
         : "no decision stored yet — ask the user once and pass it as ship_release quotaDecision";
       const msg = `GitHub Actions quota exhausted (recorded ${rec.detectedAt}, resets ${rec.resetAt}) — CI checks cannot run; ship_release skips the long checks wait. ${stored}.`;
       checks.push({ name: "ci-quota", ok: true, ...ciQuota });

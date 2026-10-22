@@ -58,7 +58,7 @@ vi.mock("../lib/github.js", () => ({
 // #752: repo key is test-controlled; the store is a temp file (DEVOPS_CI_QUOTA_FILE).
 vi.mock("../lib/ci-quota.js", async (importOriginal) => {
   const orig = await importOriginal();
-  return { ...orig, repoKey: vi.fn(() => null), clearRecord: vi.fn(orig.clearRecord), setDecision: vi.fn(orig.setDecision) };
+  return { ...orig, quotaKey: vi.fn(() => null), clearRecord: vi.fn(orig.clearRecord), setDecision: vi.fn(orig.setDecision) };
 });
 
 vi.mock("../lib/ci-account-limits.js", () => ({
@@ -1377,13 +1377,13 @@ describe("ship_release — #752 shared CI-quota block (on top of the #768 detect
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "rel-quota-"));
     process.env.DEVOPS_CI_QUOTA_FILE = join(dir, "q.json");
-    quotaLib.repoKey.mockReturnValue("o/r");
+    quotaLib.quotaKey.mockReturnValue("o");
     ghLib.watchPRChecks.mockReturnValue(billing);
     limitsLib.classifyFailedChecks.mockReturnValue(minutes);
   });
   afterEach(() => {
     delete process.env.DEVOPS_CI_QUOTA_FILE;
-    quotaLib.repoKey.mockReturnValue(null);
+    quotaLib.quotaKey.mockReturnValue(null);
     limitsLib.classifyFailedChecks.mockReturnValue({ limited: false, kinds: [], checks: [] });
     rmSync(dir, { recursive: true, force: true });
   });
@@ -1393,9 +1393,9 @@ describe("ship_release — #752 shared CI-quota block (on top of the #768 detect
     expect(res.success).toBe(false);
     expect(res.checks.status).toBe("account-limited");
     expect(res.ciAccountLimited.kinds).toEqual(["actions-minutes"]);
-    expect(res.checks.quota.repo).toBe("o/r");
+    expect(res.checks.quota.account).toBe("o");
     expect(ghLib.mergePR).not.toHaveBeenCalled();
-    expect(quotaLib.readRecord("o/r")).not.toBeNull();
+    expect(quotaLib.readRecord("o")).not.toBeNull();
   });
 
   describe("A2: interactive first ship asks before any skipChecks merge", () => {
@@ -1403,7 +1403,7 @@ describe("ship_release — #752 shared CI-quota block (on top of the #768 detect
       const res = await handler(params({ interactive: true }));
       expect(res.success).toBe(false);
       expect(res.checks.status).toBe("quota-decision-needed");
-      expect(res.ciQuotaDecisionNeeded).toMatchObject({ repo: "o/r", options: ["skip-checks", "wait"], validForDays: 7 });
+      expect(res.ciQuotaDecisionNeeded).toMatchObject({ account: "o", options: ["skip-checks", "wait"] });
       expect(res.error).toMatch(/Ask the user/);
       expect(res.error).toMatch(/do NOT retry with skipChecks/);
       expect(ghLib.mergePR).not.toHaveBeenCalled();
@@ -1447,7 +1447,7 @@ describe("ship_release — #752 shared CI-quota block (on top of the #768 detect
     limitsLib.classifyFailedChecks.mockReturnValue({ limited: true, kinds: ["artifact-quota"], checks: [{ name: "e2e", kind: "artifact-quota" }] });
     const res = await handler(params());
     expect(res.checks.status).toBe("account-limited");
-    expect(quotaLib.readRecord("o/r")).toBeNull();
+    expect(quotaLib.readRecord("o")).toBeNull();
   });
 
   test("explicit skip-checks answer is stored and applied in a later ship without re-asking", async () => {
@@ -1467,11 +1467,11 @@ describe("ship_release — #752 shared CI-quota block (on top of the #768 detect
     ghLib.watchPRChecks.mockReturnValue({ status: "passed", checks: [], failed: [], pending: [] });
     const res = await handler(params({ quotaDecision: "skip-checks" }));
     expect(res.quotaDecisionIgnored).toBeDefined();
-    expect(quotaLib.readRecord("o/r")).toBeNull();
+    expect(quotaLib.readRecord("o")).toBeNull();
   });
 
   test("stored wait decision blocks without re-asking", async () => {
-    quotaLib.recordBlock("o/r");
+    quotaLib.recordBlock("o");
     const res = await handler(params({ quotaDecision: "wait" }));
     expect(res.success).toBe(false);
     expect(res.quotaBlocked).toBe(true);
@@ -1481,28 +1481,28 @@ describe("ship_release — #752 shared CI-quota block (on top of the #768 detect
   });
 
   test("a real red check is never skipped, even with a stored skip decision", async () => {
-    quotaLib.recordBlock("o/r");
-    quotaLib.setDecision("o/r", "skip-checks");
+    quotaLib.recordBlock("o");
+    quotaLib.setDecision("o", "skip-checks");
     limitsLib.classifyFailedChecks.mockReturnValue({ limited: false, kinds: [], checks: [{ name: "build", kind: null }] });
     const res = await handler(params());
     expect(res.success).toBe(false);
     expect(res.checksBlocked).toBe(true);
     expect(res.checks.status).toBe("failed");
     expect(ghLib.mergePR).not.toHaveBeenCalled();
-    expect(quotaLib.readRecord("o/r")).toBeNull();
+    expect(quotaLib.readRecord("o")).toBeNull();
   });
 
   test("passing checks clear the record (quota is back)", async () => {
-    quotaLib.recordBlock("o/r");
+    quotaLib.recordBlock("o");
     ghLib.watchPRChecks.mockReturnValue({ status: "passed", checks: [], failed: [], pending: [] });
     const res = await handler(params());
     expect(res.checks.quotaCleared).toBe(true);
-    expect(quotaLib.readRecord("o/r")).toBeNull();
+    expect(quotaLib.readRecord("o")).toBeNull();
   });
 
   test("ship review: a record never merges on a short probe that saw no checks yet", async () => {
-    quotaLib.recordBlock("o/r");
-    quotaLib.setDecision("o/r", "wait");
+    quotaLib.recordBlock("o");
+    quotaLib.setDecision("o", "wait");
     ghLib.watchPRChecks
       .mockReturnValueOnce({ status: "no-checks", checks: [], failed: [], pending: [] })
       .mockReturnValueOnce(billing);
@@ -1514,8 +1514,8 @@ describe("ship_release — #752 shared CI-quota block (on top of the #768 detect
   });
 
   test("ship review: a mixed minutes + artifact-quota verdict is no stored skip", async () => {
-    quotaLib.recordBlock("o/r");
-    quotaLib.setDecision("o/r", "skip-checks");
+    quotaLib.recordBlock("o");
+    quotaLib.setDecision("o", "skip-checks");
     limitsLib.classifyFailedChecks.mockReturnValue({
       limited: true,
       kinds: ["actions-minutes", "artifact-quota"],
@@ -1528,7 +1528,7 @@ describe("ship_release — #752 shared CI-quota block (on top of the #768 detect
   });
 
   test("ship review: an unwritable store is a warning, never a failed ship", async () => {
-    quotaLib.recordBlock("o/r");
+    quotaLib.recordBlock("o");
     quotaLib.clearRecord.mockImplementationOnce(() => { throw new Error("EACCES: read-only home"); });
     ghLib.watchPRChecks.mockReturnValue({ status: "passed", checks: [], failed: [], pending: [] });
     const res = await handler(params());
@@ -1543,12 +1543,12 @@ describe("ship_release — #752 shared CI-quota block (on top of the #768 detect
   });
 
   test("revoke forgets the decision but keeps the block", async () => {
-    quotaLib.recordBlock("o/r");
-    quotaLib.setDecision("o/r", "skip-checks");
+    quotaLib.recordBlock("o");
+    quotaLib.setDecision("o", "skip-checks");
     const res = await handler(params({ quotaDecision: "revoke" }));
     expect(res.quotaDecisionRevoked).toBe(true);
     expect(res.checks.status).toBe("account-limited");
-    expect(quotaLib.readRecord("o/r").decision).toBeUndefined();
+    expect(quotaLib.readRecord("o").decision).toBeUndefined();
   });
 });
 

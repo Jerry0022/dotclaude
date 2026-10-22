@@ -55,7 +55,7 @@ vi.mock("../lib/conflict-markers.js", async (importOriginal) => ({
 
 vi.mock("../lib/ci-quota.js", async (importOriginal) => ({
   ...(await importOriginal()),
-  repoKey: vi.fn(() => null),
+  quotaKey: vi.fn(() => null),
 }));
 
 import { handler } from "./preflight.js";
@@ -342,21 +342,21 @@ describe("ship_preflight — #752 recorded CI-quota block", () => {
   });
   afterEach(() => {
     delete process.env.DEVOPS_CI_QUOTA_FILE;
-    quotaLib.repoKey.mockReturnValue(null);
+    quotaLib.quotaKey.mockReturnValue(null);
     rmSync(dir, { recursive: true, force: true });
   });
 
   test("no record: no ci-quota check, ciQuota null", async () => {
-    quotaLib.repoKey.mockReturnValue("o/r");
+    quotaLib.quotaKey.mockReturnValue("o");
     const result = await handler({ cwd: CWD });
     expect(checkByName(result, "ci-quota")).toBeUndefined();
     expect(result.ciQuota).toBeNull();
   });
 
   test("active record is reported with the stored decision, still ready", async () => {
-    quotaLib.repoKey.mockReturnValue("o/r");
-    quotaLib.recordBlock("o/r");
-    quotaLib.setDecision("o/r", "skip-checks");
+    quotaLib.quotaKey.mockReturnValue("o");
+    quotaLib.recordBlock("o");
+    quotaLib.setDecision("o", "skip-checks");
     const result = await handler({ cwd: CWD });
     expect(result.ciQuota.decision).toBe("skip-checks");
     expect(checkByName(result, "ci-quota").ok).toBe(true);

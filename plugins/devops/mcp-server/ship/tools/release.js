@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { gitArgs, gitTry, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf, detectDefaultBranch, NETWORK_TIMEOUT } from "../lib/git.js";
 import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch } from "../lib/github.js";
 import { classifyFailedChecks } from "../lib/ci-account-limits.js";
-import { repoKey, readRecord, recordBlock, setDecision, revokeDecision, clearRecord, describeRecord, DECISIONS, MINUTES_KIND } from "../lib/ci-quota.js";
+import { quotaKey as accountQuotaKey, readRecord, recordBlock, setDecision, revokeDecision, clearRecord, describeRecord, DECISIONS, MINUTES_KIND } from "../lib/ci-quota.js";
 import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
 import { remoteTagExists, parseLsRemoteTagOutput } from "../lib/remote-tags.js";
 import { retryUntil } from "../lib/retry.js";
@@ -58,7 +58,7 @@ export const schema = z.object({
   commitMessage: z.string().nullable().default(null).describe("If set, stage all and commit with this message before pushing"),
   mergeStrategy: z.enum(["squash", "merge", "rebase"]).default("squash").describe("PR merge strategy. Use 'merge' for overlapping files to preserve ancestry chain."),
   skipChecks: z.boolean().default(false).describe("Skip the pre-merge CI checks gate. Use only for hot-fixes when CI is broken. Env DEVOPS_SHIP_SKIP_CHECKS=1 also forces skip."),
-  quotaDecision: z.enum(["skip-checks", "wait", "revoke"]).optional().describe("The USER's explicit answer to a recorded CI-quota block (#752, kind actions-minutes): skip-checks = merge without checks while the quota is out, wait = do not merge until reset, revoke = forget the stored answer. Stored per owner/repo until the monthly reset or a check runs again. Pass ONLY after the user answered, never on your own judgement; never applied to a real red check."),
+  quotaDecision: z.enum(["skip-checks", "wait", "revoke"]).optional().describe("The USER's explicit answer to a recorded CI-quota block (#752, kind actions-minutes): skip-checks = merge without checks while the quota is out, wait = do not merge until reset, revoke = forget the stored answer. Stored per GitHub account (owner) until the quota reset — every repo of the account, every session. Pass ONLY after the user answered, never on your own judgement; never applied to a real red check."),
   interactive: z.boolean().default(false).describe("true when the user is present to answer (interactive /do-ship). An Actions-minutes block with no stored answer then returns ciQuotaDecisionNeeded instead of the skipChecks fallback: ask the user, pass the answer as quotaDecision. Default false (autonomous runs keep the local-gate → skipChecks fallback); a live .claude/.ship-lockout marker always counts as autonomous."),
   checksTimeoutSec: z.number().int().min(30).max(3600).default(600).describe("Max seconds to wait for PR CI checks before merging. Default 10 min."),
   tagVerifyAttempts: z.number().int().min(1).max(20).default(4).describe("How often to re-query the remote before declaring the pushed channel tag unverified"),
@@ -476,14 +476,14 @@ export async function handler(params) {
           return fallback;
         }
       };
-      const quotaKey = repoKey(cwd);
+      const quotaKey = accountQuotaKey(cwd);
       let quota = quotaStore(() => readRecord(quotaKey));
       if (params.quotaDecision === "revoke") {
         if (quotaStore(() => revokeDecision(quotaKey), false)) result.quotaDecisionRevoked = true;
         quota = quotaStore(() => readRecord(quotaKey));
       } else if (params.quotaDecision && DECISIONS.includes(params.quotaDecision)) {
         if (quotaStore(() => setDecision(quotaKey, params.quotaDecision))) quota = quotaStore(() => readRecord(quotaKey));
-        else result.quotaDecisionIgnored = "no CI-quota block is recorded for this repo — nothing to decide";
+        else result.quotaDecisionIgnored = "no CI-quota block is recorded for this account — nothing to decide";
       }
       let checkResult = watchPRChecks(pr.number, opts, quota
         ? { timeoutSec: Math.min(checksTimeoutSec, 60), noChecksGraceMs: 0 }
@@ -536,6 +536,8 @@ export async function handler(params) {
         if (!decision && isInteractiveShip(params)) askQuotaDecision = true;
       } else if (quota && (checkResult.status === "passed" || checkResult.status === "failed")) {
         // A check ran for real again (not a minutes block) — the block is over.
+        // This PR's checks ran over main incl. every ship merged without CI —
+        // that is the catch-up; nothing is left to re-run by hand.
         if (quotaStore(() => clearRecord(quotaKey), false)) quotaNote = { quotaCleared: true };
       }
       result.checks = {
@@ -562,17 +564,17 @@ export async function handler(params) {
           if (askQuotaDecision) {
             result.checks.status = "quota-decision-needed";
             result.ciQuotaDecisionNeeded = {
-              repo: quota?.key || quotaKey,
+              account: quota?.key || quotaKey,
               resetAt: quota?.resetAt || null,
               options: [...DECISIONS],
-              validForDays: 7,
-              question: "GitHub Actions minutes are exhausted for this repo. Merge without CI checks while the quota is out (after a green local gate), or wait for the reset?",
+              validUntil: quota?.resetAt || null,
+              question: "GitHub Actions minutes are exhausted for this GitHub account. Merge without CI checks until the reset (after a green local gate each time), or wait for the reset? The answer holds for every repo of the account until the reset; the first ship after it runs CI over everything merged meanwhile.",
             };
             result.error =
               `CI could not give a verdict — GitHub Actions minutes exhausted on ` +
               `${limits.checks.map((c) => c.name).join(", ")}. PR #${pr.number} not merged. ` +
               `Ask the user (skip-checks | wait), then call ship_release again with quotaDecision set to the answer — ` +
-              `do NOT retry with skipChecks:true on your own. The answer is stored for this project for 7 days.`;
+              `do NOT retry with skipChecks:true on your own. The answer is stored for the account until the reset (${quota?.resetAt || "1st of next month"}).`;
             return result;
           }
           result.error =

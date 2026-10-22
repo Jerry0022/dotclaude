@@ -6,21 +6,23 @@
  * zero steps and a billing annotation. Without a shared record every session
  * rediscovers that on its own and asks the user again. The record lives in
  * `~/.claude/devops-ci-quota.json` (override: env DEVOPS_CI_QUOTA_FILE, or the
- * `file` option), keyed by `owner/repo`, so all sessions and worktrees agree.
+ * `file` option), keyed by the GitHub ACCOUNT (`owner` of origin, lower-case):
+ * minutes and spending limit are shared by every private repo of that account,
+ * so one answer covers all of its projects, sessions and worktrees.
  *
  * Detection is NOT done here: ci-account-limits.js (#768) is the single detector.
  * A record is only ever created when it reports kind "actions-minutes" for every
  * failed check (see MINUTES_KIND) — never from a real red check or an artifact
  * quota hit (the latter resets on its own schedule and does not stop jobs).
  * It expires at the reset date (unknown → 1st of next month, UTC) and is dropped
- * as soon as a check on the repo runs for real again. The user's decision is
+ * as soon as a check on the account runs for real again. The user's decision is
  * stored only on an explicit answer and can be revoked.
  *
- * The decision lives apart from the block (`decisions[key]`) and is valid for
- * DECISION_TTL_MS (7 days) from the answer, across all sessions: the block can
- * clear and come back within that window without a new question. After the
- * window the next minutes block asks again (interactive ships) — see
- * release-results.md § Account-limited CI.
+ * The decision lives apart from the block (`decisions[key]`) and is valid for the
+ * whole quota period: until the block's reset date at the time of the answer
+ * (`validUntil`). The block can clear and come back within that period without a
+ * new question; the first minutes block of the NEXT period asks again
+ * (interactive ships) — see release-results.md § Account-limited CI.
  */
 
 import { execFileSync } from "node:child_process";
@@ -32,9 +34,6 @@ export const DECISIONS = ["skip-checks", "wait"];
 
 /** The only ci-account-limits kind that is recorded: it stops every job of the account. */
 export const MINUTES_KIND = "actions-minutes";
-
-/** How long a user's answer (skip-checks / wait) stays valid for the project. */
-export const DECISION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function storePath(file) {
   return file || process.env.DEVOPS_CI_QUOTA_FILE || join(homedir(), ".claude", "devops-ci-quota.json");
@@ -52,6 +51,15 @@ export function repoKey(cwd, { remoteUrl } = {}) {
   }
   const m = /[:/]([^/:]+)\/([^/]+?)(?:\.git)?\/?$/.exec(url || "");
   return m ? `${m[1]}/${m[2]}`.toLowerCase() : null;
+}
+
+function accountOf(key) {
+  return key ? key.split("/")[0] : null;
+}
+
+/** Store key: the GitHub account (owner, lower-case) of the origin remote, or null. */
+export function quotaKey(cwd, opts) {
+  return accountOf(repoKey(cwd, opts));
 }
 
 /** 1st of the next month 00:00 UTC (the documented fallback when the reset date is unknown). */
@@ -72,16 +80,41 @@ function load(file) {
       delete rec.decision;
     }
   }
+  // Per-repo stores (`owner/repo`) fold into the account: earliest detection,
+  // latest reset, newest answer.
+  for (const [key, rec] of Object.entries(data.repos)) {
+    const acc = accountOf(key);
+    if (acc === key) continue;
+    const cur = data.repos[acc];
+    data.repos[acc] = !cur ? rec : {
+      detectedAt: [cur.detectedAt, rec.detectedAt].sort()[0],
+      resetAt: [cur.resetAt, rec.resetAt].sort().pop(),
+    };
+    delete data.repos[key];
+  }
+  for (const [key, dec] of Object.entries(data.decisions)) {
+    const acc = accountOf(key);
+    if (acc === key) continue;
+    const cur = data.decisions[acc];
+    if (!cur || String(dec?.decidedAt) > String(cur.decidedAt)) data.decisions[acc] = dec;
+    delete data.decisions[key];
+  }
   return data;
 }
 
-/** The decision's expiry; a missing/garbled decidedAt expires at once. */
+/**
+ * The decision's expiry: its `validUntil` (the period's reset); an answer from
+ * before validUntil existed lasts until the 1st of the month after it was given.
+ * A missing or garbled date expires at once.
+ */
 function decisionExpiresAt(dec) {
+  const until = Date.parse(dec?.validUntil);
+  if (Number.isFinite(until)) return until;
   const t = Date.parse(dec?.decidedAt);
-  return Number.isFinite(t) ? t + DECISION_TTL_MS : NaN;
+  return Number.isFinite(t) ? Date.parse(nextMonthResetUtc(t)) : NaN;
 }
 
-/** Active (≤ 7 days) decision for the key, or null. Mutates `data` when expired; returns [decision, changed]. */
+/** This period's decision for the key, or null. Mutates `data` when expired; returns [decision, changed]. */
 function activeDecision(data, key, now) {
   const dec = data.decisions[key];
   if (!dec) return [null, false];
@@ -102,7 +135,7 @@ function save(data, file) {
   }
 }
 
-/** Active record for the repo, or null. An expired record is removed on the way. */
+/** Active record for the account, or null. An expired record is removed on the way. */
 export function readRecord(key, { now = Date.now(), file } = {}) {
   if (!key) return null;
   const data = load(file);
@@ -119,7 +152,7 @@ export function readRecord(key, { now = Date.now(), file } = {}) {
   return { key, ...rec, ...(decision ? { decision } : {}) };
 }
 
-/** Record (or refresh) a detected block; a still-valid decision (≤ 7 days) applies to it. */
+/** Record (or refresh) a detected block; this period's decision applies to it. */
 export function recordBlock(key, { now = Date.now(), file, resetAt } = {}) {
   if (!key) return null;
   const data = load(file);
@@ -133,16 +166,17 @@ export function recordBlock(key, { now = Date.now(), file, resetAt } = {}) {
   return { key, ...data.repos[key], ...(decision ? { decision } : {}) };
 }
 
-/** Store the user's explicit answer. Only meaningful while a block is recorded; returns null otherwise. */
+/** Store the user's explicit answer for the block's period. Only meaningful while a block is recorded; returns null otherwise. */
 export function setDecision(key, value, { now = Date.now(), file } = {}) {
   if (!DECISIONS.includes(value)) throw new Error(`decision must be one of ${DECISIONS.join(", ")}`);
   const rec = readRecord(key, { now, file });
   if (!rec) return null;
   const data = load(file);
   if (!data.repos[key]) return null; // cleared by another session in between
-  data.decisions[key] = { value, decidedAt: new Date(now).toISOString() };
+  const validUntil = data.repos[key].resetAt;
+  data.decisions[key] = { value, decidedAt: new Date(now).toISOString(), validUntil };
   save(data, file);
-  return { key, ...data.repos[key], decision: { ...data.decisions[key], expiresAt: new Date(now + DECISION_TTL_MS).toISOString() } };
+  return { key, ...data.repos[key], decision: { ...data.decisions[key], expiresAt: validUntil } };
 }
 
 /** Forget the user's decision; the detected block stays until it expires or checks run again. */
@@ -155,7 +189,7 @@ export function revokeDecision(key, { file } = {}) {
   return true;
 }
 
-/** Drop the block (checks ran with steps again). The user's answer keeps its 7-day validity. */
+/** Drop the block (checks ran with steps again). The user's answer stays valid for its period. */
 export function clearRecord(key, { file } = {}) {
   if (!key) return false;
   const data = load(file);
@@ -169,7 +203,7 @@ export function clearRecord(key, { file } = {}) {
 export function describeRecord(rec) {
   if (!rec) return null;
   return {
-    repo: rec.key,
+    account: rec.key,
     detectedAt: rec.detectedAt,
     resetAt: rec.resetAt,
     decision: rec.decision?.value || null,
