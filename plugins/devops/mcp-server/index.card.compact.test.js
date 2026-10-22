@@ -15,6 +15,8 @@ process.env.CLAUDE_CODE_ENTRYPOINT = "cli";
 
 const captured = vi.hoisted(() => ({ handlers: {} }));
 
+// the SDK is mocked, so the #824 dependency guard must not wait for it on disk
+vi.mock("./lib/ensure-deps.js", () => ({ ensureDeps: async () => {} }));
 vi.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({
   McpServer: class {
     registerTool(name, _cfg, handler) { captured.handlers[name] = handler; }

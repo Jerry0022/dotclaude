@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 // exactly the pipeline tools the MCP server registers, or the offline path
 // silently lags behind the server it stands in for.
 const here = dirname(fileURLToPath(import.meta.url));
-const server = readFileSync(join(here, "index.js"), "utf8");
+const server = readFileSync(join(here, "server.js"), "utf8");
 const cli = readFileSync(join(here, "cli.js"), "utf8");
 
 const registered = [...server.matchAll(/registerTool\(\s*"([a-z_]+)"/g)].map((m) => m[1]).filter((n) => n !== "health_check");

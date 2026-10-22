@@ -5,6 +5,8 @@ import { describe, test, expect, vi, beforeAll } from "vitest";
 // imported and asserted on directly.
 process.env.DEVOPS_COMPLETION_NO_USAGE = "1";
 
+// the SDK is mocked, so the #824 dependency guard must not wait for it on disk
+vi.mock("./lib/ensure-deps.js", () => ({ ensureDeps: async () => {} }));
 vi.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({
   McpServer: class {
     registerTool() {}

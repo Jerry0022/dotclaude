@@ -20,6 +20,8 @@ process.env.DEVOPS_COMPLETION_NO_USAGE = "1";
 process.env.DEVOPS_CARD_PREGATE = "0";
 process.env.CLAUDE_CODE_ENTRYPOINT = "cli";
 
+// the SDK is mocked, so the #824 dependency guard must not wait for it on disk
+vi.mock("./lib/ensure-deps.js", () => ({ ensureDeps: async () => {} }));
 vi.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({
   McpServer: class {
     registerTool() {}
