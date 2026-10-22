@@ -79,6 +79,6 @@ describe("ship SKILL.md — session title prefix", () => {
   });
 
   test("the blocked prefix carries the ship-blocked card icons (title = CTA)", () => {
-    expect(SESSION_PREFIX.blocked).toBe("👉 ┃ 🚧 Blocked ");
+    expect(SESSION_PREFIX.blocked).toBe("👉 ➜ 🚧 Blocked ┃ ");
   });
 });

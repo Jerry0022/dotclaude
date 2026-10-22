@@ -6,7 +6,7 @@
  * @plugin devops
  * @description Marks a session as "being worked on" in the sidebar: on the
  *   first real prompt of a session — and on the first prompt after every
- *   completion card — it asks Claude to put the generic `⏳ ┃ 🤖 Solo ` (no
+ *   completion card — it asks Claude to put the generic `⏳ ➜ 🤖 Solo ┃ ` (no
  *   word — `SESSION_PREFIX.work` in mcp-server/lib/mode-state.js) in front of
  *   the session title, replacing whatever outcome prefix the last card left
  *   (📦 Ready, 🧪 Test, …). The hourglass is ONE state — "Claude works, not
@@ -84,7 +84,7 @@ const { STATUS, BARE_WORK } = require('../lib/title-scheme');
 
 /**
  * The prefix a prompt puts on the title: the process it starts when it
- * starts one (a ship → `⏳ ┃ 🚀 Shipping `), the bare hourglass otherwise. The
+ * starts one (a ship → `⏳ ➜ 🚀 Shipping ┃ `), the bare hourglass otherwise. The
  * hourglass is the fallback, never the override.
  */
 function prefixFor(prompt, cwd) {
@@ -132,7 +132,7 @@ function titleWorkOutput(hook, prompt, cwd) {
 function instruction(prefix = WORK_PREFIX, { machine = false } = {}) {
   const shipping = prefix === SHIPPING_PREFIX;
   const statuses = Object.values(STATUS).join(' ');
-  const known = `a known "<status> ┃ <Word> <activity> " prefix (status icon one of ${statuses}; hair-space fill before the word), the older "<status> <activity> <Word> – " two-icon form (also with ⏸️), the bare "${BARE_WORK}", or a legacy one (${LEGACY_PREFIXES.map(p => `"${p}"`).join(', ')})`;
+  const known = `a known "<status> ➜ <activity> <Word> ┃ " prefix (status icon one of ${statuses}; also the older "<status> ┃ <activity> <Word> " form), the older "<status> <activity> <Word> – " two-icon form (also with ⏸️), the bare "${BARE_WORK}", or a legacy one (${LEGACY_PREFIXES.map(p => `"${p}"`).join(', ')})`;
   // A machine turn (a task notification — the concept's own watchers exit
   // that way) is no proof of work: it may end without a card, so it keeps its
   // hands off every known prefix (#618). Only a plain title (or the legacy
@@ -149,7 +149,7 @@ function instruction(prefix = WORK_PREFIX, { machine = false } = {}) {
         : [
           `  Else if it already starts with "${SHIPPING_PREFIX}" (or the legacy "🚀 Shipping – "): do nothing — a ship is running and the`,
           '  hourglass is only the fallback for work that is no named process.',
-          '  Else if it starts with any other "⏳ ┃ <Word> <activity> " prefix (a running named process): do nothing.',
+          '  Else if it starts with any other "⏳ ➜ <activity> <Word> ┃ " prefix (a running named process): do nothing.',
           `  Else if it already starts with "${WORK_PREFIX}" (or a bare "${BARE_WORK}<title>") and NOT "${LEGACY_PENDING_PREFIX}": do nothing`,
           '  (that worded form is a legacy of older versions — only the Solo prefix or the bare icon counts as already-marked).',
         ]),

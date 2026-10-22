@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.297.0] — 2026-10-22
+
+Session titles now read `⏳ ➜ 🤖 Solo ┃ Topic`: an arrow between the status and the activity icon, and the bar after the keyword, between the whole head and the topic.
+
+Why: the bar after the status cut the head in two; it reads better as the separator before the topic. The keyword column cannot be padded to one width: the Desktop sidebar collapses every whitespace run and refuses invisible fillers such as U+2800 (checked 2026-10-22).
+
+### Changed
+- **Title grammar.** `<STATUS> ➜ <ACTIVITY> <Word> ┃ <title>` replaces `<STATUS> ┃ <ACTIVITY> <Word> <title>` in `title-scheme.js` and in every skill, hook and doc that names a prefix. The card's CTA heading is unchanged.
+- **Older titles still match.** The 2.2/2.3 bar-first order is a recognised legacy prefix, so titles written by earlier versions are stripped and classified as before.
+
 ## [0.296.3] — 2026-10-22
 
 While `/auto-cleanup` is armed, the gate now refuses every shell command it cannot read in full, instead of letting it through.

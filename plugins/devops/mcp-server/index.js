@@ -1323,7 +1323,7 @@ function renderChannelLadderMd(ladder, lang) {
 // The localized SENTENCE of each heading. The head in front of it — status
 // icon, activity icon, English keyword — comes from the title scheme
 // (hooks/lib/title-scheme.js) via `cardHead`, the same state id the session
-// title gets: title `👉 ┃ 📦 Ready X` ↔ heading `👉 📦 Ready — Shippen?`.
+// title gets: title `👉 ➜ 📦 Ready ┃ X` ↔ heading `👉 📦 Ready — Shippen?`.
 const HEADINGS = {
   de: {
     // #714: ship is offered only when nothing is open — an `open` point or a
@@ -1456,9 +1456,9 @@ const CONCEPT_HEADING = {
   de: { waiting: 'wartet auf deine Entscheidungen', tail: ' — ich melde mich' },
   en: { waiting: 'waiting for your decisions', tail: ' — I will report back' },
 };
-// The heading head mirrors the session title: `👉 ┃ 🧭 Concept` only while
+// The heading head mirrors the session title: `👉 ➜ 🧭 Concept ┃` only while
 // the page waits for the user; iterating / implementing means Claude works,
-// so the card shows `⏳ ┃ 🧭 Concept` like the title (concept 2026-10-19).
+// so the card shows `⏳ ➜ 🧭 Concept ┃` like the title (concept 2026-10-19).
 function conceptHeadState(concept) {
   const { phase } = normalizeConcept(concept) || { phase: 'waiting' };
   return phase === 'waiting' ? 'concept-waiting' : 'concept-working';
@@ -2870,7 +2870,7 @@ server.registerTool(
       "and the app's one no-output nudge that follows gets an empty reply; " +
       "the visible title line is only for a failed call, never a shortcut.",
     inputSchema: z.object({
-      variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` = the channel-promotion card (alpha→beta→stable) do-ship renders whenever a promotion ran, also after a ship in the same run: ONE released card carries the ship's changes, tests, state and userFinalTest plus the promotion facts, never a ship-successful card first. `ready-files` = `ready` for work on disk in a project with no git repo (no commit/branch/PR/merge). `paused` = work the user pauses (\"machen wir später weiter\") AND work whose next step is a Claude Code restart, a reboot or a usage-limit reset — never `analysis`, `ready` or `fallback` then; pass `pause: { reason }`. It asks nothing; the title becomes `🟦 ┃ ✋ Paused …` (`🔌 Restart` / `💻 Reboot` / `🔋 Limit reset` with a reason)."),
+      variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` = the channel-promotion card (alpha→beta→stable) do-ship renders whenever a promotion ran, also after a ship in the same run: ONE released card carries the ship's changes, tests, state and userFinalTest plus the promotion facts, never a ship-successful card first. `ready-files` = `ready` for work on disk in a project with no git repo (no commit/branch/PR/merge). `paused` = work the user pauses (\"machen wir später weiter\") AND work whose next step is a Claude Code restart, a reboot or a usage-limit reset — never `analysis`, `ready` or `fallback` then; pass `pause: { reason }`. It asks nothing; the title becomes `🟦 ➜ ✋ Paused ┃ …` (`🔌 Restart` / `💻 Reboot` / `🔋 Limit reset` with a reason)."),
       summary: z.string().transform(v => clampText(v, SUMMARY_MAX).value)
         .describe("What changed for the user, ≤ 8 words / 60 characters (clamped on a word boundary, not rejected). No pipeline status — 'gemergt', 'geshipped', 'live', the version: the Delivery block and the CTA already say that."),
       answer: z.string().optional().describe("The full answer to the user's question, as markdown (#757). Drawn ABOVE the card body — inside the Desktop widget, as markdown in front of the card elsewhere. Use it whenever the turn answers a question or the running skill owes a report (root cause with file:line, findings, a comparison); also for other topics of the user's prompt. Raw HTML is shown as text; links need http(s). Never a recap of what the card already shows."),
@@ -2922,7 +2922,7 @@ server.registerTool(
           info: z.string().optional(),
           reason: z.string().optional(),
           description: z.string().optional(),
-          activity: z.enum(["ship", "promote", "test", "concept", "batch", "analysis", "agents"]).optional().describe("aborted only: the named process that was aborted. The title and the heading keep its activity ('🟥 ┃ 🚀 Ship …'); omit for a generic abort ('🟥 ┃ 📦 Aborted …')."),
+          activity: z.enum(["ship", "promote", "test", "concept", "batch", "analysis", "agents"]).optional().describe("aborted only: the named process that was aborted. The title and the heading keep its activity ('🟥 ➜ 🚀 Ship ┃ …'); omit for a generic abort ('🟥 ➜ 📦 Aborted ┃ …')."),
         }).optional(),
       ).describe("CTA template placeholders — an OBJECT, e.g. { reason } for aborted, { version } for ship cards, { description } for test-minimal. A plain string is accepted as { info }."),
       nextStep: z.string().optional().describe("analysis variant: the ONE step you recommend Claude does next, written as the user's instruction ('Bau im Governor eine Summen-Drossel für viele kleine Claude-Prozesse ein.'). The Desktop primary button becomes 'Empfehlung umsetzen' and sends exactly this text — without it the button says only 'Umsetzen' and the user cannot tell what it starts. Steps the user must do themselves belong in the answer text, not here."),
@@ -2978,7 +2978,7 @@ server.registerTool(
           reason: z.enum(["restart", "reboot", "usage-reset", "user"]).optional().describe("What unblocks the work: 'restart' = restart Claude Code (a new plugin/MCP version, a settings change), 'reboot' = restart the machine, 'usage-reset' = wait for the usage limit to reset, 'user' (default) = the user paused it."),
           resetAt: z.string().optional().describe("usage-reset only: when the limit resets, as the user reads it (e.g. '23:40' or 'Mo 09:00'). Named in the heading."),
         }).optional(),
-      ).describe("paused variant only: why the work stops (#583). The session title and the heading name the reason ('🟦 ┃ 🔌 Restart …') and the context line the one action that resumes it. Omit for a plain user pause."),
+      ).describe("paused variant only: why the work stops (#583). The session title and the heading name the reason ('🟦 ➜ 🔌 Restart ┃ …') and the context line the one action that resumes it. Omit for a plain user pause."),
       deployGate: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([
@@ -2989,7 +2989,7 @@ server.registerTool(
             action: z.string().optional().describe("The concrete deploy action still required, e.g. 'apply_migration' or 'deploy_edge_function desktop-latest'."),
           }),
         ])).optional(),
-      ).describe("Out-of-band deploy gate (#243) — artifacts a code merge did NOT deploy (DB migrations, edge/serverless functions) and that are therefore NOT live yet. Renders the '👉 ┃ ⚠️ Not deployed' state with a block naming each artifact + its deploy action, so a merged-but-undeployed ship never reads as done. Pair with state.deployPending to also flip the decision heading. Available in all variants except test-minimal and test. Populate from ship_preflight.outOfBandDeploys when the project has no deploy handler that already applied them."),
+      ).describe("Out-of-band deploy gate (#243) — artifacts a code merge did NOT deploy (DB migrations, edge/serverless functions) and that are therefore NOT live yet. Renders the '👉 ➜ ⚠️ Not deployed ┃' state with a block naming each artifact + its deploy action, so a merged-but-undeployed ship never reads as done. Pair with state.deployPending to also flip the decision heading. Available in all variants except test-minimal and test. Populate from ship_preflight.outOfBandDeploys when the project has no deploy handler that already applied them."),
       validation: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.object({

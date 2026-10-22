@@ -8,10 +8,10 @@
  * @description Hands Claude the exact session title a skill's mode step needs,
  *   so the skill no longer runs the `get_session` → strip → `set_session_title`
  *   ritual (each extra tool round trip re-reads the whole context):
- *   - Skill `do-ship` loaded → `⏳ ┃ 🚀 Shipping ` (do-ship Pre-Step C).
+ *   - Skill `do-ship` loaded → `⏳ ➜ 🚀 Shipping ┃ ` (do-ship Pre-Step C).
  *   - the do-batch activate command (`batch-state.js').activate(`) ran →
- *     `👉 ┃ 📚 Batch ` (do-batch 2.2b).
- *   - the do-batch deactivate command ran → the leading `👉 ┃ 📚 Batch `
+ *     `👉 ➜ 📚 Batch ┃ ` (do-batch 2.2b).
+ *   - the do-batch deactivate command ran → the leading `👉 ➜ 📚 Batch ┃ `
  *     (or the legacy `📥 Batch – `) stripped (merge.md § Retire: 4.8, Step 5, expiry).
  *   The current title comes off the transcript tail (lib/session-title.js),
  *   the rules are that lib's (`nextTitle`, `batchTitle`, `unbatchTitle`) —

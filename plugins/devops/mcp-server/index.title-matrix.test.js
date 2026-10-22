@@ -171,9 +171,9 @@ function evaluate(params, lang) {
 describe("title = CTA — every completion-card variant × every heading/prefix flag", () => {
   for (const [name, params, [status, word, activity], opts = {}] of CASES) {
     for (const lang of ["de", "en"]) {
-      test(`${name} (${lang}) → ${status} ┃ ${activity} ${word}`, () => {
+      test(`${name} (${lang}) → ${status} ➜ ${activity} ${word} ┃`, () => {
         const { heading, title } = evaluate(params, lang);
-        const head = `${status} ┃ ${activity} ${word}`;
+        const head = `${status} ➜ ${activity} ${word} ┃`;
         const prefix = (head + " ");
         if (opts.titleOwnedBySkill) {
           // An armed batch owns the title (the card leaves it alone) — and the
@@ -182,7 +182,7 @@ describe("title = CTA — every completion-card variant × every heading/prefix 
           expect(BATCH_PREFIX).toBe(prefix);
         } else {
           expect(typeof title, JSON.stringify(title)).toBe("string");
-          const m = /^(\S+) ┃ (\S+) (.+?) $/u.exec(title.split(TITLE_SCHEME.HAIR).join(""));
+          const m = /^(\S+) ➜ (\S+) (.+?) ┃ $/u.exec(title.split(TITLE_SCHEME.HAIR).join(""));
           expect(m, JSON.stringify(title)).not.toBeNull();
           expect(m[1], "status icon").toBe(status);
           expect(m[2], "activity icon").toBe(activity);
@@ -200,15 +200,15 @@ describe("title = CTA — every completion-card variant × every heading/prefix 
   }
 
   test("the matrix reaches every scheme state but the card-less F5 one", () => {
-    const reached = new Set(CASES.map(([, , [s, w, a]]) => `${s} ┃ ${a} ${w}`));
+    const reached = new Set(CASES.map(([, , [s, w, a]]) => `${s} ➜ ${a} ${w} ┃`));
     for (const [id, [statusKey, word, act]] of Object.entries(TITLE_SCHEME.STATES)) {
       if (id === "interrupted" || id === "shipping") continue; // F5 (stop hook) and /do-ship Pre-Step C set these
       const status = TITLE_SCHEME.STATUS[statusKey];
-      expect(reached.has(`${status} ┃ ${act} ${word}`), id).toBe(true);
+      expect(reached.has(`${status} ➜ ${act} ${word} ┃`), id).toBe(true);
     }
     // Both statuses of a done state are exercised: 🟩 and the 👉 a mandatory step raises.
-    expect(reached.has("🟩 ┃ 🚀 Released Alpha")).toBe(true);
-    expect(reached.has("👉 ┃ 🚀 Released Alpha")).toBe(true);
+    expect(reached.has("🟩 ➜ 🚀 Released Alpha ┃")).toBe(true);
+    expect(reached.has("👉 ➜ 🚀 Released Alpha ┃")).toBe(true);
   });
 
   test("an optional promote offer keeps 🟩, a mandatory step makes it 👉 — the heading follows", () => {
@@ -216,7 +216,7 @@ describe("title = CTA — every completion-card variant × every heading/prefix 
     expect(optional.heading).toBe("🟩 🚀 Released Alpha — v0.1.0 — nach Beta promoten?");
     const mandatory = evaluate({ variant: "ship-successful", state: SHIPPED, delivery: ring("alpha"), userFinalTest: FINAL }, "en");
     expect(mandatory.heading).toBe("👉 🚀 Released Alpha — v0.1.0 — promote to beta?");
-    expect(mandatory.title).toBe("👉 ┃ 🚀 Released Alpha ");
+    expect(mandatory.title).toBe("👉 ➜ 🚀 Released Alpha ┃ ");
   });
 
   test("worked examples from the concept read exactly", () => {
