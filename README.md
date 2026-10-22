@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.296.1**
+**Version: 0.296.2**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -84,17 +84,24 @@ Your mileage may vary. Your sanity will not.
 
 ## Installation
 
-Add the marketplace, then install the plugin from it (CLI, recommended):
+**Let Claude do it:** paste this into Claude Code (Desktop or CLI):
+
+```
+Install the devops plugin by following https://github.com/Jerry0022/dotclaude/blob/main/INSTALL.md
+```
+
+**By hand:**
+
+**Desktop App:** Sidebar → **Customize** → **+** next to *Personal Plugins* → add `Jerry0022/dotclaude` → enable **devops**.
+
+**CLI:**
 
 ```bash
 claude plugin marketplace add Jerry0022/dotclaude
-```
-
-```bash
 claude plugin install devops@dotclaude
 ```
 
-> **Desktop App:** The marketplace UI shows the marketplace tab but may not list plugins for installation. Use the CLI command above, or see [`INSTALL.md`](INSTALL.md) for manual registration steps.
+Desktop and CLI keep separate plugin stores — a CLI install (also one Claude runs for you) does not show up in the Desktop App. Requires git and Node.js 18.18+.
 
 Start a new session for hooks to take effect. See [`INSTALL.md`](INSTALL.md) for details, extensions, and uninstall.
 
@@ -104,7 +111,7 @@ Start a new session for hooks to take effect. See [`INSTALL.md`](INSTALL.md) for
 claude plugin update devops@dotclaude
 ```
 
-Or enable auto-update via **Settings** → **Plugins** → **Marketplaces**, or say **"devops update"** in any session. Semantic versioning — breaking changes only in major versions.
+Or enable auto-update for the marketplace (Desktop: **Customize**; CLI: `/plugin` → **Marketplaces**), or say **"devops update"** in any session. Semantic versioning — breaking changes only in major versions.
 
 **Release channels.** Every ship lands on `alpha`; a promotion re-tags the
 same commit on `beta`, then `stable` — never a rebuild. A fresh install
