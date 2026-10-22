@@ -1,5 +1,29 @@
 # Installation
 
+**Quickest way:** paste this one sentence into Claude Code:
+
+```
+Install the devops plugin by following https://github.com/Jerry0022/dotclaude/blob/main/INSTALL.md
+```
+
+## Instructions for Claude (agent install)
+
+You are Claude, asked to install this plugin for the user. Do these steps in order, and tell the user each result in one short line.
+
+1. **Prerequisites.** Run `git --version` and `node --version`. If git is missing or Node is older than 18.18, stop and tell the user what to install.
+2. **Find out where you run.** Read the environment variable `CLAUDE_CODE_ENTRYPOINT`.
+3. **Desktop App** (`claude-desktop`): Desktop plugins come from the user's claude.ai account. You cannot add them from a session, and a CLI install will not appear there. Walk the user through these clicks one step at a time, and wait for each confirmation:
+   1. Sidebar → **Customize** → **+** next to *Personal Plugins*
+   2. Add the marketplace `Jerry0022/dotclaude`. If that fails, retry once, then try `https://github.com/Jerry0022/dotclaude`.
+   3. Install / enable **devops**.
+4. **CLI / IDE** (any other value): run
+   ```bash
+   claude plugin marketplace add Jerry0022/dotclaude
+   claude plugin install devops@dotclaude
+   ```
+   then check `claude plugin list` for `devops@dotclaude`.
+5. **Last step:** ask the user to start a new session (Desktop: open a new session; CLI: quit and run `claude` again), because hooks and MCP servers only load at session start. Tell them to type `/do-ship` there; if it shows up in the slash menu, the plugin is active. Done.
+
 ## Add the plugin
 
 Claude Code Desktop and the `claude` CLI keep **separate plugin stores**: Desktop
@@ -22,10 +46,6 @@ claude plugin install devops@dotclaude
 
 Or inside an interactive `claude` session: `/plugin marketplace add Jerry0022/dotclaude`,
 then `/plugin install devops@dotclaude`.
-
-**Let Claude do it (CLI only):** ask it to "install the Claude Code plugin devops from the
-GitHub marketplace Jerry0022/dotclaude". Claude runs the CLI commands above, so in the
-Desktop App use the Customize steps instead.
 
 Requires **git** and **Node.js 18.18+** (the plugin's MCP server runs on Node).
 

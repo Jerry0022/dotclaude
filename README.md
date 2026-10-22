@@ -84,6 +84,14 @@ Your mileage may vary. Your sanity will not.
 
 ## Installation
 
+**Let Claude do it:** paste this into Claude Code (Desktop or CLI):
+
+```
+Install the devops plugin by following https://github.com/Jerry0022/dotclaude/blob/main/INSTALL.md
+```
+
+**By hand:**
+
 **Desktop App:** Sidebar → **Customize** → **+** next to *Personal Plugins* → add `Jerry0022/dotclaude` → enable **devops**.
 
 **CLI:**
