@@ -28,7 +28,7 @@
 import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -192,32 +192,50 @@ function buildCategories(hooks) {
  * installed on this machine and is dropped. Returns null when rendering fails.
  */
 function renderCardMarkdown(payload) {
-  const r = spawnSync(process.execPath, [join(pluginDir, "mcp-server", "index.js"), "--render-card", "-"], {
-    input: JSON.stringify({ lang: "en", session_id: "readme-card-example", ...payload }),
-    cwd: projectRoot,
-    encoding: "utf8",
-    timeout: 30_000,
-    windowsHide: true,
-    env: { ...process.env, DEVOPS_COMPLETION_NO_USAGE: "1", DEVOPS_CARD_PREGATE: "0", CLAUDE_CODE_ENTRYPOINT: "cli" },
+  return new Promise((done) => {
+    let out = "";
+    let child;
+    try {
+      child = spawn(process.execPath, [join(pluginDir, "mcp-server", "index.js"), "--render-card", "-"], {
+        cwd: projectRoot,
+        windowsHide: true,
+        env: { ...process.env, DEVOPS_COMPLETION_NO_USAGE: "1", DEVOPS_CARD_PREGATE: "0", CLAUDE_CODE_ENTRYPOINT: "cli" },
+      });
+    } catch { return done(null); }
+    const timer = setTimeout(() => child.kill(), 60_000);
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (d) => { out += d; });
+    child.stderr.resume();
+    child.on("error", () => { clearTimeout(timer); done(null); });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code !== 0 || !out.includes("---")) return done(null);
+      done(out.split(/\r?\n/).filter((l) => !l.startsWith("ℹ ")).join("\n").trim());
+    });
+    child.stdin.end(JSON.stringify({ lang: "en", session_id: "readme-card-example", ...payload }));
   });
-  if (r.status !== 0 || !r.stdout || !r.stdout.includes("---")) return null;
-  return r.stdout.replace(/\r\n/g, "\n").split("\n").filter((l) => !l.startsWith("ℹ ")).join("\n").trim();
 }
 
-/** Both card blocks, or null when the fixtures or the renderer are unavailable. */
-function buildCardBlocks() {
+/**
+ * Both card blocks, or null when the fixtures or the renderer are unavailable.
+ * All payloads render in parallel — one node process each, ~1 s apiece.
+ */
+async function buildCardBlocks() {
   const file = join(pluginDir, "scripts", "readme-card-examples.json");
   if (!existsSync(file)) return null;
   const fixtures = JSON.parse(readFileSync(file, "utf8"));
 
-  const rendered = renderCardMarkdown(fixtures.example);
+  const variants = fixtures.variants || [];
+  const [rendered, ...variantMds] = await Promise.all(
+    [fixtures.example, ...variants.map((v) => v.payload)].map(renderCardMarkdown),
+  );
   if (rendered == null) return null;
   // The leading `&nbsp;` spacer only matters in a chat; in a fence it is noise.
   const example = rendered.slice(rendered.indexOf("---"));
 
   const rows = ["| Variant / state | Decision heading | When |", "|---|---|---|"];
-  for (const v of fixtures.variants || []) {
-    const md = renderCardMarkdown(v.payload);
+  for (const [i, v] of variants.entries()) {
+    const md = variantMds[i];
     if (md == null) return null;
     const heading = (md.split("\n").find((l) => l.startsWith("## ")) || "").slice(3).trim();
     rows.push(`| \`${v.label}\` | ${heading} | ${v.when} |`);
@@ -252,7 +270,7 @@ function processFile(path, counts, lifecycle, stale, cards = null, categories = 
   }
 }
 
-function generate() {
+async function generate() {
   if (!existsSync(pluginDir)) {
     // Not the plugin source repo — nothing to maintain.
     return false;
@@ -278,7 +296,7 @@ function generate() {
   // A renderer that cannot run (a broken checkout, a missing file) leaves the
   // card blocks as they are — counts and the hook roster still refresh.
   let cards = null;
-  try { cards = buildCardBlocks(); } catch { cards = null; }
+  try { cards = await buildCardBlocks(); } catch { cards = null; }
   if (!cards) console.error("[gen-readme-sections] card examples not rendered — README card blocks left unchanged");
 
   const stale = [];
@@ -299,4 +317,4 @@ function generate() {
   return true;
 }
 
-generate();
+await generate();
