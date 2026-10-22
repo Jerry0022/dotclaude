@@ -163,10 +163,10 @@ describe("AUD-C003 / C004 — the waited sync", () => {
     expect(lines).not.toContain("bereits enthalten");
   });
 
-  test("a failed probe and a stale local main render as skipped too", () => {
+  test("a failed probe and a diverged local main render as skipped too", () => {
     for (const output of [
       "[git-sync] – origin/main → f: skipped: behind-count probe failed (timed out after 8 s)",
-      "[git-sync] – skipped: on main itself, 2 commit(s) behind origin/main — pull first",
+      "[git-sync] – origin/main → main: skipped: main has 2 unpushed local commit(s) — not merging",
     ]) {
       const lines = renderSyncLines({ ran: true, output }).join("\n");
       expect(lines).toContain("NICHT vollständig gemerged");

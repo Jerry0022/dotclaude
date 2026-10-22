@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script git-sync
- * @version 0.8.1
+ * @version 0.9.0
  * @plugin devops
  * @description Core git sync logic — fetch remote, merge parent chain into
  *   current branch. Supports branch hierarchy (feat/auth/login merges
@@ -13,7 +13,9 @@
  *   A merge that dies mid-checkout (its timeout, or its own error) never
  *   stays half-applied: what it wrote is put back (hooks/lib/git-sync-recover.js).
  *   A sync that never happened — a failed fetch, a failed behind-count probe,
- *   a session on a local main behind its remote — is "– skipped:", never "=".
+ *   a diverged default branch — is "– skipped:", never "=".
+ *   On the default branch itself it fast-forwards to its remote (#802), never
+ *   merges: a main with unpushed local commits is skipped with that reason.
  */
 
 const { execFileSync } = require('child_process');
@@ -180,19 +182,10 @@ const MAIN = (() => {
 // an exotic one.
 const branch = git(['symbolic-ref', '--quiet', '--short', 'HEAD']);
 if (!branch) quit('detached HEAD — check out a branch first');
-if (branch === MAIN) {
-  // Nothing to merge INTO main — but "=" would claim the session sees current
-  // main. Under --explain say whether the local branch trails its remote.
-  if (EXPLAIN) {
-    const f = gitFetch(['fetch', origin, `+refs/heads/${MAIN}:refs/remotes/${origin}/${MAIN}`, '--quiet']);
-    if (!f.ok) quit(`on ${MAIN} itself; fetch of ${MAIN} failed (${readFailure(f, FETCH_TIMEOUT_MS)}) — stale ref, ${origin}/${MAIN} may be ahead`);
-    const b = gitRead(['rev-list', '--count', `HEAD..refs/remotes/${origin}/${MAIN}`]);
-    if (!b.ok) quit(`on ${MAIN} itself; behind-count probe failed (${readFailure(b)})`);
-    const n = parseInt(b.out.trim(), 10) || 0;
-    if (n > 0) quit(`on ${MAIN} itself, ${n} commit(s) behind ${origin}/${MAIN} — pull first`);
-  }
-  quit(`on ${MAIN} itself`, { nothingToDo: true });
-}
+// On the default branch itself the only parent is origin/MAIN, and it is only
+// ever fast-forwarded (#802): a main with unpushed local commits is skipped,
+// never merged — a merge commit on main is a decision, not a background sync.
+const ON_MAIN = branch === MAIN;
 
 // An unfinished merge/rebase/cherry-pick/revert/bisect owns the index. A merge
 // attempted on top of one fails without conflicts of its own, and the recovery
@@ -527,7 +520,7 @@ function undoFailedMerge({ source, count, merge, lock, preHead }) {
 // Try merging source into HEAD. Resolve trivial conflicts automatically,
 // warn only for genuinely ambiguous conflicts that need semantic resolution.
 // See deep-knowledge/merge-safety.md for the full resolution protocol.
-function tryMerge(source) {
+function tryMerge(source, { ffOnly = false } = {}) {
   const probe = gitRead(['rev-list', '--count', `HEAD..${source}`]);
   // A failed probe is not "0 behind" — it is "unknown", and says so.
   if (!probe.ok) return { source, skipped: `behind-count probe failed (${readFailure(probe)})` };
@@ -560,7 +553,7 @@ function tryMerge(source) {
   // sync into a ✗ repeating for as long as main stays ahead. Hook policy
   // belongs to the commits the user makes, not to a background fast-forward of
   // their own default branch.
-  const merge = gitWrite([...NO_HOOKS, 'merge', source, '--no-edit', '--quiet']);
+  const merge = gitWrite([...NO_HOOKS, 'merge', ...(ffOnly ? ['--ff-only'] : []), source, '--no-edit', '--quiet']);
   if (merge.ok) {
     return { source, commits: count };
   }
@@ -636,6 +629,26 @@ function tryMerge(source) {
   return { source, commits: count, autoResolved: files.length };
 }
 
+/**
+ * The default branch's own sync: fast-forward to its remote, or step aside.
+ * Local commits not on the remote mean main has diverged — skipped with a
+ * reason, never merged (#802). `--ff-only` also covers a commit made between
+ * this probe and the merge: git refuses instead of writing a merge commit.
+ */
+function tryFastForward(source) {
+  const ahead = gitRead(['rev-list', '--count', `${source}..HEAD`]);
+  if (!ahead.ok) return { source, skipped: `ahead-count probe failed (${readFailure(ahead)})` };
+  const n = parseInt(ahead.out.trim(), 10);
+  if (!Number.isFinite(n)) return { source, skipped: `ahead-count probe unreadable (${JSON.stringify(ahead.out.trim().slice(0, 40))})` };
+  if (n > 0) {
+    // Say only when it matters: a diverged main that is not behind has nothing to sync.
+    const behind = gitRead(['rev-list', '--count', `HEAD..${source}`]);
+    if (behind.ok && (parseInt(behind.out.trim(), 10) || 0) === 0) return null;
+    return { source, skipped: `${MAIN} has ${n} unpushed local commit(s) — not merging` };
+  }
+  return tryMerge(source, { ffOnly: true });
+}
+
 // Fetch each parent of this branch into its REMOTE-TRACKING ref, and merge
 // from that ref — never from the local branch.
 //
@@ -699,12 +712,13 @@ if (!sources.length) {
 // the call that pushes a deadline-bound caller (batch-collect) over its
 // budget — see the arithmetic comment on SYNC_WRITE_TIMEOUT_MS in
 // prompt.batch.collect.js.
-gitRunner({ cwd, timeoutMs: Math.min(FETCH_TIMEOUT_MS, 5000), env: GIT_ENV })(['fetch', origin, `${MAIN}:${MAIN}`, '--quiet']);
+// On MAIN itself git refuses it (checked out here) — the fast-forward below is the update.
+if (!ON_MAIN) gitRunner({ cwd, timeoutMs: Math.min(FETCH_TIMEOUT_MS, 5000), env: GIT_ENV })(['fetch', origin, `${MAIN}:${MAIN}`, '--quiet']);
 
 // Merge each parent into current branch (root → closest parent)
 const messages = EXPLAIN ? [...fetchSkips] : [];
 for (const parent of sources) {
-  const result = tryMerge(parent);
+  const result = ON_MAIN ? tryFastForward(parent) : tryMerge(parent);
   const stale = staleFetch.get(parent);
   const staleNote = stale ? `fetch of ${parent.slice(origin.length + 1)} failed (${stale}) — stale ref` : '';
   if (!result) {

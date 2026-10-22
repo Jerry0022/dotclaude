@@ -92,17 +92,17 @@ describe("--explain never reports '=' for a sync that did not run", () => {
     expect(out).not.toMatch(/\] = /);
   });
 
-  test("on main behind its remote → skipped with the count", async () => {
+  test("on main behind its remote → fast-forwarded with the count (#802)", async () => {
     const { primary, other } = await makeWorld();
     await advanceOrigin(other, "from-main.txt", "main\n", "main moves");
     const out = await runSyncExplain(primary);
-    expect(out).toContain("– skipped: on main itself, 1 commit(s) behind origin/main");
+    expect(out).toContain("✓ origin/main → main: 1 commit(s)");
   });
 
-  test("on main and current → '=' stays", async () => {
+  test("on main and current → '='", async () => {
     const { primary } = await makeWorld();
     const out = await runSyncExplain(primary);
-    expect(out).toContain("[git-sync] = on main itself");
+    expect(out).toContain("= origin/main already in main");
   });
 
   test("a failed behind-count probe → skipped, never '0 behind'", async () => {

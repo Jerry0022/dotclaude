@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.git.sync
- * @version 0.3.0
+ * @version 0.4.0
  * @event Stop
  * @plugin devops
  * @description Throttled background git sync at turn end. Replaces the former
@@ -72,11 +72,12 @@ function maybeSync() {
   if (!git('remote')) return;
 
   // symbolic-ref, not rev-parse --abbrev-ref: the latter answers the literal
-  // 'HEAD' on a detached HEAD, which passes the !== 'main' test and burns the
-  // 30-minute throttle slot on a sync the child then refuses outright. These
-  // worktrees sit detached between tasks, so that is the common state.
+  // 'HEAD' on a detached HEAD, which would burn the 30-minute throttle slot on
+  // a sync the child then refuses outright. These worktrees sit detached
+  // between tasks, so that is the common state. The default branch syncs too
+  // (#802): git-sync fast-forwards it and detects the default branch itself.
   const branch = git('symbolic-ref --quiet --short HEAD');
-  if (!branch || branch === 'main') return;
+  if (!branch) return;
 
   // Claim only now that a sync will actually happen.
   if (!claimSyncSlot(cwd)) return;
