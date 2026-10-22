@@ -36,7 +36,6 @@ export default defineConfig({
     // session-scoped temp state never leaks between files or from the live
     // session running the suite.
     setupFiles: ["./vitest.isolation-setup.mjs", "./vitest.yield-setup.mjs"],
-    minWorkers: 1,
     // Hook tests spawn real node processes (that IS the contract under test —
     // the harness invokes hooks as child processes). On Windows a single spawn
     // costs 1-20s once 70+ test files compete for the machine, so vitest's 5s
