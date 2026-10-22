@@ -44,7 +44,12 @@ The card's component line uses 🧩.
 
 **F5 Interrupted.** A turn that ends WITHOUT a card while the title is
 `⏳ ➜ 🤖 Solo ┃ …` is rewritten to `👉 ➜ ⚡ Interrupted ┃ <title>`. A batch turn without a
-card, a concept waiting and `⏳ ➜ 🚀 Shipping ┃` stay untouched.
+card, a concept waiting and `⏳ ➜ 🚀 Shipping ┃` stay untouched — except on a
+card-less turn that answers a task notification while no background work of the
+session is open (#833): then a Shipping / Team / Testing hourglass goes too, to the
+last delegated ship result's `titlePrefix` in the transcript (e.g.
+`🟩 ➜ 🚀 Released Alpha ┃ `), else to `👉 ➜ ⚡ Interrupted ┃ `. A working concept
+page stays.
 
 **Legacy prefixes.** Titles in the wild may carry the bar-first order of
 v0.292–v0.296 (`<STATUS> ┃ <ACTIVITY> <Word> `, e.g. `👉 ┃ 📦 Ready `), the word-first order of

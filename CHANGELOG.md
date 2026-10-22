@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.300.1] — 2026-10-22
+
+A session title no longer keeps its hourglass once all background work is done. A turn that answers a task notification without a card, while no background agent or command of the session is still open, now replaces a leftover `⏳` Shipping, Team or Testing title.
+
+Why: after delegated ships finished, the next notification turn answered in text only, nothing re-evaluated the title, and the user waited on an hourglass for finished work (#833). Only notification turns are touched: on an ordinary card-less turn a running Team or Shipping title still stays.
+
+### Fixed
+- **Stale hourglass.** `stop.flow.guard` (v0.12.0) extends the F5 rename: on a card-less notification turn with no open background work, a `⏳` title takes the last delegated ship result's `titlePrefix` from the transcript (e.g. `🟩 ➜ 🚀 Released Alpha ┃ `), else `👉 ➜ ⚡ Interrupted ┃ `. Same block mechanism and per-session marker, no loop. A working concept page, a batch and every settled state keep their title.
+- **Title helpers.** `session-title` (v0.5.0) adds `staleWorkTitle` and `lastTitlePrefix`.
+- **Docs.** do-ship delegated mode: the parent applies `titlePrefix` on a text-only notification turn too; `session-title-scheme.md` F5 names the notification case.
+
+Known limits: without a reachable ship result the fallback is "Interrupted", slightly off for finished work (the title scheme has no neutral "done" state).
+
 ## [0.300.0] — 2026-10-22
 
 `/do-batch` notes now belong to the session that collected them. A prompt in another session that starts with the execute marker no longer merges those notes or arms the hand-off gate; the notes are archived and the prompt runs normally.

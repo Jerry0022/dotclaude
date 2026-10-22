@@ -1,6 +1,6 @@
 /**
  * @module session-title
- * @version 0.4.0
+ * @version 0.5.0
  * @description Reads the session's CURRENT sidebar title straight from the
  *   transcript and computes the next one, so a title instruction can hand
  *   Claude the exact `set_session_title` value instead of a
@@ -132,6 +132,45 @@ function interruptedTitle(current) {
   return r ? INTERRUPTED_PREFIX + r : null;
 }
 
+/**
+ * #833: the title a card-less NOTIFICATION turn leaves once no background
+ * work of the session is live. A title that still says ⏳ (bare work, a
+ * running ship, Team, Testing) is replaced by `terminalPrefix` (the last
+ * delegated-ship result's `titlePrefix`, see `lastTitlePrefix`) or, without
+ * one, by `👉 ➜ ⚡ Interrupted ┃ `. A working concept page, a batch and every
+ * non-⏳ state stay (`null`). The caller proves "no live work".
+ *
+ * @param {string|null} current
+ * @param {string|null} [terminalPrefix]
+ * @returns {string|null}
+ */
+function staleWorkTitle(current, terminalPrefix = null) {
+  if (typeof current !== 'string') return null;
+  const kind = classify(current);
+  if (kind !== 'work' && kind !== 'shipping' && kind !== 'process') return null;
+  if (current.startsWith(CONCEPT_WORKING_PREFIX)) return null;
+  const r = rest(current);
+  return r ? (terminalPrefix || INTERRUPTED_PREFIX) + r : null;
+}
+
+/**
+ * #833: the last `titlePrefix` a delegated ship returned in `text` (a
+ * transcript slice), when it is a settled state — never an ⏳ one. `null`
+ * when there is none.
+ *
+ * @param {string} text
+ * @returns {string|null}
+ */
+function lastTitlePrefix(text) {
+  if (typeof text !== 'string' || !text.includes('titlePrefix')) return null;
+  const re = /titlePrefix\\*"\s*:\s*\\*"([^"\\]+)/g;
+  let m; let last = null;
+  while ((m = re.exec(text)) !== null) last = m[1];
+  if (!last || !last.trim()) return null;
+  const kind = classify(last + 'x');
+  return kind === 'plain' || kind === 'work' || kind === 'process' || kind === 'shipping' ? null : last;
+}
+
 /** The title an entry line carries, or undefined when it is no title entry. */
 function titleOf(line, type, key) {
   if (!line.includes(`"type":"${type}"`)) return undefined;
@@ -216,6 +255,8 @@ function findTranscript(sessionId, home = os.homedir(), cwd = undefined) {
 }
 
 module.exports = {
+  staleWorkTitle,
+  lastTitlePrefix,
   projectSlug,
   findTranscript,
   WORK_PREFIX,

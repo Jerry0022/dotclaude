@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.guard
- * @version 0.11.0
+ * @version 0.12.0
  * @event Stop
  * @plugin devops
  * @description Per-turn completion card + validation enforcement (the validation
@@ -66,6 +66,12 @@
  *   ticks, scheduled tasks and an active guide are skipped. A per-session
  *   marker lets the follow-up stop through, so it never loops.
  *
+ *   Stale hourglass (#833, 0.12.0): the same rename also fires for a
+ *   card-less turn that answers a task notification while no background work
+ *   of the session is open — then a running Shipping / Team / Testing title
+ *   goes too, to the last delegated ship result's `titlePrefix` found in the
+ *   transcript, else to Interrupted. A working concept page stays.
+ *
  *   Card-data pointer (#712 R6): when it blocks while a delegated
  *   `--card-data` ship left its card input in
  *   `.claude/.ship-carddata-<session>.json` (lib/ship-carddata.js), the reason
@@ -96,7 +102,7 @@ const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { releaseOnce } = require('../lib/run-once');
 const { isGuideActive, isGuideLoopLive } = require('../../scripts/guide-active-state');
 const { execFileSync } = require('child_process');
-const { interruptedTitle, readCurrentTitle } = require('../lib/session-title');
+const { interruptedTitle, staleWorkTitle, lastTitlePrefix, readCurrentTitle } = require('../lib/session-title');
 
 /** Per-session marker of a pending F5 rename — the follow-up stop passes. */
 const INTERRUPT_FLAG = 'dotclaude-devops-interrupt-title';
@@ -330,7 +336,13 @@ process.stdin.on('end', () => {
     if (asked) {
       try { fs.unlinkSync(asked.filePath); } catch { /* marker already gone — nothing to clear */ }
     } else if (!cardRendered) {
-      const next = interruptedTitle(readCurrentTitle(hook.transcript_path));
+      // #833: a card-less NOTIFICATION turn with no background work left must
+      // not keep ANY ⏳ (Team, Shipping, Testing too): it takes the last
+      // delegated ship result's terminal prefix, else Interrupted.
+      const current = readCurrentTitle(hook.transcript_path);
+      const next = (notificationTurn && transcript && openTasks.length === 0)
+        ? staleWorkTitle(current, lastTitlePrefix(transcript))
+        : interruptedTitle(current);
       let marked = false;
       if (next) {
         try { writeSessionFile(sessionFile(INTERRUPT_FLAG, sessionId), next); marked = true; } catch { /* unwritable marker → no block (see below) */ }
