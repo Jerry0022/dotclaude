@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.300.0] — 2026-10-22
+
+`/do-batch` notes now belong to the session that collected them. A prompt in another session that starts with the execute marker no longer merges those notes or arms the hand-off gate; the notes are archived and the prompt runs normally.
+
+Why: a fresh session typing a prompt that began with the natural-language marker (`los`) merged hours-old notes of another session and armed the hand-off gate, which then blocked edits (#841). Decision: a legacy `batch-mode.json` without a session id, a missing mode file, or a prompt without a session id count as not foreign and still merge — nothing proves foreign ownership, and a stale merge is recoverable while a swallowed queue is not.
+
+### Changed
+- **Batch session ownership.** `batch-state` (v0.8.0) records the collecting session id in `batch-mode.json` on activation (the hook stamps it on the first prompt after activation) and adds a `foreign` verdict for a bare execute marker from another session (`isForeignSession`, `claimMode`).
+- **Foreign marker.** `prompt.batch.collect` (v0.12.0): with the mode off, a foreign marker archives the notes, prints one notice naming the archive path, deactivates the mode and passes the prompt through untouched — no merge, no hand-off gate. With the mode still active nothing changes. The same session with an expired mode still merges; an explicit `/do-batch go` adopts foreign notes.
+- **Docs.** `do-batch` SKILL.md: one paragraph on session ownership.
+
+Known limits: after `/clear` the new session id counts as foreign once the mode expired (notes archived, `/do-batch go` recovers them); a queue left by `/do-batch off` (mode file deleted) has no owner and still merges.
+
 ## [0.299.0] — 2026-10-22
 
 A checkout on the default branch now keeps itself current: the background git sync fast-forwards `main` (or `master`) from its remote, the same way it merges `main` into feature branches.
