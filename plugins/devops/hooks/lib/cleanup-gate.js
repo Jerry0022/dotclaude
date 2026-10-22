@@ -354,7 +354,7 @@ function defaultBase(git) {
  * --write-tree, a timeout) is NOT landed.
  * @param {(args: string[]) => string|null} git trimmed stdout, null on a non-zero exit
  */
-function hasLanded(git, d) {
+function hasLanded(git, d, opts = {}) {
   const refs = d.kind === 'remote'
     ? [`refs/remotes/${d.remote}/${d.target}`, `refs/heads/${d.target}`]
     : [`refs/heads/${d.target}`];
@@ -365,7 +365,34 @@ function hasLanded(git, d) {
   if (git(['merge-base', '--is-ancestor', ref, base]) !== null) return true;
   const merged = git(['merge-tree', '--write-tree', base, ref]);
   const baseTree = git(['rev-parse', `${base}^{tree}`]);
-  return Boolean(merged && baseTree && merged.split('\n')[0].trim() === baseTree);
+  if (merged && baseTree && merged.split('\n')[0].trim() === baseTree) return true;
+  return landedBySquashChain(git, ref, base, opts);
+}
+
+/**
+ * Same classifier as ship_hygiene's landedVia "chain" / "tree"
+ * (scripts/lib/chain-landed.js, scripts/lib/content-landed.js): the tip sits
+ * inside a merged PR head that still holds all its changes, or its content is
+ * already in the base. Needs the repo directory (`opts.cwd`); anything
+ * unknown — no cwd, no merged-PR data, a git error — is NOT landed.
+ */
+function landedBySquashChain(git, ref, base, opts = {}) {
+  try {
+    if (!opts.cwd) return false;
+    const sha = git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
+    if (!sha) return false;
+    const { contentInBase } = require('../../scripts/lib/content-landed');
+    if (contentInBase(opts.cwd, sha, base).landed) return true;
+    const heads = (opts.mergedHeads || defaultMergedHeads)(opts.cwd, base.replace(/^refs\/(remotes\/[^/]+|heads)\//, ''));
+    if (!heads || heads.size === 0) return false;
+    return require('../../scripts/lib/chain-landed').chainLanded(sha, { cwd: opts.cwd, baseRef: base, heads });
+  } catch {
+    return false;
+  }
+}
+
+function defaultMergedHeads(cwd, baseBranch) {
+  return require('../../scripts/lib/chain-landed').fetchMergedHeadShas(cwd, baseBranch);
 }
 
 // ── decision ───────────────────────────────────────────────────────────────
@@ -407,7 +434,7 @@ const HOW_TO_CONFIRM =
  * @param {{command: string, cwd: string, state: object|null, gitFor: (dir: string) => ((args: string[]) => string|null)}} p
  * @returns {{block: string}|null}
  */
-function decide({ command, cwd, state, gitFor }) {
+function decide({ command, cwd, state, gitFor, mergedHeads }) {
   if (!state) return null;
   const { deletes, unresolved } = parseDeletes(command, cwd);
   if (!deletes.length && !unresolved.length) return null;
@@ -429,7 +456,7 @@ function decide({ command, cwd, state, gitFor }) {
   }
   const notLanded = deletes.filter(d => d.kind !== 'worktree'
     && !state.unmerged.some(a => (a.exact ? a.scope === d.target : namesBranch(a.scope, d.target)))
-    && !hasLanded(gitFor(d.dir), d));
+    && !hasLanded(gitFor(d.dir), d, { cwd: d.dir, mergedHeads }));
   if (notLanded.length) {
     const names = [...new Set(notLanded.map(d => d.target))];
     return { block: [head,

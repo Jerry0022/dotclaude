@@ -52,6 +52,26 @@ For each Git-Session branch (both Löschbar and Untersuchen), gather:
    - Multiple consecutive commits touching the same file with similar messages
    Count occurrences. > 50% WIP commits → `wip-keep` signal.
 
+### Chain- and tree-landed branches (#825)
+
+Sub-agent branches (`worktree-agent-*`, `claude/<batch>-<role>`) are merged
+into an integration branch that lands on main through a squash PR — they are
+neither ancestors of main nor PR heads. The same rule decides them in
+`ship_hygiene` (`landedVia`: `chain` / `tree`) and in the cleanup gate
+(`scripts/lib/chain-landed.js`, `scripts/lib/content-landed.js`):
+
+- **chain** — the tip is an ancestor of a merged PR head and that head still
+  holds every change of the branch (nothing dropped or reverted before the
+  squash). Files main deleted later do not matter.
+- **tree** — every file the branch changed is identical in main, or applying
+  the branch onto main is a no-op.
+- Commits made after the PR merged, dropped/reverted changes, or any git/`gh`
+  failure → not landed (fail closed) → UNMERGED, needs the `Unmerged` yes.
+
+`rescue/*` and `salvage/*` tips (copies an earlier cleanup made of such
+branches) go through the identical check. Passing ones are SQUASH-MERGED:
+Löschbar, pre-checked.
+
 ### Recommendation Logic
 
 Apply rules in order, first match wins:

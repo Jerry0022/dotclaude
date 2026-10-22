@@ -81,6 +81,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const { contentInBase } = require("../../../scripts/lib/content-landed.js");
+const { chainLanded: chainLandedShared, filesInBase: filesInBaseShared } = require("../../../scripts/lib/chain-landed.js");
 const { isParked, coveringRef } = require("../../../hooks/lib/park-register.js");
 
 const DAY_MS = 86_400_000;
@@ -441,71 +442,16 @@ export function landedVia(sha, branch, ctx) {
   return contentInBase(ctx.cwd, sha, ctx.baseRef, { maxFiles: TREE_CHECK_MAX_FILES }).landed ? "tree" : null;
 }
 
-/** At most this many merged PR heads are searched for one that holds a branch (chain proof). */
-const CHAIN_MAX_HEADS = 200;
-
 /**
- * PR-chain proof (integration branch): `sha` is an ancestor of a merged PR
- * head of ANOTHER branch (a sub-agent branch merged locally into the branch
- * that became the PR), and that head still holds every change of `sha` — the
- * PR did not drop or revert any. Commits made on the integration branch AFTER
- * its PR merged are not in the merged head, so such a tip never gets here.
- * Read-only; false when it cannot be told.
+ * PR-chain proof and per-file change check live in scripts/lib/chain-landed.js
+ * so the cleanup gate applies the very same rule.
  */
 function chainLanded(sha, ctx) {
-  let tried = 0;
-  for (const head of ctx.merged.bySha) {
-    if (tried++ >= CHAIN_MAX_HEADS) break;
-    if (!gitOk(["merge-base", "--is-ancestor", sha, head], ctx.cwd)) continue;
-    const f = filesInBase(sha, ctx, head);
-    if (f && f.filesIn === f.filesTotal) return true;
-  }
-  return false;
+  return chainLandedShared(sha, { cwd: ctx.cwd, baseRef: ctx.baseRef, heads: ctx.merged.bySha });
 }
 
-/** A throw-away index holding `baseRef`'s tree, for `git apply --cached` dry runs. */
-function withTempIndex(ctx, fn) {
-  const idx = path.join(os.tmpdir(), `hygiene-idx-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  const env = { ...process.env, GIT_INDEX_FILE: idx };
-  try {
-    execFileSync("git", ["read-tree", ctx.baseRef], { windowsHide: true, cwd: ctx.cwd, env, timeout: GIT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"] });
-    return fn(env);
-  } catch {
-    return null;
-  } finally {
-    try { fs.rmSync(idx, { force: true }); } catch { /* temp file */ }
-  }
-}
-
-/**
- * How much of `sha`'s own change set `baseRef` already holds, file by file:
- * the patch `mergebase..sha` of each file must reverse-apply cleanly to the
- * base tree (so the base contains exactly that change). null when it cannot
- * be told (too many files, git too old, unreadable).
- */
 function filesInBase(sha, ctx, treeRef = ctx.baseRef) {
-  const mb = gitOut(["merge-base", sha, ctx.baseRef], ctx.cwd);
-  if (!mb) return null;
-  const names = gitOut(["diff", "--name-only", "-z", mb, sha], ctx.cwd);
-  if (names === null) return null;
-  const files = names.split("\0").filter(Boolean);
-  if (files.length > TREE_CHECK_MAX_FILES) return null;
-  if (files.length === 0) return { filesIn: 0, filesTotal: 0 };
-  return withTempIndex({ ...ctx, baseRef: treeRef }, (env) => {
-    let filesIn = 0;
-    for (const f of files) {
-      try {
-        const patch = execFileSync("git", ["diff", "--binary", mb, sha, "--", f], { windowsHide: true,
-          cwd: ctx.cwd, encoding: "utf8", timeout: GIT_TIMEOUT, maxBuffer: 64 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"],
-        });
-        execFileSync("git", ["apply", "--cached", "-R", "--check", "-"], { windowsHide: true,
-          cwd: ctx.cwd, env, input: patch, timeout: GIT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"],
-        });
-        filesIn += 1;
-      } catch { /* this file's change is not (fully) in the base */ }
-    }
-    return { filesIn, filesTotal: files.length };
-  });
+  return filesInBaseShared(sha, ctx, treeRef);
 }
 
 /**
