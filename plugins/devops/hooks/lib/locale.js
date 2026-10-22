@@ -99,6 +99,40 @@ function detectSignal(prompt) {
   return null;
 }
 
+// Prompts the app, the harness or the plugin itself put into the user slot.
+// They are English by construction and say nothing about the user's language:
+// letting them through flipped 27 of 120 German sessions to `[ui-locale: en]`
+// (audit 2026-10-22), mostly on <task-notification> turns, and Claude then
+// answered in English. Matched against the trimmed start of the prompt.
+const INJECTED_PROMPT = new RegExp('^(?:' + [
+  '<task-notification', '<side-sessions-event', '<ci-monitor-event',
+  '<system-reminder', '<scheduled-task', '<local-command',
+  'Continue from where you left off',
+  'The app was quit while you were working',
+  '\\[Your previous response',
+  '\\[Request interrupted',
+  'This session is being continued',
+  'Stop hook feedback:',
+  'Silently run via Bash:',
+  'Base directory for this skill:',
+  'Skill /',
+  'AUTONOMOUS_',
+  'Another Claude session sent a message',
+].join('|') + ')');
+
+/** True when the prompt was generated, not typed by the user. */
+function isInjectedPrompt(prompt) {
+  return typeof prompt === 'string' && INJECTED_PROMPT.test(prompt.trimStart());
+}
+
+// Pasted material and harness reminders inside a typed prompt are not the
+// user's own words either ("ok" + a pasted English log must not flip to en).
+function ownWords(prompt) {
+  return prompt
+    .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, ' ')
+    .replace(/<pasted_content[^>]*>[\s\S]*?<\/pasted_content[^>]*>/g, ' ');
+}
+
 /**
  * Read cached session locale. Returns one of SUPPORTED, defaulting to
  * DEFAULT_LOCALE when no cache exists or the cached value is invalid.
@@ -131,6 +165,12 @@ function setLocale(sessionId, lang) {
  */
 function ensureLocale(sessionId, prompt) {
   const cached = readSessionFile(SESSION_PREFIX, sessionId);
+  if (isInjectedPrompt(prompt)) {
+    // Never detect from, cache from or announce on a generated prompt.
+    const lang = cached && cached.content.trim();
+    return { lang: SUPPORTED.includes(lang) ? lang : DEFAULT_LOCALE, isFresh: false };
+  }
+  if (typeof prompt === 'string') prompt = ownWords(prompt);
   if (cached) {
     const lang = cached.content.trim();
     if (SUPPORTED.includes(lang)) {
@@ -165,5 +205,6 @@ module.exports = {
   getLocale,
   setLocale,
   ensureLocale,
+  isInjectedPrompt,
   t,
 };

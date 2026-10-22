@@ -145,6 +145,42 @@ describe("ensureLocale", () => {
     expect(getLocale(sid)).toBe("de");
   });
 
+  test("app- and plugin-injected prompts never flip a German session", () => {
+    const sid = TEST_SESSION_BASE + "-injected";
+    ensureLocale(sid, "ich kann das nicht");
+    for (const p of [
+      "<task-notification>\n<task-id>a1</task-id>\n<summary>Agent \"qa\" completed: all tests pass, the build is green</summary>",
+      "Continue from where you left off.",
+      "The app was quit while you were working. Please continue from where you left off.",
+      "[Your previous response had no visible output. Please continue with the task.]",
+      "This session is being continued from a previous conversation that ran out of context. The summary is below.",
+      "Stop hook feedback: [stop.flow.guard] Completion card is missing for this turn, render it now",
+      "Silently run via Bash: node \"C:/x/watch.js\" — this is the concept watcher, do not show it",
+      "Base directory for this skill: C:\\x\\skills\\do-ship\n\n# Ship — what this skill does",
+      "<side-sessions-event>The session you started has finished its turn</side-sessions-event>",
+      "AUTONOMOUS_RESUME: token-window reset reached, continue with the next item of the run",
+      "Another Claude session sent a message: <message>can you check the build for me</message>",
+    ]) {
+      expect(ensureLocale(sid, p)).toEqual({ lang: "de", isFresh: false });
+    }
+    expect(getLocale(sid)).toBe("de");
+  });
+
+  test("an injected prompt opening a session neither caches nor announces", () => {
+    const sid = TEST_SESSION_BASE + "-injected-first";
+    expect(ensureLocale(sid, "<task-notification>why is this done with the build</task-notification>"))
+      .toEqual({ lang: "en", isFresh: false });
+    expect(ensureLocale(sid, "Warum antwortest du mir nicht auf Deutsch?"))
+      .toEqual({ lang: "de", isFresh: true });
+  });
+
+  test("pasted English material does not flip a German session", () => {
+    const sid = TEST_SESSION_BASE + "-pasted";
+    ensureLocale(sid, "ich kann das nicht");
+    const res = ensureLocale(sid, "ok <pasted_content id=\"x\">Why is this the error you are seeing with the build?</pasted_content id=\"x\">");
+    expect(res.lang).toBe("de");
+  });
+
   test("short acknowledgements never flip the cached locale", () => {
     const sid = TEST_SESSION_BASE + "-ack";
     ensureLocale(sid, "ich kann das nicht");
