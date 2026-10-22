@@ -20,7 +20,9 @@
  *       (`Dry-Run…` = the manifest confirm, `Unmerged…` = one branch).
  *     - pre.cleanup.gate refuses every Bash/PowerShell delete — `git branch
  *       -d/-D/--delete`, `git push --delete` / `:ref` / `--prune` / `--mirror`,
- *       `git update-ref -d refs/heads/…`, `git worktree remove` — whose target
+ *       `git update-ref -d refs/heads/…`, `git worktree remove`, a recursive
+ *       directory delete of a worktree (`cmd /c rmdir /s /q`, `rm -rf`,
+ *       `Remove-Item -Recurse` — clean tree only, #829) — whose target
  *       is not named in the last yes-answered Dry-Run question, and every
  *       not-landed branch without its own yes.
  *
@@ -246,11 +248,47 @@ function stripRefsHeads(name) { return name.replace(/^refs\/heads\//, ''); }
 /** A target the gate can verify: a literal name, no expansion or glob. */
 function literal(t) { return typeof t === 'string' && t !== '' && !/[$`*?()[\]{}]/.test(t); }
 
+const PS_RECURSE_RE = /^-r(e(c(u(r(s(e)?)?)?)?)?)?$/i;
+
+/**
+ * A recursive directory delete — `cmd /c rmdir /s /q <p>`, `rd /s`, `rm -rf <p>`,
+ * `Remove-Item -Recurse <p>` — the native fast path for removing a worktree
+ * (#829). Whether a target is a worktree is decided in decide().
+ * @returns {{dir: null, kind: 'dir', target: string}[]|{unresolved: string}|null}
+ */
+function dirDeletesInTokens(tokens) {
+  let t = tokens;
+  if (/^cmd(\.exe)?$/i.test(t[0] || '') && /^\/c$/i.test(t[1] || '')) t = t.slice(2);
+  const cmd = (t[0] || '').replace(/^.*[\\/]/, '').toLowerCase().replace(/\.exe$/, '');
+  const rest = t.slice(1);
+  let recursive = false;
+  let args = [];
+  if (cmd === 'rmdir' || cmd === 'rd') {
+    // cmd-style `/s /q`, or PowerShell's alias of Remove-Item (`-Recurse`)
+    recursive = rest.some(a => /^\/s$/i.test(a) || PS_RECURSE_RE.test(a));
+    args = rest.filter(a => !/^\/[a-z]$/i.test(a) && !a.startsWith('-'));
+  } else if (cmd === 'rm') {
+    recursive = rest.some(a => a === '--recursive' || /^-[a-zA-Z]*[rR]/.test(a));
+    args = rest.filter(a => !a.startsWith('-'));
+  } else if (['remove-item', 'ri', 'del', 'erase'].includes(cmd)) {
+    recursive = rest.some(a => PS_RECURSE_RE.test(a));
+    args = rest.filter(a => !a.startsWith('-'));
+  } else {
+    return null;
+  }
+  if (!recursive || !args.length) return null;
+  const bad = args.find(a => !literal(a));
+  if (bad) return { unresolved: `the delete target "${bad}" is not a literal path` };
+  return args.map(a => ({ dir: null, kind: 'dir', target: a }));
+}
+
 /**
  * The deletions one segment's tokens perform.
- * @returns {{dir: string|null, kind: 'branch'|'remote'|'worktree', target: string, remote?: string}[]|{unresolved: string}|null}
+ * @returns {{dir: string|null, kind: 'branch'|'remote'|'worktree'|'dir', target: string, remote?: string}[]|{unresolved: string}|null}
  */
 function deletesInTokens(tokens) {
+  const native = dirDeletesInTokens(tokens);
+  if (native) return native;
   let i = tokens.findIndex(t => /(^|[\\/])git(\.exe)?$/i.test(t));
   if (i === -1) return null;
   const viaXargs = tokens.slice(0, i).some(t => /(^|[\\/])xargs(\.exe)?$/i.test(t));
@@ -446,17 +484,52 @@ const HOW_TO_CONFIRM =
  * @param {{command: string, cwd: string, state: object|null, gitFor: (dir: string) => ((args: string[]) => string|null)}} p
  * @returns {{block: string}|null}
  */
+/**
+ * A recursive directory delete is the gate's business only when it hits a
+ * worktree: registered in `git worktree list`, carrying a `.git` file, or under
+ * `.claude/worktrees/`. Such a delete skips git's own dirty-tree refusal, so
+ * the gate re-checks it: never the main checkout, never the session's own
+ * directory, and a live checkout only with a clean `git status`.
+ * @returns {{skip: true}|{block: string}|{ok: true}}
+ */
+function checkDirDelete(d, cwd, gitFor) {
+  const abs = normPath(path.resolve(d.dir, d.target));
+  const listed = (gitFor(d.dir)(['worktree', 'list', '--porcelain']) || '')
+    .split('\n').filter(l => l.startsWith('worktree ')).map(l => normPath(l.slice(9)));
+  const hasGitFile = fs.existsSync(path.join(path.resolve(d.dir, d.target), '.git'));
+  // a worktree folder itself, never a subfolder of one (`rm -rf dist` in a session worktree)
+  if (!listed.includes(abs) && !hasGitFile && !/\/\.claude\/worktrees\/[^/]+$/.test(abs)) return { skip: true };
+  const inside = (p) => p === abs || p.startsWith(`${abs}/`);
+  if (listed[0] && inside(listed[0])) return { block: `${d.target} is (or holds) the main checkout.` };
+  if (inside(normPath(cwd))) return { block: `${d.target} holds this session's own directory.` };
+  if (hasGitFile) {
+    const status = gitFor(path.resolve(d.dir, d.target))(['status', '--porcelain']);
+    if (status === null) return { block: `git status of ${d.target} could not be read — its tree is unverified.` };
+    if (status !== '') return { block: `${d.target} has uncommitted or untracked changes.` };
+  }
+  return { ok: true };
+}
+
 function decide({ command, cwd, state, gitFor, mergedHeads }) {
   if (!state) return null;
-  const { deletes, unresolved } = parseDeletes(command, cwd);
-  if (!deletes.length && !unresolved.length) return null;
+  const parsed = parseDeletes(command, cwd);
+  const { unresolved } = parsed;
+  if (!parsed.deletes.length && !unresolved.length) return null;
   const head = '[cleanup-gate] BLOCKED — /auto-cleanup is running in this session.';
   if (unresolved.length) {
     return { block: [head, `The gate cannot verify what this deletes: ${unresolved[0]}.`,
       'Name every branch / worktree literally, one delete per name.', NO_ANSWER_RULE].join('\n') };
   }
+  const deletes = [];
+  for (const d of parsed.deletes) {
+    if (d.kind !== 'dir') { deletes.push(d); continue; }
+    const r = checkDirDelete(d, cwd, gitFor);
+    if (r.block) return { block: [head, `Directory delete refused: ${r.block}`, NO_ANSWER_RULE].join('\n') };
+    if (r.ok) deletes.push(d);
+  }
+  if (!deletes.length) return null;
   const dryScopes = state.dryRun.map(a => a.scope);
-  const missing = deletes.filter(d => !dryScopes.some(s => d.kind === 'worktree'
+  const missing = deletes.filter(d => !dryScopes.some(s => d.kind === 'worktree' || d.kind === 'dir'
     ? namesWorktree(s, d.target, d.dir)
     : namesBranch(s, d.target)));
   if (missing.length) {
@@ -468,7 +541,7 @@ function decide({ command, cwd, state, gitFor, mergedHeads }) {
   }
   const headCache = new Map();
   const deadline = Date.now() + CHAIN_BUDGET_MS;
-  const notLanded = deletes.filter(d => d.kind !== 'worktree'
+  const notLanded = deletes.filter(d => d.kind !== 'worktree' && d.kind !== 'dir'
     && !state.unmerged.some(a => (a.exact ? a.scope === d.target : namesBranch(a.scope, d.target)))
     && !hasLanded(gitFor(d.dir), d, { cwd: d.dir, mergedHeads, cache: headCache, deadline }));
   if (notLanded.length) {
