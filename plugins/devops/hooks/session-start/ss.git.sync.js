@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.git.sync
- * @version 1.1.0
+ * @version 1.2.0
  * @event SessionStart
  * @plugin devops
  * @description Starts ONE detached background git sync for this worktree.
@@ -41,16 +41,17 @@ function git(cmd) {
   }
 }
 
-// Only sync in a git repo on a non-main branch with a remote
+// Only sync in a git repo on a branch with a remote. The default branch syncs
+// too (#802): git-sync fast-forwards it and detects the default branch itself.
 if (git('rev-parse --is-inside-work-tree') !== 'true') process.exit(0);
 if (!git('remote')) process.exit(0);
 
 // symbolic-ref, not rev-parse --abbrev-ref: the latter answers the literal
-// 'HEAD' on a detached HEAD, which passes the !== 'main' test and burns the
-// 30-minute throttle slot on a sync the child then refuses outright. These
-// worktrees sit detached between tasks, so that is the common state.
+// 'HEAD' on a detached HEAD, which would burn the 30-minute throttle slot on a
+// sync the child then refuses outright. These worktrees sit detached between
+// tasks, so that is the common state.
 const branch = git('symbolic-ref --quiet --short HEAD');
-if (!branch || branch === 'main') process.exit(0);
+if (!branch) process.exit(0);
 
 // A session resumed in the middle of a ship must not merge under the pipeline:
 // ship rebases and releases what it just tested, and a background merge commit

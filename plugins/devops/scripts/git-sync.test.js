@@ -62,14 +62,12 @@ describe("merge source — the regression that made the sync a silent no-op", ()
     expect(fs.existsSync(resultFile)).toBe(false);
   });
 
-  test("does nothing on main itself", async () => {
-    const { root, primary, wt, other } = await makeWorld();
+  test("fast-forwards main itself (#802)", async () => {
+    const { root, primary, other } = await makeWorld();
     await advanceOrigin(other, "x.txt", "x\n", "main moves on");
-    void wt;
 
-    const resultFile = path.join(root, "result");
-    expect(await runSync(primary, resultFile)).toBe("");
-    expect(fs.existsSync(resultFile)).toBe(false);
+    expect(await runSync(primary, path.join(root, "result"))).toContain("✓ origin/main → main: 1 commit(s)");
+    expect(fs.existsSync(path.join(primary, "x.txt"))).toBe(true);
   });
 });
 
