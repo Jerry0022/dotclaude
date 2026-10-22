@@ -336,6 +336,23 @@ describe("hasLanded / decide against a real repo", () => {
       expect(decide(cmd(wt), armed()).block).toMatch(/no Dry-Run-Confirm/);
     });
 
+    test.each([
+      ["combined cmd switches", (p) => `cmd.exe /C rd /s/q "${p}"`],
+      ["quoted inner command", (p) => `cmd /c "rmdir /s /q ${p.replace(/\\/g, "/")}"`],
+      ["PowerShell -Path:value", (p) => `Remove-Item -Path:'${p}' -Recurse -Force`],
+      ["PowerShell short flags", (p) => `rm -r -fo '${p}'`],
+      ["no recursive switch at all", (p) => `rmdir "${p}"`],
+      ["trailing slash, other case", (p) => `rm -rf "${p.toUpperCase()}/"`],
+      ["relative path", (p) => `rm -rf "${path.relative(w.repo, p)}"`],
+    ])("unconfirmed worktree delete is refused: %s", (_n, cmd) => {
+      expect(decide(cmd(wt), armed(dryRun(["- feat/squash"]))).block).toMatch(/does not name/);
+    });
+
+    test("a parent folder of worktrees is refused even when the Dry-Run names it", () => {
+      const parent = path.join(w.repo, ".claude", "worktrees");
+      expect(decide(`rm -rf "${parent}"`, armed(dryRun([`- ${parent}`]))).block).toMatch(/holds worktrees/);
+    });
+
     test("dirty worktree → refused even when confirmed", () => {
       expect(decide(`cmd /c rmdir /s /q "${dirty}"`, named()).block).toMatch(/uncommitted or untracked changes/);
     });

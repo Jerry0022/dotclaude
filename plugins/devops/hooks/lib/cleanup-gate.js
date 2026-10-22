@@ -248,35 +248,45 @@ function stripRefsHeads(name) { return name.replace(/^refs\/heads\//, ''); }
 /** A target the gate can verify: a literal name, no expansion or glob. */
 function literal(t) { return typeof t === 'string' && t !== '' && !/[$`*?()[\]{}]/.test(t); }
 
-const PS_RECURSE_RE = /^-r(e(c(u(r(s(e)?)?)?)?)?)?$/i;
+const DELETE_CMDS = new Set(['rm', 'rmdir', 'rd', 'remove-item', 'ri', 'del', 'erase']);
+const PS_PATH_PARAM_RE = /^-(literal)?path$/i;
 
 /**
- * A recursive directory delete — `cmd /c rmdir /s /q <p>`, `rd /s`, `rm -rf <p>`,
+ * A directory delete — `cmd /c rmdir /s /q <p>`, `rd /s`, `rm -rf <p>`,
  * `Remove-Item -Recurse <p>` — the native fast path for removing a worktree
- * (#829). Whether a target is a worktree is decided in decide().
+ * (#829). Every target counts, whatever the flags: a flag form the parser does
+ * not know must not let a worktree delete through, so the recursive switch is
+ * not required. Whether a target is a worktree is decided in decide().
  * @returns {{dir: null, kind: 'dir', target: string}[]|{unresolved: string}|null}
  */
 function dirDeletesInTokens(tokens) {
   let t = tokens;
-  if (/^cmd(\.exe)?$/i.test(t[0] || '') && /^\/c$/i.test(t[1] || '')) t = t.slice(2);
-  const cmd = (t[0] || '').replace(/^.*[\\/]/, '').toLowerCase().replace(/\.exe$/, '');
-  const rest = t.slice(1);
-  let recursive = false;
-  let args = [];
-  if (cmd === 'rmdir' || cmd === 'rd') {
-    // cmd-style `/s /q`, or PowerShell's alias of Remove-Item (`-Recurse`)
-    recursive = rest.some(a => /^\/s$/i.test(a) || PS_RECURSE_RE.test(a));
-    args = rest.filter(a => !/^\/[a-z]$/i.test(a) && !a.startsWith('-'));
-  } else if (cmd === 'rm') {
-    recursive = rest.some(a => a === '--recursive' || /^-[a-zA-Z]*[rR]/.test(a));
-    args = rest.filter(a => !a.startsWith('-'));
-  } else if (['remove-item', 'ri', 'del', 'erase'].includes(cmd)) {
-    recursive = rest.some(a => PS_RECURSE_RE.test(a));
-    args = rest.filter(a => !a.startsWith('-'));
-  } else {
-    return null;
+  if (/^cmd(\.exe)?$/i.test(t[0] || '')) {
+    const c = t.findIndex(a => /^\/[ck]$/i.test(a));
+    if (c === -1) return null;
+    t = t.slice(c + 1);
+    // `cmd /c "rmdir /s /q X"` — the inner command arrives as one token
+    if (t.length === 1 && /\s/.test(t[0])) t = (segments(t[0])[0] || { tokens: [] }).tokens;
   }
-  if (!recursive || !args.length) return null;
+  const cmd = (t[0] || '').replace(/^.*[\\/]/, '').toLowerCase().replace(/\.exe$/, '');
+  if (!DELETE_CMDS.has(cmd)) return null;
+  const rest = t.slice(1);
+  const args = [];
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (/^(\/[a-z])+$/i.test(a)) continue; // cmd switches, also combined (`/s/q`)
+    if (a.startsWith('-')) {
+      const colon = a.indexOf(':');
+      const name = colon === -1 ? a : a.slice(0, colon);
+      if (PS_PATH_PARAM_RE.test(name)) {
+        if (colon !== -1) args.push(a.slice(colon + 1));
+        else if (i + 1 < rest.length) args.push(rest[++i]);
+      }
+      continue;
+    }
+    args.push(a);
+  }
+  if (!args.length) return null;
   const bad = args.find(a => !literal(a));
   if (bad) return { unresolved: `the delete target "${bad}" is not a literal path` };
   return args.map(a => ({ dir: null, kind: 'dir', target: a }));
@@ -497,11 +507,13 @@ function checkDirDelete(d, cwd, gitFor) {
   const listed = (gitFor(d.dir)(['worktree', 'list', '--porcelain']) || '')
     .split('\n').filter(l => l.startsWith('worktree ')).map(l => normPath(l.slice(9)));
   const hasGitFile = fs.existsSync(path.join(path.resolve(d.dir, d.target), '.git'));
-  // a worktree folder itself, never a subfolder of one (`rm -rf dist` in a session worktree)
-  if (!listed.includes(abs) && !hasGitFile && !/\/\.claude\/worktrees\/[^/]+$/.test(abs)) return { skip: true };
   const inside = (p) => p === abs || p.startsWith(`${abs}/`);
   if (listed[0] && inside(listed[0])) return { block: `${d.target} is (or holds) the main checkout.` };
   if (inside(normPath(cwd))) return { block: `${d.target} holds this session's own directory.` };
+  const held = listed.filter(p => p !== abs && inside(p));
+  if (held.length) return { block: `${d.target} holds worktrees (${held.join(', ')}) — remove each one by its own path.` };
+  // a worktree folder itself, never a subfolder of one (`rm -rf dist` in a session worktree)
+  if (!listed.includes(abs) && !hasGitFile && !/\/\.claude\/worktrees\/[^/]+$/.test(abs)) return { skip: true };
   if (hasGitFile) {
     const status = gitFor(path.resolve(d.dir, d.target))(['status', '--porcelain']);
     if (status === null) return { block: `git status of ${d.target} could not be read — its tree is unverified.` };
