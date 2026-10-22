@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.292.2] — 2026-10-22
+
+Deleting a finished remote branch no longer needs a throwaway worktree: from the main checkout, `git push origin --delete <branch>` now passes the main-branch guard.
+
+Root cause: `pre.main.guard` treated every `git push` on main as a write to main, including pure deletes of other branches, so cleaning up remote branches required a separate worktree — which then became cleanup debt of its own (#828).
+
+### Fixed
+- **Remote branch deletes pass on main.** A Bash command whose only writes are pure remote deletes (`--delete`/`-d <ref>…` or `:<ref>…`, plain branch names, `refs/heads/` and `heads/` prefixes stripped) is allowed.
+- **main stays protected.** Deleting `main`, `master` or the remote's default branch (`refs/remotes/<remote>/HEAD`, case-insensitive) is still blocked; an unknown remote HEAD blocks (fail closed); chains, other ref namespaces and anything else in the same command keep the block. PowerShell keeps the plain block.
+
 ## [0.292.1] — 2026-10-22
 
 Sub-agent worktrees that a crashed agent left locked are now removed after their branch merged into the integration branch, instead of piling up.

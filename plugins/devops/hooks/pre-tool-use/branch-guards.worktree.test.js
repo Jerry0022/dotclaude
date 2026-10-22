@@ -54,6 +54,7 @@ beforeAll(() => {
   git(["commit", "-qm", "c1"], mainDir);
   git(["remote", "add", "origin", origin], mainDir);
   git(["push", "-q", "origin", "main"], mainDir);
+  git(["remote", "set-head", "origin", "main"], mainDir);
   featDir = join(mainDir, ".claude", "worktrees", "feat");
   git(["worktree", "add", "-q", "-b", "feat/x", featDir, "main"], mainDir);
   onMainDir = join(mainDir, ".claude", "worktrees", "onmain");
@@ -272,6 +273,36 @@ describe("pre.main.guard", () => {
 
   test("DEVOPS_ALLOW_MAIN=1 still passes", () => rootOnMain(() => {
     expect(commit(mainDir, {}, { DEVOPS_ALLOW_MAIN: "1" }).status).toBe(0);
+  }), TIMEOUT);
+
+  // #828: deleting non-default remote branches writes neither local nor remote main.
+  const cmdOnMain = (command) => run(MAIN, { tool_name: "Bash", cwd: mainDir, tool_input: { command } });
+  test.each([
+    "git push origin --delete feat/x",
+    "git push origin -d a b",
+    "git push origin :feat/x",
+    "git -C . push origin --delete x",
+  ])("main checkout: %j passes", (command) => rootOnMain(() => {
+    expect(cmdOnMain(command).status).toBe(0);
+  }), TIMEOUT);
+
+  test.each([
+    "git push origin --delete main",
+    "git push origin :master",
+    "git push origin --delete feat/x main",
+    "git push origin main",
+    "git push --force origin --delete feat/x",
+    "git push origin --delete foo && git commit -m x",
+    "git push origin --delete MAIN",
+    // a remote whose default branch is unknown → fail closed
+    "git push upstream --delete feat/x",
+  ])("main checkout: %j stays blocked", (command) => rootOnMain(() => {
+    expect(cmdOnMain(command).status).toBe(2);
+  }), TIMEOUT);
+
+  test("PowerShell keeps the plain block (its argument parsing differs)", () => rootOnMain(() => {
+    const r = run(MAIN, { tool_name: "PowerShell", cwd: mainDir, tool_input: { command: "git push origin --delete feat/x" } });
+    expect(r.status).toBe(2);
   }), TIMEOUT);
 });
 
