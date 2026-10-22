@@ -79,8 +79,12 @@ function main(hook, deps = {}) {
   if (!state || now - (state.heartbeat || 0) >= cfg.admission.staleMs) spawnWatcher();
   const yieldsTo = res.reason.startsWith('priority:') ? 'an app that has priority right now' : 'the 80 % resource budget';
   const cli = path.resolve(__dirname, '..', '..', 'scripts', 'governor', 'cli.js').replace(/\\/g, '/');
+  // Local HH:MM: a reason quoted turns later must read as a snapshot, never as the cause of a later failure (#812).
+  const at = new Date(now);
+  const hhmm = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
   return {
-    block: `[governor] Not starting this now — heavy work yields to ${yieldsTo}. Pressed: ${P.pressedText(res, state)} (${res.reason}).\n`
+    block: `[governor ${hhmm}] Not starting this now — heavy work yields to ${yieldsTo}. Pressed: ${P.pressedText(res, state)} (${res.reason}).\n`
+      + `This is a snapshot of the load at ${hhmm}, not a diagnosis of errors that show up later.\n`
       + `Recorded as ${rec.id}. To wait for a slot run: node "${cli}" wait ${rec.id}  (bounded, default 15 min, --timeout 30m to change; fine with run_in_background). `
       + 'Exit 0 = admitted: then re-run the SAME command yourself under normal permissions. Exit 2 = still pressed after the timeout.\n'
       + 'Otherwise the governor tells you (this session or the next one in this repo) when the resources are free. Do NOT start it another way; defer the steps that depend on its result, report them as open, and continue with other work.',

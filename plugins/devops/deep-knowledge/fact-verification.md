@@ -51,6 +51,7 @@ Example: "React has 45% market share (StateOfJS 2025, confirmed by StackOverflow
 - **Vendor-published benchmarks** → always note: "Herstellerangabe — unabhängige Bestätigung empfohlen"
 - **"Studies show" without citation** → reject: do not repeat, find the actual study or say it's unverifiable
 - **Numbers that seem too round** (e.g., "exactly 50% faster") → suspicious, verify extra carefully
+- **Failure causes** → an earlier governor block reason is a snapshot, not evidence for a later failure: fresh evidence or "cause unverified" (`load-governor.md` § Reading a governor block)
 
 ## When NOT to verify
 
