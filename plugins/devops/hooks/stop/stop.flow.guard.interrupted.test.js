@@ -73,7 +73,7 @@ describe("stop.flow.guard — F5 interrupted title", () => {
       // The follow-up stop passes even though the transcript still says ⏳ — no loop.
       expect(await stop(dir, { transcript_path, stop_hook_active: true })).toBe("");
       // The marker is consumed: a later card-less turn on a bare ⏳ is renamed again.
-      expect(await stop(dir, { transcript_path })).toMatch(/⚡ Interrupted Refactor/);
+      expect(await stop(dir, { transcript_path })).toMatch(/⚡ Interrupted ┃ Refactor/);
     } finally {
       cleanup(dir);
     }

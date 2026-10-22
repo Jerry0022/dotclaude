@@ -130,7 +130,7 @@ in the same message as your next tool call — no `get_session`. No block →
 already marked. Only a block saying the title is unknown sends you to the
 `get_session` fallback in `deep-knowledge/activation.md` § Session title prefix.
 
-The prefix is exactly `👉 ➜ 📚 Batch ┃ ` (pointing hand, bar, word, books emoji, space; the code adds hair-space fill before the word,
+The prefix is exactly `👉 ➜ 📚 Batch ┃ ` (pointing hand, arrow, books emoji, word, bar, space;
 same icons as the completion card in its `👉 ➜ 📚 Batch ┃`
 CTA while the mode is armed. Both tools exist only in the Desktop app. Deferred is not unavailable: when they sit in the deferred-tools list, load
 both once with `ToolSearch` `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`, then call them
