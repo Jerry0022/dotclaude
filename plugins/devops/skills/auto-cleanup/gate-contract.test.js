@@ -176,3 +176,16 @@ describe("auto-cleanup gate contract — ship queue and card", () => {
     expect(c).toMatch(/Output the markdown VERBATIM as the LAST thing/);
   });
 });
+
+describe("hook timeouts under load (#827)", () => {
+  const find = (name) => Object.values(HOOKS.hooks).flat().flatMap((e) => e.hooks).find((h) => h.command.includes(name));
+  test("cleanup gate keeps blocking on failure, with a load-sized budget", () => {
+    const h = find("pre.cleanup.gate.js");
+    expect(h.onFailure).toBe("block");
+    expect(h.timeout).toBeGreaterThanOrEqual(30);
+  });
+  test("governor gate fails open on timeout", () => {
+    const h = find("pre.governor.gate.js");
+    expect(h.onFailure).not.toBe("block");
+  });
+});

@@ -60,7 +60,7 @@
       },
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.cleanup.gate.js\"", "timeout": 15, "onFailure": "block" }
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.cleanup.gate.js\"", "timeout": 30, "onFailure": "block" }
         ],
         "matcher": "Bash|PowerShell"
       },
@@ -116,7 +116,7 @@
       },
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.governor.gate.js\"", "timeout": 5, "onFailure": "block" }
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.governor.gate.js\"", "timeout": 10 }
         ],
         "matcher": "Bash|PowerShell"
       }
