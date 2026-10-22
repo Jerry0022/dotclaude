@@ -404,7 +404,9 @@ describe("hasLanded / decide against a real repo", () => {
       expect(decide(`bash -c -- "rm -rf '${wt}'"`, armed(dryRun(["- feat/squash"]))).block).toMatch(/does not name/);
       expect(decide(`bash -c -x "rm -rf '${wt}'"`, named()).block).toMatch(/payload the gate cannot read/);
       expect(decide("pwsh -Command -", armed()).block).toMatch(/payload the gate cannot read/);
-      expect(decide("powershell -NoProfile", armed())).toBeNull();
+      expect(decide("powershell -NoProfile", armed()).block).toMatch(/without an inline command/);
+      expect(decide(`bash < del.sh`, armed()).block).toMatch(/without an inline command/);
+      expect(decide(`echo "rm -rf ${wt}" |& bash`, named()).block).toMatch(/without an inline command/);
       // round 4: bundled/abbreviated env -S, quoted command after a prefix, shells fed by a pipe
       expect(decide(`env -iS "rm -rf ${wt}"`, named()).block).toMatch(/env -S/);
       expect(decide(`env --sp="rm -rf ${wt}"`, named()).block).toMatch(/env -S/);

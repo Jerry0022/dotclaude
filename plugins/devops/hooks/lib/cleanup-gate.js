@@ -221,7 +221,7 @@ function segments(command) {
     if (c === '&' && s[i + 1] === '&') { i++; pushSeg(false); continue; }
     if (c === '&') { pushSeg(false); continue; } // cmd's `a & b`, bash background, PowerShell call operator
     if (c === '|' && s[i + 1] === '|') { i++; pushSeg(false); continue; }
-    if (c === '|') { pushSeg(true); continue; }
+    if (c === '|') { if (s[i + 1] === '&') i++; pushSeg(true); continue; } // `|&` pipes stderr too
     if (c === '{' || c === '}') { pushTok(); continue; }
     if (/\s/.test(c)) { pushTok(); continue; }
     if (c === '>' || c === '<') {
@@ -352,8 +352,10 @@ function unwrap(tokens, depth = 0, piped = false) {
   if (prefix && /\s/.test(t[0] || '')) return unresolvedAs(`a "${prefix}" prefix in front of a quoted command line`);
   const name = baseName(t[0]);
   if (!SHELL_WRAP_RE.test(name)) return [t];
-  // a shell fed by a pipe reads its commands from stdin (`echo "rm -rf X" | bash`)
-  const fromStdin = () => (piped ? unresolvedAs(`a ${name} that reads its commands from a pipe`) : [t]);
+  // A shell without an inline payload runs a script or reads stdin — a pipe
+  // (`| bash`, `|& bash`), a redirect (`bash < f`, `<<<`), a here-doc. The gate
+  // cannot see those commands, so it refuses every such shell while armed.
+  const fromStdin = () => unresolvedAs(`a ${name} without an inline command${piped ? ', fed from a pipe' : ' (script or stdin)'}`);
   if (depth > 3) return unresolvedAs('too deeply nested shell wrappers');
   // a payload that starts with an option (`-c -- …`, `-Command -` = stdin) is not read
   const open = (parts) => {
