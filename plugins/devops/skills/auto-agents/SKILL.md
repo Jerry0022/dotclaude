@@ -427,10 +427,10 @@ Loop until the gate says `finish`, `pause` or `stop`:
    ancestor of the integration branch, worktree clean) the next step is
    `node "{PLUGIN_ROOT}/scripts/integration-check.js" --integration
    <integration-branch> --sub <sub-branch|path> --remove --now`. `--now` skips
-   only the ≥30 min idle wait; landed, clean, own-commits, live-session and
-   ignored-file checks still apply, so a worktree it keeps (listed in the
-   output) is retried by the Step 7 sweep. Do not leave agent worktrees for
-   the end of the run.
+   only the ≥30 min idle wait; landed, clean, own-commits, live-session,
+   ignored-file and lock checks (a dead pid's lock is lifted) still apply; a
+   kept worktree (`kept` in the output) is retried by the Step 7 sweep. Do
+   not leave agent worktrees for the end of the run.
 3. **Before removing any worktree** → `B prune-check --branch=<b>
    --worktree=<w>`; exit 1 means keep it.
 4. After the loop: the full QA run as an ordinary last task (not a gate),

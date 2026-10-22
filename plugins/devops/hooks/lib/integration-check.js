@@ -1,6 +1,6 @@
 /**
  * @module integration-check
- * @version 0.2.0
+ * @version 0.3.0
  * @description Integration proof for multi-agent runs: which sub-branches /
  *   agent worktrees are NOT yet in the integration ref, and which agent
  *   worktrees hold uncommitted work. Landing detection reuses hygiene.js
@@ -36,19 +36,36 @@ function loadHygiene() {
   return hygienePromise;
 }
 
-/** Worktree entries: [{path, branch|null, head}] */
+/** Worktree entries: [{path, branch|null, head, locked, lockReason|null}] */
 function listWorktrees(cwd) {
   const out = git(['worktree', 'list', '--porcelain'], cwd);
   if (!out) return [];
   return out.split(/\r?\n\r?\n/).map((blk) => {
-    const e = { path: null, branch: null, head: null };
+    const e = { path: null, branch: null, head: null, locked: false, lockReason: null };
     for (const line of blk.split(/\r?\n/)) {
       if (line.startsWith('worktree ')) e.path = line.slice(9).trim();
       else if (line.startsWith('HEAD ')) e.head = line.slice(5).trim();
       else if (line.startsWith('branch ')) e.branch = line.slice(7).trim().replace(/^refs\/heads\//, '');
+      else if (line === 'locked' || line.startsWith('locked ')) {
+        e.locked = true;
+        e.lockReason = line.slice(6).trim() || null;
+      }
     }
     return e;
   }).filter((e) => e.path);
+}
+
+function pidAlive(pid) {
+  try { process.kill(pid, 0); return true; } catch (e) { return Boolean(e && e.code === 'EPERM'); }
+}
+
+/**
+ * A lock that still holds the worktree: no pid in its reason (cannot tell who
+ * holds it) or a live pid. A lock naming a dead pid is stale -> false.
+ */
+function lockHeld(lockReason) {
+  const m = /\bpid[\s=:]*(\d+)/i.exec(lockReason || '');
+  return !m || pidAlive(Number(m[1]));
 }
 
 /** Uncommitted paths worth keeping: porcelain entries minus untracked tooling state. */
@@ -118,6 +135,7 @@ async function checkIntegration({ cwd, integrationRef, subRefs, merged }) {
     const landedVia = sha ? await landing(sha, branch, integrationRef, cwd, merged) : null;
     parts.push({
       branch, path: wtPath, sha, removable: Boolean(ref.removable),
+      locked: Boolean(wt && wt.locked), lockReason: (wt && wt.lockReason) || null,
       landed: Boolean(landedVia), landedVia,
       dirty: dirty.length > 0, dirtyPaths: dirty.slice(0, 20),
     });
@@ -169,12 +187,21 @@ function discoverParts(cwd, { slug, integrationRef } = {}) {
   return parts;
 }
 
-/** Line for the `open:` field — "ungelandet: N Teile (…)" or null. */
-function summarize(result) {
+/**
+ * Line for the `open:` field — "ungelandet: N Teile (…)", plus
+ * "gesperrt: N Teile (…)" for landed parts a live or unreadable lock keeps
+ * (`kept` from removeIntegrated) — or null.
+ */
+function summarize(result, kept = []) {
+  const lines = [];
   const u = result.unlanded;
-  if (!u.length) return null;
-  const names = u.map((p) => `${p.path || p.branch}${p.dirty ? ' [uncommitted]' : ''}`);
-  return `ungelandet: ${u.length} Teile (${names.join('; ')})`;
+  if (u.length) {
+    const names = u.map((p) => `${p.path || p.branch}${p.dirty ? ' [uncommitted]' : ''}`);
+    lines.push(`ungelandet: ${u.length} Teile (${names.join('; ')})`);
+  }
+  const locked = kept.filter((k) => k.reason === 'locked');
+  if (locked.length) lines.push(`gesperrt: ${locked.length} Teile (${locked.map((k) => k.part).join('; ')})`);
+  return lines.length ? lines.join(' · ') : null;
 }
 
 const IDLE_MIN_MS = 30 * 60 * 1000;
@@ -223,6 +250,7 @@ async function keepReason(part, { cwd, explicit, idleMs = IDLE_MIN_MS }) {
     if (own === null) return 'no-reflog';
   }
   if (part.path) {
+    if (part.locked && lockHeld(part.lockReason)) return 'locked';
     const hyg = await loadHygiene();
     if (hyg && hyg.hasLiveSession(part.path, hyg.defaultProjectsDir())) return 'live-session';
     const idx = git(['rev-parse', '--git-path', 'index'], part.path);
@@ -241,17 +269,24 @@ async function keepReason(part, { cwd, explicit, idleMs = IDLE_MIN_MS }) {
  * Remove parts that are landed AND clean AND owned by the run (carry the
  * whole run slug, or named via --sub: `explicit`). Each part is re-checked
  * right before deleting; never forced; never a part without own commits, with
- * a live/recent session, ignored files or a link inside.
+ * a live/recent session, ignored files or a link inside. A lock naming a dead
+ * pid is lifted (`git worktree unlock`, never forced) right before removing;
+ * a live or pid-less lock keeps the part (reason `locked`).
+ * @param {{kept?: Array<{part:string, reason:string}>}} o - `kept` collects why parts stayed
  * @returns {Promise<string[]>} removed paths/branches
  */
-async function removeIntegrated({ cwd, integrationRef, result, explicit = false, idleMs }) {
+async function removeIntegrated({ cwd, integrationRef, result, explicit = false, idleMs, kept = [] }) {
   const removed = [];
+  const keep = (p, reason) => { kept.push({ part: p.path || p.branch, reason }); };
   for (const p of result.parts) {
-    if (await keepReason(p, { cwd, explicit, idleMs })) continue;
+    const why = await keepReason(p, { cwd, explicit, idleMs });
+    if (why) { keep(p, why); continue; }
     const fresh = await checkIntegration({ cwd, integrationRef, subRefs: [{ branch: p.branch, path: p.path }] });
     const f = { ...fresh.parts[0], removable: p.removable };
-    if (!f.sha || await keepReason(f, { cwd, explicit, idleMs })) continue;
-    if (f.path && !gitOk(['worktree', 'remove', f.path], cwd)) continue;
+    const whyFresh = f.sha ? await keepReason(f, { cwd, explicit, idleMs }) : 'no-sha';
+    if (whyFresh) { keep(p, whyFresh); continue; }
+    if (f.path && f.locked && !gitOk(['worktree', 'unlock', f.path], cwd)) { keep(p, 'unlock-failed'); continue; }
+    if (f.path && !gitOk(['worktree', 'remove', f.path], cwd)) { keep(p, 'remove-failed'); continue; }
     if (f.branch && !PROTECTED_BRANCH.test(f.branch) && f.branch !== integrationRef) git(['branch', '-D', f.branch], cwd);
     removed.push(f.path || f.branch);
   }
@@ -260,5 +295,5 @@ async function removeIntegrated({ cwd, integrationRef, result, explicit = false,
 
 module.exports = {
   checkIntegration, discoverParts, summarize, removeIntegrated,
-  listWorktrees, dirtyPaths, mergeAddsNothing, loadHygiene, carriesSlug, keepReason,
+  listWorktrees, dirtyPaths, mergeAddsNothing, loadHygiene, carriesSlug, keepReason, lockHeld,
 };
