@@ -355,7 +355,7 @@ describe("hasLanded / decide against a real repo", () => {
       ["glued cmd /c", (p) => `cmd /crmdir /s /q "${p}"`],
       ["bundled bash -lc", (p) => `bash -lc "rm -rf '${p}'"`],
       ["PowerShell -c abbreviation", (p) => `pwsh -NoLogo -c "Remove-Item -Recurse '${p}'"`],
-      ["PowerShell positional command", (p) => `powershell -ExecutionPolicy Bypass "Remove-Item -Recurse '${p}'"`],
+      ["PowerShell slash switch", (p) => `powershell /NoProfile /Command "Remove-Item -Recurse '${p}'"`],
       ["sudo -u <user>", (p) => `sudo -u root rm -rf "${p}"`],
     ])("unconfirmed worktree delete is refused: %s", (_n, cmd) => {
       expect(decide(cmd(wt), armed(dryRun(["- feat/squash"]))).block).toMatch(/does not name/);
@@ -395,6 +395,16 @@ describe("hasLanded / decide against a real repo", () => {
       expect(decide("powershell -e AAAA", armed()).block).toMatch(/encoded command/);
       expect(decide("powershell -File cleanup.ps1", armed()).block).toMatch(/script file/);
       expect(decide(`env -X weird rm -rf "${wt}"`, named()).block).toMatch(/prefix with options/);
+      // round 3 (#840 review): what the parser cannot model is refused
+      expect(decide(`powershell -ExecutionPolicy Bypass "Remove-Item -Recurse '${wt}'"`, named()).block).toMatch(/without -Command/);
+      expect(decide(`powershell -Exec Bypass "Remove-Item -Recurse '${wt}'"`, named()).block).toMatch(/without -Command/);
+      expect(decide(`env -S "rm -rf ${wt}" `, named()).block).toMatch(/env -S/);
+      expect(decide(`env --split-string="rm -rf ${wt}"`, named()).block).toMatch(/env -S/);
+      expect(decide(`sudo -u "rm -rf ${wt}"`, named()).block).toMatch(/option value that is a command/);
+      expect(decide(`bash -c -- "rm -rf '${wt}'"`, armed(dryRun(["- feat/squash"]))).block).toMatch(/does not name/);
+      expect(decide(`bash -c -x "rm -rf '${wt}'"`, named()).block).toMatch(/payload the gate cannot read/);
+      expect(decide("pwsh -Command -", armed()).block).toMatch(/payload the gate cannot read/);
+      expect(decide("powershell -NoProfile", armed())).toBeNull();
       const deep = `cmd /c cmd /c cmd /c cmd /c cmd /c rmdir /s /q "${wt}"`;
       expect(decide(deep, named()).block).toMatch(/too deeply nested/);
       expect(decide("bash -lc \"echo hi\"", armed())).toBeNull();
