@@ -732,27 +732,49 @@ four attributes; the engine (templates-design-overview.md § Variant overview JS
 | `data-design-motto` | The design's slogan, 2–5 words ("Less is calm."). It heads the card and is the header name's tooltip. |
 | `data-design-traits` | Exactly **three** traits, separated by `\|`. Only genuine differences to the OTHER designs of the round — never something every design has ("responsive", "dark mode"). |
 | `data-design-icon` | A built-in icon name (`leaf`, `rocket`, `gauge`, `grid`, `map`, `cube`, `chart`, `bolt`, `heart`, `compass`, `layers`, `sparkles`, `shield`, `book`, `user`, `home`, `sun`, `moon`, `flame`, `palette`, `game`, `list`) or one inline SVG, entity-escaped inside the attribute (`data-design-icon="&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;&lt;path d=&quot;…&quot;/&gt;&lt;/svg&gt;"` — a raw `<`/`>` in an attribute breaks the build's and the gate's tag scanners); stroke paths in `currentColor`, everything outside svg/g/path/circle/ellipse/line/polyline/polygon/rect and their geometry/stroke attributes is dropped. A short emoji works too. Claude picks it thematically per concept — the icon is how the user tells the designs apart in the quick nav. |
-| `data-design-color` | Optional. A hex colour for the design's card, header line and icon background. Never the accent blue: the icons themselves are drawn in one uniform accent tint, and the background must stay distinguishable. Without it the engine assigns a palette colour by position. |
+| `data-design-color` | Optional. A hex colour for the design's slide ring, header line and icon background. Never the accent blue: the icons themselves are drawn in one uniform accent tint, and the background must stay distinguishable. Without it the engine assigns a palette colour by position. |
+| `data-design-overlay` | Optional. Where the overlay (kicker, motto, traits) sits on the preview: `tl`, `tr`, `bl`, `br`, `tc` or `bc`; default `bl`. Claude picks the corner that covers the least important part of THAT design's first screen (titles and key figures usually sit top → `bl`/`bc`). |
+| `data-design-overlay-tone` | Optional. `warm` switches the overlay from the semi-transparent bluish tint to a warm graphite — set it when the preview itself is bluish and the default tint would sink into it. No auto-detection. |
+
+**Authoring attribute on the iteration** (`section[data-iteration]` of a
+≥2-design round): `data-design-set="alternatives"` when the designs are
+alternatives for the same thing — the usual case under "one visual topic per
+round" — or `data-design-set="topics"` when they show different topics
+(start page, settings, …). Only `alternatives` offers the favourite (☆/★,
+`F`, header ★, dimming); unmarked or `topics` → no star anywhere and
+`favorite` stays `null`.
 
 The gate warns (never fails) when a ≥2-design round lacks motto, traits or
-icon, or when the traits are not exactly three (`concept-gate.js`
-`findDesignAuthoringWarnings`; validation-gate.md § Variant overview).
+icon, when the traits are not exactly three, when the round has no
+`data-design-set`, or when `data-design-overlay` names an unknown anchor
+(`concept-gate.js` `findDesignAuthoringWarnings`; validation-gate.md
+§ Variant overview).
 
 **What the engine builds:**
 
-- **Overview** — the round's first top-level item ("Übersicht", `Esc`). One
-  card per design: number + icon + name, motto, a live mini preview of the
-  design's first screen (a scaled, inert clone; click = open the design),
-  page chips (jump to a screen), the three traits, a notes count (💬 N =
-  every note on the design: its dock row, its pages, its annotation answers,
-  its user pins) and **☆ Favourite**. A fresh page lands on the overview; a
-  reload returns to where the user was (`_overview` / `_overviewDesign` /
-  `_overviewScreen`, § State Persistence).
-- **Favourite** — optional, at most one, toggled until submit (button on the
-  card, the header's ★, or `F`). The favoured card is raised with a
-  gold border and a `★ FAVOURITE` badge, the others dim. Payload:
-  `favorite: <designId>|null` (§ Decision schema). Meaning for the next
-  round: step5-process.md § 5a.
+- **Overview** — the round's first top-level item ("Übersicht", `Esc`): a
+  **carousel** that fills the viewport and never scrolls. One design large
+  in the centre (≈ 78 % of the width, up to the viewport height minus the
+  header row, 16:10), its neighbours peeking in cut off at the left and
+  right edges (dimmed, desaturated). A click on a neighbour, the ‹ › arrows
+  or `←` / `→` turn the carousel — they never open anything. The centre is a
+  live preview of the design's first (or first changed) screen — a scaled,
+  inert clone, a still image: click or `Enter` opens the design, "Öffnen ↗"
+  shows on hover / focus only. On it sits the **overlay**: kicker
+  `icon · N · name` (+ ☆/★ on an alternatives round), the motto as heading,
+  the three traits — at `data-design-overlay`, tinted per
+  `data-design-overlay-tone`. `Space` (or the header's layers button) hides /
+  shows the overlay; default on, remembered per viewer. With
+  `section[data-view]`s the questions are the **last slide** (open /
+  answered list, click opens the view). No page chips, no notes row, no
+  second navigation — the pages live in the quick nav. A fresh page lands on
+  the overview; a reload returns to where the user was (`_overview` /
+  `_overviewDesign` / `_overviewScreen`, § State Persistence).
+- **Favourite** — only on a round marked `data-design-set="alternatives"`;
+  optional, at most one, toggled until submit (☆ in the overlay, the
+  header's ★, or `F`). The favoured slide gets a gold ring, the others dim.
+  Payload: `favorite: <designId>|null` (§ Decision schema; always `null`
+  without `alternatives`). Meaning for the next round: step5-process.md § 5a.
 - **Header** (top left, replaces `#screen-indicator`) — compact: back item
   "▦ Übersicht" (on a design or view page; overview icon + word, no arrow),
   icon + name, `★` only when this design IS the favourite (on the overview:
@@ -770,17 +792,21 @@ icon, or when the traits are not exactly three (`concept-gate.js`
   `section[data-view]`s, a trailing amber `?` segment counts the unanswered
   questions (a note or a clicked bi-state answers one) and carries their
   list as a tab hanging off it (ring = open, ✓ = answered, progress bar);
-  it pulses on every arrival on the overview. The overview grid gets a
-  questions card, and the panel's submit area a non-blocking "N Fragen noch
-  offen — zur ersten springen" line.
+  it pulses on every arrival on the overview. The carousel gets a questions
+  slide, and the panel's submit area a non-blocking "N Fragen noch
+  offen — zur ersten springen" line. The quick nav's band is measured
+  against the header's real right edge and the ☰ FAB on every render, so the
+  two never overlap; too little room folds the pages into the chip, then
+  shrinks every design to its icon.
 - **Every design round, one design included,** gets the header and the quick
-  nav; only the overview grid, the favourite and `Esc`-to-overview need ≥2
-  designs. The page builds itself up on load: content, header, quick nav
+  nav; only the overview carousel and `Esc`-to-overview need ≥2 designs,
+  the favourite additionally `data-design-set="alternatives"`. The page builds itself up on load: content, header, quick nav
   (with a bounce), then the FABs (`body.dz-intro`, ~2 s, off under reduced
   motion).
 - **Hotkeys** — `Esc` overview · `1`–`9` design N · `Shift`+`1`–`9` view N ·
   `Tab` next page of the current design (only while nothing is focused) ·
-  `F` favourite · `Alt`+`1`–`9` iteration tab · `?` shortcut sheet ·
+  `←` / `→` turn the overview carousel · `Space` overlay on / off (overview) ·
+  `F` favourite (alternatives round only) · `Alt`+`1`–`9` iteration tab · `?` shortcut sheet ·
   `Ctrl`+`Enter` submit · `N` notes dock. A digit or quick-nav switch keeps
   the page: design A page 2 → design B page 2 (B's first page when it has
   none); a view tied to a design maps to the target design's view at the
@@ -799,8 +825,7 @@ icon, or when the traits are not exactly three (`concept-gate.js`
   attributes ignored). A card whose first page is unchanged previews its
   first CHANGED page instead and names it; an overlay on the preview reads
   "Geändert: <pages>", "Neu in dieser Runde" or "Unverändert". Every menu
-  entry leading to a changed page (quick nav, ☰ rows, header tabs, card
-  chips) carries a green dot until that page was opened once (per viewer,
+  entry leading to a changed page (quick nav, ☰ rows) carries a green dot until that page was opened once (per viewer,
   localStorage). Keep ids stable across rounds — a renamed page id reads as
   new. Nothing to author.
 
@@ -831,7 +856,8 @@ icon, or when the traits are not exactly three (`concept-gate.js`
                below). -->
           <!-- ≥2 designs: every design also carries the overview authoring
                attributes (§ Variant overview (≥2 designs)) — motto, exactly
-               three traits, an icon, optionally a colour. -->
+               three traits, an icon, optionally a colour, an overlay
+               anchor and tone; the iteration says data-design-set. -->
           <section data-design="dispatch" data-nav-label="Dispatch and Apparatus" data-design-active="true"
                    data-design-motto="Every unit at a glance."
                    data-design-traits="Map-first layout | Apparatus as cards | One-click dispatch"

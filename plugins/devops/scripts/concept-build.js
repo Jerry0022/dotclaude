@@ -349,8 +349,11 @@ function bakeFrozenFeedback(fragment, payload) {
     if (v) blob[k] = v;
   }
   // Variant overview (templates-design.md § Variant overview): the frozen tab
-  // shows the favourite and the user's own pins read-only.
-  if (payload && typeof payload.favorite === 'string' && payload.favorite) blob.favorite = payload.favorite;
+  // shows the favourite and the user's own pins read-only. A favourite only
+  // means something on a round of alternatives (data-design-set).
+  const rootTag = rootSection(fragment);
+  const alternatives = !!rootTag && /(?:^|\s)data-design-set=("|')alternatives\1/i.test(rootTag.attrs);
+  if (alternatives && payload && typeof payload.favorite === 'string' && payload.favorite) blob.favorite = payload.favorite;
   if (payload && Array.isArray(payload.userPins) && payload.userPins.length) blob.userPins = payload.userPins;
   const tag = `<script type="application/json" data-frozen-feedback>${JSON.stringify(blob).replace(/<\/script/gi, '<\\/script')}</script>`;
   const cleaned = fragment.replace(/\s*<script\b[^>]*data-frozen-feedback[^>]*>[\s\S]*?<\/script>/gi, '');

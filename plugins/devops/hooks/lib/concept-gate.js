@@ -135,7 +135,8 @@ const ENGINE_CLASSES = [
   'iteration-tab', 'screen-indicator', 'design-switcher', 'frozen-bar',
   'frozen-bar-text', 'closeout-sheet', 'device-frame', 'panel-here',
   'concept-layout', 'concept-content', 'iteration-intro',
-  'design-header', 'design-quick', 'design-ov', 'design-ov-card', 'design-fav-btn',
+  'design-header', 'design-quick', 'design-ov', 'design-ov-stage', 'design-ov-slide',
+  'design-ov-preview', 'design-ov-overlay', 'design-ov-arrow', 'design-ov-star',
   'upin', 'upin-layer', 'upin-hint', 'design-keys', 'app-kbd',
 ];
 // A mock class is namespaced when it carries a per-design prefix.
@@ -753,12 +754,14 @@ function findViewOverlap(html) {
 
 /**
  * Advisory only — never blocks. A design round with ≥2 `section[data-design]`
- * renders an overview card per design from `data-design-motto`,
+ * renders an overview slide per design from `data-design-motto`,
  * `data-design-traits` (exactly three, `|`-separated) and `data-design-icon`
  * (templates-design.md § Variant overview (≥2 designs)). A missing one still
  * renders (no motto line, no traits, a generic icon), so a page written
  * before the overview existed must keep building; the warning names what the
- * card is missing.
+ * overlay is missing. The round itself should say what its designs are
+ * (`data-design-set="alternatives|topics"` — only `alternatives` offers a
+ * favourite), and `data-design-overlay` must name a known anchor.
  *
  * @returns {Array<{kind:string, why:string, at:number}>}
  */
@@ -772,7 +775,7 @@ function findDesignAuthoringWarnings(html) {
   let cur = null, m;
   while ((m = topRe.exec(body)) !== null) {
     if (m[1].toLowerCase() === 'data-iteration') {
-      cur = { n: m[3], designs: [] };
+      cur = { n: m[3], designs: [], tag: m[0], at: m.index };
       groups.push(cur);
     } else if (cur) {
       cur.designs.push({ id: m[3], tag: m[0], at: m.index });
@@ -780,6 +783,11 @@ function findDesignAuthoringWarnings(html) {
   }
   for (const g of groups) {
     if (g.designs.length < 2) continue;
+    const set = attrOf(g.tag, 'data-design-set');
+    if (!set || !/^(alternatives|topics)$/.test(set.trim())) {
+      warnings.push({ kind: 'overview-set', at: g.at,
+        why: `iteration ${g.n}: ${g.designs.length} designs but ${set ? `data-design-set="${set}" is neither "alternatives" nor "topics"` : 'no data-design-set'} — set "alternatives" when the designs answer the same thing (favourite ☆ on), "topics" when they show different topics (templates-design.md § Variant overview)` });
+    }
     for (const d of g.designs) {
       const missing = [];
       const motto = attrOf(d.tag, 'data-design-motto');
@@ -790,12 +798,17 @@ function findDesignAuthoringWarnings(html) {
       if (!icon) missing.push('data-design-icon');
       if (missing.length) {
         warnings.push({ kind: 'overview-authoring', at: d.at,
-          why: `iteration ${g.n}, design "${d.id}": ${missing.join(', ')} missing — the variant overview card renders without it (templates-design.md § Variant overview)` });
+          why: `iteration ${g.n}, design "${d.id}": ${missing.join(', ')} missing — the variant overview slide renders without it (templates-design.md § Variant overview)` });
+      }
+      const anchor = attrOf(d.tag, 'data-design-overlay');
+      if (anchor !== null && !/^(tl|tr|bl|br|tc|bc)$/.test(anchor.trim())) {
+        warnings.push({ kind: 'overview-overlay', at: d.at,
+          why: `iteration ${g.n}, design "${d.id}": data-design-overlay="${anchor}" is not one of tl, tr, bl, br, tc, bc — the overlay falls back to bl` });
       }
       if (traits && traits.trim()) {
         const count = traits.split('|').map(t => t.trim()).filter(Boolean).length;
         if (count !== 3) warnings.push({ kind: 'overview-traits', at: d.at,
-          why: `iteration ${g.n}, design "${d.id}": data-design-traits has ${count} trait(s), the card shows exactly three genuine differences ("A | B | C")` });
+          why: `iteration ${g.n}, design "${d.id}": data-design-traits has ${count} trait(s), the overlay shows exactly three genuine differences ("A | B | C")` });
       }
     }
   }

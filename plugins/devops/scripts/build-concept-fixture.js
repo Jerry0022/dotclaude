@@ -305,7 +305,7 @@ function designRound(n, { live, mapping = false, designs = 1 }) {
   ].join('\n');
   const suffixes = Array.from({ length: Math.max(1, designs) }, (_, i) => (i === 0 ? '' : String.fromCharCode(97 + i)));
   return [
-    `<section id="iter-${n}" data-iteration="${n}" data-iteration-template="design"${live ? ' data-active' : ' hidden'}>`,
+    `<section id="iter-${n}" data-iteration="${n}" data-iteration-template="design"${designs >= 2 ? ' data-design-set="alternatives"' : ''}${live ? ' data-active' : ' hidden'}>`,
     ...suffixes.map((sfx, i) => design(`d${n}${sfx}`, `Design ${n}${sfx ? ' ' + sfx.toUpperCase() : ''}`, i === 0)),
     ...(mapping ? [mappingView(n, { live })] : []),
     '</section>',

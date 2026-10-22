@@ -201,6 +201,13 @@ must see their own language. The locale hint is authoritative.
 | `design.overview_count`        | {n} designs · pick a favourite or just comment | {n} Designs · Favorit wählen oder einfach kommentieren |
 | `design.overview_open`         | Open this design                | Design öffnen |
 | `design.overview_notes`        | Notes on this design            | Notizen zu diesem Design |
+| `design.overview_count_plain`  | {n} designs · just comment      | {n} Designs · einfach kommentieren |
+| `design.overview_prev`         | Previous                        | Vorherige |
+| `design.overview_next`         | Next                            | Nächste |
+| `design.overview_overlay`      | Show or hide the overlay        | Overlay ein- oder ausblenden |
+| `design.keys_carousel`         | Previous / next slide (overview) | Vorherige / nächste Folie (Übersicht) |
+| `design.keys_overlay`          | Overlay on / off (overview)     | Overlay ein / aus (Übersicht) |
+| `design.key_space`             | Space                           | Leertaste |
 | `design.favorite`              | Favourite                       | Favorit |
 | `design.favorite_badge`        | FAVOURITE                       | FAVORIT |
 | `design.favorite_set`          | Mark as favourite               | Als Favorit markieren |
