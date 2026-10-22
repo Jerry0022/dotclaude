@@ -1,0 +1,187 @@
+#!/usr/bin/env node
+/**
+ * @module dotclaude-ship-mcp
+ * @version 0.3.0
+ * @plugin devops
+ * @description MCP server with the ship pipeline tools:
+ *   - ship_preflight    — pre-flight safety checks
+ *   - ship_build        — build, lint, test, build-ID
+ *   - ship_version_bump — bump + verify all version files
+ *   - ship_release      — commit, push, PR, merge, tag, release
+ *   - ship_promote      — re-tag a shipped version onto beta/stable
+ *   - ship_cleanup      — delete branch, prune worktrees
+ *   - ship_hygiene      — post-ship auto-clean of old leftovers + cleanup nudge
+ *   - health_check      — boot diagnostics (#324)
+ *
+ *   Registered in plugin.json → started automatically by Claude Code.
+ *   Stdout is the JSON-RPC wire — all logging goes to stderr.
+ */
+
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+import { createRequire } from "node:module";
+import { register as registerHeartbeat } from "../lib/heartbeat.js";
+
+import { schema as preflightSchema, handler as preflightHandler } from "./tools/preflight.js";
+import { schema as buildSchema, handler as buildHandler } from "./tools/build.js";
+import { schema as versionBumpSchema, handler as versionBumpHandler } from "./tools/version-bump.js";
+import { schema as releaseSchema, handler as releaseHandler } from "./tools/release.js";
+import { schema as promoteSchema, handler as promoteHandler } from "./tools/promote.js";
+import { schema as cleanupSchema, handler as cleanupHandler } from "./tools/cleanup.js";
+import { schema as hygieneSchema, handler as hygieneHandler } from "./tools/hygiene.js";
+
+const SERVER_NAME = "dotclaude-ship";
+const SERVER_VERSION = "0.3.0";
+
+const server = new McpServer({
+  name: SERVER_NAME,
+  version: SERVER_VERSION,
+});
+
+// Set once the stdio transport is live — see the boot block at the bottom.
+let bootMs = null;
+
+/**
+ * Where an interrupted ship left off (hooks/lib/ship-checkpoint.js): every
+ * pipeline tool's result is recorded after it returns, so a ship that dies
+ * mid-way (usage limit, crash) resumes at the step that did not finish.
+ * Loaded on first use — no work before connect (Boot Discipline) — and never
+ * allowed to fail the tool call it follows.
+ */
+let checkpointLib;
+function recordStep(name, params, result) {
+  try {
+    if (checkpointLib === undefined) {
+      checkpointLib = createRequire(import.meta.url)("../../hooks/lib/ship-checkpoint.js");
+    }
+    checkpointLib.recordShipStep(name, params, result);
+  } catch { checkpointLib = checkpointLib || null; }
+}
+
+function registerTool(name, title, description, schema, handler) {
+  server.registerTool(
+    name,
+    { title, description, inputSchema: schema },
+    async (params) => {
+      try {
+        const result = await handler(params);
+        recordStep(name, params, result);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ error: true, message: e.message }) }],
+          isError: true,
+        };
+      }
+    }
+  );
+}
+
+registerTool(
+  "health_check",
+  "Health Check",
+  "Boot diagnostics for this MCP server: which build answered, from which working directory, " +
+  "and how long it took from process start to a live stdio transport. " +
+  "Use when diagnosing MCP CONNECT_TIMEOUT at session start.",
+  z.object({}),
+  async () => ({
+    server: SERVER_NAME,
+    version: SERVER_VERSION,
+    cwd: process.cwd(),
+    bootMs,
+    node: process.version,
+    depsResolved: true,
+  }),
+);
+
+registerTool(
+  "ship_preflight",
+  "Ship Pre-Flight",
+  "Run pre-flight safety checks: clean tree, commits ahead, pushed, version consistency, worktree detection. " +
+  "Returns structured check results. Call this FIRST in the ship pipeline.",
+  preflightSchema,
+  preflightHandler,
+);
+
+registerTool(
+  "ship_build",
+  "Ship Build",
+  "Build the project, run lint and tests, compute build-ID. " +
+  "Auto-detects available scripts from package.json — only runs what exists. " +
+  "Returns success/failure with step details. Use buildIdOnly=true to skip build and only hash.",
+  buildSchema,
+  buildHandler,
+);
+
+registerTool(
+  "ship_version_bump",
+  "Ship Version Bump",
+  "Bump version in all project files (plugin.json/package.json, README, marketplace.json). " +
+  "Verifies all files match after bump. CHANGELOG must be updated separately by Claude before calling this.",
+  versionBumpSchema,
+  versionBumpHandler,
+);
+
+registerTool(
+  "ship_release",
+  "Ship Release",
+  "Commit, push, create PR, squash-merge, and create the alpha ring tag. " +
+  "Handles the full git + GitHub flow deterministically. The GitHub Release is created later by ship_promote. Returns PR number, merge sha, tag status.",
+  releaseSchema,
+  releaseHandler,
+);
+
+registerTool(
+  "ship_promote",
+  "Ship Promote",
+  "Promote a shipped version to a higher channel (alpha→beta→stable) by re-tagging the SAME commit SHA. " +
+  "Never rebuilds, never bumps versions — bit-identical ring promotion via annotated tags. " +
+  "Idempotent: re-run after partial failure completes the missing steps. Used by do-ship's promotion steps (promotion-only, or Step 5d right after a ship when the user named beta/stable) — never by the ship pipeline's own build/release steps.",
+  promoteSchema,
+  promoteHandler,
+);
+
+registerTool(
+  "ship_cleanup",
+  "Ship Cleanup",
+  "Delete shipped feature branch (local + remote if lingering), prune worktrees and remotes. " +
+  "IMPORTANT: If in a worktree, Claude must call ExitWorktree BEFORE this tool. " +
+  "EXCEPTION: when keep:true is passed, the tool only clears the ship-in-progress sentinel " +
+  "and leaves the worktree + branch intact — safe to call from inside the worktree.",
+  cleanupSchema,
+  cleanupHandler,
+);
+
+registerTool(
+  "ship_hygiene",
+  "Ship Hygiene",
+  "After a SUCCESSFUL ship (trigger 'ship') or promotion-only run (trigger 'promote'): " +
+  "removes leftover branches/worktrees whose content provably landed — only after a ship: once one is older than the " +
+  "age gate (default 3 days) everything removable older than 3 days, beyond the 5 newest removable ones always, and " +
+  "the oldest kept worktree checkouts when they exceed 10 GB (branch kept) — and decides whether the card " +
+  "suggests the cleanup page (more than 50 leftovers, at most weekly). Thresholds are user settings (devops-config). " +
+  "Returns ready-made card lines: card.tests → the card's tests array, card.open ({ text, reply }) → its open array. " +
+  "Never call it for a blocked ship or a queued ship (--queued).",
+  hygieneSchema,
+  hygieneHandler,
+);
+
+// ---------------------------------------------------------------------------
+// Start — connect FIRST, then everything else (#324 boot discipline)
+// ---------------------------------------------------------------------------
+
+const transport = new StdioServerTransport();
+try {
+  await server.connect(transport);
+} catch (e) {
+  // A hung server is worse than an absent one: Claude Code waits out the full
+  // connect window before it gives up. Fail loud and fast instead.
+  console.error(`[${SERVER_NAME}-mcp] connect failed:`, e && e.message);
+  process.exit(1);
+}
+bootMs = Math.round(process.uptime() * 1000);
+registerHeartbeat(SERVER_NAME);
+console.error(`[${SERVER_NAME}-mcp] Server started on stdio (boot ${bootMs}ms)`);

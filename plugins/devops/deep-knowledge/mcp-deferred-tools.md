@@ -189,6 +189,10 @@ hand-made tag): the CLI is the only substitute for the tools.
 - **Do NOT** load tools one at a time. One ToolSearch call can load the whole pipeline in a single round-trip.
 - **Do NOT** re-load a tool whose schema is already visible in the conversation. Once loaded, it persists for the session.
 
+## Self-healing dependencies at server start (#824)
+
+After a plugin update Claude Code switches to the new cache path and may start the three MCP servers before `node_modules` exists there. Each entry point (`mcp-server/index.js`, `ship/index.js`, `issues/index.js`) therefore runs `ensureDeps()` from `mcp-server/lib/ensure-deps.js` before the SDK is imported. Happy path: one `existsSync`. Otherwise it relinks `CLAUDE_PLUGIN_DATA/node_modules` into the plugin copy (same logic as the `ss.mcp.deps` hook), falls back to a locked `npm install` after ~8 s, and waits up to ~25 s (`DEVOPS_MCP_DEPS_WAIT_MS`). If nothing appears it writes one stderr line naming the missing packages and exits 1; stdout is never touched. `ship/` and `issues/` are thin bootstraps that dynamically import `server.js`, because static imports would hoist above the check.
+
 ## Related
 
 - `pre.ship.guard.js` — block message explicitly points here.

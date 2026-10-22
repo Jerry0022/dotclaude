@@ -59,8 +59,11 @@ const MCP_CRITICAL_FILES = [
   '.mcp.json',
   path.join('mcp-server', 'index.js'),
   path.join('mcp-server', 'lib', 'heartbeat.js'),
+  path.join('mcp-server', 'lib', 'ensure-deps.js'),
   path.join('mcp-server', 'ship', 'index.js'),
+  path.join('mcp-server', 'ship', 'server.js'),
   path.join('mcp-server', 'issues', 'index.js'),
+  path.join('mcp-server', 'issues', 'server.js'),
 ];
 
 function hasMcpServer(root) {

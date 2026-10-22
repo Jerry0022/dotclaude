@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.mcp.deps
- * @version 0.4.0
+ * @version 0.5.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-install MCP server dependencies into CLAUDE_PLUGIN_DATA,
@@ -19,10 +19,12 @@
  */
 
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync, symlinkSync, mkdirSync, existsSync, unlinkSync, lstatSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, rmSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+
+import { hasAllDeps, linkHealthy, linkTargets, relinkTargets } from "../../mcp-server/lib/ensure-deps.js";
 
 const require = createRequire(import.meta.url);
 const { runOnce, releaseOnce } = require("../lib/run-once.js");
@@ -40,19 +42,6 @@ const SOURCE_PKG = join(PLUGIN_ROOT, "mcp-server", "package.json");
 const CACHED_PKG = join(PLUGIN_DATA, "package.json");
 const DATA_MODULES = join(PLUGIN_DATA, "node_modules");
 
-// Top-level runtime deps every MCP server needs (from mcp-server/package.json).
-// Their presence is the completeness signal: a partial node_modules (the
-// failure mode in issue #190) lacks these even when the directory exists.
-const REQUIRED_PKGS = ["@modelcontextprotocol/sdk", "zod"];
-
-// A package counts only with its package.json: a directory alone is what an
-// interrupted install or a delete through a junction leaves behind (the SDK
-// with just LICENSE + dist/), and the ESM resolver cannot load it.
-function hasAllDeps(modulesDir) {
-  if (!existsSync(modulesDir)) return false;
-  return REQUIRED_PKGS.every((pkg) => existsSync(join(modulesDir, ...pkg.split("/"), "package.json")));
-}
-
 function needsInstall() {
   if (!existsSync(CACHED_PKG) || !existsSync(DATA_MODULES)) return true;
   // Heal partial installs: a node_modules missing the required packages
@@ -67,23 +56,7 @@ function needsInstall() {
   }
 }
 
-// The dirs whose node_modules must resolve for the ESM servers to boot.
-const symlinkTargets = [
-  join(PLUGIN_ROOT, "mcp-server", "node_modules"),
-  join(PLUGIN_ROOT, "mcp-server", "ship", "node_modules"),
-  join(PLUGIN_ROOT, "mcp-server", "issues", "node_modules"),
-];
-
-/** A link/dir that the ESM resolver will actually find the packages through. */
-function linkHealthy(target) {
-  try {
-    // A link is judged by what it reaches, not by being a link: a junction to
-    // a truncated install must be relinked, not trusted.
-    return hasAllDeps(target);
-  } catch {
-    return false;
-  }
-}
+const symlinkTargets = linkTargets(join(PLUGIN_ROOT, "mcp-server"));
 
 // ---------------------------------------------------------------------------
 // Cooldown gate (#324)
@@ -144,28 +117,5 @@ if (!hasAllDeps(DATA_MODULES)) {
   process.exit(0);
 }
 
-// Step 2: Create symlinks so ESM resolver finds the packages
-for (const target of symlinkTargets) {
-  try {
-    let stat = null;
-    try { stat = lstatSync(target); } catch { /* absent */ }
-    if (stat) {
-      if (stat.isSymbolicLink()) {
-        if (hasAllDeps(target)) continue;
-        // Stale or dangling junction (e.g. to another plugin id's truncated
-        // install): unlink removes only the link, never the target's files.
-        unlinkSync(target);
-      } else if (stat.isDirectory()) {
-        // Real directory: keep it only if it is a complete install (a dev
-        // checkout or a healthy cache). A partial real dir (issue #190 — the
-        // cache sync dropped deps) shadows the shared node_modules and makes
-        // the server crash; replace it with a junction to the healed copy.
-        if (hasAllDeps(target)) continue;
-        rmSync(target, { recursive: true, force: true });
-      }
-    }
-    symlinkSync(DATA_MODULES, target, "junction");
-  } catch {
-    // Symlink creation can fail on some systems — non-fatal
-  }
-}
+// Step 2: Create symlinks so ESM resolver finds the packages (shared with the servers, #824)
+relinkTargets(DATA_MODULES, symlinkTargets);
