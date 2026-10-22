@@ -29,6 +29,10 @@ Commit message format and granularity: [commit-conventions.md](commit-convention
   block these actions unless a sentinel file `.claude/.ship-in-progress` is present
   (written by `ship_preflight`, cleared by `ship_cleanup`) or `DEVOPS_ALLOW_MAIN=1`
   is set for an explicit one-shot bypass.
+- Exception: on main, a Bash command whose only write is a pure remote branch
+  delete (`git push <remote> --delete <branch>` or `:<branch>`) passes, unless a
+  deleted ref is `main`, `master` or the remote's default branch
+  (`refs/remotes/<remote>/HEAD`; unknown → blocked). PowerShell keeps the plain block.
 - These rules only apply inside a git working tree. Outside a repo, the guards are
   no-ops.
 
