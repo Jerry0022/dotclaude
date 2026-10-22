@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.298.2] — 2026-10-22
+
+The README is consumer-first: what you get, install, update, everyday use, the completion card, recommended setup, optional features, customize and troubleshooting stay visible (218 lines instead of ~730); everything else is folded into `<details>` blocks. Every way to do something is listed in the order Claude Code prompt → CLI → manual.
+
+Why: user feedback on the README refreshed in 0.298.0 — too much text for a plugin consumer — and a standing preference for the order of recommendations. Nothing essential was dropped, only duplication and derivations; every skill, agent, hook and card variant is still in the README.
+
+### Changed
+- **README.** Visible page = the consumer core; all skills and strict mode, release channels, card variants, integrations, agents and delegation, token math, supported stacks, hook rosters, the Windows backup table and the project structure moved into collapsible sections. Node requirement unified to 18.18+ (as in INSTALL.md).
+- **INSTALL.md.** Install, update, uninstall, Quiet style, API credits, the `.claude` ignore block and troubleshooting list Claude Code → CLI → manual. No longer suggests a `SKILL.md` extension file (extensions are `reference.md`; a `SKILL.md` would load as its own skill).
+- **README standards.** `readme-standards.md` adds two rules: the Claude Code → CLI → manual order, and "consumer first, details folded". `docs/readme-doc-map.json` follows the new README headings.
+
 ## [0.298.1] — 2026-10-22
 
 While `/auto-cleanup` is armed, a PowerShell payload path that starts with `/` and an abbreviated `env --split-string` no longer slip past the delete gate.
