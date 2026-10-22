@@ -81,14 +81,55 @@ function gitRunner({ cwd, timeoutMs, env }) {
       });
       return { ok: true, out: String(out), err: '', timedOut: false };
     } catch (e) {
+      const timedOut = !!e && e.code === 'ETIMEDOUT';
+      if (timedOut) killDescendants(e.pid);
       return {
         ok: false,
         out: String((e && e.stdout) || ''),
         err: String((e && e.stderr) || ''),
-        timedOut: !!e && e.code === 'ETIMEDOUT',
+        timedOut,
       };
     }
   };
+}
+
+const KILL_TREE_PS = [
+  '$all = @(Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId)',
+  '$ids = New-Object System.Collections.Generic.HashSet[int]',
+  '$queue = New-Object System.Collections.Generic.Queue[int]',
+  '$queue.Enqueue([int]$env:GS_KILL_PID)',
+  'while ($queue.Count -gt 0) { $p = $queue.Dequeue(); foreach ($c in $all) { if ($c.ParentProcessId -eq $p -and $c.ProcessId -ne $p -and $ids.Add([int]$c.ProcessId)) { $queue.Enqueue([int]$c.ProcessId) } } }',
+  'if ($ids.Count -gt 0) {',
+  '  $ids | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }',
+  '  $ids | ForEach-Object { Wait-Process -Id $_ -Timeout 10 -ErrorAction SilentlyContinue }',
+  '}',
+].join('\n');
+
+/**
+ * Stop what a timed-out child left running, and wait until it is gone.
+ *
+ * execFileSync's timeout terminates only the process it spawned. On Windows
+ * that is often just the launcher: Git for Windows' `cmd\git.exe` starts
+ * `mingw64\bin\git.exe` and waits for it, so killing the launcher leaves the
+ * real git running — still holding index.lock, still writing the checkout,
+ * and renaming a new index over the one the recovery is about to repair. The
+ * recovery then saw a lock that kept changing and reported "another process
+ * holds index.lock" (index.lock is the killed git's own, not a foreign one).
+ * A dead parent's children keep its pid as their ParentProcessId, so the
+ * tree is still walkable from the pid the timeout reports. POSIX reparents
+ * orphans and never had a launcher, so this is Windows-only.
+ * @param {number|undefined} pid the killed child's pid
+ */
+function killDescendants(pid) {
+  if (process.platform !== 'win32' || !Number.isInteger(pid) || pid <= 0) return;
+  try {
+    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', KILL_TREE_PS], {
+      env: { ...process.env, GS_KILL_PID: String(pid) },
+      timeout: 30_000,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+  } catch { /* best effort: the lock settle check still guards the removal */ }
 }
 
 /** git's own reason, one line: the first `fatal:` / `error:` line, else the first line. */
@@ -296,6 +337,7 @@ function restoreIncomingTree({ run, top, preHead, source }) {
 }
 
 module.exports = {
+  killDescendants,
   LOCK_SLACK_MS,
   LOCK_SETTLE_MS,
   WRITE_TIMEOUT_DEFAULT_MS,
