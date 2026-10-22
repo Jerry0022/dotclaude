@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.296.1] — 2026-10-22
+
+The `/auto-cleanup` gate no longer lets a worktree delete through when it hides behind a shell wrapper or prefix the parser could not open.
+
+Why: a security review of 0.295.0 (#829) found fail-open paths in the wrapper unwrapping, so a delete in an armed session could pass unparsed.
+
+### Fixed
+- **PowerShell.** Every abbreviation of `-EncodedCommand` (`-e`, `-enc`, `-ec`, …) and `-File` are refused. Abbreviations of `-Command` (`-c`, `-co`, …) and a positional command are opened and gated.
+- **cmd and POSIX shells.** `cmd /r`, a glued `/c"…"` and bundled flags such as `bash -lc` / `sh -ec` are opened. Wrappers nested deeper than 4 levels are refused instead of passed.
+- **Prefixes.** Options that take a value are skipped correctly (`sudo -u root`, `env -u VAR`, `time -f`, `exec -a`, `nice -n`, `timeout <n>`). An unknown prefix option in front of a git, delete or shell command is refused.
+
 ## [0.296.0] — 2026-10-22
 
 A finished ship now reads `Released Alpha` in the session title and the completion card instead of a bare `Alpha`.
