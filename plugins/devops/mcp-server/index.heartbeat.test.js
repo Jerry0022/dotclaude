@@ -15,6 +15,8 @@ const NAME = "dotclaude-completion";
 // Same SDK/zod mock preamble as index.meter.test.js; connect() records whether
 // the heartbeat already existed (it must be written AFTER connect).
 const seen = vi.hoisted(() => ({ connected: false, fileAtConnect: null }));
+// the SDK is mocked, so the #824 dependency guard must not wait for it on disk
+vi.mock("./lib/ensure-deps.js", () => ({ ensureDeps: async () => {} }));
 vi.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({
   McpServer: class {
     registerTool() {}

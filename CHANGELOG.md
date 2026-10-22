@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.298.3] — 2026-10-22
+
+The devops MCP servers no longer stay down for a whole session when Claude Code starts them right after a plugin update. They wait for their dependencies and connect once those arrive.
+
+Why: after an update Claude Code switched the plugin path and started the three MCP servers before `node_modules` existed there. They died within 193 ms with `ERR_MODULE_NOT_FOUND '@modelcontextprotocol/sdk'`; a session 42 s later booted fine (#824). Rejected: installing before the path switch, because that switch happens inside Claude Code, which this repo does not control.
+
+### Fixed
+- **MCP start after a plugin update.** The ship, issues and completion servers check their dependencies first. The happy path is one `existsSync`. Otherwise they poll every 100 ms, accept an ancestor `node_modules` (dev checkout), relink `CLAUDE_PLUGIN_DATA/node_modules` into the plugin copy, and after 8 s start one locked `npm install`. After 25 s (`DEVOPS_MCP_DEPS_WAIT_MS`) they write one stderr line naming the missing packages and exit 1; stdout stays clean.
+- **One relink path.** `ss.mcp.deps` (v0.5.0) uses the same helper, so the relink logic exists once, and takes the same `.install.lock` as the servers: a server waiting longer than 8 s no longer deletes an install the hook is still running. The ship and issues entry points are small bootstraps that load `server.js` after the check; `.mcp.json` is unchanged.
+
 ## [0.298.2] — 2026-10-22
 
 The README is consumer-first: what you get, install, update, everyday use, the completion card, recommended setup, optional features, customize and troubleshooting stay visible (218 lines instead of ~730); everything else is folded into `<details>` blocks. Every way to do something is listed in the order Claude Code prompt → CLI → manual.

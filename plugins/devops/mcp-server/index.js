@@ -48,6 +48,7 @@ import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { register as registerHeartbeat } from "./lib/heartbeat.js";
+import { ensureDeps } from "./lib/ensure-deps.js";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
 import { dropForeignOpenItems, foreignTokensFor } from "./lib/foreign-branches.js";
 import { dropNextStepOpenItems } from "./lib/open-admission.js";
@@ -2719,6 +2720,9 @@ if (cliPayloadSource !== null) runRenderCardCli(cliPayloadSource);
 // ---------------------------------------------------------------------------
 // Entry point 2 — MCP Server
 // ---------------------------------------------------------------------------
+
+// #824: the update race - wait for / relink node_modules before the SDK import.
+await ensureDeps();
 
 const { McpServer } = await import("@modelcontextprotocol/sdk/server/mcp.js");
 const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");

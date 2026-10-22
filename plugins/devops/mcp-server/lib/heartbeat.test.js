@@ -40,7 +40,7 @@ function registerAs(pid, dir) {
 // every hook read it as dead and put the offline card path first. Each of the
 // three servers must register under its .mcp.json name after connecting.
 describe("heartbeat — every devops server registers itself", () => {
-  for (const [file, name] of [["../index.js", "dotclaude-completion"], ["../ship/index.js", "dotclaude-ship"], ["../issues/index.js", "dotclaude-issues"]]) {
+  for (const [file, name] of [["../index.js", "dotclaude-completion"], ["../ship/server.js", "dotclaude-ship"], ["../issues/server.js", "dotclaude-issues"]]) {
     test(`${name} registers after server.connect`, () => {
       const src = fs.readFileSync(new URL(file, import.meta.url), "utf8");
       const mcpName = new RegExp(`const SERVER_NAME = "${name}"`);
