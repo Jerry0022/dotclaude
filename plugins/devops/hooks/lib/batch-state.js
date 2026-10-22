@@ -1,6 +1,6 @@
 /**
  * @module batch-state
- * @version 0.7.0
+ * @version 0.8.0
  * @description State and classification for the `/do-batch` collect mode.
  *
  * Collect mode batches user prompts into `.claude/batch.md` instead of acting
@@ -287,9 +287,49 @@ function activate(cwd, opts = {}) {
     // but never an unusable one, or the mode starts with no way out.
     marker: asked.ok ? asked.marker : cfg.marker,
   };
+  // The collecting session (#841). Optional: the skill activates from a shell
+  // that has no session id, so the hook stamps it on the first prompt it sees
+  // (`claimMode`).
+  if (typeof opts.sessionId === 'string' && opts.sessionId) mode.sessionId = opts.sessionId;
   fs.mkdirSync(claudeDir(cwd), { recursive: true });
   fs.writeFileSync(modePath(cwd), JSON.stringify(mode, null, 2) + '\n', 'utf8');
   return mode;
+}
+
+/**
+ * Does the collection belong to ANOTHER session than `sessionId`? (#841)
+ *
+ * Notes and mode file are project-scoped, so a session that never collected
+ * anything inherits whatever an earlier session left behind. Only a mode
+ * record that names a DIFFERENT session counts as foreign. A legacy
+ * `batch-mode.json` (no `sessionId`), a missing mode file and a prompt without
+ * a session id are all "not foreign": nothing proves the notes are somebody
+ * else's, and the old guarantee (an expired mode must not strand its notes)
+ * is the safe side — a stale merge is recoverable, a swallowed queue is not.
+ */
+function isForeignSession(cwd, sessionId) {
+  if (typeof sessionId !== 'string' || !sessionId) return false;
+  const mode = readMode(cwd);
+  return Boolean(mode && typeof mode.sessionId === 'string' && mode.sessionId
+    && mode.sessionId !== sessionId);
+}
+
+/**
+ * Record `sessionId` as the collecting session. The session that last
+ * collected owns the queue, so a `/clear` (new session_id, mode still active)
+ * carries the queue over instead of orphaning it. No-op without a mode file.
+ * @returns {boolean} true when the file changed
+ */
+function claimMode(cwd, sessionId) {
+  if (typeof sessionId !== 'string' || !sessionId) return false;
+  const mode = readMode(cwd);
+  if (!mode || mode.sessionId === sessionId) return false;
+  try {
+    fs.writeFileSync(modePath(cwd), JSON.stringify({ ...mode, sessionId }, null, 2) + '\n', 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function deactivate(cwd) {
@@ -1207,9 +1247,13 @@ function detectActivation(text) {
  * A card's open prompt (`Im Standardbrowser öffnen: <url>`) is never a note:
  * prompt.flow.open-url opens the page and blocks it itself.
  *
- * @returns {'passthrough'|'collect'|'execute'|'rearm'}
+ * `foreign` (#841): the notes belong to another session (`isForeignSession`).
+ * A bare marker then yields `foreign` instead of `execute` — the caller
+ * passes the prompt through and archives orphaned notes; it never merges.
+ *
+ * @returns {'passthrough'|'collect'|'execute'|'rearm'|'foreign'}
  */
-function classify({ text, hookInput, marker, modeActive }) {
+function classify({ text, hookInput, marker, modeActive, foreign }) {
   if (isMachinePrompt(text)) return 'passthrough';
   if (parseOpenUrlPrompt(text)) return 'passthrough';
   const inv = parseBatchCommand(text);
@@ -1224,7 +1268,9 @@ function classify({ text, hookInput, marker, modeActive }) {
   // The marker fires the merge even with the mode already off: an expired or
   // note-capped mode must not swallow the user's only way to reach the queue.
   // The caller decides whether notes actually exist.
-  if (startsWithMarker(text, marker)) return 'execute';
+  // #841: not for a session that did not collect them. Only the explicit
+  // `/do-batch go` above adopts another session's notes.
+  if (startsWithMarker(text, marker)) return foreign ? 'foreign' : 'execute';
   if (!modeActive) return 'passthrough';
   if (hasAttachment(text, hookInput)) return 'passthrough';
   return 'collect';
@@ -1274,7 +1320,7 @@ module.exports = {
   ACTIVATION_CONTENT_MIN,
   configPath, claudeDir, notesPath, modePath, activityPath, lockPath,
   loadConfig, saveConfig,
-  readMode, isModeActive, expiryReason, activate, deactivate,
+  readMode, isModeActive, expiryReason, activate, deactivate, isForeignSession, claimMode,
   appendNote, readNotes, countNotes, clearNotes, archiveNotes,
   IMAGE_MATCH_WINDOW_MS, IMAGE_LATE_MATCH_MAX_MS, assetsDir, sessionImageDirs, listImagesIn, unclaimedImages,
   claimImages, imagesNear, captureSessionImages, assignImagesToNotes, attachmentFileLines,

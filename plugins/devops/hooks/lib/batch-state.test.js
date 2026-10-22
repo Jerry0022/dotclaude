@@ -8,7 +8,7 @@ import {
   touchActivity, readActivity,
   isMachinePrompt, isExpandedCommand, hasAttachment, attachmentRefs, detectActivation,
   startsWithMarker, stripMarker, looksLikeQuestion, validateMarker,
-  classify, willBeCollected, notesPath, modePath,
+  classify, willBeCollected, notesPath, modePath, isForeignSession, claimMode,
   loadConfig, saveConfig, configPath, effectiveMarker,
   parseBatchCommand, renderModeSummary, describeMode, renderHelp,
   PANEL_ICONS, renderCommandLines, renderAutoEndNotice,
@@ -1060,5 +1060,40 @@ describe("image tracking helpers (2026-10-03 session analysis)", () => {
     const m = matchRescuedToNotes(notes, rescued);
     expect([...m.keys()]).toEqual([0]);
     expect(m.get(0)).toEqual(["/r/1.webp"]);
+  });
+});
+
+describe("session scope (#841)", () => {
+  test("activate records the collecting session; claimMode stamps a legacy file", () => {
+    activate(cwd, { sessionId: "s-a" });
+    expect(readMode(cwd).sessionId).toBe("s-a");
+    deactivate(cwd);
+    activate(cwd);
+    expect(readMode(cwd).sessionId).toBeUndefined();
+    expect(claimMode(cwd, "s-b")).toBe(true);
+    expect(readMode(cwd).sessionId).toBe("s-b");
+    expect(claimMode(cwd, "s-b")).toBe(false);
+  });
+
+  test("only a mode naming a DIFFERENT session is foreign", () => {
+    activate(cwd, { sessionId: "s-a" });
+    expect(isForeignSession(cwd, "s-a")).toBe(false);
+    expect(isForeignSession(cwd, "s-b")).toBe(true);
+    expect(isForeignSession(cwd, undefined)).toBe(false);
+  });
+
+  test("legacy mode file without a session id is never foreign", () => {
+    activate(cwd);
+    expect(isForeignSession(cwd, "s-b")).toBe(false);
+  });
+
+  test("foreign session: marker is not an execute; same session still is", () => {
+    const base = { text: "los ", marker: "los", modeActive: false };
+    expect(classify({ ...base, foreign: true })).toBe("foreign");
+    expect(classify({ ...base, foreign: false })).toBe("execute");
+  });
+
+  test("explicit /do-batch go adopts even foreign notes", () => {
+    expect(classify({ text: "/do-batch go", marker: "los", modeActive: false, foreign: true })).toBe("execute");
   });
 });
