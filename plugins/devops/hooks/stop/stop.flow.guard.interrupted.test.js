@@ -38,6 +38,43 @@ function transcript(dir, title) {
   return p;
 }
 
+/** Agent launch text as the harness writes it (id swapped for the fixture's). */
+const AGENT_ID = "a75d674f7108dd6c8";
+const AGENT_LAUNCH_TEXT =
+  "Async agent launched successfully.\nagentId: " + AGENT_ID +
+  " (internal ID - do not mention to user.)\nThe agent is working in the background.";
+const BASH_BG_TEXT =
+  "Command running in background with ID: b68oycrr6. Output is being written to: " +
+  "C:\\Temp\\tasks\\b68oycrr6.output. You will be notified when it completes.";
+
+/**
+ * #833: a card-less turn that answers a task notification. A background agent
+ * was launched and its notification arrived (so it is closed); `result` is the
+ * text the notification carries; `bash` keeps a backgrounded command open.
+ */
+function notificationTranscript(dir, title, { result = "Agent finished.", bash = false } = {}) {
+  const p = path.join(dir, "transcript.jsonl");
+  const use = (id, name, input) => ({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id, name, input }] } });
+  const res = (id, text) => ({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: [{ type: "text", text }] }] } });
+  const lines = [
+    { type: "user", message: { role: "user", content: "ship it" } },
+    use("toolu_1", "Agent", { subagent_type: "general-purpose", run_in_background: true, description: "Delegated ship", prompt: "x" }),
+    res("toolu_1", AGENT_LAUNCH_TEXT),
+  ];
+  if (bash) {
+    lines.push(use("toolu_2", "Bash", { command: "npm test", description: "Run the suite", run_in_background: true }));
+    lines.push(res("toolu_2", BASH_BG_TEXT));
+  }
+  const note = "<task-notification>\n<task-id>" + AGENT_ID + "</task-id>\n<status>completed</status>\n" +
+    "<summary>Agent finished</summary>\n<result>" + result + "</result>\n</task-notification>";
+  lines.push({ type: "queue-operation", operation: "enqueue", content: note });
+  lines.push({ type: "user", message: { role: "user", content: note } });
+  lines.push({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Fertig." }] } });
+  lines.push({ type: "custom-title", customTitle: title, sessionId: SESSION });
+  fs.writeFileSync(p, lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+  return p;
+}
+
 function setFlag(dir, name) {
   fs.writeFileSync(path.join(dir + "-tmp", `dotclaude-devops-${name}-${SESSION}`), new Date().toISOString());
 }
@@ -122,6 +159,40 @@ describe("stop.flow.guard — F5 interrupted title", () => {
     try {
       setFlag(dir, "silent-turn");
       expect(await stop(dir, { transcript_path: transcript(dir, "⏳ Refactor") })).toBe("");
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  test("#833: a Team ⏳ on a card-less notification turn takes the ship result's titlePrefix", async () => {
+    const dir = project();
+    try {
+      const result = 'Done.\n```json\n{"status":"done","titlePrefix":"🟩 ➜ 🚀 Released Alpha ┃ "}\n```';
+      const out = await stop(dir, { transcript_path: notificationTranscript(dir, "⏳ ➜ 🤖 Team ┃ Refactor", { result }) });
+      expect(out).toMatch(/"decision":"block"/);
+      expect(JSON.parse(out).reason).toContain("title:" + JSON.stringify("🟩 ➜ 🚀 Released Alpha ┃ Refactor"));
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  test("#833: a Shipping ⏳ without a ship result in the transcript → Interrupted", async () => {
+    const dir = project();
+    try {
+      const out = await stop(dir, { transcript_path: notificationTranscript(dir, "⏳ ➜ 🚀 Shipping ┃ Login-Fix") });
+      expect(out).toMatch(/"decision":"block"/);
+      expect(JSON.parse(out).reason).toContain("title:" + JSON.stringify("👉 ➜ ⚡ Interrupted ┃ Login-Fix"));
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  test("#833: a ⏳ title stays while a background command of the session is still open", async () => {
+    const dir = project();
+    try {
+      const out = await stop(dir, { transcript_path: notificationTranscript(dir, "⏳ ➜ 🚀 Shipping ┃ Login-Fix", { bash: true }) });
+      expect(out).not.toContain("set_session_title");
+      expect(out).not.toContain("Interrupted");
     } finally {
       cleanup(dir);
     }
