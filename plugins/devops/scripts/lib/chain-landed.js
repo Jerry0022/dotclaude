@@ -68,6 +68,7 @@ function filesInBase(sha, ctx, treeRef = ctx.baseRef) {
   return withTempIndex(ctx.cwd, treeRef, (env) => {
     let filesIn = 0;
     for (const f of files) {
+      if (ctx.deadline && Date.now() > ctx.deadline) return null; // caller's overall budget is spent
       try {
         const patch = execFileSync('git', ['diff', '--binary', mb, sha, '--', f], { windowsHide: true,
           cwd: ctx.cwd, encoding: 'utf8', timeout: GIT_TIMEOUT, maxBuffer: 64 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'],
@@ -84,7 +85,8 @@ function filesInBase(sha, ctx, treeRef = ctx.baseRef) {
 
 /**
  * @param {string} sha branch tip
- * @param {{cwd:string, baseRef:string, heads: Iterable<string>}} ctx heads = merged PR head shas
+ * @param {{cwd:string, baseRef:string, heads: Iterable<string>, deadline?: number}} ctx heads = merged PR head shas;
+ *   deadline = absolute ms after which the search gives up (false)
  * @returns {boolean} false when it cannot be told
  */
 function chainLanded(sha, ctx) {
@@ -92,6 +94,7 @@ function chainLanded(sha, ctx) {
   let tried = 0;
   for (const head of ctx.heads || []) {
     if (tried++ >= CHAIN_MAX_HEADS || Date.now() - t0 > CHAIN_DEADLINE_MS) break;
+    if (ctx.deadline && Date.now() > ctx.deadline) break;
     if (!gitOk(['merge-base', '--is-ancestor', sha, head], ctx.cwd)) continue;
     const f = filesInBase(sha, ctx, head);
     if (f && f.filesIn === f.filesTotal) return true;

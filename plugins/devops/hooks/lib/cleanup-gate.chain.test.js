@@ -94,4 +94,14 @@ describe("hasLanded — sub-agent branches of a squash-merged integration branch
     expect(run("git branch -D agent/ok")).toBeNull();
     expect(run("git branch -D agent/dropped").block).toMatch(/header "Unmerged"/);
   });
+
+  test("decide: one merged-PR lookup per command, and a spent budget counts as not landed", () => {
+    const state = armedFor("- agent/ok", "- agent/dropped");
+    let calls = 0;
+    const counting = (...a) => { calls++; return headOf(...a); };
+    gate.decide({ command: "git branch -D agent/ok agent/dropped", cwd: dir, state, gitFor, mergedHeads: counting });
+    expect(calls).toBe(1);
+    expect(lands("agent/ok", headOf)).toBe(true);
+    expect(gate.hasLanded(g, { kind: "branch", target: "agent/ok" }, { cwd: dir, mergedHeads: headOf, deadline: Date.now() - 1 })).toBe(false);
+  });
 });

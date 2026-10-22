@@ -379,21 +379,33 @@ function hasLanded(git, d, opts = {}) {
 function landedBySquashChain(git, ref, base, opts = {}) {
   try {
     if (!opts.cwd) return false;
+    if (opts.deadline && Date.now() > opts.deadline) return false;
     const sha = git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
     if (!sha) return false;
     const { contentInBase } = require('../../scripts/lib/content-landed');
     if (contentInBase(opts.cwd, sha, base).landed) return true;
-    const heads = (opts.mergedHeads || defaultMergedHeads)(opts.cwd, base.replace(/^refs\/(remotes\/[^/]+|heads)\//, ''));
+    const baseBranch = base.replace(/^refs\/(remotes\/[^/]+|heads)\//, '');
+    // One gh call per repo + base per decide() (opts.cache), not one per delete.
+    const key = `${opts.cwd}\0${baseBranch}`;
+    const cache = opts.cache || new Map();
+    if (!cache.has(key)) cache.set(key, (opts.mergedHeads || defaultMergedHeads)(opts.cwd, baseBranch, opts.deadline));
+    const heads = cache.get(key);
     if (!heads || heads.size === 0) return false;
-    return require('../../scripts/lib/chain-landed').chainLanded(sha, { cwd: opts.cwd, baseRef: base, heads });
+    return require('../../scripts/lib/chain-landed').chainLanded(sha, { cwd: opts.cwd, baseRef: base, heads, deadline: opts.deadline });
   } catch {
     return false;
   }
 }
 
-function defaultMergedHeads(cwd, baseBranch) {
-  return require('../../scripts/lib/chain-landed').fetchMergedHeadShas(cwd, baseBranch);
+function defaultMergedHeads(cwd, baseBranch, deadline) {
+  const left = deadline ? deadline - Date.now() : 10_000;
+  if (left < 1000) return null;
+  return require('../../scripts/lib/chain-landed').fetchMergedHeadShas(cwd, baseBranch, { timeout: Math.min(10_000, left) });
 }
+
+// The chain proof shares one budget per decide() call, well inside the hook's
+// 30 s timeout: past it every remaining target counts as not landed (Unmerged yes).
+const CHAIN_BUDGET_MS = 18_000;
 
 // ── decision ───────────────────────────────────────────────────────────────
 
@@ -454,9 +466,11 @@ function decide({ command, cwd, state, gitFor, mergedHeads }) {
       : `no Dry-Run-Confirm was answered "Ja" for ${names}.`;
     return { block: [head, `Delete refused: ${why}`, NO_ANSWER_RULE, HOW_TO_CONFIRM].join('\n') };
   }
+  const headCache = new Map();
+  const deadline = Date.now() + CHAIN_BUDGET_MS;
   const notLanded = deletes.filter(d => d.kind !== 'worktree'
     && !state.unmerged.some(a => (a.exact ? a.scope === d.target : namesBranch(a.scope, d.target)))
-    && !hasLanded(gitFor(d.dir), d, { cwd: d.dir, mergedHeads }));
+    && !hasLanded(gitFor(d.dir), d, { cwd: d.dir, mergedHeads, cache: headCache, deadline }));
   if (notLanded.length) {
     const names = [...new Set(notLanded.map(d => d.target))];
     return { block: [head,
