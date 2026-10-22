@@ -405,6 +405,15 @@ describe("hasLanded / decide against a real repo", () => {
       expect(decide(`bash -c -x "rm -rf '${wt}'"`, named()).block).toMatch(/payload the gate cannot read/);
       expect(decide("pwsh -Command -", armed()).block).toMatch(/payload the gate cannot read/);
       expect(decide("powershell -NoProfile", armed())).toBeNull();
+      // round 4: bundled/abbreviated env -S, quoted command after a prefix, shells fed by a pipe
+      expect(decide(`env -iS "rm -rf ${wt}"`, named()).block).toMatch(/env -S/);
+      expect(decide(`env --sp="rm -rf ${wt}"`, named()).block).toMatch(/env -S/);
+      expect(decide(`nohup "rm -rf ${wt}"`, named()).block).toMatch(/quoted command line/);
+      expect(decide(`echo "rm -rf ${wt}" | bash`, named()).block).toMatch(/from a pipe/);
+      expect(decide(`echo "rm -rf ${wt}" | sh -s`, named()).block).toMatch(/from a pipe/);
+      expect(decide(`echo "Remove-Item -Recurse ${wt}" | powershell -NoProfile`, named()).block).toMatch(/from a pipe/);
+      expect(decide(`echo rmdir /s /q ${wt} | cmd`, named()).block).toMatch(/from a pipe/);
+      expect(decide("git log --oneline | head -5", armed())).toBeNull();
       const deep = `cmd /c cmd /c cmd /c cmd /c cmd /c rmdir /s /q "${wt}"`;
       expect(decide(deep, named()).block).toMatch(/too deeply nested/);
       expect(decide("bash -lc \"echo hi\"", armed())).toBeNull();

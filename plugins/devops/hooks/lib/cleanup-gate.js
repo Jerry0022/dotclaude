@@ -313,7 +313,7 @@ function baseName(tok) { return (tok || '').replace(/^.*[\\/]/, '').replace(/\.e
  * so the gate refuses it instead of passing it.
  * @returns {string[][]}
  */
-function unwrap(tokens, depth = 0) {
+function unwrap(tokens, depth = 0, piped = false) {
   const unresolvedAs = (why) => [['__unresolved__', why]];
   let t = tokens.slice();
   let prefix = null;
@@ -330,7 +330,10 @@ function unwrap(tokens, depth = 0) {
     else if (/^\w+=/.test(t[0])) t = t.slice(1);
     else if (prefix && t[0].startsWith('-')) {
       // `env -S "rm -rf X"` runs its value as a command line
-      if (prefix === 'env' && /^(-S|--split-string)/.test(t[0])) return unresolvedAs('env -S (a split command line)');
+      // also bundled (`-iS`) and any prefix of --split-string (`--sp=…`)
+      if (prefix === 'env' && (/^-[^-]*S/.test(t[0]) || /^--sp(l(i(t(-(s(t(r(i(n(g)?)?)?)?)?)?)?)?)?)?(=|$)/.test(t[0]))) {
+        return unresolvedAs('env -S (a split command line)');
+      }
       const re = PREFIX_VALUE_OPTS[prefix];
       const takesValue = re && re.test(t[0]);
       const value = takesValue ? t[1] || '' : '';
@@ -345,19 +348,23 @@ function unwrap(tokens, depth = 0) {
   if (prefix && !RUNS_SOMETHING_RE.test(baseName(t[0])) && t.slice(1).some(a => RUNS_SOMETHING_RE.test(baseName(a)))) {
     return unresolvedAs(`a "${prefix}" prefix with options the gate cannot read`);
   }
+  // a command word with whitespace after a prefix is a quoted command line (`nohup "rm -rf X"`)
+  if (prefix && /\s/.test(t[0] || '')) return unresolvedAs(`a "${prefix}" prefix in front of a quoted command line`);
   const name = baseName(t[0]);
   if (!SHELL_WRAP_RE.test(name)) return [t];
+  // a shell fed by a pipe reads its commands from stdin (`echo "rm -rf X" | bash`)
+  const fromStdin = () => (piped ? unresolvedAs(`a ${name} that reads its commands from a pipe`) : [t]);
   if (depth > 3) return unresolvedAs('too deeply nested shell wrappers');
   // a payload that starts with an option (`-c -- …`, `-Command -` = stdin) is not read
   const open = (parts) => {
     const p = parts[0] === '--' ? parts.slice(1) : parts;
     if (!p.length || p[0].startsWith('-')) return unresolvedAs(`a ${name} payload the gate cannot read`);
-    return segments(p.join(' ')).flatMap(s => unwrap(s.tokens, depth + 1));
+    return segments(p.join(' ')).flatMap(s => unwrap(s.tokens, depth + 1, s.piped));
   };
   let rest = t.slice(1);
   if (/^cmd$/i.test(name)) {
     const c = rest.findIndex(a => /^\/[ckr]/i.test(a));
-    if (c === -1) return [t];
+    if (c === -1) return fromStdin();
     const glued = rest[c].slice(2); // `/c"rmdir …"` or `/crmdir`
     return open([glued, ...rest.slice(c + 1)].filter(Boolean));
   }
@@ -370,11 +377,12 @@ function unwrap(tokens, depth = 0) {
     // no -Command: PowerShell runs the first positional argument, after options
     // the gate cannot all model (any unambiguous prefix of a value parameter)
     if (rest.some(a => !a.startsWith('-'))) return unresolvedAs('a PowerShell command without -Command');
-    return [t];
+    return fromStdin();
   }
-  // POSIX shells: `-c`, also bundled (`-lc`, `-ec`); without it a script file runs
+  // POSIX shells: `-c`, also bundled (`-lc`, `-ec`); without it a script file
+  // runs, or the commands come from stdin (`-s`, or no argument at all)
   const c = rest.findIndex(a => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a));
-  if (c === -1) return [t];
+  if (c === -1) return fromStdin();
   return open(rest.slice(c + 1));
 }
 
@@ -452,7 +460,7 @@ function parseDeletes(command, cwd) {
   const deletes = [];
   const unresolved = [];
   let dir = cwd;
-  for (const t of segments(command).flatMap(seg => unwrap(seg.tokens))) {
+  for (const t of segments(command).flatMap(seg => unwrap(seg.tokens, 0, seg.piped))) {
     if (t[0] === '__unresolved__') { unresolved.push(`a shell wrapper runs ${t[1]}`); continue; }
     if (/^(cd|Set-Location|sl|pushd)$/i.test(t[0]) && t[1] && !t[1].startsWith('-')) {
       if (literal(t[1])) dir = path.resolve(dir, t[1]);
