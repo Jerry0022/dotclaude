@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.297.0] — 2026-10-22
+
+The README matches the plugin again, and the completion-card examples in it are now drawn by the real card renderer, so they cannot fall behind the card design anymore.
+
+Why: ship kept only the counts, the hook roster and the table rows current; Docs-Sync was pure judgment without knowing which README section describes which code. The card design changed in 57 commits since 2026-09-20, the README example never. Rejected: a section-level "README touched?" check in preflight — every ship bumps the README version line, so it would always pass. A source→section map plus generated examples replaces it.
+
+### Added
+- **Generated card examples.** `gen-readme-sections` renders the README card example and the variant-heading table through `mcp-server/index.js --render-card` from `scripts/readme-card-examples.json`; `--check` fails when a fixture no longer renders. Renders run in parallel (~10 s instead of 24–35 s under load).
+- **Generated hook categories.** The README hook list by category is built from the hook ids; the lifecycle roster now includes `SubagentStop`.
+- **README section check at ship.** `docs/readme-doc-map.json` maps the hand-written README sections to their source globs. `ship_preflight` warns with `doc-readme-sections` naming every section whose sources the branch changed while `README.md` stayed untouched; Docs-Sync (Step 2.6) reads exactly those sections and greps their old literal strings. Documented in `documentation-maintenance.md` and `CONVENTIONS.md`.
+
+### Fixed
+- **README content.** Completion-card section, do-run and delegation text, project structure and hook categories reflect the current plugin. Removed: a "self-calibration every 10 min" in the token math that does not exist, the retired `/run-*` skills, `/auto-agents` listed as a do-run mode, and "autonomous never ships" (it ships when chosen at the start).
+
 ## [0.296.2] — 2026-10-22
 
 New users can install the plugin with one sentence pasted into Claude Code, or by following the README.
