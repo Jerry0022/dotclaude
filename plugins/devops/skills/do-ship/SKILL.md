@@ -418,7 +418,7 @@ Pre-Step C put `⏳ ┃ 🚀 Shipping ` on the session title. The outcome prefix
 
 | Outcome | Title |
 |---------|-------|
-| `ship-successful` — final (`state.merged` = main, normal **or** keep-mode) or intermediate ship (feature branch) | `🟩 ┃ 🚀 Alpha {title}` — the finished form of `⏳ ┃ 🚀 Shipping `; the next card that ends a turn replaces the marker |
+| `ship-successful` — final (`state.merged` = main, normal **or** keep-mode) or intermediate ship (feature branch) | `🟩 ┃ 🚀 Released Alpha {title}` — the finished form of `⏳ ┃ 🚀 Shipping `; the next card that ends a turn replaces the marker |
 | `ship-blocked` (any gate, build, checks, PR not merged) | `👉 ┃ 🚧 Blocked {title}` — same two icons as the card headline (title = CTA) |
 | `released` (Step 5d promoted, with or without a ship before it) | `🟩 🎊 Released <Beta\|Stable> – {title}` (promote only: `🟩 🎊 Promoted <Beta\|Stable> – `) |
 

@@ -89,24 +89,24 @@ const CASES = [
   ["ready-files + open", { variant: "ready-files", state: { mode: "file-only" }, open: OPEN }, ["👉", "Files", "📦"]],
   // ship
   ["ship-blocked", { variant: "ship-blocked", cta: { reason: "Preflight" } }, ["👉", "Blocked", "🚧"]],
-  ["ship-successful plain merge (no ring)", { variant: "ship-successful", state: SHIPPED, delivery: { ship: { version: "0.1.0" } } }, ["🟩", "Alpha", "🚀"]],
-  ["ship-successful ring alpha (optional promote)", { variant: "ship-successful", state: SHIPPED, delivery: ring("alpha") }, ["🟩", "Alpha", "🚀"]],
-  ["ship-successful ring + open point (mandatory)", { variant: "ship-successful", state: SHIPPED, delivery: ring("alpha"), open: OPEN }, ["👉", "Alpha", "🚀"]],
-  ["ship-successful ring + userFinalTest (mandatory)", { variant: "ship-successful", state: SHIPPED, delivery: ring("alpha"), userFinalTest: FINAL }, ["👉", "Alpha", "🚀"]],
-  ["ship-successful ring + requirement waiting on the user", { variant: "ship-successful", state: SHIPPED, delivery: ring("alpha"), validation: WAITS }, ["👉", "Alpha", "🚀"]],
-  ["ship-successful + promote beta in one run", { variant: "ship-successful", state: SHIPPED, delivery: ring("beta") }, ["🟩", "Beta", "🚀"]],
-  ["ship-successful + promote stable in one run", { variant: "ship-successful", state: SHIPPED, delivery: ring("stable") }, ["🟩", "Stable", "🚀"]],
-  ["ship-successful kept", { variant: "ship-successful", state: { ...SHIPPED, kept: true }, delivery: ring("alpha") }, ["🟩", "Alpha", "🚀"]],
-  ["ship-successful kept + open", { variant: "ship-successful", state: { ...SHIPPED, kept: true }, delivery: ring("alpha"), open: OPEN }, ["👉", "Alpha", "🚀"]],
+  ["ship-successful plain merge (no ring)", { variant: "ship-successful", state: SHIPPED, delivery: { ship: { version: "0.1.0" } } }, ["🟩", "Released Alpha", "🚀"]],
+  ["ship-successful ring alpha (optional promote)", { variant: "ship-successful", state: SHIPPED, delivery: ring("alpha") }, ["🟩", "Released Alpha", "🚀"]],
+  ["ship-successful ring + open point (mandatory)", { variant: "ship-successful", state: SHIPPED, delivery: ring("alpha"), open: OPEN }, ["👉", "Released Alpha", "🚀"]],
+  ["ship-successful ring + userFinalTest (mandatory)", { variant: "ship-successful", state: SHIPPED, delivery: ring("alpha"), userFinalTest: FINAL }, ["👉", "Released Alpha", "🚀"]],
+  ["ship-successful ring + requirement waiting on the user", { variant: "ship-successful", state: SHIPPED, delivery: ring("alpha"), validation: WAITS }, ["👉", "Released Alpha", "🚀"]],
+  ["ship-successful + promote beta in one run", { variant: "ship-successful", state: SHIPPED, delivery: ring("beta") }, ["🟩", "Released Beta", "🚀"]],
+  ["ship-successful + promote stable in one run", { variant: "ship-successful", state: SHIPPED, delivery: ring("stable") }, ["🟩", "Released Stable", "🚀"]],
+  ["ship-successful kept", { variant: "ship-successful", state: { ...SHIPPED, kept: true }, delivery: ring("alpha") }, ["🟩", "Released Alpha", "🚀"]],
+  ["ship-successful kept + open", { variant: "ship-successful", state: { ...SHIPPED, kept: true }, delivery: ring("alpha"), open: OPEN }, ["👉", "Released Alpha", "🚀"]],
   ["ship-successful merged-not-deployed", { variant: "ship-successful", state: { ...SHIPPED, deployPending: true }, deployGate: [{ kind: "migration", artifact: "001.sql" }] }, ["👉", "Not deployed", "⚠️"]],
-  ["ship-successful closeout (concept waits for its final report)", { variant: "ship-successful", state: { ...SHIPPED, kept: true }, delivery: ring("alpha"), cwd: "@closeout" }, ["👉", "Alpha", "🚀"]],
+  ["ship-successful closeout (concept waits for its final report)", { variant: "ship-successful", state: { ...SHIPPED, kept: true }, delivery: ring("alpha"), cwd: "@closeout" }, ["👉", "Released Alpha", "🚀"]],
   // released: promote-only vs ship+promote, per channel
   ["released promote-only → beta", { variant: "released", delivery: { promote: { channels: { alpha: "0.1.0", beta: "0.1.0" }, current: "beta" }, ship: { version: "0.1.0" } } }, ["🟩", "Beta", "🎊"]],
   ["released promote-only → stable", { variant: "released", delivery: { promote: { channels: { stable: "0.1.0" }, current: "stable" } } }, ["🟩", "Stable", "🎊"]],
   ["released promote-only via promotion.to stable", { variant: "released", promotion: { from: "beta", to: "stable" }, delivery: { promote: { channels: { stable: "0.1.0" } } } }, ["🟩", "Stable", "🎊"]],
-  ["released ship+promote → beta", { variant: "released", state: SHIPPED, delivery: ring("beta") }, ["🟩", "Beta", "🚀"]],
-  ["released ship+promote → stable", { variant: "released", state: SHIPPED, delivery: ring("stable") }, ["🟩", "Stable", "🚀"]],
-  ["released ship+promote → stable + userFinalTest", { variant: "released", state: SHIPPED, delivery: ring("stable"), userFinalTest: FINAL }, ["👉", "Stable", "🚀"]],
+  ["released ship+promote → beta", { variant: "released", state: SHIPPED, delivery: ring("beta") }, ["🟩", "Released Beta", "🚀"]],
+  ["released ship+promote → stable", { variant: "released", state: SHIPPED, delivery: ring("stable") }, ["🟩", "Released Stable", "🚀"]],
+  ["released ship+promote → stable + userFinalTest", { variant: "released", state: SHIPPED, delivery: ring("stable"), userFinalTest: FINAL }, ["👉", "Released Stable", "🚀"]],
   ["released promote-only → beta + open", { variant: "released", delivery: { promote: { channels: { beta: "0.1.0" }, current: "beta" } }, open: OPEN }, ["👉", "Beta", "🎊"]],
   // test
   ["test", { variant: "test", userTest: ["Login prüfen"] }, ["👉", "Test", "🧪"]],
@@ -207,16 +207,16 @@ describe("title = CTA — every completion-card variant × every heading/prefix 
       expect(reached.has(`${status} ┃ ${act} ${word}`), id).toBe(true);
     }
     // Both statuses of a done state are exercised: 🟩 and the 👉 a mandatory step raises.
-    expect(reached.has("🟩 ┃ 🚀 Alpha")).toBe(true);
-    expect(reached.has("👉 ┃ 🚀 Alpha")).toBe(true);
+    expect(reached.has("🟩 ┃ 🚀 Released Alpha")).toBe(true);
+    expect(reached.has("👉 ┃ 🚀 Released Alpha")).toBe(true);
   });
 
   test("an optional promote offer keeps 🟩, a mandatory step makes it 👉 — the heading follows", () => {
     const optional = evaluate({ variant: "ship-successful", state: SHIPPED, delivery: ring("alpha") }, "de");
-    expect(optional.heading).toBe("🟩 🚀 Alpha — v0.1.0 — nach Beta promoten?");
+    expect(optional.heading).toBe("🟩 🚀 Released Alpha — v0.1.0 — nach Beta promoten?");
     const mandatory = evaluate({ variant: "ship-successful", state: SHIPPED, delivery: ring("alpha"), userFinalTest: FINAL }, "en");
-    expect(mandatory.heading).toBe("👉 🚀 Alpha — v0.1.0 — promote to beta?");
-    expect(mandatory.title).toBe("👉 ┃ 🚀 Alpha ");
+    expect(mandatory.heading).toBe("👉 🚀 Released Alpha — v0.1.0 — promote to beta?");
+    expect(mandatory.title).toBe("👉 ┃ 🚀 Released Alpha ");
   });
 
   test("worked examples from the concept read exactly", () => {

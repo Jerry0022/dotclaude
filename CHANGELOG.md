@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.296.0] — 2026-10-22
+
+A finished ship now reads `Released Alpha` in the session title and the completion card instead of a bare `Alpha`.
+
+Why: a bare channel word did not say that the work was released; every ship lands an `alpha/vX` tag, so a finished ship is a released alpha.
+
+### Changed
+- **Released wording.** The states `released-alpha`, `released-beta` and `released-stable` (title scheme v2.3.0) use the keywords `Released Alpha` / `Released Beta` / `Released Stable`: title `🟩 ┃ 🚀 Released Alpha …`, card CTA `🟩 🚀 Released Alpha — v… — nach Beta promoten?`. The promoted states (`🎊 Beta`, `🎊 Stable`) are unchanged.
+- **Old titles do not stack.** The retired bare words are still recognised and stripped in both orders (`🚀 Alpha` from v0.292, `Alpha 🚀` from v0.287–0.291), so an existing title is replaced, not prefixed twice.
+
 ## [0.295.1] — 2026-10-22
 
 German sessions no longer switch to English after a task notification or another prompt that the app or plugin put into the user slot.

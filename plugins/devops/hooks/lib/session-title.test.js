@@ -84,7 +84,7 @@ describe("session-title — prefixes mirror mode-state.js", () => {
     expect(stripPrefixes("⏳ Fix Login – Bug")).toBe("Fix Login – Bug");
     expect(nextTitle("⏳ Fix Login – Bug")).toBeNull();
     expect(nextTitle("👉 ┃ 📦 Ready Fix Login – Bug")).toBe(W + "Fix Login – Bug");
-    expect(stripPrefixes("🟩 ┃ 🚀 Alpha Fix Login – Bug")).toBe("Fix Login – Bug");
+    expect(stripPrefixes("🟩 ┃ 🚀 Released Alpha Fix Login – Bug")).toBe("Fix Login – Bug");
     expect(stripPrefixes("📦 Packaging – rework")).toBe("📦 Packaging – rework");
     expect(stripPrefixes("👉 📦 Shipit – rework")).toBe("👉 📦 Shipit – rework");
     expect(stripPrefixes("Release Notes – v2")).toBe("Release Notes – v2");
@@ -114,7 +114,7 @@ describe("session-title — prefixes mirror mode-state.js", () => {
     expect(classify("⏳ ┃ 🧭 Concept X")).toBe("process");
     expect(classify("⏳ ┃ 🤖 Team X")).toBe("process");
     expect(classify("⏳ ┃ 🧪 Testing X")).toBe("process");
-    expect(classify("🟩 ┃ 🚀 Alpha X")).toBe("outcome");
+    expect(classify("🟩 ┃ 🚀 Released Alpha X")).toBe("outcome");
     expect(classify("🚀 Shipped – X")).toBe("outcome");
   });
 
@@ -155,7 +155,7 @@ describe("session-title — nextTitle (user prompt)", () => {
   });
   test("a ship prompt sets Shipping — over the hourglass, an outcome, a process; a legacy Shipping is upgraded", () => {
     expect(nextTitle("⏳ Fix login", { prefix: SHIPPING_PREFIX })).toBe("⏳ ┃ 🚀 Shipping Fix login");
-    expect(nextTitle("🟩 ┃ 🚀 Alpha Fix login", { prefix: SHIPPING_PREFIX })).toBe("⏳ ┃ 🚀 Shipping Fix login");
+    expect(nextTitle("🟩 ┃ 🚀 Released Alpha Fix login", { prefix: SHIPPING_PREFIX })).toBe("⏳ ┃ 🚀 Shipping Fix login");
     expect(nextTitle("🚀 Shipped – Fix login", { prefix: SHIPPING_PREFIX })).toBe("⏳ ┃ 🚀 Shipping Fix login");
     expect(nextTitle("⏳ ┃ 🤖 Team Fix login", { prefix: SHIPPING_PREFIX })).toBe("⏳ ┃ 🚀 Shipping Fix login");
     expect(nextTitle("🚀 Shipping – Fix login", { prefix: SHIPPING_PREFIX })).toBe("⏳ ┃ 🚀 Shipping Fix login");
@@ -172,7 +172,7 @@ describe("session-title — nextTitle (user prompt)", () => {
 describe("session-title — nextTitle (machine turn)", () => {
   const m = { machine: true };
   test("modes, processes and outcomes stay (#618)", () => {
-    for (const t of ["👉 ┃ 🧭 Concept D", "⏳ ┃ 🧭 Concept D", "👉 ┃ 📚 Batch Q", "🟩 ┃ 🚀 Alpha X",
+    for (const t of ["👉 ┃ 🧭 Concept D", "⏳ ┃ 🧭 Concept D", "👉 ┃ 📚 Batch Q", "🟩 ┃ 🚀 Released Alpha X",
       "👉 ┃ 📦 Ready X", "🟦 ┃ ✋ Paused X", "🧭 Concept – D", "📥 Batch – Q", "🚀 Shipped – X", "📦 Ready – X", "⏸️ Paused – X"]) {
       expect(nextTitle(t, m), t).toBeNull();
     }
@@ -194,7 +194,7 @@ describe("session-title — interruptedTitle (F5)", () => {
   test("batch, a waiting concept, a running ship and every named state stay", () => {
     for (const t of ["👉 ┃ 📚 Batch Q", "📥 Batch – Q", "👉 ┃ 🧭 Concept D", "🧭 Concept – D", "⏳ ┃ 🧭 Concept D",
       "⏳ ┃ 🚀 Shipping X", "🚀 Shipping – X", "⏳ ┃ 🤖 Team X", "⏳ ┃ 🧪 Testing X", "👉 ┃ ⚡ Interrupted X",
-      "🟩 ┃ 🚀 Alpha X", "Plain", "", null]) {
+      "🟩 ┃ 🚀 Released Alpha X", "Plain", "", null]) {
       expect(interruptedTitle(t), String(t)).toBeNull();
     }
     expect(interruptedTitle("⏳ ")).toBeNull();

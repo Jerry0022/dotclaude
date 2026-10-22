@@ -42,6 +42,6 @@ there. A resumed run therefore rebuilds nothing from the conversation.
    - `checkpoint.decisions` are answers the user already gave. Apply them;
      never ask again.
 4. Everything after that is the normal pipeline, including the ship card
-   (`ship-successful` / `ship-blocked` → `🟩 ┃ 🚀 Alpha ` / `👉 ┃ 🚧 Blocked `). The title
+   (`ship-successful` / `ship-blocked` → `🟩 ┃ 🚀 Released Alpha ` / `👉 ┃ 🚧 Blocked `). The title
    already says `⏳ ┃ 🚀 Shipping `: `prompt.flow.title-work` marks a resuming prompt
    as a ship.

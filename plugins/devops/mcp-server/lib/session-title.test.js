@@ -45,7 +45,7 @@ describe("SESSION_PREFIX", () => {
 
   test("done is a green box — never the old ✅", () => {
     for (const p of Object.values(SESSION_PREFIX)) expect(p.startsWith("✅")).toBe(false);
-    expect(SESSION_PREFIX["released-alpha"]).toBe("🟩 ┃ 🚀 Alpha ");
+    expect(SESSION_PREFIX["released-alpha"]).toBe("🟩 ┃ 🚀 Released Alpha ");
     expect(SESSION_PREFIX.aborted).toBe("🟥 ┃ 📦 Aborted ");
   });
 
@@ -67,12 +67,12 @@ describe("SESSION_PREFIX", () => {
 
 describe("releasedPrefix", () => {
   test("names the channel reached: alpha on the rocket, beta/stable on the party popper", () => {
-    expect(releasedPrefix("stable")).toBe("🟩 ┃ 🚀 Stable ");
-    expect(releasedPrefix("Beta")).toBe("🟩 ┃ 🚀 Beta ");
-    expect(releasedPrefix("alpha")).toBe("🟩 ┃ 🚀 Alpha ");
+    expect(releasedPrefix("stable")).toBe("🟩 ┃ 🚀 Released Stable ");
+    expect(releasedPrefix("Beta")).toBe("🟩 ┃ 🚀 Released Beta ");
+    expect(releasedPrefix("alpha")).toBe("🟩 ┃ 🚀 Released Alpha ");
     expect(releasedPrefix("beta", { promoted: true })).toBe("🟩 ┃ 🎊 Beta ");
     expect(releasedPrefix("stable", { promoted: true })).toBe("🟩 ┃ 🎊 Stable ");
-    expect(releasedPrefix("stable", { mandatory: true })).toBe("👉 ┃ 🚀 Stable ");
+    expect(releasedPrefix("stable", { mandatory: true })).toBe("👉 ┃ 🚀 Released Stable ");
   });
 
   test("falls back to Released Alpha for an unknown or missing channel", () => {
@@ -187,7 +187,7 @@ describe("titlePrefixFor", () => {
     expect(titlePrefixFor({ variant: "released", delivery: { promote: { current: "stable" } } }, deps)).toBe("🟩 ┃ 🎊 Stable ");
     expect(titlePrefixFor({ variant: "released", promotion: { to: "beta" } }, deps)).toBe("🟩 ┃ 🎊 Beta ");
     expect(titlePrefixFor({ variant: "released", cta: { to: "stable" } }, deps)).toBe("🟩 ┃ 🎊 Stable ");
-    expect(titlePrefixFor({ variant: "released", state: { merged: "main" }, delivery: { promote: { current: "stable" } } }, deps)).toBe("🟩 ┃ 🚀 Stable ");
+    expect(titlePrefixFor({ variant: "released", state: { merged: "main" }, delivery: { promote: { current: "stable" } } }, deps)).toBe("🟩 ┃ 🚀 Released Stable ");
     expect(titlePrefixFor({ variant: "released" }, deps)).toBe("🟩 ┃ 🎊 Beta ");
   });
 
@@ -380,7 +380,7 @@ describe("titleInstruction", () => {
 
   // The concept finalize ship renders its ship card while the state file is
   // still there: the "closes the concept out" branch is what lets that card
-  // end on 🟩 ┃ 🚀 Alpha instead of the concept prefix.
+  // end on 🟩 ┃ 🚀 Released Alpha instead of the concept prefix.
   test("a conditional names the concept, the owner's prefix, the close-out case and the other prefix", () => {
     const text = titleInstruction({ owned: SESSION_PREFIX["concept-waiting"], other: SESSION_PREFIX["released-alpha"] });
     expect(text.startsWith("[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]")).toBe(true);
@@ -428,11 +428,11 @@ describe("titleInstruction — current title known", () => {
   test("stacked and legacy prefixes go, the title is JSON-escaped", () => {
     const rest = 'Fix "quotes" ' + String.fromCharCode(92) + " path";
     const text = titleInstruction(releasedPrefix("stable"), "⏳ Working – 🚀 Shipping – " + rest);
-    expect(text).toContain(`title:${JSON.stringify("🟩 ┃ 🚀 Stable " + rest)}}`);
+    expect(text).toContain(`title:${JSON.stringify("🟩 ┃ 🚀 Released Stable " + rest)}}`);
   });
 
   test("a title that is already right needs no block at all", () => {
-    expect(titleInstruction(SESSION_PREFIX["released-alpha"], "🟩 ┃ 🚀 Alpha Login")).toBe("");
+    expect(titleInstruction(SESSION_PREFIX["released-alpha"], "🟩 ┃ 🚀 Released Alpha Login")).toBe("");
     expect(titleInstruction("", "Plain title")).toBe("");
     expect(titleInstruction(SESSION_PREFIX.ready, "👉 ┃ 📦 Ready ")).toBe("");
     expect(titleInstruction(SESSION_PREFIX["paused-user"], "🟦 ┃ ✋ Paused Job")).toBe("");
@@ -449,7 +449,7 @@ describe("titleInstruction — current title known", () => {
   test("an unattributed concept keeps its conditional, with exact titles", () => {
     const text = titleInstruction({ owned: SESSION_PREFIX["concept-waiting"], other: SESSION_PREFIX["released-alpha"] }, "⏳ Page");
     expect(text).toContain(`title:${JSON.stringify("👉 ┃ 🧭 Concept Page")}}`);
-    expect(text).toContain(`title:${JSON.stringify("🟩 ┃ 🚀 Alpha Page")}}`);
+    expect(text).toContain(`title:${JSON.stringify("🟩 ┃ 🚀 Released Alpha Page")}}`);
     expect(text).toMatch(/If THIS session runs that concept/);
     const leave = titleInstruction({ owned: SESSION_PREFIX["concept-waiting"], other: null }, "👉 ┃ 🧭 Concept Page");
     expect(leave).toBe("");
