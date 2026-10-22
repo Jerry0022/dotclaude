@@ -10,7 +10,10 @@
  * have own commits, no live/recent session and no ignored files (re-checked,
  * never forced). --now = "just merged, remove now": skips only the >=30 min idle
  * wait (use right after merging a sub-agent branch); landed, clean, own commits,
- * live-session and ignored-file checks all still apply. Parts of other runs are listed, never removed. Exit 0 always.
+ * live-session and ignored-file checks all still apply. A worktree lock naming a
+ * dead pid is lifted before removing (never forced); a live or pid-less lock keeps
+ * the part — `kept` lists every kept part with its reason, `open` names the locked
+ * ones. Parts of other runs are listed, never removed. Exit 0 always.
  */
 const fs = require('fs');
 const { execFileSync } = require('child_process');
@@ -34,9 +37,10 @@ function arg(name) {
     ? sub.split(',').filter(Boolean).map((r) => (fs.existsSync(r) && fs.statSync(r).isDirectory() ? { path: r } : r))
     : lib.discoverParts(cwd, { slug: arg('slug'), integrationRef });
   const result = await lib.checkIntegration({ cwd, integrationRef, subRefs });
+  const kept = [];
   const removed = process.argv.includes('--remove')
-    ? await lib.removeIntegrated({ cwd, integrationRef, result, explicit: Boolean(sub), ...(process.argv.includes('--now') ? { idleMs: 0 } : {}) }) : [];
-  process.stdout.write(`${JSON.stringify({ ...result, open: lib.summarize(result), removed }, null, 2)}\n`);
+    ? await lib.removeIntegrated({ cwd, integrationRef, result, explicit: Boolean(sub), kept, ...(process.argv.includes('--now') ? { idleMs: 0 } : {}) }) : [];
+  process.stdout.write(`${JSON.stringify({ ...result, open: lib.summarize(result, kept), removed, kept }, null, 2)}\n`);
 })().catch((e) => {
   process.stdout.write(`${JSON.stringify({ error: String((e && e.message) || e) })}\n`);
 });

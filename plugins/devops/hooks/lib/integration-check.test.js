@@ -117,6 +117,31 @@ describe('checkIntegration', () => {
     expect(await removeIntegrated({ cwd: main, integrationRef: 'feature', result: res })).toEqual([]);
   });
 
+  test('a lock naming a dead pid is lifted and the worktree removed; live or pid-less locks keep it', async () => {
+    const dead = agentWt('agent-aaa', 'run-abcdef-1');
+    commit(dead, 'one.txt', '1');
+    const live = agentWt('agent-bbb', 'run-abcdef-2');
+    commit(live, 'two.txt', '2');
+    const manual = agentWt('agent-ccc', 'run-abcdef-3');
+    commit(manual, 'three.txt', '3');
+    g(main, 'merge', '--no-ff', '-m', 'merge', 'run-abcdef-1', 'run-abcdef-2', 'run-abcdef-3');
+    g(main, 'worktree', 'lock', '--reason', 'claude agent agent-aaa (pid 999999)', dead);
+    g(main, 'worktree', 'lock', '--reason', `claude agent agent-bbb (pid ${process.pid})`, live);
+    g(main, 'worktree', 'lock', '--reason', 'held by hand', manual);
+
+    const parts = discoverParts(main, { slug: 'run-abcdef', integrationRef: 'feature' });
+    const res = await checkIntegration({ cwd: main, integrationRef: 'feature', subRefs: parts });
+    expect(res.parts.every((p) => p.locked)).toBe(true);
+    const kept = [];
+    const removed = await removeIntegrated({ cwd: main, integrationRef: 'feature', result: res, idleMs: 0, kept });
+    expect(removed.map(n)).toEqual([n(dead)]);
+    expect(fs.existsSync(dead)).toBe(false);
+    expect(fs.existsSync(live)).toBe(true);
+    expect(fs.existsSync(manual)).toBe(true);
+    expect(kept.map((k) => [n(k.part), k.reason]).sort()).toEqual([[n(live), 'locked'], [n(manual), 'locked']]);
+    expect(summarize(res, kept)).toMatch(/^gesperrt: 2 Teile/);
+  });
+
   test('ignored files inside keep the worktree', async () => {
     const w1 = agentWt('agent-aaa', 'run-abcdef-1');
     commit(w1, '.gitignore', 'keep.bin\n');
