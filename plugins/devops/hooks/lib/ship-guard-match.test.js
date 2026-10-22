@@ -130,6 +130,7 @@ describe("remoteDeleteRefs", () => {
     ["git push origin --delete refs/heads/x", ["x"]],
     ["git push origin --delete main", ["main"]],
     ["git push origin --delete refs/heads/main", ["main"]],
+    ["git push origin --delete heads/main", ["main"]],
     ["git push origin :main", ["main"]],
     ["git push origin --delete a && git push origin --delete b", ["a", "b"]],
   ])("%j -> %j", (cmd, refs) => {

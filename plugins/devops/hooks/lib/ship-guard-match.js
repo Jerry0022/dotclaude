@@ -171,7 +171,8 @@ function remoteDeleteRefs(cmd) {
     if (pos.length < 2) return null; // remote + at least one ref
     for (const spec of pos.slice(1)) {
       if (!del && !spec.startsWith(':')) return null;
-      const name = spec.replace(/^:/, '').replace(/^refs\/heads\//, '');
+      // git DWIMs `heads/main` to refs/heads/main as well
+      const name = spec.replace(/^:/, '').replace(/^(?:refs\/)?heads\//, '');
       if (!name || name.includes(':')) return null;
       refs.push(name);
     }
