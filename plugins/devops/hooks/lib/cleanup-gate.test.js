@@ -416,6 +416,13 @@ describe("hasLanded / decide against a real repo", () => {
       expect(decide(`echo "Remove-Item -Recurse ${wt}" | powershell -NoProfile`, named()).block).toMatch(/from a pipe/);
       expect(decide(`echo rmdir /s /q ${wt} | cmd`, named()).block).toMatch(/from a pipe/);
       expect(decide("git log --oneline | head -5", armed())).toBeNull();
+      // round 6 (#843 review): a payload path keeps its slash; every --s… prefix; inline =values
+      const posix = wt.replace(/\\/g, "/");
+      expect(decide(`pwsh /NoProfile /Command Remove-Item -Recurse ${posix}`, armed(dryRun(["- feat/squash"]))).block).toMatch(/does not name/);
+      expect(decide(`env --s="rm -rf ${wt}"`, named()).block).toMatch(/env -S/);
+      expect(decide(`sudo --user="rm -rf ${wt}"`, named()).block).toMatch(/option value that is a command/);
+      expect(decide(`env --chdir=/tmp/x node x.js`, armed())).toBeNull();
+      expect(gate.parseDeletes("pwsh /Command Remove-Item -Recurse /tmp/x", "/r").deletes.map((d) => d.target)).toEqual(["/tmp/x"]);
       const deep = `cmd /c cmd /c cmd /c cmd /c cmd /c rmdir /s /q "${wt}"`;
       expect(decide(deep, named()).block).toMatch(/too deeply nested/);
       expect(decide("bash -lc \"echo hi\"", armed())).toBeNull();
