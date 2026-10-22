@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.mcp.failcache
- * @version 0.1.0
+ * @version 0.2.0
  * @event SessionStart
  * @plugin devops
  * @description Clear the plugin's entries from Claude Code's machine-wide MCP
@@ -18,7 +18,9 @@
  *   Runs concurrently with the MCP boot, so it cannot rescue the session it
  *   runs in when the CLI already skipped — it rescues the next start. When an
  *   entry was still inside the window, it tells the user that one restart
- *   brings the servers back.
+ *   brings the servers back. An entry written around this session's start is
+ *   this session's own failure and is reported neutrally (cause in the MCP
+ *   logs); another session is named only when every entry predates it (#823).
  *
  *   Boot Discipline (CONVENTIONS.md): one small file read, no network, no
  *   subprocess; any throw is swallowed and the hook exits 0.
@@ -29,8 +31,8 @@ require('../lib/plugin-guard');
 try {
   const home = process.env.HOME || process.env.USERPROFILE || '';
   if (home) {
-    const { clearPluginEntries, cacheFile } = require('../lib/mcp-failure-cache');
-    const { active } = clearPluginEntries(cacheFile(home));
+    const { clearPluginEntries, classify, cacheFile } = require('../lib/mcp-failure-cache');
+    const { active, activeEntries } = clearPluginEntries(cacheFile(home));
     if (active.length) {
       const root = (process.env.CLAUDE_PLUGIN_ROOT || require('path').resolve(__dirname, '..', '..')).split(require('path').sep).join('/');
       const names = active.map((k) => k.replace('plugin:devops:', '')).join(', ');
@@ -38,10 +40,19 @@ try {
       // THIS session already skipped the servers — and nothing reconnects them
       // in-session. Said once at the start, not discovered hours later at the
       // ship (2026-10-03: a finished ship stalled on "restart needed").
+      // Another session is named only when every entry predates this start (#823).
+      const startMs = Date.now() - process.uptime() * 1000;
+      const foreign = classify(activeEntries, startMs) === 'foreign';
+      const lead = foreign
+        ? `[mcp-failcache] Another session's connect timeout had blocked the devops MCP servers (${names}) machine-wide; the block is cleared for the next start, but this session most likely started without them.\n`
+        : `[mcp-failcache] The devops MCP servers (${names}) failed to connect in this session; the cause is in the MCP logs (mcp-logs-plugin-devops-*). The failure cache is cleared for the next start.\n`;
+      const line = foreign
+        ? '"Die devops-Server (Ship, Completion-Card, Issues) sind in dieser Session durch einen Timeout in einer anderen Session gesperrt — ich nutze die Offline-Wege; ein Neustart holt sie zurück."'
+        : '"Die devops-Server (Ship, Completion-Card, Issues) konnten in dieser Session nicht verbinden (Ursache in den MCP-Logs) — ich nutze die Offline-Wege; ein Neustart holt sie zurück."';
       process.stdout.write(
-        `[mcp-failcache] Another session's connect timeout had blocked the devops MCP servers (${names}) machine-wide; the block is cleared for the next start, but this session most likely started without them.\n` +
+        lead +
           'In your FIRST reply, before any other work, tell the user in one line (in their language): ' +
-          '"Die devops-Server (Ship, Completion-Card, Issues) sind in dieser Session durch einen Timeout in einer anderen Session gesperrt — ich nutze die Offline-Wege; ein Neustart holt sie zurück."\n' +
+          `${line}\n` +
           'For the rest of the session use the offline entry points, never a manual ship: ' +
           `card: node "${root}/mcp-server/index.js" --render-card <payload.json> · ` +
           `ship pipeline: node "${root}/mcp-server/ship/cli.js" <tool> <params.json> ` +
