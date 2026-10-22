@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.296.2] — 2026-10-22
+
+New users can install the plugin with one sentence pasted into Claude Code, or by following the README.
+
+Why: the documented `claude plugin add devops@Jerry0022` does not resolve, because the marketplace is named `dotclaude` and must be added first. A Desktop user who let Claude run the CLI install also never saw the plugin, since the Desktop App keeps its own plugin store.
+
+### Added
+- **One-sentence install.** Paste `Install the devops plugin by following https://github.com/Jerry0022/dotclaude/blob/main/INSTALL.md` into Claude Code. INSTALL.md starts with agent instructions: check git/Node, detect Desktop vs. CLI via `CLAUDE_CODE_ENTRYPOINT`, run the CLI install or walk the user through the Customize clicks, and finally ask for a new session.
+
+### Fixed
+- **Install commands.** README and INSTALL.md now use `claude plugin marketplace add Jerry0022/dotclaude` + `claude plugin install devops@dotclaude`, and `@dotclaude` for update and uninstall.
+- **Desktop install path.** Customize → Personal Plugins is documented as the Desktop route, with a note that a CLI install does not appear in the Desktop App. The outdated manual-registration steps (pinned to 0.30.1) are gone.
+
 ## [0.296.1] — 2026-10-22
 
 The `/auto-cleanup` gate no longer lets a worktree delete through when it hides behind a shell wrapper or prefix the parser could not open.

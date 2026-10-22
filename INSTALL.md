@@ -1,20 +1,53 @@
 # Installation
 
-## Add the plugin
+**Quickest way:** paste this one sentence into Claude Code:
 
-**CLI (recommended):**
-
-```bash
-claude plugin add devops@Jerry0022
+```
+Install the devops plugin by following https://github.com/Jerry0022/dotclaude/blob/main/INSTALL.md
 ```
 
-**Desktop App UI:**
+## Instructions for Claude (agent install)
 
-1. Open **Settings** → **Plugins** → **Marketplaces**
-2. Add marketplace: `Jerry0022/dotclaude`
-3. Enable the plugin `devops`
+You are Claude, asked to install this plugin for the user. Do these steps in order, and tell the user each result in one short line.
 
-> **Note:** The Desktop App marketplace UI may not list third-party plugins for installation. If the plugin tab appears empty, use the CLI command above or see [Troubleshooting](#troubleshooting) below.
+1. **Prerequisites.** Run `git --version` and `node --version`. If git is missing or Node is older than 18.18, stop and tell the user what to install.
+2. **Find out where you run.** Read the environment variable `CLAUDE_CODE_ENTRYPOINT`.
+3. **Desktop App** (`claude-desktop`): Desktop plugins come from the user's claude.ai account. You cannot add them from a session, and a CLI install will not appear there. Walk the user through these clicks one step at a time, and wait for each confirmation:
+   1. Sidebar → **Customize** → **+** next to *Personal Plugins*
+   2. Add the marketplace `Jerry0022/dotclaude`. If that fails, retry once, then try `https://github.com/Jerry0022/dotclaude`.
+   3. Install / enable **devops**.
+4. **CLI / IDE** (any other value): run
+   ```bash
+   claude plugin marketplace add Jerry0022/dotclaude
+   claude plugin install devops@dotclaude
+   ```
+   then check `claude plugin list` for `devops@dotclaude`.
+5. **Last step:** ask the user to start a new session (Desktop: open a new session; CLI: quit and run `claude` again), because hooks and MCP servers only load at session start. Tell them to type `/do-ship` there; if it shows up in the slash menu, the plugin is active. Done.
+
+## Add the plugin
+
+Claude Code Desktop and the `claude` CLI keep **separate plugin stores**: Desktop
+loads plugins from your claude.ai account, the CLI from `~/.claude/plugins/`. A
+plugin installed through one does not appear in the other, so install it where
+you work (or in both).
+
+**Desktop App:**
+
+1. Sidebar → **Customize** → **+** next to *Personal Plugins*
+2. Add the marketplace `Jerry0022/dotclaude` (or `https://github.com/Jerry0022/dotclaude`)
+3. Install / enable the plugin **devops**
+
+**CLI (terminal):**
+
+```bash
+claude plugin marketplace add Jerry0022/dotclaude
+claude plugin install devops@dotclaude
+```
+
+Or inside an interactive `claude` session: `/plugin marketplace add Jerry0022/dotclaude`,
+then `/plugin install devops@dotclaude`.
+
+Requires **git** and **Node.js 18.18+** (the plugin's MCP server runs on Node).
 
 Start a new session for hooks to take effect. Skills are available immediately: type `/do-ship` (or just "ship it"), or say what you need — "funktioniert nicht" / "this is broken" reaches the debugging skill, "concept page" / "ein concept für …" the interactive concept page.
 
@@ -23,10 +56,10 @@ Start a new session for hooks to take effect. Skills are available immediately: 
 Updates are managed by the Claude Code marketplace:
 
 ```bash
-claude plugin update devops@Jerry0022
+claude plugin update devops@dotclaude
 ```
 
-Or enable auto-update via **Settings** → **Plugins** → **Marketplaces**.
+Or enable auto-update for the marketplace (Desktop: **Customize**; CLI: `/plugin` → **Marketplaces**).
 
 Alternatively, ask Claude to run the built-in plugin-update skill (it is hidden from the slash menu — this phrase is its trigger):
 
@@ -100,47 +133,17 @@ Typical combined workflows:
 
 ## Troubleshooting
 
-### Desktop App: plugin not visible in marketplace
+### Desktop App: plugin not visible after a CLI install
 
-The Desktop App marketplace UI recognizes third-party marketplace tabs but may not list their plugins for one-click installation. The marketplace tab appears empty with "No plugins found".
+The Desktop App does not read `~/.claude/plugins/`. A `claude plugin install` (also one Claude ran for you)
+succeeds there but stays invisible in Desktop — add the marketplace via **Customize → Personal Plugins**
+as described above.
 
-**Fix — use CLI:**
+### Desktop App: adding the marketplace fails
 
-```bash
-claude plugin add devops@Jerry0022
-```
-
-**Alternative — manual registration:**
-
-If the CLI command is not available, register the plugin manually:
-
-1. Add the marketplace (Settings → Plugins → Marketplaces → `Jerry0022/dotclaude`)
-2. Copy the plugin files into the cache:
-   ```bash
-   mkdir -p ~/.claude/plugins/cache/dotclaude/devops/0.30.1
-   cp -r ~/.claude/plugins/marketplaces/dotclaude/plugins/devops/* \
-         ~/.claude/plugins/cache/dotclaude/devops/0.30.1/
-   cp -r ~/.claude/plugins/marketplaces/dotclaude/plugins/devops/.claude-plugin \
-         ~/.claude/plugins/cache/dotclaude/devops/0.30.1/
-   cp    ~/.claude/plugins/marketplaces/dotclaude/plugins/devops/.mcp.json \
-         ~/.claude/plugins/cache/dotclaude/devops/0.30.1/
-   ```
-3. Add to `~/.claude/plugins/installed_plugins.json` → `plugins` object:
-   ```json
-   "devops@dotclaude": [{
-     "scope": "user",
-     "installPath": "<home>/.claude/plugins/cache/dotclaude/devops/0.30.1",
-     "version": "0.30.1",
-     "installedAt": "<now ISO>",
-     "lastUpdated": "<now ISO>",
-     "gitCommitSha": "<git rev-parse HEAD from marketplace clone>"
-   }]
-   ```
-4. Add to `~/.claude/settings.json` → `enabledPlugins`:
-   ```json
-   "devops@dotclaude": true
-   ```
-5. Restart the Desktop App.
+Retry once — a first attempt can fail while the marketplace is fetched. Also try the full URL
+`https://github.com/Jerry0022/dotclaude`. In a Team/Enterprise organization, adding marketplaces may be
+restricted to admins.
 
 ### Hooks not running
 
@@ -148,12 +151,12 @@ Start a new session. Hooks only activate on session start, not mid-session.
 
 ### Skills not found
 
-Verify the plugin is enabled: check `enabledPlugins` in `~/.claude/settings.json`.
+Verify the plugin is enabled — Desktop: **Customize → Personal Plugins**; CLI: `claude plugin list` or `enabledPlugins` in `~/.claude/settings.json`.
 
 ## Uninstall
 
 ```bash
-claude plugin remove devops@Jerry0022
+claude plugin uninstall devops@dotclaude
 ```
 
-Or remove manually via **Settings** → **Plugins**.
+Desktop App: remove it under **Customize → Personal Plugins**.
