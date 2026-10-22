@@ -168,7 +168,7 @@ Subagents inherit all output contracts:
 - **The session title names the state the last card left the session in.**
   `render_completion_card` returns a `[SESSION TITLE]` block beside the card
   (stderr on the CLI path), one per variant, double-icon
-  (`<STATUS> <ACTIVITY> <Word> – `, e.g. `🟩 ┃ 🚀 Alpha ` for
+  (`<STATUS> <ACTIVITY> <Word> – `, e.g. `🟩 ┃ 🚀 Released Alpha ` for
   `ship-successful`, `👉 ┃ 📦 Ready ` for `ready`, `🟩 ┃ 🖥️ System ` for
   `fallback`), and the CTA heading starts with the same two icons and keyword
   (title = CTA); the full status/activity tables and the 👉-vs-🟩 rule live in

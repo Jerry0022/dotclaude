@@ -47,14 +47,14 @@ describe("ship card — version prefix (#695)", () => {
       variant: "ship-successful", summary: "Ship", lang: "en", session_id: "test-comp-1", buildId: "b1",
       state: SHIPPED, delivery: { ship: { version: "0.10.0", base: "main" } },
     });
-    expect(bare).toMatch(/^## 🟩 🚀 Alpha — v0\.10\.0 → main\.$/m);
+    expect(bare).toMatch(/^## 🟩 🚀 Released Alpha — v0\.10\.0 → main\.$/m);
     expect(bare).toContain("· v0.10.0 · Build b1");
 
     const composed = await cardText({
       variant: "ship-successful", summary: "Ship", lang: "en", session_id: "test-comp-2", buildId: "b1",
       state: SHIPPED, delivery: { ship: { version: "Desktop app 0.10.0", base: "main" } },
     });
-    expect(composed).toMatch(/^## 🟩 🚀 Alpha — Desktop app 0\.10\.0 → main\.$/m);
+    expect(composed).toMatch(/^## 🟩 🚀 Released Alpha — Desktop app 0\.10\.0 → main\.$/m);
     expect(composed).not.toContain("vDesktop");
   });
 
@@ -63,7 +63,7 @@ describe("ship card — version prefix (#695)", () => {
       variant: "ship-successful", summary: "Ship", lang: "de", session_id: "test-comp-3", buildId: "b1",
       state: SHIPPED, delivery: { ship: { version: "v1.2.3", base: "main" } },
     });
-    expect(text).toMatch(/^## 🟩 🚀 Alpha — v1\.2\.3 → main\.$/m);
+    expect(text).toMatch(/^## 🟩 🚀 Released Alpha — v1\.2\.3 → main\.$/m);
     expect(text).not.toContain("vv1.2.3");
   });
 });
@@ -77,7 +77,7 @@ describe("ship card — components (#695)", () => {
         { name: "Desktop app", version: "0.10.0", tag: "desktop-v0.10.0", channel: "alpha" },
       ] } },
     });
-    expect(text).toMatch(/^## 🟩 🚀 Alpha — Desktop app 0\.10\.0 → main · desktop-v0\.10\.0 · alpha\.$/m);
+    expect(text).toMatch(/^## 🟩 🚀 Released Alpha — Desktop app 0\.10\.0 → main · desktop-v0\.10\.0 · alpha\.$/m);
     const pipe = pipelineOf(text).join("\n");
     expect(pipe).toContain("main · Desktop app 0.10.0 · desktop-v0.10.0 · alpha");
     expect(pipe).not.toContain("Build 21dd0e3");
@@ -92,7 +92,7 @@ describe("ship card — components (#695)", () => {
         { name: "Web", version: "2.4.0", root: true },
       ] } },
     });
-    expect(text).toMatch(/^## 🟩 🚀 Alpha — Web 2\.4\.0 → main\.$/m);
+    expect(text).toMatch(/^## 🟩 🚀 Released Alpha — Web 2\.4\.0 → main\.$/m);
     expect(pipelineOf(text).join("\n")).toContain("· Web 2.4.0 · Build 21dd0e3");
   });
 
@@ -105,7 +105,7 @@ describe("ship card — components (#695)", () => {
         { name: "Uploader", version: "1.3.0" },
       ] } },
     });
-    expect(de).toMatch(/^## 🟩 🚀 Alpha — 2 Komponenten → main\.$/m);
+    expect(de).toMatch(/^## 🟩 🚀 Released Alpha — 2 Komponenten → main\.$/m);
     expect(de).toMatch(/^🧩 Desktop app 0\.10\.0 · desktop-v0\.10\.0 · alpha$/m);
     expect(de).toMatch(/^🧩 Uploader 1\.3\.0$/m);
     expect(de).not.toContain("Build 21dd0e3");
@@ -120,7 +120,7 @@ describe("ship card — components (#695)", () => {
         promote: { channels: { alpha: "0.10.0" }, current: "alpha" },
       },
     });
-    expect(text).toMatch(/^## 🟩 🚀 Alpha — Desktop app 0\.10\.0 — promote to beta\?$/m);
+    expect(text).toMatch(/^## 🟩 🚀 Released Alpha — Desktop app 0\.10\.0 — promote to beta\?$/m);
   });
 
   test("the pipeline line carries the components into the widget, one line each", () => {

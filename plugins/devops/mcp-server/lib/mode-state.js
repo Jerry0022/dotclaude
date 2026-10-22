@@ -83,7 +83,7 @@ export const VARIANT_TITLE_STATE = Object.freeze({
 const CHANNELS = Object.freeze(["Alpha", "Beta", "Stable"]);
 
 /** The title prefix of a merged ship or a promotion reaching `channel`:
- *  alpha → `🟩 ┃ 🚀 Alpha `; beta/stable → `🟩 ┃ 🚀 Beta ` / `🟩 ┃ 🚀 Stable `;
+ *  alpha → `🟩 ┃ 🚀 Released Alpha `; beta/stable → `🟩 ┃ 🚀 Released Beta ` / `🟩 ┃ 🚀 Released Stable `;
  *  after a ship in the same run, `🟩 ┃ 🎊 Beta ` for a promote-only
  *  run (`{ promoted: true }`). Unknown channel → Alpha. */
 export function releasedPrefix(channel, { promoted = false, mandatory = false } = {}) {

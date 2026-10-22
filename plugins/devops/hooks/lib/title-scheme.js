@@ -1,6 +1,6 @@
 /**
  * @module title-scheme
- * @version 2.2.0
+ * @version 2.3.0
  * @description The ONE table behind the session title and the completion
  *   card's CTA heading (concept 2026-10-21 "title-iconography").
  *
@@ -71,10 +71,10 @@ const STATES = Object.freeze({
   interrupted: ['user', 'Interrupted', '⚡'],
   // 🟩 done — 👉 when a mandatory step rides along.
   // A merged ship — ring alpha or a plain merge without a ring — reads
-  // "Alpha" (F3: one term everywhere).
-  'released-alpha': ['done', 'Alpha', '🚀'],
-  'released-beta': ['done', 'Beta', '🚀'],
-  'released-stable': ['done', 'Stable', '🚀'],
+  // "Released Alpha" (F3: one term everywhere; 2.3 added "Released").
+  'released-alpha': ['done', 'Released Alpha', '🚀'],
+  'released-beta': ['done', 'Released Beta', '🚀'],
+  'released-stable': ['done', 'Released Stable', '🚀'],
   'promoted-beta': ['done', 'Beta', '🎊'],
   'promoted-stable': ['done', 'Stable', '🎊'],
   committed: ['done', 'Committed', '📦'],
@@ -269,9 +269,12 @@ const KNOWN = [];
   const pairs = new Map();
   for (const [, word, act] of Object.values(STATES)) pairs.set(word + ' ' + act, [word, act]);
   pairs.set('Solo 🤖', ['Solo', '🤖']);
+  // Words retired by 2.3 ("Alpha 🚀" before "Released Alpha"), both orders.
+  const retired = [['Alpha', '🚀'], ['Beta', '🚀'], ['Stable', '🚀']];
+  const current = new Map([...pairs, ...retired.map((wa) => [wa.join(' '), wa])]);
   // The 2.0/2.1 word-first order, with the icons it used (Started 💡).
-  const wordFirst = new Map([...pairs, ['Started 💡', ['Started', '💡']]]);
-  for (const [build, list] of [[compose, pairs], [composeWordFirst, wordFirst]]) {
+  const wordFirst = new Map([...current, ['Started 💡', ['Started', '💡']]]);
+  for (const [build, list] of [[compose, current], [composeWordFirst, wordFirst]]) {
     for (const st of Object.values(STATUS)) {
       for (const [word, act] of list.values()) {
         const p = build(st, word, act) + ' ';

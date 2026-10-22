@@ -94,7 +94,7 @@ describe("stop.flow.guard — F5 interrupted title", () => {
       "👉 ┃ 📚 Batch Ideen", "📥 Batch – Ideen",
       "👉 ┃ 🧭 Concept Billing", "🧭 Concept – Billing", "⏳ ┃ 🧭 Concept Billing",
       "⏳ ┃ 🚀 Shipping Login-Fix", "🚀 Shipping – Login-Fix",
-      "⏳ ┃ 🤖 Team Refactor", "🟩 ┃ 🚀 Alpha Login-Fix", "👉 ┃ ⚡ Interrupted Refactor",
+      "⏳ ┃ 🤖 Team Refactor", "🟩 ┃ 🚀 Released Alpha Login-Fix", "👉 ┃ ⚡ Interrupted Refactor",
       "Plain title",
     ]) {
       const dir = project();

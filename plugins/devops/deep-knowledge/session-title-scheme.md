@@ -23,7 +23,7 @@ turn end. Nothing else strips or sets titles.
 |---|---|
 | work | `⏳ ┃ 🚀 Shipping`, `⏳ ┃ 🧪 Testing`, `⏳ ┃ 🤖 Team` (pending background work), `⏳ ┃ 🧭 Concept` (iterating/implementing), `⏳ ┃ 🤖 Solo` (generic) |
 | user | `👉 ┃ 🧭 Concept` (page waits), `📚 Batch`, `🧪 Test`, `📦 Ready`, `📦 Files`, `❓ Question`, `⚠️ Red tests`, `⚠️ Unverified`, `⚠️ Not deployed`, `🚧 Blocked`, `⚡ Interrupted` (see F5) |
-| done | `🟩 ┃ 🚀 Alpha` (merged ship), `🚀 Beta` / `🚀 Stable` (ship and promote in one run), `🎊 Beta` / `🎊 Stable` (promote only), `📦 Committed`, `✨ Started`, `📊 Analysis`, `🖥️ System` (work outside the repo); never "LIVE" |
+| done | `🟩 ┃ 🚀 Released Alpha` (merged ship), `🚀 Released Beta` / `🚀 Released Stable` (ship and promote in one run), `🎊 Beta` / `🎊 Stable` (promote only), `📦 Committed`, `✨ Started`, `📊 Analysis`, `🖥️ System` (work outside the repo); never "LIVE" |
 | aborted | `🟥 ┃ 📦 Aborted` (generic), `🚀 Ship`, `🎊 Promote`, `🧪 Test`, `🧭 Concept`, `📚 Batch`, `📊 Analysis`, `🤖 Team` |
 | paused | `🟦 ┃ ✋ Paused`, `🔋 Limit reset`, `🔌 Restart`, `💻 Reboot` |
 
@@ -78,13 +78,13 @@ alone (it may end without a card). Concretely:
 untouched, and a prompt that *is* a ship (`hooks/lib/ship-intent.js`, the same
 classifier `prompt.ship.detect` uses) is marked `⏳ ┃ 🚀 Shipping ` by the hook
 itself, so `/do-ship` after a change never sits on `⏳` for the length of the
-pipeline. Outcome prefixes (`🟩 ┃ 🚀 Alpha `, `👉 ┃ 📦 Ready `, …) are what a new
+pipeline. Outcome prefixes (`🟩 ┃ 🚀 Released Alpha `, `👉 ┃ 📦 Ready `, …) are what a new
 prompt outdates — those the hook strips. Observed 2026-09-21.
 
 **An outcome prefix lives exactly one turn.** `stop.flow.guard` hands the
 title-work token back at every non-silent turn end — card or no card — so the
 next prompt always marks `⏳ ┃ 🤖 Solo ` and the card that ends that turn sets its own
-outcome (`👉 ┃ 📦 Ready `, `👉 ┃ 🧪 Test `, …). `🟩 ┃ 🚀 Alpha ` therefore stays on
+outcome (`👉 ┃ 📦 Ready `, `👉 ┃ 🧪 Test `, …). `🟩 ┃ 🚀 Released Alpha ` therefore stays on
 the sidebar only while the LAST thing the session did was a ship; work after
 a ship reads ⏳ → Ready/Test, never Released. (Until 0.183.9 the token was
 released only after a card, and one card-less answer after a ship pinned

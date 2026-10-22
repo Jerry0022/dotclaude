@@ -42,7 +42,7 @@ duplicate watcher) is a silent turn: no text, no title change.
 prefix (`👉 ┃ 🧭 Concept `, `⏳ `, `⏳ ┃ 🚀 Shipping `, … — the `SESSION_PREFIX`
 and `LEGACY_PREFIXES` values). If part C shipped successfully, its ship card
 is the closing artefact and no Step 6b card follows — set
-`"🟩 ┃ 🚀 Alpha " + {stripped title}`. Otherwise set the stripped title; the
+`"🟩 ┃ 🚀 Released Alpha " + {stripped title}`. Otherwise set the stripped title; the
 final card (Step 6b) then sets the outcome prefix (`👉 ┃ 📦 Ready `, …). A
 title without any prefix is left untouched — the user renamed it meanwhile,
 and that name wins.

@@ -206,7 +206,7 @@ right after the page is open, prefix the session title:
 1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
 2. If `title` already starts with `👉 ┃ 🧭 Concept `: done.
 3. Strip any leading devops prefix (`⏳ `, `👉 ┃ 📦 Ready `, `👉 ┃ 🧪 Test `,
-   `🟩 ┃ 🚀 Alpha `, … and the legacy single-icon forms — the `SESSION_PREFIX` and `LEGACY_PREFIXES` values in
+   `🟩 ┃ 🚀 Released Alpha `, … and the legacy single-icon forms — the `SESSION_PREFIX` and `LEGACY_PREFIXES` values in
    `mcp-server/lib/mode-state.js`) left by the first-prompt hourglass or an
    earlier card — never stack them (`👉 ┃ 🧭 Concept ⏳ Foo` is the bug).
 4. `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
