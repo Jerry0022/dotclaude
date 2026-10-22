@@ -82,7 +82,7 @@ describe("auto-cleanup gate contract — confirm before anything runs", () => {
     expect(s).toMatch(/no browser, or a repo so small the page looks like overkill, is no exception/);
     expect(s).toMatch(/print the Apply-Manifest .* as text and ask the confirm right away/);
     expect(s).toMatch(/header `Dry-Run`, the question names every branch and worktree to delete by full name/);
-    expect(s).toMatch(/header `Unmerged`, the question names the branch/);
+    expect(s).toMatch(/multiSelect question, header `Unmerged`/);
   });
 
   test("a missing, errored or non-yes answer is a no — and the run ends there", () => {
@@ -94,7 +94,8 @@ describe("auto-cleanup gate contract — confirm before anything runs", () => {
     expect(s).toMatch(/`analysis` card/);
     const e = section(EXEC, "## Step 10a", "## Step 10b");
     expect(e).toMatch(/ONE `AskUserQuestion`: header `Dry-Run`/);
-    expect(e).toMatch(/header `Unmerged`/);
+    expect(e).toMatch(/multiSelect question, header\s+`Unmerged`/);
+    expect(e).toMatch(/never\s+brace- or prefix-compressed/);
     expect(e).toMatch(/No answer .* is `Abbrechen`: nothing ships, nothing is deleted/);
   });
 

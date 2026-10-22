@@ -268,6 +268,29 @@ describe("hasLanded / decide against a real repo", () => {
   test("non-delete commands pass untouched while armed", () => {
     expect(decide("git status && git branch -vv && git log --oneline origin/main..feat/unmerged", armed())).toBeNull();
   });
+
+  describe("Unmerged batch multiSelect", () => {
+    const batch = (answer) => ({
+      questions: [{
+        header: "Unmerged", question: "Welche unmerged Branches löschen?", multiSelect: true,
+        options: [{ label: "feat/a" }, { label: "feat/b" }, { label: "feat/c" }],
+      }],
+      answer,
+    });
+    const run = (answer) => armed(dryRun(["- feat/a", "- feat/b", "- feat/c"]), batch(answer));
+    test.each([["array", ["feat/a", "feat/b"]], ["comma string", "feat/a, feat/b"]])("ticked names pass, unticked refused (%s)", (_n, ans) => {
+      const st = run(ans);
+      expect(decide("git branch -D feat/a feat/b", st)).toBeNull();
+      expect(decide("git branch -D feat/c", st).block).toMatch(/not in the default branch/);
+    });
+    test.each([[[]], [""], ["my own text"], [["feat/zzz"]]])("empty, Other or unknown records nothing (%j)", (ans) => {
+      expect(run(ans).unmerged).toEqual([]);
+    });
+    test("single-select still works and refusal points to the batch form", () => {
+      expect(decide("git branch -D feat/u", armed(dryRun(["- feat/u"]), unmergedYes("feat/u")))).toBeNull();
+      expect(decide("git branch -D feat/u", armed(dryRun(["- feat/u"]))).block).toMatch(/multiSelect/);
+    });
+  });
 });
 
 describe("hooks end to end — post arms and records, pre refuses", () => {

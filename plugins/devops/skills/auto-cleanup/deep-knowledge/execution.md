@@ -45,10 +45,15 @@ ship PR with its `#<n>` and head branch), options `Ja, ausführen` /
 names — a name missing from it is refused even after the yes.
 
 Then, for every unmerged branch in the delete set (Untersuchen — content not
-in the default branch), its own yes: one question per branch (up to 4 per
-call), header `Unmerged`, the question names the branch and its unshipped
-commits, options `Ja, löschen` / `Behalten`. Behalten drops that branch from
-the set; the rest proceeds.
+in the default branch), its own yes: one multiSelect question, header
+`Unmerged`, options = the full branch names (description: unshipped commits).
+The tool allows 4 options per question: chunk the branches into several
+`Unmerged` questions of one call. Only ticked names are approved; unticked
+branches drop out of the set and the rest proceeds.
+
+The manifest and the Dry-Run question name every branch literally, never
+brace- or prefix-compressed (`x-{a,b}`, `x-*`): the gate matches exact names
+and refuses a compressed one even after the yes.
 
 Only proceed after explicit confirmation. No answer — the tool errors
 (`Answer questions?` under `claude -p`), is denied or unavailable, or the reply
