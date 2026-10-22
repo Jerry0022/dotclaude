@@ -351,6 +351,12 @@ describe("hasLanded / decide against a real repo", () => {
       ["env / sudo / nohup prefix", (p) => `env A=1 nohup rm -rf "${p}"`],
       ["subshell", (p) => `( rm -rf "${p}" )`],
       ["comma list", (p) => `Remove-Item -Path "${other}","${p}" -Recurse`],
+      ["cmd /r", (p) => `cmd /r rmdir /s /q "${p}"`],
+      ["glued cmd /c", (p) => `cmd /crmdir /s /q "${p}"`],
+      ["bundled bash -lc", (p) => `bash -lc "rm -rf '${p}'"`],
+      ["PowerShell -c abbreviation", (p) => `pwsh -NoLogo -c "Remove-Item -Recurse '${p}'"`],
+      ["PowerShell positional command", (p) => `powershell -ExecutionPolicy Bypass "Remove-Item -Recurse '${p}'"`],
+      ["sudo -u <user>", (p) => `sudo -u root rm -rf "${p}"`],
     ])("unconfirmed worktree delete is refused: %s", (_n, cmd) => {
       expect(decide(cmd(wt), armed(dryRun(["- feat/squash"]))).block).toMatch(/does not name/);
     });
@@ -385,6 +391,14 @@ describe("hasLanded / decide against a real repo", () => {
       expect(decide("rm -rf ~/repo/.claude/worktrees/done", named()).block).toMatch(/not a literal path/);
       expect(decide(`Get-Item "${wt}" | Remove-Item -Recurse`, named()).block).toMatch(/from a pipe/);
       expect(decide("powershell -EncodedCommand AAAA", armed()).block).toMatch(/encoded command/);
+      expect(decide("pwsh -enc AAAA", armed()).block).toMatch(/encoded command/);
+      expect(decide("powershell -e AAAA", armed()).block).toMatch(/encoded command/);
+      expect(decide("powershell -File cleanup.ps1", armed()).block).toMatch(/script file/);
+      expect(decide(`env -X weird rm -rf "${wt}"`, named()).block).toMatch(/prefix with options/);
+      const deep = `cmd /c cmd /c cmd /c cmd /c cmd /c rmdir /s /q "${wt}"`;
+      expect(decide(deep, named()).block).toMatch(/too deeply nested/);
+      expect(decide("bash -lc \"echo hi\"", armed())).toBeNull();
+      expect(decide("pwsh -NoProfile -c \"Get-ChildItem\"", armed())).toBeNull();
     });
   });
 });

@@ -290,18 +290,34 @@ function dirDeletesInTokens(t) {
   return paths.map(a => ({ dir: null, kind: 'dir', target: a }));
 }
 
-const PREFIX_CMDS = new Set(['env', 'command', 'sudo', 'time', 'nohup', 'exec', 'builtin']);
-const SHELL_WRAP_RE = /^(cmd|bash|sh|zsh|dash|powershell|pwsh)$/i;
+const PREFIX_CMDS = new Set(['env', 'command', 'sudo', 'time', 'nohup', 'exec', 'builtin', 'doas', 'nice', 'timeout']);
+// prefix options that take a value: `sudo -u root rm …` must not read `root` as the command
+const PREFIX_VALUE_OPTS = {
+  sudo: /^-[ughpCDrtUT]$/, doas: /^-[uC]$/, env: /^-[uCS]$/, time: /^-[fo]$/, exec: /^-a$/, nice: /^-n$/,
+};
+const SHELL_WRAP_RE = /^(cmd|bash|sh|zsh|dash|ksh|powershell|pwsh)$/i;
+const RUNS_SOMETHING_RE = /^(git|cmd|bash|sh|zsh|dash|ksh|powershell|pwsh|rm|rmdir|rd|remove-item|ri|del|erase)$/i;
+const PS_COMMAND_RE = /^-c(o(m(m(a(n(d)?)?)?)?)?)?$|^--command$/i;
+const PS_ENCODED_RE = /^-e(n(c(o(d(e(d(c(o(m(m(a(n(d)?)?)?)?)?)?)?)?)?)?)?)?)?$|^-ec$/i;
+const PS_FILE_RE = /^-f(i(l(e)?)?)?$/i;
+const PS_VALUE_OPTS_RE = /^-(ex(ecutionpolicy)?|ep|w(indowstyle)?|wd|workingdirectory|v(ersion)?|if|inputformat|of|outputformat|config(urationname)?|psconsolefile)$/i;
+
+function baseName(tok) { return (tok || '').replace(/^.*[\\/]/, '').replace(/\.exe$/i, ''); }
 
 /**
- * The commands one segment really runs: prefixes (`env A=1`, `sudo`, `nohup`)
- * dropped, and a shell wrapper (`cmd /c "…"`, `bash -c "…"`,
- * `powershell -Command "…"`) opened into every segment of its payload.
+ * The commands one segment really runs: prefixes (`env A=1`, `sudo -u x`,
+ * `nohup`) dropped, and a shell wrapper (`cmd /c "…"`, `bash -lc "…"`,
+ * `powershell -Command "…"`) opened into every segment of its payload. What
+ * the parser cannot open — an encoded command, a script file run by
+ * PowerShell, nesting deeper than four wrappers, a prefix whose options it
+ * does not know in front of a command — comes back as an unresolved marker,
+ * so the gate refuses it instead of passing it.
  * @returns {string[][]}
  */
 function unwrap(tokens, depth = 0) {
+  const unresolvedAs = (why) => [['__unresolved__', why]];
   let t = tokens.slice();
-  let prefixed = false;
+  let prefix = null;
   while (t.length) {
     if (t[0].startsWith('(')) { // `(rm -rf X)` subshell
       t[0] = t[0].slice(1);
@@ -309,19 +325,49 @@ function unwrap(tokens, depth = 0) {
       if (t[last].endsWith(')')) t[last] = t[last].slice(0, -1);
       if (t[last] === '' && last > 0) t.pop();
     }
+    const h = t[0].toLowerCase();
     if (t[0] === '') t = t.slice(1);
-    else if (PREFIX_CMDS.has(t[0].toLowerCase())) { prefixed = true; t = t.slice(1); }
-    else if (/^\w+=/.test(t[0]) || (prefixed && t[0].startsWith('-'))) t = t.slice(1);
+    else if (PREFIX_CMDS.has(h)) { prefix = h; t = t.slice(1); }
+    else if (/^\w+=/.test(t[0])) t = t.slice(1);
+    else if (prefix && t[0].startsWith('-')) {
+      const re = PREFIX_VALUE_OPTS[prefix];
+      t = t.slice(re && re.test(t[0]) ? 2 : 1);
+    } else if (prefix === 'timeout' && /^\d+[smhd]?$/.test(t[0])) t = t.slice(1);
     else break;
   }
-  const name = (t[0] || '').replace(/^.*[\\/]/, '').replace(/\.exe$/i, '');
-  if (depth > 3 || !SHELL_WRAP_RE.test(name)) return [t];
-  const c = t.findIndex((a, i) => i > 0 && /^([/-](c|k|command|encodedcommand)|--command)$/i.test(a));
+  // a prefix option the table does not know may have eaten the real command
+  if (prefix && !RUNS_SOMETHING_RE.test(baseName(t[0])) && t.slice(1).some(a => RUNS_SOMETHING_RE.test(baseName(a)))) {
+    return unresolvedAs(`a "${prefix}" prefix with options the gate cannot read`);
+  }
+  const name = baseName(t[0]);
+  if (!SHELL_WRAP_RE.test(name)) return [t];
+  if (depth > 3) return unresolvedAs('too deeply nested shell wrappers');
+  const open = (payload) => segments(payload).flatMap(s => unwrap(s.tokens, depth + 1));
+  const rest = t.slice(1);
+  if (/^cmd$/i.test(name)) {
+    const c = rest.findIndex(a => /^\/[ckr]/i.test(a));
+    if (c === -1) return [t];
+    const glued = rest[c].slice(2); // `/c"rmdir …"` or `/crmdir`
+    return open([glued, ...rest.slice(c + 1)].filter(Boolean).join(' '));
+  }
+  if (/^(powershell|pwsh)$/i.test(name)) {
+    if (rest.some(a => PS_ENCODED_RE.test(a))) return unresolvedAs('an encoded command');
+    if (rest.some(a => PS_FILE_RE.test(a))) return unresolvedAs('a script file');
+    const c = rest.findIndex(a => PS_COMMAND_RE.test(a));
+    if (c !== -1) return open(rest.slice(c + 1).join(' '));
+    // no -Command: the first positional argument is the command
+    const payload = [];
+    for (let i = 0; i < rest.length; i++) {
+      if (payload.length) { payload.push(rest[i]); continue; }
+      if (PS_VALUE_OPTS_RE.test(rest[i])) { i++; continue; }
+      if (!rest[i].startsWith('-')) payload.push(rest[i]);
+    }
+    return payload.length ? open(payload.join(' ')) : [t];
+  }
+  // POSIX shells: `-c`, also bundled (`-lc`, `-ec`); without it a script file runs
+  const c = rest.findIndex(a => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a));
   if (c === -1) return [t];
-  if (/^-encodedcommand$/i.test(t[c])) return [['__unresolved__', 'an encoded command']];
-  // the payload: one quoted token (`"rmdir /s /q X"`) or the rest of the line
-  const payload = t.slice(c + 1).join(' ');
-  return segments(payload).flatMap(s => unwrap(s.tokens, depth + 1));
+  return open(rest.slice(c + 1).join(' '));
 }
 
 /**
