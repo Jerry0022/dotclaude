@@ -61,8 +61,8 @@
  *   Interrupted title (F5, 0.10.0): a turn that would pass WITHOUT a card
  *   while the session title (read off the transcript) is still the bare
  *   `⏳ ` is blocked once with a title instruction that renames it to
- *   `👉 ┃ ⚡ Interrupted <title>`. A batch, a waiting concept, a running
- *   `⏳ ┃ 🚀 Shipping ` and every other named state stay untouched; silent
+ *   `👉 ➜ ⚡ Interrupted ┃ <title>`. A batch, a waiting concept, a running
+ *   `⏳ ➜ 🚀 Shipping ┃ ` and every other named state stay untouched; silent
  *   ticks, scheduled tasks and an active guide are skipped. A per-session
  *   marker lets the follow-up stop through, so it never loops.
  *
@@ -105,7 +105,7 @@ const INTERRUPT_FLAG = 'dotclaude-devops-interrupt-title';
  * The block reason that renames a card-less turn's bare `⏳ ` title (F5):
  * the exact title, one set call, nothing else in the reply.
  *
- * @param {string} title the `👉 ┃ ⚡ Interrupted …` title
+ * @param {string} title the `👉 ➜ ⚡ Interrupted ┃ …` title
  * @returns {string}
  */
 function interruptReason(title) {
@@ -299,8 +299,8 @@ process.stdin.on('end', () => {
 
   // F5: a turn that ends WITHOUT a card must not leave the bare `⏳ ` claiming
   // Claude still works. Only a bare hourglass is rewritten (to
-  // `👉 ┃ ⚡ Interrupted …`): a batch title (a batch turn without a card is
-  // intended), a waiting concept, a running `⏳ ┃ 🚀 Shipping ` and every
+  // `👉 ➜ ⚡ Interrupted ┃ …`): a batch title (a batch turn without a card is
+  // intended), a waiting concept, a running `⏳ ➜ 🚀 Shipping ┃ ` and every
   // named state stay. Title known only from the transcript (Desktop) — the
   // terminal has none, so nothing happens there. The rename is a title
   // instruction like the card's (exact title, no get_session), delivered as a

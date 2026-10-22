@@ -81,8 +81,8 @@ falls back to the get_session instruction above. The completion card's
 from the card's `session_id` + `cwd` and names the exact title, set in the same
 message as the card's `show_widget` call. The skills' mode steps do too:
 `post.flow.title-mode` answers a `do-ship` Skill load and the do-batch
-`activate` / `deactivate` commands with the exact `⏳ ┃ 🚀 Shipping ` /
-`👉 ┃ 📚 Batch ` / stripped title, and `prompt.batch.collect` puts it into the
+`activate` / `deactivate` commands with the exact `⏳ ➜ 🚀 Shipping ┃ ` /
+`👉 ➜ 📚 Batch ┃ ` / stripped title, and `prompt.batch.collect` puts it into the
 merge context — `get_session` only when the title is unknown.
 
 ## When the server is genuinely down: `Connection closed`

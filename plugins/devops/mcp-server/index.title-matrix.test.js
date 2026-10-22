@@ -207,8 +207,8 @@ describe("title = CTA — every completion-card variant × every heading/prefix 
       expect(reached.has(`${status} ┃ ${act} ${word}`), id).toBe(true);
     }
     // Both statuses of a done state are exercised: 🟩 and the 👉 a mandatory step raises.
-    expect(reached.has("🟩 ┃ 🚀 Released Alpha")).toBe(true);
-    expect(reached.has("👉 ┃ 🚀 Released Alpha")).toBe(true);
+    expect(reached.has("🟩 ➜ 🚀 Released Alpha ┃")).toBe(true);
+    expect(reached.has("👉 ➜ 🚀 Released Alpha ┃")).toBe(true);
   });
 
   test("an optional promote offer keeps 🟩, a mandatory step makes it 👉 — the heading follows", () => {
@@ -216,7 +216,7 @@ describe("title = CTA — every completion-card variant × every heading/prefix 
     expect(optional.heading).toBe("🟩 🚀 Released Alpha — v0.1.0 — nach Beta promoten?");
     const mandatory = evaluate({ variant: "ship-successful", state: SHIPPED, delivery: ring("alpha"), userFinalTest: FINAL }, "en");
     expect(mandatory.heading).toBe("👉 🚀 Released Alpha — v0.1.0 — promote to beta?");
-    expect(mandatory.title).toBe("👉 ┃ 🚀 Released Alpha ");
+    expect(mandatory.title).toBe("👉 ➜ 🚀 Released Alpha ┃ ");
   });
 
   test("worked examples from the concept read exactly", () => {

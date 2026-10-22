@@ -15,7 +15,7 @@ import TITLE_SCHEME_MOD from "../lib/title-scheme.js";
 describe("prompt.flow.title-work", () => {
   test("the generic prefix is SESSION_PREFIX.work — Solo, no named process", () => {
     expect(WORK_PREFIX).toBe(SESSION_PREFIX.work);
-    expect(WORK_PREFIX).toBe("⏳ ┃ 🤖 Solo ");
+    expect(WORK_PREFIX).toBe("⏳ ➜ 🤖 Solo ┃ ");
   });
 
   test("the worded hourglass is legacy only; the hook and the card share one legacy list", () => {
@@ -28,7 +28,7 @@ describe("prompt.flow.title-work", () => {
     expect(CONCEPT_PREFIX).toBe(SESSION_PREFIX["concept-waiting"]);
     expect(BATCH_PREFIX).toBe(SESSION_PREFIX.batch);
     expect(SHIPPING_PREFIX).toBe(SESSION_PREFIX.shipping);
-    expect(SHIPPING_PREFIX).toBe("⏳ ┃ 🚀 Shipping ");
+    expect(SHIPPING_PREFIX).toBe("⏳ ➜ 🚀 Shipping ┃ ");
   });
 
   test("the instruction names both session-mgmt tools, the hourglass, and the silent-skip rule", () => {
@@ -102,7 +102,7 @@ describe("prompt.flow.title-work", () => {
     const text = instruction();
     expect(text).toContain(`already starts with "${SHIPPING_PREFIX}" (or the legacy "🚀 Shipping – "): do nothing`);
     expect(text).toMatch(/hourglass is only the fallback/);
-    expect(text).toMatch(/any other "⏳ ┃ <Word> <activity> " prefix \(a running named process\): do nothing/);
+    expect(text).toMatch(/any other "⏳ ➜ <activity> <Word> ┃ " prefix \(a running named process\): do nothing/);
     expect(text).toContain(`"${WORK_PREFIX}" + <stripped title>`);
     expect(instruction(WORK_PREFIX)).toBe(text);
   });
@@ -215,24 +215,24 @@ describe("prompt.flow.title-work — title known from the transcript", () => {
 
   test("a title that is already right → no output at all", () => {
     expect(out("⏳ Login")).toBe("");
-    expect(out("👉 ┃ 📚 Batch Queue")).toBe("");
+    expect(out("👉 ➜ 📚 Batch ┃ Queue")).toBe("");
     expect(out("📥 Batch – Queue")).toBe("");
-    expect(out("⏳ ┃ 🚀 Shipping Login")).toBe("");
+    expect(out("⏳ ➜ 🚀 Shipping ┃ Login")).toBe("");
     expect(out("🚀 Shipping – Login")).toBe("");
     // R1: every ⏳ two-slot process stays — the bare-⏳ shortcut is not what keeps them.
-    expect(out("⏳ ┃ 🧭 Concept Login")).toBe("");
-    expect(out("⏳ ┃ 🤖 Team Login")).toBe("");
-    expect(out("⏳ ┃ 🧪 Testing Login")).toBe("");
+    expect(out("⏳ ➜ 🧭 Concept ┃ Login")).toBe("");
+    expect(out("⏳ ➜ 🤖 Team ┃ Login")).toBe("");
+    expect(out("⏳ ➜ 🧪 Testing ┃ Login")).toBe("");
   });
 
   test("a ship prompt gets the Shipping title and the Pre-Step C note", () => {
     const text = out("⏳ Login", "/do-ship");
-    expect(text).toContain("title:" + JSON.stringify("⏳ ┃ 🚀 Shipping Login"));
+    expect(text).toContain("title:" + JSON.stringify("⏳ ➜ 🚀 Shipping ┃ Login"));
     expect(text).toMatch(/Pre-Step C/);
   });
 
   test("a waiting concept title yields and names the card that restores it", () => {
-    for (const cur of ["👉 ┃ 🧭 Concept Dashboard", "🧭 Concept – Dashboard"]) {
+    for (const cur of ["👉 ➜ 🧭 Concept ┃ Dashboard", "🧭 Concept – Dashboard"]) {
       const text = out(cur);
       expect(text, cur).toContain("title:" + JSON.stringify(WORK_PREFIX + "Dashboard"));
       expect(text, cur).toMatch(/sets it again/);
@@ -240,7 +240,7 @@ describe("prompt.flow.title-work — title known from the transcript", () => {
   });
 
   test("a machine turn leaves an outcome alone", () => {
-    expect(out("🟩 ┃ 🚀 Released Alpha Login", "<task-notification>\n<status>completed</status>\n</task-notification>")).toBe("");
+    expect(out("🟩 ➜ 🚀 Released Alpha ┃ Login", "<task-notification>\n<status>completed</status>\n</task-notification>")).toBe("");
   });
 
   test("title unknown (no entry, no transcript) → the get_session fallback", () => {
@@ -264,7 +264,7 @@ describe("prompt.flow.title-work — title known from the transcript", () => {
         releaseTitleWork(sid);
       }
     };
-    expect(run("👉 ┃ 📦 Ready Login")).toContain("title:" + JSON.stringify(WORK_PREFIX + "Login"));
+    expect(run("👉 ➜ 📦 Ready ┃ Login")).toContain("title:" + JSON.stringify(WORK_PREFIX + "Login"));
     expect(run("📦 Ready – Login")).toContain("title:" + JSON.stringify(WORK_PREFIX + "Login"));
     expect(run("⏳ Login")).toBe("");
   });

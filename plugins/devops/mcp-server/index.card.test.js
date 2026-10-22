@@ -1237,7 +1237,7 @@ describe("render_completion_card — concept close-out after the implement ship 
       expect(deText).not.toMatch(/weiter in/);
       const all = de.content.map(c => c.text).join("\n");
       expect(all).not.toContain("\"🧭 Concept – \" +");
-      expect(all).toContain("set the title to \"" + "👉 ┃ 🚀 Released Alpha " + "\" +");
+      expect(all).toContain("set the title to \"" + "👉 ➜ 🚀 Released Alpha ┃ " + "\" +");
       const en = await cardText({ ...kept, summary: "x", lang: "en", session_id: "test-closeout-en", cwd });
       expect(en).toMatch(/^## 👉 🚀 Released Alpha — v0\.1\.0 — Close out the concept – final report is waiting\.$/m);
       expect(en).not.toMatch(/continue on/);
