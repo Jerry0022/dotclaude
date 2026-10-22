@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.batch.collect
- * @version 0.11.0
+ * @version 0.12.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Collect mode for `/do-batch`: while active, blocks the user
@@ -803,17 +803,44 @@ process.stdin.on('end', () => {
   let modeActive;
   let marker;
   let verdict;
+  let foreign = false;
   try {
     modeActive = B.isModeActive(cwd);
     marker = B.effectiveMarker(cwd);
-    verdict = B.classify({ text, hookInput: hook, marker, modeActive });
+    foreign = B.isForeignSession(cwd, hook.session_id);
+    verdict = B.classify({ text, hookInput: hook, marker, modeActive, foreign });
   } catch {
     process.exit(0); // never let a classification bug swallow a prompt
   }
 
+  // The session that collects owns the queue (#841). Claimed on collect/rearm
+  // and for a mode the skill activated without a session id.
+  try {
+    if (modeActive && (verdict === 'collect' || verdict === 'rearm' || !B.readMode(cwd)?.sessionId)) {
+      B.claimMode(cwd, hook.session_id);
+    }
+  } catch { /* advisory */ }
+
   // A real user prompt advances the clock the watchdog reads whatever happens to
   // it next, so a later activation starts from a truthful timestamp.
   try { if (!B.isMachinePrompt(text)) B.touchActivity(cwd); } catch { /* non-fatal */ }
+
+  if (verdict === 'foreign') {
+    // A marker word in a session that did not collect these notes (#841): the
+    // prompt is the user's own, so it runs untouched — no merge, no hand-off
+    // gate. A mode still active is its owner's live collection: leave it be.
+    // Otherwise the notes are orphaned: archive (never delete) and say where.
+    if (!modeActive) {
+      try {
+        const dest = B.archiveNotes(cwd);
+        if (dest) {
+          B.deactivate(cwd);
+          process.stdout.write(`[do-batch] Notizen einer anderen Session archiviert (nicht gemerged): ${dest} — \`/do-batch go\` übernimmt sie bewusst.\n`);
+        }
+      } catch { /* advisory — the prompt still runs */ }
+    }
+    process.exit(0);
+  }
 
   if (verdict === 'execute') {
     // Reached with the mode off as well: an expired or note-capped mode must not
