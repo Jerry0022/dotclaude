@@ -152,6 +152,11 @@ describe("remoteDeleteRefs", () => {
     "git push origin --delete 'ma'in",
     "(git push origin --delete main)",
     "git push origin --delete $(echo main)",
+    "git push origin --delete refs/tags/v1",
+    "git push origin --delete a,main",
+    "git push origin --delete @{u}",
+    "git push origin --delete ~main",
+    "git push :x --delete y",
     "git status",
     "",
   ])("%j -> null", (cmd) => {

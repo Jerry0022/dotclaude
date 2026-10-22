@@ -20,10 +20,13 @@
  *
  *   Allowed on main: deleting remote branches that are not the default
  *   branch (`git push <remote> --delete|-d <ref>...`, `git push <remote>
- *   :<ref>`) — it writes neither local nor remote main. Protected: main,
- *   master and the branch origin/HEAD points to. Every push in the command
- *   must be such a pure delete (no --force/--mirror/--all/--prune); any other
- *   write command chained in (`&& git commit`) still blocks.
+ *   :<ref>`) — it writes neither local nor remote main. Protected
+ *   (case-insensitive): main, master and the branch refs/remotes/<remote>/HEAD
+ *   points to for every remote named; a remote without a known HEAD blocks
+ *   (fail closed). Every push in the command must be such a pure delete (no
+ *   --force/--mirror/--all/--prune, plain ref names only); any other write
+ *   command chained in (`&& git commit`) still blocks. Bash only: a
+ *   PowerShell command keeps the plain block.
  *
  *   Read-only git commands (status, log, diff, fetch, branch listing) pass
  *   through untouched.
@@ -42,10 +45,10 @@
 // A lib that fails to load (half-written during a plugin update, version skew)
 // makes this hook a silent no-op instead of a hook error on every Bash call
 // (AUD-028).
-let gitOut, sentinelActive, isLinkedWorktree, branchFix, ownWorktreeDecided, BYPASS, gitCommandRe, matchesGitCommand, WORD_END, remoteDeleteRefs;
+let gitOut, sentinelActive, isLinkedWorktree, branchFix, ownWorktreeDecided, BYPASS, gitCommandRe, matchesGitCommand, WORD_END, remoteDeleteTargets;
 try {
   require('../lib/plugin-guard');
-  ({ gitCommandRe, matchesGitCommand, WORD_END, remoteDeleteRefs } = require('../lib/ship-guard-match'));
+  ({ gitCommandRe, matchesGitCommand, WORD_END, remoteDeleteTargets } = require('../lib/ship-guard-match'));
   ({ gitOut } = require('../lib/git-timeout'));
   ({ isActive: sentinelActive } = require('../lib/ship-sentinel'));
   ({ isLinkedWorktree } = require('../lib/project-root'));
@@ -120,13 +123,20 @@ process.stdin.on('end', () => {
   if (branch !== 'main' && branch !== 'master') process.exit(0);
 
   // Only a push matched: a pure delete of non-default remote branches is fine.
-  if (!otherWrite) {
-    const refs = remoteDeleteRefs(cmd);
-    if (refs) {
-      const head = gitOut(cwd, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD']);
-      const def = head ? head.replace(/^[^/]+\//, '') : null;
-      const protectedRefs = new Set(['main', 'master', def].filter(Boolean));
-      if (!refs.some(r => protectedRefs.has(r))) process.exit(0);
+  // Bash syntax only — PowerShell parses arguments differently, so it keeps
+  // the plain block. Each named remote's default branch must be readable
+  // (refs/remotes/<remote>/HEAD); unknown → block (fail closed).
+  if (!otherWrite && tool === 'Bash') {
+    const t = remoteDeleteTargets(cmd);
+    if (t) {
+      const protectedRefs = new Set(['main', 'master']);
+      let known = true;
+      for (const remote of t.remotes) {
+        const head = gitOut(cwd, ['symbolic-ref', '--quiet', '--short', `refs/remotes/${remote}/HEAD`]);
+        if (!head || !head.startsWith(`${remote}/`)) { known = false; break; }
+        protectedRefs.add(head.slice(remote.length + 1).toLowerCase());
+      }
+      if (known && !t.refs.some(r => protectedRefs.has(r.toLowerCase()))) process.exit(0);
     }
   }
 

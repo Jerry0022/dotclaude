@@ -54,6 +54,7 @@ beforeAll(() => {
   git(["commit", "-qm", "c1"], mainDir);
   git(["remote", "add", "origin", origin], mainDir);
   git(["push", "-q", "origin", "main"], mainDir);
+  git(["remote", "set-head", "origin", "main"], mainDir);
   featDir = join(mainDir, ".claude", "worktrees", "feat");
   git(["worktree", "add", "-q", "-b", "feat/x", featDir, "main"], mainDir);
   onMainDir = join(mainDir, ".claude", "worktrees", "onmain");
@@ -292,8 +293,16 @@ describe("pre.main.guard", () => {
     "git push origin main",
     "git push --force origin --delete feat/x",
     "git push origin --delete foo && git commit -m x",
+    "git push origin --delete MAIN",
+    // a remote whose default branch is unknown → fail closed
+    "git push upstream --delete feat/x",
   ])("main checkout: %j stays blocked", (command) => rootOnMain(() => {
     expect(cmdOnMain(command).status).toBe(2);
+  }), TIMEOUT);
+
+  test("PowerShell keeps the plain block (its argument parsing differs)", () => rootOnMain(() => {
+    const r = run(MAIN, { tool_name: "PowerShell", cwd: mainDir, tool_input: { command: "git push origin --delete feat/x" } });
+    expect(r.status).toBe(2);
   }), TIMEOUT);
 });
 
