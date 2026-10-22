@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.299.0] — 2026-10-22
+
+A checkout on the default branch now keeps itself current: the background git sync fast-forwards `main` (or `master`) from its remote, the same way it merges `main` into feature branches.
+
+Why: on the default branch the sync stopped at "on main itself … pull first", so a main checkout never moved and a project that dropped its own `git pull` went stale (#802). Rejected: merging a diverged main, because a merge commit on main is a decision, not a background sync.
+
+### Added
+- **Default-branch sync.** `git-sync` (v0.9.0) fetches `origin/<default>` and fast-forwards with `--ff-only` under the same guards as on a feature branch: dirty overlap, a merge/rebase in progress, `/do-ship` in flight, detached HEAD. A main with unpushed local commits is never merged; `--explain` reports `– origin/main → main: skipped: main has N unpushed local commit(s) — not merging`. A fast-forward reports `✓ origin/main → main: N commit(s)`; an up-to-date main stays silent.
+- **Hooks.** `ss.git.sync` (v1.2.0) and `stop.git.sync` (v0.4.0) no longer exit early on a literal `main`; the default branch is detected by the script.
+
 ## [0.298.5] — 2026-10-22
 
 A governor block message now carries the local time it was written and says it is a snapshot of the load at that moment, not a diagnosis of errors that show up later.
