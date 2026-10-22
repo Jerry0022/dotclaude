@@ -175,7 +175,10 @@ To get the servers back for later sessions:
    (stdio servers never need auth; the other entries stay). The SessionStart
    hook `ss.mcp.failcache` does this at every start — it runs concurrently with
    the MCP boot, so it rescues the *next* start, and says so when an entry was
-   still blocking. Without the hook (older install): remove the keys by hand.
+   still blocking. It blames another session only when every entry predates
+   this session's start; a newer entry is this session's own connect failure,
+   whose cause is in the MCP logs (`mcp-logs-plugin-devops-*`). Without the
+   hook (older install): remove the keys by hand.
 2. The user restarts the session.
 
 A restart is optional — the offline entry points above cover card, ship and

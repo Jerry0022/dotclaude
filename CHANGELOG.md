@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.298.4] — 2026-10-22
+
+The SessionStart notice about a skipped devops MCP connect no longer blames "another session" when the failure was this session's own. It names another session only when the cached failure predates this session's start.
+
+Why: `ss.mcp.failcache` read every active `plugin:devops:*` entry in Claude Code's failure cache as another session's timeout. On a resume right after a plugin update the entry was this session's own boot failure (`ERR_MODULE_NOT_FOUND`, #824), and the notice sent the user hunting for a session that did not exist (#823). Accepted trade-off: a foreign entry younger than 60 s before this start is reported neutrally.
+
+### Fixed
+- **Failure-cache notice.** `ss.mcp.failcache` (v0.2.0) compares each entry's timestamp with the session start (process uptime, 60 s slack). Own failure → "failed to connect in this session; the cause is in the MCP logs (`mcp-logs-plugin-devops-*`)". Older entry → the previous "another session's connect timeout" text. Both keep the offline entry points (`--render-card`, `ship/cli.js`) and the restart hint; the hook still exits 0 on any error.
+
 ## [0.298.3] — 2026-10-22
 
 The devops MCP servers no longer stay down for a whole session when Claude Code starts them right after a plugin update. They wait for their dependencies and connect once those arrive.
