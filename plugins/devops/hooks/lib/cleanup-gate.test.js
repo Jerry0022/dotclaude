@@ -344,6 +344,13 @@ describe("hasLanded / decide against a real repo", () => {
       ["no recursive switch at all", (p) => `rmdir "${p}"`],
       ["trailing slash, other case", (p) => `rm -rf "${p.toUpperCase()}/"`],
       ["relative path", (p) => `rm -rf "${path.relative(w.repo, p)}"`],
+      ["after a single &", (p) => `echo hi & rm -rf "${p}"`],
+      ["second command inside cmd /c", (p) => `cmd /c "cd C:/ && rmdir /s /q ${p.replace(/\\/g, "/")}"`],
+      ["bash -c", (p) => `bash -c "rm -rf '${p}'"`],
+      ["powershell -Command", (p) => `powershell -NoProfile -Command "Remove-Item -Recurse -Force '${p}'"`],
+      ["env / sudo / nohup prefix", (p) => `env A=1 nohup rm -rf "${p}"`],
+      ["subshell", (p) => `( rm -rf "${p}" )`],
+      ["comma list", (p) => `Remove-Item -Path "${other}","${p}" -Recurse`],
     ])("unconfirmed worktree delete is refused: %s", (_n, cmd) => {
       expect(decide(cmd(wt), armed(dryRun(["- feat/squash"]))).block).toMatch(/does not name/);
     });
@@ -374,6 +381,10 @@ describe("hasLanded / decide against a real repo", () => {
       expect(decide(`rm -f "${path.join(wt, "x.txt")}"`, armed())).toBeNull();
       expect(decide(`rm -rf "${path.join(wt, "node_modules")}"`, armed())).toBeNull();
       expect(decide('rm -rf "$WT"', named()).block).toMatch(/not a literal path/);
+      expect(decide('rd /s /q "%WT%"', named()).block).toMatch(/not a literal path/);
+      expect(decide("rm -rf ~/repo/.claude/worktrees/done", named()).block).toMatch(/not a literal path/);
+      expect(decide(`Get-Item "${wt}" | Remove-Item -Recurse`, named()).block).toMatch(/from a pipe/);
+      expect(decide("powershell -EncodedCommand AAAA", armed()).block).toMatch(/encoded command/);
     });
   });
 });

@@ -219,6 +219,7 @@ function segments(command) {
     if (c === '"' || c === "'") { quote = c; has = true; continue; }
     if (c === '\n' || c === ';') { pushSeg(false); continue; }
     if (c === '&' && s[i + 1] === '&') { i++; pushSeg(false); continue; }
+    if (c === '&') { pushSeg(false); continue; } // cmd's `a & b`, bash background, PowerShell call operator
     if (c === '|' && s[i + 1] === '|') { i++; pushSeg(false); continue; }
     if (c === '|') { pushSeg(true); continue; }
     if (c === '{' || c === '}') { pushTok(); continue; }
@@ -259,15 +260,7 @@ const PS_PATH_PARAM_RE = /^-(literal)?path$/i;
  * not required. Whether a target is a worktree is decided in decide().
  * @returns {{dir: null, kind: 'dir', target: string}[]|{unresolved: string}|null}
  */
-function dirDeletesInTokens(tokens) {
-  let t = tokens;
-  if (/^cmd(\.exe)?$/i.test(t[0] || '')) {
-    const c = t.findIndex(a => /^\/[ck]$/i.test(a));
-    if (c === -1) return null;
-    t = t.slice(c + 1);
-    // `cmd /c "rmdir /s /q X"` — the inner command arrives as one token
-    if (t.length === 1 && /\s/.test(t[0])) t = (segments(t[0])[0] || { tokens: [] }).tokens;
-  }
+function dirDeletesInTokens(t) {
   const cmd = (t[0] || '').replace(/^.*[\\/]/, '').toLowerCase().replace(/\.exe$/, '');
   if (!DELETE_CMDS.has(cmd)) return null;
   const rest = t.slice(1);
@@ -286,10 +279,49 @@ function dirDeletesInTokens(tokens) {
     }
     args.push(a);
   }
-  if (!args.length) return null;
-  const bad = args.find(a => !literal(a));
+  if (!args.length) {
+    // `Get-Item X | Remove-Item -Recurse` — the targets arrive on the pipe
+    return /^(remove-item|ri)$/.test(cmd) ? { unresolved: `${cmd} gets its targets from a pipe` } : null;
+  }
+  // PowerShell `-Path A,B`; `%VAR%` and `~` are expanded by the shell, not here
+  const paths = args.flatMap(a => a.split(',')).filter(Boolean);
+  const bad = paths.find(a => !literal(a) || /%/.test(a) || a.startsWith('~'));
   if (bad) return { unresolved: `the delete target "${bad}" is not a literal path` };
-  return args.map(a => ({ dir: null, kind: 'dir', target: a }));
+  return paths.map(a => ({ dir: null, kind: 'dir', target: a }));
+}
+
+const PREFIX_CMDS = new Set(['env', 'command', 'sudo', 'time', 'nohup', 'exec', 'builtin']);
+const SHELL_WRAP_RE = /^(cmd|bash|sh|zsh|dash|powershell|pwsh)$/i;
+
+/**
+ * The commands one segment really runs: prefixes (`env A=1`, `sudo`, `nohup`)
+ * dropped, and a shell wrapper (`cmd /c "…"`, `bash -c "…"`,
+ * `powershell -Command "…"`) opened into every segment of its payload.
+ * @returns {string[][]}
+ */
+function unwrap(tokens, depth = 0) {
+  let t = tokens.slice();
+  let prefixed = false;
+  while (t.length) {
+    if (t[0].startsWith('(')) { // `(rm -rf X)` subshell
+      t[0] = t[0].slice(1);
+      const last = t.length - 1;
+      if (t[last].endsWith(')')) t[last] = t[last].slice(0, -1);
+      if (t[last] === '' && last > 0) t.pop();
+    }
+    if (t[0] === '') t = t.slice(1);
+    else if (PREFIX_CMDS.has(t[0].toLowerCase())) { prefixed = true; t = t.slice(1); }
+    else if (/^\w+=/.test(t[0]) || (prefixed && t[0].startsWith('-'))) t = t.slice(1);
+    else break;
+  }
+  const name = (t[0] || '').replace(/^.*[\\/]/, '').replace(/\.exe$/i, '');
+  if (depth > 3 || !SHELL_WRAP_RE.test(name)) return [t];
+  const c = t.findIndex((a, i) => i > 0 && /^([/-](c|k|command|encodedcommand)|--command)$/i.test(a));
+  if (c === -1) return [t];
+  if (/^-encodedcommand$/i.test(t[c])) return [['__unresolved__', 'an encoded command']];
+  // the payload: one quoted token (`"rmdir /s /q X"`) or the rest of the line
+  const payload = t.slice(c + 1).join(' ');
+  return segments(payload).flatMap(s => unwrap(s.tokens, depth + 1));
 }
 
 /**
@@ -366,8 +398,8 @@ function parseDeletes(command, cwd) {
   const deletes = [];
   const unresolved = [];
   let dir = cwd;
-  for (const seg of segments(command)) {
-    const t = seg.tokens;
+  for (const t of segments(command).flatMap(seg => unwrap(seg.tokens))) {
+    if (t[0] === '__unresolved__') { unresolved.push(`a shell wrapper runs ${t[1]}`); continue; }
     if (/^(cd|Set-Location|sl|pushd)$/i.test(t[0]) && t[1] && !t[1].startsWith('-')) {
       if (literal(t[1])) dir = path.resolve(dir, t[1]);
       continue;
