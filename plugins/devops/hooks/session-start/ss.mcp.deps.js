@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.mcp.deps
- * @version 0.5.0
+ * @version 0.5.1
  * @event SessionStart
  * @plugin devops
  * @description Auto-install MCP server dependencies into CLAUDE_PLUGIN_DATA,
@@ -24,7 +24,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
-import { hasAllDeps, linkHealthy, linkTargets, relinkTargets } from "../../mcp-server/lib/ensure-deps.js";
+import { acquireInstallLock, hasAllDeps, linkHealthy, linkTargets, relinkTargets } from "../../mcp-server/lib/ensure-deps.js";
 
 const require = createRequire(import.meta.url);
 const { runOnce, releaseOnce } = require("../lib/run-once.js");
@@ -80,8 +80,16 @@ if (!broken && !FORCE && !runOnce("ss-mcp-deps", null, { cooldownMs: COOLDOWN_MS
   process.exit(0);
 }
 
-// Step 1: Install dependencies if needed
+// Step 1: Install dependencies if needed — under the install lock the servers
+// take too (#824), so a waiting server never deletes this install mid-run.
 if (needsInstall()) {
+  const releaseLock = acquireInstallLock(PLUGIN_DATA);
+  if (!releaseLock) {
+    // A server is installing right now; it relinks itself when done.
+    console.error("[dotclaude] MCP dependencies are being installed by another process — skipping.");
+    releaseOnce("ss-mcp-deps", null);
+    process.exit(0);
+  }
   console.error("[dotclaude] Installing MCP dependencies...");
   try {
     mkdirSync(PLUGIN_DATA, { recursive: true });
@@ -98,10 +106,12 @@ if (needsInstall()) {
       stdio: ["pipe", "pipe", "pipe"],
     });
 
+    releaseLock();
     console.error("[dotclaude] MCP dependencies installed.");
   } catch (err) {
     console.error("[dotclaude] Failed to install MCP dependencies:", err.message);
     try { unlinkSync(CACHED_PKG); } catch { /* ignore */ }
+    releaseLock();
     // Hand the cooldown token back — the work did not succeed, so the next
     // session must be free to retry instead of waiting out 24 h on a failure.
     releaseOnce("ss-mcp-deps", null);

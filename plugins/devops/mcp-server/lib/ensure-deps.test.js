@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from "node:
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ensureDeps } from "./ensure-deps.js";
+import { acquireInstallLock, ensureDeps } from "./ensure-deps.js";
 
 const LIB = join(dirname(fileURLToPath(import.meta.url)), "ensure-deps.js");
 
@@ -61,6 +61,18 @@ console.error("SHOULD NOT REACH");`;
     const lines = r.stderr.trim().split(/\r?\n/);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/dependencies .*@modelcontextprotocol\/sdk.* not found/);
+    rmSync(f.root, { recursive: true, force: true });
+  });
+
+  test("install lock is exclusive between the hook and the servers", () => {
+    const f = fixture();
+    const release = acquireInstallLock(f.data);
+    expect(typeof release).toBe("function");
+    expect(acquireInstallLock(f.data)).toBeNull();
+    release();
+    const again = acquireInstallLock(f.data);
+    expect(typeof again).toBe("function");
+    again();
     rmSync(f.root, { recursive: true, force: true });
   });
 });

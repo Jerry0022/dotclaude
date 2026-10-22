@@ -68,22 +68,34 @@ export function relinkTargets(dataModules, targets = linkTargets()) {
 
 const LOCK_STALE_MS = 90_000;
 
-/** Last resort: npm install into PLUGIN_DATA, once across the three servers. */
-function tryInstall(pluginData, mcpRoot) {
+/**
+ * The one install lock for PLUGIN_DATA, shared by the ss.mcp.deps hook and the
+ * servers: whoever holds it may delete and reinstall node_modules, everyone
+ * else leaves it alone. Returns a release function, or null when another
+ * process holds a lock younger than LOCK_STALE_MS.
+ */
+export function acquireInstallLock(pluginData) {
   const lock = join(pluginData, ".install.lock");
   try {
     mkdirSync(pluginData, { recursive: true });
     try { if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) rmdirSync(lock); } catch { /* none */ }
     mkdirSync(lock); // atomic: EEXIST means another process (hook/server) is on it
-  } catch { return; }
+  } catch { return null; }
+  return () => { try { rmdirSync(lock); } catch { /* ignore */ } };
+}
+
+/** Last resort: npm install into PLUGIN_DATA, once across the three servers. */
+function tryInstall(pluginData, mcpRoot) {
+  const release = acquireInstallLock(pluginData);
+  if (!release) return;
   try {
     const dataModules = join(pluginData, "node_modules");
     if (existsSync(dataModules) && !hasAllDeps(dataModules)) rmSync(dataModules, { recursive: true, force: true });
     writeFileSync(join(pluginData, "package.json"), readFileSync(join(mcpRoot, "package.json"), "utf8"));
-  } catch { try { rmdirSync(lock); } catch { /* ignore */ } return; }
+  } catch { release(); return; }
   const child = execFile("npm", ["install", "--omit=dev", "--no-fund", "--no-audit"],
     { cwd: pluginData, timeout: 60_000, windowsHide: true, shell: process.platform === "win32" },
-    () => { try { rmdirSync(lock); } catch { /* ignore */ } });
+    () => release());
   child.unref?.();
 }
 
