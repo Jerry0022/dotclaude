@@ -20,7 +20,9 @@
  *       (`Dry-Run…` = the manifest confirm, `Unmerged…` = one branch).
  *     - pre.cleanup.gate refuses every Bash/PowerShell delete — `git branch
  *       -d/-D/--delete`, `git push --delete` / `:ref` / `--prune` / `--mirror`,
- *       `git update-ref -d refs/heads/…`, `git worktree remove` — whose target
+ *       `git update-ref -d refs/heads/…`, `git worktree remove`, a recursive
+ *       directory delete of a worktree (`cmd /c rmdir /s /q`, `rm -rf`,
+ *       `Remove-Item -Recurse` — clean tree only, #829) — whose target
  *       is not named in the last yes-answered Dry-Run question, and every
  *       not-landed branch without its own yes.
  *
@@ -217,6 +219,7 @@ function segments(command) {
     if (c === '"' || c === "'") { quote = c; has = true; continue; }
     if (c === '\n' || c === ';') { pushSeg(false); continue; }
     if (c === '&' && s[i + 1] === '&') { i++; pushSeg(false); continue; }
+    if (c === '&') { pushSeg(false); continue; } // cmd's `a & b`, bash background, PowerShell call operator
     if (c === '|' && s[i + 1] === '|') { i++; pushSeg(false); continue; }
     if (c === '|') { pushSeg(true); continue; }
     if (c === '{' || c === '}') { pushTok(); continue; }
@@ -246,11 +249,88 @@ function stripRefsHeads(name) { return name.replace(/^refs\/heads\//, ''); }
 /** A target the gate can verify: a literal name, no expansion or glob. */
 function literal(t) { return typeof t === 'string' && t !== '' && !/[$`*?()[\]{}]/.test(t); }
 
+const DELETE_CMDS = new Set(['rm', 'rmdir', 'rd', 'remove-item', 'ri', 'del', 'erase']);
+const PS_PATH_PARAM_RE = /^-(literal)?path$/i;
+
+/**
+ * A directory delete — `cmd /c rmdir /s /q <p>`, `rd /s`, `rm -rf <p>`,
+ * `Remove-Item -Recurse <p>` — the native fast path for removing a worktree
+ * (#829). Every target counts, whatever the flags: a flag form the parser does
+ * not know must not let a worktree delete through, so the recursive switch is
+ * not required. Whether a target is a worktree is decided in decide().
+ * @returns {{dir: null, kind: 'dir', target: string}[]|{unresolved: string}|null}
+ */
+function dirDeletesInTokens(t) {
+  const cmd = (t[0] || '').replace(/^.*[\\/]/, '').toLowerCase().replace(/\.exe$/, '');
+  if (!DELETE_CMDS.has(cmd)) return null;
+  const rest = t.slice(1);
+  const args = [];
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (/^(\/[a-z])+$/i.test(a)) continue; // cmd switches, also combined (`/s/q`)
+    if (a.startsWith('-')) {
+      const colon = a.indexOf(':');
+      const name = colon === -1 ? a : a.slice(0, colon);
+      if (PS_PATH_PARAM_RE.test(name)) {
+        if (colon !== -1) args.push(a.slice(colon + 1));
+        else if (i + 1 < rest.length) args.push(rest[++i]);
+      }
+      continue;
+    }
+    args.push(a);
+  }
+  if (!args.length) {
+    // `Get-Item X | Remove-Item -Recurse` — the targets arrive on the pipe
+    return /^(remove-item|ri)$/.test(cmd) ? { unresolved: `${cmd} gets its targets from a pipe` } : null;
+  }
+  // PowerShell `-Path A,B`; `%VAR%` and `~` are expanded by the shell, not here
+  const paths = args.flatMap(a => a.split(',')).filter(Boolean);
+  const bad = paths.find(a => !literal(a) || /%/.test(a) || a.startsWith('~'));
+  if (bad) return { unresolved: `the delete target "${bad}" is not a literal path` };
+  return paths.map(a => ({ dir: null, kind: 'dir', target: a }));
+}
+
+const PREFIX_CMDS = new Set(['env', 'command', 'sudo', 'time', 'nohup', 'exec', 'builtin']);
+const SHELL_WRAP_RE = /^(cmd|bash|sh|zsh|dash|powershell|pwsh)$/i;
+
+/**
+ * The commands one segment really runs: prefixes (`env A=1`, `sudo`, `nohup`)
+ * dropped, and a shell wrapper (`cmd /c "…"`, `bash -c "…"`,
+ * `powershell -Command "…"`) opened into every segment of its payload.
+ * @returns {string[][]}
+ */
+function unwrap(tokens, depth = 0) {
+  let t = tokens.slice();
+  let prefixed = false;
+  while (t.length) {
+    if (t[0].startsWith('(')) { // `(rm -rf X)` subshell
+      t[0] = t[0].slice(1);
+      const last = t.length - 1;
+      if (t[last].endsWith(')')) t[last] = t[last].slice(0, -1);
+      if (t[last] === '' && last > 0) t.pop();
+    }
+    if (t[0] === '') t = t.slice(1);
+    else if (PREFIX_CMDS.has(t[0].toLowerCase())) { prefixed = true; t = t.slice(1); }
+    else if (/^\w+=/.test(t[0]) || (prefixed && t[0].startsWith('-'))) t = t.slice(1);
+    else break;
+  }
+  const name = (t[0] || '').replace(/^.*[\\/]/, '').replace(/\.exe$/i, '');
+  if (depth > 3 || !SHELL_WRAP_RE.test(name)) return [t];
+  const c = t.findIndex((a, i) => i > 0 && /^([/-](c|k|command|encodedcommand)|--command)$/i.test(a));
+  if (c === -1) return [t];
+  if (/^-encodedcommand$/i.test(t[c])) return [['__unresolved__', 'an encoded command']];
+  // the payload: one quoted token (`"rmdir /s /q X"`) or the rest of the line
+  const payload = t.slice(c + 1).join(' ');
+  return segments(payload).flatMap(s => unwrap(s.tokens, depth + 1));
+}
+
 /**
  * The deletions one segment's tokens perform.
- * @returns {{dir: string|null, kind: 'branch'|'remote'|'worktree', target: string, remote?: string}[]|{unresolved: string}|null}
+ * @returns {{dir: string|null, kind: 'branch'|'remote'|'worktree'|'dir', target: string, remote?: string}[]|{unresolved: string}|null}
  */
 function deletesInTokens(tokens) {
+  const native = dirDeletesInTokens(tokens);
+  if (native) return native;
   let i = tokens.findIndex(t => /(^|[\\/])git(\.exe)?$/i.test(t));
   if (i === -1) return null;
   const viaXargs = tokens.slice(0, i).some(t => /(^|[\\/])xargs(\.exe)?$/i.test(t));
@@ -318,8 +398,8 @@ function parseDeletes(command, cwd) {
   const deletes = [];
   const unresolved = [];
   let dir = cwd;
-  for (const seg of segments(command)) {
-    const t = seg.tokens;
+  for (const t of segments(command).flatMap(seg => unwrap(seg.tokens))) {
+    if (t[0] === '__unresolved__') { unresolved.push(`a shell wrapper runs ${t[1]}`); continue; }
     if (/^(cd|Set-Location|sl|pushd)$/i.test(t[0]) && t[1] && !t[1].startsWith('-')) {
       if (literal(t[1])) dir = path.resolve(dir, t[1]);
       continue;
@@ -446,17 +526,54 @@ const HOW_TO_CONFIRM =
  * @param {{command: string, cwd: string, state: object|null, gitFor: (dir: string) => ((args: string[]) => string|null)}} p
  * @returns {{block: string}|null}
  */
+/**
+ * A recursive directory delete is the gate's business only when it hits a
+ * worktree: registered in `git worktree list`, carrying a `.git` file, or under
+ * `.claude/worktrees/`. Such a delete skips git's own dirty-tree refusal, so
+ * the gate re-checks it: never the main checkout, never the session's own
+ * directory, and a live checkout only with a clean `git status`.
+ * @returns {{skip: true}|{block: string}|{ok: true}}
+ */
+function checkDirDelete(d, cwd, gitFor) {
+  const abs = normPath(path.resolve(d.dir, d.target));
+  const listed = (gitFor(d.dir)(['worktree', 'list', '--porcelain']) || '')
+    .split('\n').filter(l => l.startsWith('worktree ')).map(l => normPath(l.slice(9)));
+  const hasGitFile = fs.existsSync(path.join(path.resolve(d.dir, d.target), '.git'));
+  const inside = (p) => p === abs || p.startsWith(`${abs}/`);
+  if (listed[0] && inside(listed[0])) return { block: `${d.target} is (or holds) the main checkout.` };
+  if (inside(normPath(cwd))) return { block: `${d.target} holds this session's own directory.` };
+  const held = listed.filter(p => p !== abs && inside(p));
+  if (held.length) return { block: `${d.target} holds worktrees (${held.join(', ')}) — remove each one by its own path.` };
+  // a worktree folder itself, never a subfolder of one (`rm -rf dist` in a session worktree)
+  if (!listed.includes(abs) && !hasGitFile && !/\/\.claude\/worktrees\/[^/]+$/.test(abs)) return { skip: true };
+  if (hasGitFile) {
+    const status = gitFor(path.resolve(d.dir, d.target))(['status', '--porcelain']);
+    if (status === null) return { block: `git status of ${d.target} could not be read — its tree is unverified.` };
+    if (status !== '') return { block: `${d.target} has uncommitted or untracked changes.` };
+  }
+  return { ok: true };
+}
+
 function decide({ command, cwd, state, gitFor, mergedHeads }) {
   if (!state) return null;
-  const { deletes, unresolved } = parseDeletes(command, cwd);
-  if (!deletes.length && !unresolved.length) return null;
+  const parsed = parseDeletes(command, cwd);
+  const { unresolved } = parsed;
+  if (!parsed.deletes.length && !unresolved.length) return null;
   const head = '[cleanup-gate] BLOCKED — /auto-cleanup is running in this session.';
   if (unresolved.length) {
     return { block: [head, `The gate cannot verify what this deletes: ${unresolved[0]}.`,
       'Name every branch / worktree literally, one delete per name.', NO_ANSWER_RULE].join('\n') };
   }
+  const deletes = [];
+  for (const d of parsed.deletes) {
+    if (d.kind !== 'dir') { deletes.push(d); continue; }
+    const r = checkDirDelete(d, cwd, gitFor);
+    if (r.block) return { block: [head, `Directory delete refused: ${r.block}`, NO_ANSWER_RULE].join('\n') };
+    if (r.ok) deletes.push(d);
+  }
+  if (!deletes.length) return null;
   const dryScopes = state.dryRun.map(a => a.scope);
-  const missing = deletes.filter(d => !dryScopes.some(s => d.kind === 'worktree'
+  const missing = deletes.filter(d => !dryScopes.some(s => d.kind === 'worktree' || d.kind === 'dir'
     ? namesWorktree(s, d.target, d.dir)
     : namesBranch(s, d.target)));
   if (missing.length) {
@@ -468,7 +585,7 @@ function decide({ command, cwd, state, gitFor, mergedHeads }) {
   }
   const headCache = new Map();
   const deadline = Date.now() + CHAIN_BUDGET_MS;
-  const notLanded = deletes.filter(d => d.kind !== 'worktree'
+  const notLanded = deletes.filter(d => d.kind !== 'worktree' && d.kind !== 'dir'
     && !state.unmerged.some(a => (a.exact ? a.scope === d.target : namesBranch(a.scope, d.target)))
     && !hasLanded(gitFor(d.dir), d, { cwd: d.dir, mergedHeads, cache: headCache, deadline }));
   if (notLanded.length) {

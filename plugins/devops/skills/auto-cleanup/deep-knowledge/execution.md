@@ -135,11 +135,27 @@ Execute in order after Dry-Run-Confirm and after the ship queue (10b):
    a. Delete selected local branches: `git branch -D <branch>`
    b. If `delete_remote` is true: `git push origin --delete <branch>` for
       each selected branch that has a remote
-   c. Remove selected clean worktrees: `git worktree remove <path>` (no --force)
-      - Re-check `git -C <path> status --porcelain` immediately before each removal.
+   c. Remove selected clean worktrees — in the background (Bash
+      `run_in_background: true`), one removal after the other, never under a
+      foreground timeout. A worktree with `node_modules` takes minutes per
+      `git worktree remove` on Windows (31 took ~20 min, #829), so use the fast
+      path, per worktree:
+      - Re-run the protected-set check (§ Safety Invariants, Worktree Removal
+        Safety) and `git -C <path> status --porcelain` immediately before it.
         If ANY output → SKIP with warning: "Worktree hat inzwischen Aenderungen —
         Entfernung abgebrochen."
-   d. If `prune_worktrees` is true: `git worktree prune`
+      - Delete the folder natively: `cmd /c rmdir /s /q "<path>"` (Windows) or
+        `rm -rf "<path>"` — literal path, one per command. `pre.cleanup.gate`
+        allows it only for a path the confirmed Dry-Run names, never for the
+        main checkout or the session's own directory, and only while its tree
+        is clean.
+      - Echo one progress line per worktree (`[3/31] <path> entfernt`) and
+        report it on the page; a folder still on disk afterwards is
+        `beschädigt` (half removed) — finish it per
+        `{PLUGIN_ROOT}/deep-knowledge/git-hygiene.md` § *A half-done worktree
+        removal is Claude's to finish*, never hand it to the user.
+      After the last one: ONE `git worktree prune` drops the registrations.
+   d. If `prune_worktrees` is true: `git worktree prune` (already done when c ran)
    e. `git remote prune origin`
    f. If `sync_main` is true: `git checkout main && git pull origin main`,
       then return to original branch
@@ -172,11 +188,14 @@ for Aktive Sessions classified as `clean` in Step 2. Enforce these rules:
 1. **Re-check before removal:** Run `git -C <worktree_path> status --porcelain`
    again immediately before acting. If ANY output → SKIP with warning:
    "Worktree hat inzwischen Aenderungen — Entfernung abgebrochen."
-2. **Never force-remove:** Use `git worktree remove <path>` (without `--force`).
-   If it fails, report the error — do NOT retry with `--force`. Run it in the
-   background (a big `node_modules` outlasts a 120 s call), and finish a
-   half-removed orphan yourself: `{PLUGIN_ROOT}/deep-knowledge/git-hygiene.md` § *A
-   half-done worktree removal is Claude's to finish*.
+2. **Never force-remove:** Use `git worktree remove <path>` (without `--force`)
+   or the 10c fast path (native delete after a clean re-check, then one
+   `git worktree prune`). If git refuses, report the error — do NOT retry with
+   `--force`, and never switch to the native delete for a worktree git called
+   dirty. Run removals in the background (a big `node_modules` outlasts a
+   120 s call), and finish a half-removed orphan yourself:
+   `{PLUGIN_ROOT}/deep-knowledge/git-hygiene.md` § *A half-done worktree
+   removal is Claude's to finish*.
 3. **Never discard changes:** If a worktree (Aktive Session) has `status: has-changes`,
    the UI must NOT render any DESTRUCTIVE action controls — no delete checkbox,
    no "discard", no "reset", no implicit-cleanup option. The ONLY allowed

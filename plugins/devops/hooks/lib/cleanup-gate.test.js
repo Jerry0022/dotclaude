@@ -309,6 +309,84 @@ describe("hasLanded / decide against a real repo", () => {
       expect(decide("git branch -D feat/u", armed(dryRun(["- feat/u"]))).block).toMatch(/multiSelect/);
     });
   });
+
+  describe("native recursive delete of a worktree (#829)", () => {
+    let wt, dirty, orphan, other;
+    beforeAll(() => {
+      wt = path.join(w.repo, ".claude", "worktrees", "done");
+      dirty = path.join(w.repo, ".claude", "worktrees", "dirty");
+      git(w.repo, "worktree", "add", "-q", wt, "feat/merged");
+      git(w.repo, "worktree", "add", "-q", dirty, "feat/squash");
+      fs.writeFileSync(path.join(dirty, "local-note.txt"), "keep me\n");
+      orphan = path.join(w.repo, ".claude", "worktrees", "orphan");
+      fs.mkdirSync(path.join(orphan, "node_modules"), { recursive: true });
+      other = path.join(w.dir, "scratch");
+      fs.mkdirSync(other);
+    });
+    const named = () => armed(dryRun([`- feat/merged (${wt})`, `- feat/squash (${dirty})`, `- orphan (${orphan})`]));
+
+    test.each([
+      ["cmd /c rmdir /s /q", (p) => `cmd /c rmdir /s /q "${p}"`],
+      ["rm -rf", (p) => `rm -rf "${p}"`],
+      ["Remove-Item -Recurse -Force", (p) => `Remove-Item -Recurse -Force -LiteralPath '${p}'`],
+      ["rd /S /Q", (p) => `rd /S /Q "${p}"`],
+    ])("%s of a clean, confirmed worktree → allowed; unconfirmed → refused", (_n, cmd) => {
+      expect(decide(cmd(wt), named())).toBeNull();
+      expect(decide(cmd(wt), armed(dryRun(["- feat/squash"]))).block).toMatch(/does not name/);
+      expect(decide(cmd(wt), armed()).block).toMatch(/no Dry-Run-Confirm/);
+    });
+
+    test.each([
+      ["combined cmd switches", (p) => `cmd.exe /C rd /s/q "${p}"`],
+      ["quoted inner command", (p) => `cmd /c "rmdir /s /q ${p.replace(/\\/g, "/")}"`],
+      ["PowerShell -Path:value", (p) => `Remove-Item -Path:'${p}' -Recurse -Force`],
+      ["PowerShell short flags", (p) => `rm -r -fo '${p}'`],
+      ["no recursive switch at all", (p) => `rmdir "${p}"`],
+      ["trailing slash, other case", (p) => `rm -rf "${p.toUpperCase()}/"`],
+      ["relative path", (p) => `rm -rf "${path.relative(w.repo, p)}"`],
+      ["after a single &", (p) => `echo hi & rm -rf "${p}"`],
+      ["second command inside cmd /c", (p) => `cmd /c "cd C:/ && rmdir /s /q ${p.replace(/\\/g, "/")}"`],
+      ["bash -c", (p) => `bash -c "rm -rf '${p}'"`],
+      ["powershell -Command", (p) => `powershell -NoProfile -Command "Remove-Item -Recurse -Force '${p}'"`],
+      ["env / sudo / nohup prefix", (p) => `env A=1 nohup rm -rf "${p}"`],
+      ["subshell", (p) => `( rm -rf "${p}" )`],
+      ["comma list", (p) => `Remove-Item -Path "${other}","${p}" -Recurse`],
+    ])("unconfirmed worktree delete is refused: %s", (_n, cmd) => {
+      expect(decide(cmd(wt), armed(dryRun(["- feat/squash"]))).block).toMatch(/does not name/);
+    });
+
+    test("a parent folder of worktrees is refused even when the Dry-Run names it", () => {
+      const parent = path.join(w.repo, ".claude", "worktrees");
+      expect(decide(`rm -rf "${parent}"`, armed(dryRun([`- ${parent}`]))).block).toMatch(/holds worktrees/);
+    });
+
+    test("dirty worktree → refused even when confirmed", () => {
+      expect(decide(`cmd /c rmdir /s /q "${dirty}"`, named()).block).toMatch(/uncommitted or untracked changes/);
+    });
+
+    test("the main checkout and the session's own directory are refused", () => {
+      const s = armed(dryRun([`- main (${w.repo})`]));
+      expect(decide(`rm -rf "${w.repo}"`, s).block).toMatch(/main checkout/);
+      expect(gate.decide({ command: `rm -rf "${wt}"`, cwd: path.join(wt, "sub"), state: named(), gitFor }).block)
+        .toMatch(/session's own directory/);
+    });
+
+    test("an orphan under .claude/worktrees/ needs the Dry-Run too; then one prune follows", () => {
+      expect(decide(`cmd /c rmdir /s /q "${orphan}"`, armed(dryRun(["- feat/merged"]))).block).toMatch(/does not name/);
+      expect(decide(`cmd /c rmdir /s /q "${orphan}" && git worktree prune`, named())).toBeNull();
+    });
+
+    test("a delete that is not a worktree is none of the gate's business; a non-literal one is refused", () => {
+      expect(decide(`rm -rf "${other}"`, armed())).toBeNull();
+      expect(decide(`rm -f "${path.join(wt, "x.txt")}"`, armed())).toBeNull();
+      expect(decide(`rm -rf "${path.join(wt, "node_modules")}"`, armed())).toBeNull();
+      expect(decide('rm -rf "$WT"', named()).block).toMatch(/not a literal path/);
+      expect(decide('rd /s /q "%WT%"', named()).block).toMatch(/not a literal path/);
+      expect(decide("rm -rf ~/repo/.claude/worktrees/done", named()).block).toMatch(/not a literal path/);
+      expect(decide(`Get-Item "${wt}" | Remove-Item -Recurse`, named()).block).toMatch(/from a pipe/);
+      expect(decide("powershell -EncodedCommand AAAA", armed()).block).toMatch(/encoded command/);
+    });
+  });
 });
 
 describe("hooks end to end — post arms and records, pre refuses", () => {

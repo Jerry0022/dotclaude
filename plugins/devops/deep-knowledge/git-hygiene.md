@@ -190,6 +190,13 @@ directory is left on disk with no `.git` file and tens of thousands of files
 
 - **Run the removal so it can finish:** in the background or with a timeout of
   at least 15 min, never under a 120 s ceiling.
+- **Fast path for many worktrees (#829):** re-check the protected set and
+  `git -C <path> status --porcelain` (must be empty), delete the folder
+  natively (`cmd /c rmdir /s /q "<path>"` on Windows, `rm -rf "<path>"`
+  elsewhere), one worktree per command with a progress line, then ONE
+  `git worktree prune` at the end (`git worktree remove` took ~40 s per
+  worktree with `node_modules`: 31 in ~20 min). During `/auto-cleanup` the `pre.cleanup.gate` hook
+  allows the native delete only for paths the confirmed Dry-Run names.
 - **Finish an orphan left anyway, don't hand it to the user.** It qualifies
   when **all** of these hold:
   - not in `git worktree list --porcelain`, and has no `.git` file;

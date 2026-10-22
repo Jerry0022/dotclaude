@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.295.0] — 2026-10-22
+
+`/auto-cleanup` removes worktrees in the background with a native recursive delete and one final `git worktree prune`, instead of a slow sequential `git worktree remove` per worktree.
+
+Why: removing 31 worktrees, each with `node_modules`, took about 20 minutes on Windows (#829).
+
+### Added
+- **Background removal with progress.** Step 10c removes one worktree per command, re-checks the protected set and a clean `git status` before each delete, shows a progress line and runs one `git worktree prune` at the end. A half-removed folder is reported as damaged and finished per git-hygiene; a worktree git called dirty is never force-removed or native-deleted.
+- **Cleanup gate reads directory deletes.** While `/auto-cleanup` is armed, `pre.cleanup.gate` parses `rmdir /s /q`, `rd`, `rm -rf`, `Remove-Item`, `del`, `ri` and `erase`, opens shell wrappers (`cmd /c|/k`, `bash -c`, `powershell -Command`), drops prefixes (`env`, `sudo`, `nohup`, `VAR=`) and handles subshells, single `&`, `-Path:value` and comma lists. A delete that hits a worktree must be named by the confirmed Dry-Run, may not be or hold the main checkout, the session cwd or other worktrees, and a live checkout needs an empty `git status --porcelain`.
+- **Fails closed.** `-EncodedCommand`, non-literal targets (`$VAR`, `%VAR%`, `~`, globs) and a target-less piped `Remove-Item` are refused while the gate is armed. Non-worktree deletes are untouched.
+
+### Known limits
+- Generic scripts (`rimraf`, `node -e fs.rmSync`, `robocopy /MIR`) are not parsed, as for the existing git-delete gate. `rm -rf "$TMP/x"` is refused while armed (non-literal target).
+
 ## [0.294.0] — 2026-10-22
 
 `/auto-cleanup` no longer asks for an Unmerged confirmation on sub-agent branches whose work landed through a squash-merged integration branch.
