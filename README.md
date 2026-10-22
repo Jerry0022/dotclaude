@@ -4,386 +4,241 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
-Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and templates that make shipping faster, safer, and smarter.
+DevOps automation plugin for Claude Code: you say what you want, Claude builds,
+tests, ships and reports back on one card. Hooks, skills, agents and MCP tools
+keep git clean, block risky moves and stop context waste.
 
-> ⚠ **AI runs commands on your machine.** Hooks, skills, and agents execute shell commands, edit files, push to remotes, and launch apps autonomously. Built-in safeguards reduce risk but do not replace your review.
->
-> Work in a versioned tree. Keep backups. Read what Claude proposes before approving. **Use at your own risk.**
+> ⚠ **AI runs commands on your machine** — shell commands, file edits, pushes,
+> app launches. Safeguards reduce the risk but do not replace your review. Work
+> in a versioned tree, keep backups. **Use at your own risk.**
 
-**Token math — costs and payoff:**
-- **Costs:** ~0.7M tokens/week — hooks, prompt guards, always-on context
-- **Plan share:** 1–4% on Max plans · up to ~23% on Pro + Opus
-- **Saves (context):** ~1–4M tokens/week — token guard blocks expensive reads before they land
-- **Saves (time):** 2–4 hours/week — auto git state, ship pipeline, root-cause debug
-- **Net:** plugin pays itself back 1.5–6× via prevented context waste
+**Contents:** [Install](#install) · [Update](#update) · [Everyday use](#everyday-use) ·
+[Completion card](#completion-card) · [Recommended setup](#recommended-setup) ·
+[Optional features](#optional-features) · [Customize](#customize) ·
+[Reference](#reference) · [Troubleshooting](#troubleshooting)
+
+## What you get
+
+- **Ship in one sentence** — "ship it" builds, bumps the version, opens and merges the PR, tags `alpha`; promotions re-tag the same commit on `beta` / `stable`
+- **One card per task** — three result lines, the evidence (requirements · tests · live check) and one decision; on the Desktop app with buttons
+- **Guard rails** — no writes on `main`, no force-push, no manual PRs past the pipeline, no oversized reads that burn your context
+- **Agents when they pay off** — background agents for research, sweeps, tests and reviews, scaled to your live plan usage
+- **Runs while you are away** — `/do-run` works off a backlog, a task or the leftover weekly budget, and ships each item
+- **Per-project tuning** — extend any skill with a `reference.md`, no fork
+
+<!--devops:count:hooks-->87<!--/devops:count:hooks--> hooks ·
+<!--devops:count:skills-->14<!--/devops:count:skills--> skills ·
+<!--devops:count:agents-->12<!--/devops:count:agents--> agents ·
+~0.7M tokens/week overhead (1–4 % of a Max plan), paid back 1.5–6× by the
+token guard alone — see [Token math](#token-math).
+
+## Install
+
+Needs **git** and **Node.js 18.18+**. Desktop and CLI keep separate plugin
+stores — install where you work.
+
+1. **Claude Code** — paste into any session (Desktop or CLI):
+   ```
+   Install the devops plugin by following https://github.com/Jerry0022/dotclaude/blob/main/INSTALL.md
+   ```
+2. **CLI:**
+   ```bash
+   claude plugin marketplace add Jerry0022/dotclaude
+   ```
+   ```bash
+   claude plugin install devops@dotclaude
+   ```
+3. **Manually (Desktop app):** Sidebar → **Customize** → **+** next to *Personal Plugins* → add `Jerry0022/dotclaude` → enable **devops**.
+
+Then start a new session — hooks and MCP servers load at session start.
+Details, uninstall and Codex setup: [`INSTALL.md`](INSTALL.md).
+
+## Update
+
+1. **Claude Code:** say **"devops update"**
+2. **CLI:** `claude plugin update devops@dotclaude`
+3. **Manually:** turn on auto-update for the marketplace (Desktop: **Customize**; CLI: `/plugin` → **Marketplaces**)
 
 <details>
-<summary><strong>Detailed token math</strong> — weekly breakdown, plan %, what you get back</summary>
+<summary><strong>Release channels</strong> — alpha, beta, stable</summary>
 
-### Weekly plugin overhead (estimated)
-
-| Source | Tokens/week | Notes |
-|---|---|---|
-| SessionStart hooks (once per session) | ~8K | Update check, git check, token scan, MCP deps |
-| Prompt guards (per message) | ~150K–250K | Ship detection, issue tracking, git sync — most exit silently |
-| Tool guards (per tool call) | ~100K–200K | Token budget, ship and branch enforcement, agent cards — early-exit when clean |
-| Always-on context (per session) | ~200K–400K | Delegation policy, deep-knowledge index and card reminders, re-sent with every call (mostly as cache reads) |
-| Skill invocations (~15–25/week) | ~15K–30K | Only when you call /do-ship, /do-run, /auto-fix, etc. |
-| **Total** | **~500K–900K** | **~0.7M tokens/week on average** |
-
-### Percentage of your plan
-
-Based on ~0.7M tokens/week plugin overhead:
-
-| Plan | Model | Weekly budget (approx.) | Plugin overhead |
-|---|---|---|---|
-| Pro ($20) | Sonnet | ~10M | **~7%** |
-| Pro ($20) | Opus | ~3M | **~23%** |
-| Max 5x ($100) | Sonnet | ~55M | **~1.3%** |
-| Max 5x ($100) | Opus | ~18M | **~3.9%** |
-| Max 20x ($200) | Sonnet | ~225M | **~0.3%** |
-| Max 20x ($200) | Opus | ~75M | **~0.9%** |
-
-*Budgets are rough estimates and vary by usage pattern. Anthropic adjusts limits dynamically.*
-
-### What you get back
-
-| Without plugin | With plugin |
-|---|---|
-| "Wait, did I push that?" | Git state checked on every session start |
-| `git push --force` to main at 2 AM | Blocked before it happens |
-| Forgetting to bump the version | /do-ship handles version, PR, merge, cleanup |
-| "Why is my context window gone?" | Token guard kills expensive reads before they land |
-| Debugging the same error 4 times | /auto-fix kicks in after the second failure |
-| Writing commit messages by hand | Conventional commits enforced by shared conventions |
-
-**Token guard payoff:** The token guard blocks any single operation above your plan's per-operation share of the ~200K context window — **5% (~10K tokens) on Pro, 8% (~16K) on Max 5×, 10% (~20K) on Max 20×**. Calls from a sub-agent get their own, higher threshold (4× the plan's share, capped at 50 %; `subagentConfirmThresholdPct` and a per-agent `subagentTypeThresholdPct` map override it): a sub-agent's fresh context exists to read broadly and return only the conclusion. In a typical session, Claude attempts 5–15 broad searches or large-file reads that would each burn 20–80K tokens — that's 100–400K tokens/session evaporating into context you never asked for. Across ~10 sessions/week, the guard saves roughly **1–4M tokens/week** in prevented waste. The plugin's own overhead (~0.7M tokens/week for hooks, startup checks, and skill prompts) pays for itself 1.5–6x over just by keeping Claude from reading files it doesn't need.
-
-Your mileage may vary. Your sanity will not.
+Every ship lands on `alpha`; a promotion re-tags the same commit on `beta`,
+then `stable` — never a rebuild. A fresh install follows `stable`. Pin another
+channel in `~/.claude/plugins/.channels.json` (`{ "dotclaude": "alpha" }`) to
+get every ship the moment it lands. Semantic versioning — breaking changes
+only in major versions.
 
 </details>
 
-## Table of Contents
+## Everyday use
 
-**Setup**
-- [Installation](#installation)
-- [Updates](#updates)
-- [Supported Stacks](#supported-stacks)
-- [Integrations](#integrations)
-- [Customization](#customization)
-- [Local Claude Code setup](#local-claude-code-setup)
+Plain words are enough; the slash doors (`/do-*`) are in the menu, the rest is
+picked from what you say.
 
-**Use**
-- [Features](#features)
-- [What it does](#what-it-does)
-- [Completion Cards](#completion-cards)
+| Say | What happens |
+|---|---|
+| "ship it" · `/do-ship` | Build, test, version bump, PR, merge, tag `alpha`, cleanup — then the card |
+| "promote to stable" | Re-tag the shipped commit on `beta` / `stable` (no rebuild) |
+| "this is broken" · "debug" | Root-cause analysis first, then the fix |
+| "concept page for …" | Interactive HTML page with options to pick; your choices flow back |
+| `/do-run` | Bigger work: implement a prompt with agents, work off the backlog, run AFK, burn leftover budget, rethink a stuck area, full audit |
+| "harden" · "polish" | Stabilize (tests, bugs, consistency) · refine the UI |
+| "devops learn …" · `/do-learn` | Turn a correction into a lasting project rule |
+| `/do-batch` | Collect prompts first, run them later as one plan |
+| "strict on" · "strict: <task>" | Deliver exactly what was named, nothing extra |
 
-**Details**
-- [Project Structure](#project-structure)
-- [Troubleshooting](#troubleshooting)
+<details>
+<summary><strong>All skills</strong> — doors, hidden workers, former skills</summary>
 
-## Installation
+Doors (`do-*`) are in the slash menu. Workers (`auto-*`) are hidden from it:
+Claude starts them from your words, the trigger router or a hook. Old names
+(`/ship`, `/fix`, `/concept`, `/run-backlog`, `/promote`, …) still map to the
+new skill, and project extensions under an old name keep loading.
 
-**Let Claude do it:** paste this into Claude Code (Desktop or CLI):
-
-```
-Install the devops plugin by following https://github.com/Jerry0022/dotclaude/blob/main/INSTALL.md
-```
-
-**By hand:**
-
-**Desktop App:** Sidebar → **Customize** → **+** next to *Personal Plugins* → add `Jerry0022/dotclaude` → enable **devops**.
-
-**CLI:**
-
-```bash
-claude plugin marketplace add Jerry0022/dotclaude
-claude plugin install devops@dotclaude
-```
-
-Desktop and CLI keep separate plugin stores — a CLI install (also one Claude runs for you) does not show up in the Desktop App. Requires git and Node.js 18.18+.
-
-Start a new session for hooks to take effect. See [`INSTALL.md`](INSTALL.md) for details, extensions, and uninstall.
-
-## Updates
-
-```bash
-claude plugin update devops@dotclaude
-```
-
-Or enable auto-update for the marketplace (Desktop: **Customize**; CLI: `/plugin` → **Marketplaces**), or say **"devops update"** in any session. Semantic versioning — breaking changes only in major versions.
-
-**Release channels.** Every ship lands on `alpha`; a promotion re-tags the
-same commit on `beta`, then `stable` — never a rebuild. A fresh install
-follows `stable`. Pin another channel in `~/.claude/plugins/.channels.json`
-(`{ "dotclaude": "alpha" }`) to get every ship the moment it lands.
-
-## Supported Stacks
-
-This plugin is built and actively tested against a specific stack. Outside that stack, hooks and skills may work, degrade gracefully, or not run at all — anything not listed as **supported** is best-effort.
-
-| Area | Supported | Behavior outside |
+| Skill | Invocation | Purpose |
 |---|---|---|
-| **OS** | Windows, macOS, Linux | Other platforms: AnythingLLM lifecycle reports `unsupported-platform`; core git / skill flows still run via Node + git |
-| **Shell** | bash (Git-Bash on Windows), zsh | PowerShell / cmd are untested — use Git-Bash or WSL on Windows |
-| **Git hosting** | GitHub (via `gh` CLI) | GitLab / Gitea / Bitbucket / self-hosted: issue tracking, PR creation, and ship release will fail. Local / push-only flows still work |
-| **Default branch** | Auto-detected from `origin/HEAD` (`main`, `master`, or any other name) | Detached HEAD or missing `origin/HEAD`: falls back to `main` |
-| **Build system** | `npm` — auto-detects `build`, `lint`, `test` scripts in `package.json` | No `package.json`: build / lint / test steps are **silently skipped**. pnpm, yarn, pytest, cargo, go test, maven, gradle etc. are **not invoked** |
-| **Local LLM** | AnythingLLM Desktop (HTTP API) | Feature degrades gracefully — `local_generate` becomes unavailable, all main flows continue normally |
-| **Node runtime** | Node.js 20+ | Older Node: MCP server and hooks may fail to start |
+| `/do-ship` | Explicit + Hook | Full shipping pipeline: build, version, PR, merge, cleanup |
+| `/do-ship promote` | Explicit | Channel promotion (alpha→beta→stable): re-tag the same SHA, no rebuild |
+| `/do-run` | Explicit + Router | Door for every run: picks the mode below or implements the prompt through `auto-agents` |
+| `/do-run backlog` | Explicit | Refine, implement, test and ship planned milestones/issues unsupervised |
+| `/do-run autonomous` | Explicit | One task fully AFK; ships at the end only when chosen at the start |
+| `/do-run burn` | Explicit | Turns budget that would expire this week into landed work; asks at a limit stop, never burns through |
+| `/do-run rethink` | Explicit | Code-blind fresh approaches for stuck development, decided and implemented autonomously |
+| `/do-run audit` | Explicit | Full-spectrum audit (functional, visual, a11y, logging, performance, …), then fixes or a concept page |
+| `/do-learn` | Explicit | Capture long-term learnings and route them to project-specific instructions |
+| `/do-batch` | Explicit + Hook | Collect prompts into `.claude/batch.md`, then merge them into one feasibility-checked plan |
+| `/auto-agents` | Hidden · Skills | Execution path for everything that implements: delegation tiers, one agent card, waves; full ceremony only on a yes |
+| `/auto-fix` (trigger: "debug") | Hidden · Router + Hook | Root-cause analysis, diagnostics, fix cycle |
+| `/auto-concept` | Hidden · Router | Interactive HTML page for analysis, plans, concepts, prototypes |
+| `/auto-harden` | Hidden · Router | Full test suite, autonomous bug fixes, regression + consistency |
+| `/auto-polish` | Hidden · Router + `/do-ship` | UI refinement and the standing UI rules (`deep-knowledge/ui-defaults.md`) |
+| `/auto-cleanup` (trigger: "branch cleanup") | Hidden · Card hint + Router | Branch/worktree/PR hygiene page; open PRs land one after another via `/do-ship` |
+| `/auto-issue` | Hidden · Hook | GitHub issue creation and refinement — the single owner of every issue write |
+| `/auto-guide` | Hidden · Hook | Live step-by-step overlay in your browser for logins, API keys and settings Claude cannot do itself |
+| `/auto-extend` | Hidden | Scaffold or adapt project-level skill extensions |
+| `/auto-update` | Hidden | Update the plugin ("devops update") |
 
-If your stack differs, extend the plugin per-project via the 3-layer extension model — see [Customization](#customization).
+**Former skills, now knowledge + hooks:** `/setup-readme` → `readme-standards.md`,
+`/auto-graph` → `graphify.md`, `/auto-usage` → `usage.md` (the card fetches
+usage itself), `/claude-strict` → `strict.md`. A prompt naming one gets a
+pointer to the doc.
 
-## Integrations
+**Strict mode** — the deliverable is exactly what the prompt names, with the
+tests, docs and callers of the changed thing; it carries over to agents and
+skills. `strict on` / `strikt an` (this worktree + branch) · `strict off` ·
+`strict status` · `strict: <task>` or "nur das ändern" (one task). A bare
+"strict" arms nothing.
 
-### Codex (optional)
+</details>
 
-Install [codex-plugin-cc](https://github.com/openai/codex-plugin-cc) alongside
-this plugin for AI-powered code review and task delegation via OpenAI Codex.
-Both plugins coexist as independent skill providers — no configuration needed.
+## Completion card
 
-Combined workflows: `/codex:rescue` for pre-ship code review, parallel investigation
-for research tasks, and QA-integrated review for complex changes.
+Every task ends with one card — always the last thing in the response. This
+example is rendered by the real renderer, as a terminal shows it:
 
-See [INSTALL.md](INSTALL.md#optional-codex-integration) for setup instructions.
+<!--devops:block:card-example-->
+````
+---
 
-### Claude API credits (optional, opt-in)
+### **✨✨✨ Filter dialog moved to settings ✨✨✨**
+› Settings now has a Filter tab with drag & drop, replacing the old dialog
+› The old dialog route still works and redirects to the new tab
+✓ 3/3 Requirements  ✓ 47 tests green
+✓ commit → ✓ push → ✓ PR #42 → ✓ merge   main · Build a3f9b21
+alpha **v0.8.3** › beta v0.8.1 (−2) › stable v0.7.9 (−4 · 9 d)
 
-Claude Max and Team plans include monthly Claude API credits ($100 on Max 5x,
-$200 on Max 20x, up to $500 pooled on Team) that expire every billing cycle.
-They do **not** cover Claude Code itself, so your session, its subagents and
-the plugin's hooks always stay on the plan. When you switch this on, the plugin
-runs its **read-only side work on the credit first** and falls back to the plan
-when the credit is empty or unavailable:
+## 🟩 🚀 Released Alpha — v0.8.3 — promote to beta?
 
-| Work | Runs on |
-|---|---|
-| Codebase sweeps, research, second-opinion reviews (`scripts/claude-api-agent.js`, a lean read-only agent on the Messages API) | credit first, then an in-session agent |
-| Codex second opinion when Codex is skipped (`scripts/claude-api-safe.js`) | credit |
-| Month-end code audit (`scripts/api-credit-audit.js`, report in `~/.claude/devops-audits/`) | credit |
-| Evals (`evals/ab-run.js`) started from your own terminal | credit |
-| Code-writing and test-running agents | always the plan |
+---
+````
+<!--/devops:block:card-example-->
 
-Same price per token as the plan path, but far less context per agent (about
-2k tokens of setup instead of 30k+), and none of it counts against your plan's
-5-hour window or week. Measured on 2026-10-19: plain API calls draw the
-promotional credit; a `claude -p` child started from the desktop app draws
-*purchased* credit, so the plugin never does that.
+Top block: what happened — result lines, evidence, where the change lies
+(commit → push → PR → merge, channel ladder), and the usage bars once a window
+is worth a look. Bottom block: one decision. On the Desktop app the card is a
+widget with buttons (`Ship`, `Ändern`, `Fix`, `Promote beta`, `Nachbessern`
+with a prepared answer, `App starten`, …), each with a tooltip.
 
-Two switches, both off by default:
+<details>
+<summary><strong>All variants</strong> — the decision heading each one ends with</summary>
 
-| Setting | Effect |
-|---|---|
-| `apiCredit.enabled` | Turns on the credit-first routes above. Off: no network call, no change. |
-| `apiCredit.webGuide` | If no API key is stored yet, Claude offers once to walk you through the Claude Console in your browser: create a `devops` workspace, set a spend limit, create a key. The key goes to `~/.claude/devops-api.env`. |
+<!--devops:block:card-variants-->
+| Variant / state | Decision heading | When |
+|---|---|---|
+| `ready` | 👉 📦 Ready — Ship? | Code or doc changes, nothing open, no app to start |
+| `ready + open point` | 👉 ❓ Question — Also retry on HTTP 503? | A decision is still the user's (`open`) — Ship is not offered until it is answered |
+| `ready + red tests` | 👉 ⚠️ Red tests — Ship anyway with 2 red tests? | Tests are red or a requirement is unmet — line 1 says what was not achieved |
+| `test` | 👉 🧪 Test — Test first, then ship? | Code changed and the app can be started — the user tests first |
+| `test-minimal` | 🟩 ✨ Started — have fun | The user only asked to start the app, nothing was edited |
+| `ship-blocked` | 👉 🚧 Blocked — Bypass tsc error and ship anyway? | The ship pipeline ran but did not merge |
+| `ship-successful (plain)` | 🟩 🚀 Released Alpha — v1.4.0 → main. | Merged to main in a project without release channels |
+| `ship-successful (ring)` | 🟩 🚀 Released Alpha — v1.4.0 — promote to beta? | Merged and released to alpha in a channel (ring) project |
+| `released → beta` | 🟩 🎊 Beta — v1.4.0 — to stable? | A promotion re-tagged the same commit on beta |
+| `released → stable` | 🟩 🎊 Stable — v1.4.0 — done. | A promotion reached stable — nothing left to decide |
+| `ready-files` | 👉 📦 Files — Done on disk — anything else? | Files changed outside any git repository |
+| `analysis` | 🟩 📊 Analysis — read through — questions? | An answer or investigation — nothing changed anywhere |
+| `aborted` | 🟥 📦 Aborted — aborted because of no write access — try differently? | The task was stopped, infeasible or hit a limit |
+| `fallback` | 🟩 🖥️ System — done — anything else? | Work done outside the repo with no repo diff (a setting, a deploy, a DB operation) |
+| `paused` | 🟦 🔌 Restart — restart Claude Code | The user pauses, or the next step is a restart, a reboot or a usage-limit reset |
+| `pending (override)` | ⏳ 🤖 Team — not done yet — agent `qa` is working | Background agents still run — replaces the decision of any variant |
+<!--/devops:block:card-variants-->
 
-Turn them on by saying **"nutze mein API-Guthaben"** (or "API credits for
-devops"). Claude asks both questions once, then stores the answers globally.
-Check them with `node plugins/devops/scripts/claude-api-safe.js --status`, see what the
-credit was spent on this month with `--usage`, and
-turn them off with "API-Guthaben nicht mehr nutzen".
+Headings follow your language; this is the English rendering. The Desktop
+session title carries the same icons (`👉` your move · `⏳` Claude works ·
+`🟩` done · `🟥` aborted · `🟦` paused). Full spec:
+[completion-card-design.md](plugins/devops/deep-knowledge/completion-card-design.md).
 
-Notes:
-- The key is read only as `DEVOPS_ANTHROPIC_API_KEY`. Never set `ANTHROPIC_API_KEY`
-  for this: doing so would switch Claude Code itself to API billing, which the
-  credit rejects.
-- Purchased credits can't be excluded. Anthropic spends the included credit
-  first. The workspace spend limit is the guardrail.
+</details>
 
-Runbook (billing matrix, token economics, flags, exit codes): [`plugins/devops/deep-knowledge/api-credits.md`](plugins/devops/deep-knowledge/api-credits.md).
+## Recommended setup
 
-### Claude home backup (optional, opt-in)
+### Quiet output style
 
-Your settings, `CLAUDE.md`, agents, your own skills and commands, project
-memory and helper scripts live only in `~/.claude` on one disk. The home backup
-pushes that part to a **private** GitHub repo once a day, so a new machine is one
-`git clone` away. It is off by default.
+Claude narrates a lot. With this plugin decisions arrive as dialogs, analyses
+as concept pages and results as the card — the narration is noise. The Quiet
+style keeps answers, drops narration, and relays only what the plugin marks
+for you, in your language.
 
-Say **"richte Home-Backup ein"** (or "set up home backup"). Claude runs one
-setup command: it creates the private repo (default `<you>/claude-home`),
-initialises git in `~/.claude` with a deny-by-default `.gitignore` (`/*`, then
-an allowlist), and registers a daily job (Windows Task Scheduler, crontab on
-Linux/macOS). Never included: `.credentials.json`, any `*token*` / `*secret*` /
-`*credential*` / `.env` file, transcripts (`*.jsonl`), caches, `plugins/`,
-`file-history/`, browser profiles, logs and backups.
+1. **Claude Code** — paste into a session with the plugin installed:
+   ```text
+   Set up the Quiet output style: copy the newest
+   ~/.claude/plugins/cache/dotclaude/devops/*/templates/output-style-quiet.md
+   to ~/.claude/output-styles/quiet.md (create the directory if needed), set
+   "outputStyle": "Quiet" in ~/.claude/settings.json, then tell me to start a
+   new session. Do not change anything else.
+   ```
+2. **CLI:** copy the file as above, then `/output-style Quiet` in a session
+3. **Manually:** copy [`templates/output-style-quiet.md`](plugins/devops/templates/output-style-quiet.md) to `~/.claude/output-styles/quiet.md` and set `"outputStyle": "Quiet"` in `~/.claude/settings.json`
 
-Before every commit each staged file is scanned for **secrets** (private keys,
-`sk-` / `ghp_` / `github_pat_` / `xox*` / `AKIA` tokens, JWTs, long
-`password=` / `token=` / `api_key=` values) and **private data** (e-mail
-addresses, phone numbers, IBANs, Luhn-valid card numbers). On any hit nothing is
-committed or pushed: you get a desktop notification and
-`~/.claude/home-backup-report.txt` with file, line and rule — never the value.
-Remove the data, or allow that one finding on purpose in `~/.claude/.backupallow`.
-Commits use a fixed local identity, not your e-mail address. The scans are
-pattern rules: they catch keys, tokens and structured personal data, not
-free-text private details — what you write into memory files stays your call.
+Start a new session afterwards.
 
-**Token cost: 0.** The daily run is a plain node script — no `claude` call, no
-Claude Code cron, no cloud routine. Only the one-time setup conversation costs
-tokens, well under 0.1 % of a Pro plan's weekly usage.
+<details>
+<summary><strong>More about the style</strong></summary>
 
-Turn it off with "Home-Backup aus" (removes the job; the repo and `~/.claude/.git`
-stay). **Restore** on a new machine: install Claude Code, move the fresh
-`~/.claude` aside, `git clone https://github.com/<you>/claude-home ~/.claude`,
-let `claude plugin update` reinstall the plugins from the restored marketplaces,
-then `/login` — credentials are never part of the backup.
-Runbook: [`plugins/devops/deep-knowledge/home-backup.md`](plugins/devops/deep-knowledge/home-backup.md).
+It is a personal setting, not a plugin rule, and sits in the system prompt, so
+it does not fade over a long session. Every user-facing hook and tool block
+opens with `Show the user this … verbatim` — the card, the workspace check,
+the update notice — and only those reach you; instructions addressed to
+Claude stay silent. Explicit questions still get a full answer. If the
+Desktop app's "New output style" dialog asks you to sign in again, the CLI
+token behind it expired: the file route needs no generator, and `claude` +
+`/login` in a terminal repairs the dialog.
 
-### WIP watch (optional, opt-in)
+</details>
 
-Un-landed branches, forgotten stashes and dirty or broken worktrees pile up
-across projects, and the work in them exists nowhere else. The WIP watch looks
-for them once a week and tells you only when something needs a decision. It is
-off by default.
+### Prompt cache TTL
 
-Say **"WIP-Wächter an"**. Claude registers a weekly job (default Sunday) that
-scans every git repo under your roots (default `~/IdeaProjects`) against the
-existing `origin/<default>` ref — no fetch. A branch counts as landed when its
-content is in main: ancestor, the head of a merged PR, or every changed file
-identical / re-applying it is a no-op — so squash merges are recognised. Each
-finding gets a rule-based suggestion: delete (already in main), push + PR (ahead,
-rebases cleanly), reimplement on current main (far behind or conflicts), commit
-or discard (dirty worktree, by age), secure or drop (stash older than 30 days),
-`git worktree prune` (worktree folder gone). The result is
-`~/.claude/wip-watch/report.json`.
+In overage (usage credits) Claude Code silently drops the prompt cache from
+1 hour to 5 minutes, so every short break re-writes the whole context.
+`"promptCacheTtl": "1h"` in `~/.claude/settings.json` keeps it (Claude Code
+≥ 2.1.242; check with `/usage` → `Prompt cache (main)`).
 
-You get one desktop notification, only when a NEW finding appears — never an
-"all ok". It carries the prompt to paste into Claude: **`WIP-Report aufräumen`**.
-That opens the cleanup page with all repos grouped, each suggestion
-pre-selected, and nothing executed before the dry-run confirmation.
+<details>
+<summary><strong>Measure first, then set</strong> — prompt for Claude, how the cache works</summary>
 
-**Token cost: 0.** The weekly job is a plain node script, never starts Claude
-and never deletes anything; only opening the cleanup page costs tokens. Turn it
-off with "WIP-Wächter aus". Runbook:
-[`plugins/devops/deep-knowledge/wip-watch.md`](plugins/devops/deep-knowledge/wip-watch.md).
-
-## Customization
-
-Every skill and agent supports **three-layer extensions**:
-
-```
-Layer 1: Plugin (this plugin)         ← defaults
-Layer 2: User global (~/.claude/)     ← your personal overrides
-Layer 3: Project ({project}/.claude/) ← project-specific rules
-```
-
-To extend any plugin skill for your project, create a `reference.md` in a
-directory matching the skill's name under `.claude/skills/` in your project:
-
-```
-your-project/.claude/skills/{skill-name}/
-└── reference.md    ← project-specific context, rules and step directives
-```
-
-When the skill starts, one override loader injects your global and project
-`reference.md` (project wins on conflict). Directive headings become explicit
-orders: `## Add after Step 4`, `## Skip Step 3`, `## Replace Step 2`; any
-other text is an additional rule. The completion card shows which override
-applied (`🧩 Override aktiv: Projekt do-ship (Step 3 übersprungen)`). Never
-name the file `SKILL.md` — Claude Code would load it as a skill of its own.
-
-**Example** — extending `/do-ship` with project-specific quality gates and deploy targets:
-
-```
-your-project/.claude/skills/do-ship/
-└── reference.md    ← "## Add after Step 1 — run ng build --prod" · "Deploy via SSH to 192.168.178.32"
-```
-
-Say "extend skill" (the hidden `auto-extend` skill) to interactively scaffold an extension for any plugin skill.
-It detects existing extensions and lets you adapt them.
-
-For the full extension guide with examples per skill, see `deep-knowledge/skill-extension-guide.md`.
-
-### `.claude` in git — one managed ignore block
-
-What of `.claude/` is shared and what stays on your machine is one policy, kept
-in ONE marked block of the project's `.gitignore`:
-
-```gitignore
-# >>> claude (managed) >>>
-**/.claude/settings.local.json
-**/.claude/launch.json
-**/.claude/worktrees/
-…every runtime file Claude Code and the plugin write…
-# <<< claude (managed) <<<
-```
-
-Versioned: `CLAUDE.md`, `.claude/settings.json`, `.claude/skills/`, `commands/`,
-`hooks/`, `agents/`, `deep-knowledge/`, `.claude/project-map.md`,
-`.claude/launch.example.json`, `docs/concepts/`. Local: `settings.local.json`,
-`launch.json`, `worktrees/` and all plugin runtime state. A new repository gets
-the block on its own. An existing one keeps its `.gitignore` untouched until you
-move it over; until then each clone gets the block in `.git/info/exclude` at
-session start, so a fresh clone is covered from the first session. Move it with
-`node plugins/devops/scripts/claude-ignore.js migrate` — idempotent, it folds
-hand-grown Claude lines into the block and removes the plugin's lines (and the
-fallback copy) from `.git/info/exclude`. Files the block ignores that are
-already committed (e.g. an old `.claude/launch.json`) are reported with the
-`git rm --cached` command; nothing is untracked for you. `/do-ship` checks the
-block only when a ship touches `.gitignore` or `.claude/`, and then hands you
-the fix instead of blocking. `claude-ignore.js env-example` writes
-a `.env.example` with key names only (never values) for your secrets files.
-
-### Quiet output style (recommended)
-
-Claude narrates a lot — what it is reading, what it is about to do, a recap
-at the end. None of that is needed with this plugin: decisions arrive as
-`AskUserQuestion` dialogs, long analyses as `/auto-concept` pages, results as the
-completion card. The rest is noise that pulls you out of your own work.
-
-The fix is Claude Code's built-in **output style** — a personal setting, not
-a plugin rule, so every consumer picks their own level of quiet. It sits in
-the system prompt, so it does not fade over a long session the way a skill or
-an injected instruction does.
-
-1. Copy [`templates/output-style-quiet.md`](plugins/devops/templates/output-style-quiet.md)
-   to `~/.claude/output-styles/quiet.md` (or `.claude/output-styles/` in a project)
-2. Activate it with `/output-style Quiet`, or set `"outputStyle": "Quiet"` in
-   `~/.claude/settings.json`
-3. Start a new session
-
-**Optional — let Claude do it.** Paste this into any Claude Code session
-with the plugin installed; it copies the template, activates the style and
-tells you to restart:
-
-```text
-Set up the Quiet output style: copy the newest
-~/.claude/plugins/cache/dotclaude/devops/*/templates/output-style-quiet.md
-to ~/.claude/output-styles/quiet.md (create the directory if needed), set
-"outputStyle": "Quiet" in ~/.claude/settings.json, then tell me to start a
-new session. Do not change anything else.
-```
-
-The style relays only what the plugin marks for you. Every user-facing hook
-and tool block opens with `Show the user this … verbatim` — the completion
-card, the workspace check, the update notice, the team changelog — and the
-rest of the tool output (instructions addressed to Claude) stays silent.
-Those blocks reach you in the language you write in, every line kept, and so
-does every answer: English hook text, skill files and the app's own resume
-and nudge messages never switch it. Explicit questions still get a full
-answer; the style targets narration, not explanations.
-
-If the desktop app's "New output style" dialog asks you to sign in again, the
-headless CLI token behind it has expired — the file route above needs no
-generator. `claude` + `/login` in a terminal repairs the dialog.
-
-## Local Claude Code setup
-
-Recommendations for the machine Claude Code runs on — independent of this
-plugin, but they decide how far your usage goes and what survives an OS
-reinstall.
-
-### Recommended settings
-
-| Setting (`~/.claude/settings.json`) | Why |
-|---|---|
-| `"promptCacheTtl": "1h"` | On a subscription the main conversation already uses the 1-hour prompt cache — but in overage (usage credits) Claude Code silently drops to 5 minutes, so every short break re-writes the whole context. Pinning `1h` keeps it. Needs Claude Code ≥ 2.1.242; check with `/usage` → `Prompt cache (main)`. |
-| `"outputStyle": "Quiet"` | See [Quiet output style](#quiet-output-style-recommended). |
-
-**Check first, then set — let Claude do it.** Paste this into any Claude Code
-session; it measures what the 1-hour TTL would have saved on your own last
-sessions (reads local transcripts only, no extra model calls) and sets it only
-when the effect is significant:
+Paste into any session; it measures what the 1-hour TTL would have saved on
+your own last sessions (local transcripts only, no extra model calls) and sets
+it only when the effect is significant:
 
 ```text
 Analyse my prompt-cache pauses, then decide on promptCacheTtl:
@@ -409,70 +264,226 @@ Analyse my prompt-cache pauses, then decide on promptCacheTtl:
    transcript content.
 ```
 
-How the cache works, in short: every API call (each tool call, not just each
-message) re-sends the full context; an unchanged prefix is read from the cache
-at ~0.1× the input price (0.05× on Opus 5.5), new content is written once at
-2× (1h TTL). A pause longer than the TTL, a model switch, or a change in the
-tool list (MCP server or plugin toggled mid-session) re-writes everything.
-Keep one topic per session, run big reads in subagents, and `/compact` or
-write a hand-off *before* a long break while the cache is still warm.
+Every API call (each tool call, not just each message) re-sends the full
+context; an unchanged prefix is read from the cache at ~0.1× the input price
+(0.05× on Opus 5.5), new content is written once at 2× (1h TTL). A pause
+longer than the TTL, a model switch or a changed tool list (MCP server or
+plugin toggled mid-session) re-writes everything. Keep one topic per session,
+run big reads in subagents, and `/compact` or write a hand-off *before* a long
+break while the cache is still warm.
 
-### Before reinstalling Windows (or moving to a new machine)
+</details>
 
-Claude Code keeps everything local in two places under your user profile.
-Back these up; everything else is either regenerated or lives in your account.
+## Optional features
 
-| Path | What it holds | Back up? |
-|---|---|---|
-| `%USERPROFILE%\.claude\settings.json`, `settings.local.json`, `keybindings.json` | Permissions, hooks, enabled plugins, marketplaces, output style, cache TTL | **Yes** |
-| `%USERPROFILE%\.claude\CLAUDE.md` | Your global instructions | **Yes** |
-| `%USERPROFILE%\.claude\output-styles\`, `agents\`, `skills\`, `commands\` | Personal styles, agents, skills, slash commands | **Yes** |
-| `%USERPROFILE%\.claude\projects\<project>\memory\` | Auto-memory per project | **Yes** |
-| `%USERPROFILE%\.claude\scheduled-tasks\`, `scripts\`, statusline script | Desktop scheduled tasks and your own helper scripts | **Yes** |
-| `%USERPROFILE%\.claude\plugins\installed_plugins.json`, `known_marketplaces.json` | Which plugins and marketplaces are installed | Yes (small) |
-| devops state in `%USERPROFILE%\.claude\` (`delegation.json`, `devops-*.json`, `token-config.json`) | Plugin preferences | Yes (small) |
-| `%USERPROFILE%\.claude.json` | User-scoped MCP servers (`claude mcp add -s user`), per-project trust and state | **Yes** |
-| `%APPDATA%\Claude\claude_desktop_config.json`, `config.json` | Desktop app settings and its MCP servers | **Yes** |
-| `%USERPROFILE%\.claude\projects\*.jsonl`, `history.jsonl` | Session transcripts and prompt history (can be GBs) | Optional — only for `--resume` of old sessions |
-| `%USERPROFILE%\.claude\plugins\cache\`, `cache\`, `debug\`, `shell-snapshots\`, `telemetry\`, `file-history\` | Caches and logs | No — regenerated |
-| `%USERPROFILE%\.claude\.credentials.json` | Login token | **No** — never copy or sync it; run `/login` after the reinstall |
-| `%APPDATA%\Claude\` (everything else) | Browser caches of the desktop app | No |
+All off by default. Turn each on by saying the phrase in a session.
 
-Not on disk, nothing to back up: claude.ai connectors, published artifacts,
-cloud sessions and routines — they belong to your account.
+| Feature | What it does | Turn on | Token cost |
+|---|---|---|---|
+| [Codex review](#codex) | Second-AI code review before each ship | install [codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | on the OpenAI side |
+| [API credits](#claude-api-credits) | Read-only side work runs on your plan's monthly API credit first | "nutze mein API-Guthaben" | moves work off the plan |
+| [Home backup](#claude-home-backup) | Daily push of `~/.claude` to a private GitHub repo, secret-scanned | "richte Home-Backup ein" | 0 after setup |
+| [WIP watch](#wip-watch) | Weekly scan for un-landed branches, stashes, broken worktrees | "WIP-Wächter an" | 0 |
 
-**Your code is the bigger risk.** Unpushed commits and uncommitted work in
-worktrees (`<repo>\.claude\worktrees\…`) are gone with the disk. Before
-reinstalling, ship or at least push every branch: `git log --branches --not --remotes`
-lists what only exists locally.
+<a name="codex"></a>
+<details>
+<summary><strong>Codex</strong></summary>
 
-**Make it a habit, not an emergency.** Keep the "Yes" rows in a private git
-repo (dotfiles) and restore them with a copy after reinstalling Claude Code —
-exclude `.credentials.json`, transcripts and caches. The opt-in
-[Claude home backup](#claude-home-backup-optional-opt-in) does exactly this
-for `~/.claude` every day, with a secret and private-data scan. After restoring:
-install Claude Code, `/login`, then `claude plugin update` pulls every plugin
-from the restored marketplaces.
+Install [codex-plugin-cc](https://github.com/openai/codex-plugin-cc) and the
+`codex` CLI next to this plugin; no configuration needed. The ship pipeline
+then runs a Codex review of the diff before the PR, `/auto-fix` hands an
+unclear root cause to Codex, and QA/research agents use it for risky changes.
+Every call has a hard timeout and a stored usage limit, so Codex never blocks a
+ship. Setup: [INSTALL.md](INSTALL.md#optional-codex-integration).
 
-## Features
+</details>
 
-- **<!--devops:count:hooks-->87<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->14<!--/devops:count:skills--> Skills** — doors do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit modes), do-learn, do-batch; hidden workers auto-cleanup, auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue. README standards, graphify, usage data, strict mode and project setup are knowledge + hooks, not skills
-- **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, PO, QA, Redteam, Research, Rethinker, Scout, Concept-Author
-- **Completion Card** — mandatory card after every task (11 variants plus pending, concept and batch overrides): three result lines, evidence, one decision — on the Desktop app a widget with buttons
-- **V&V Gate** — every code change states how each requirement was verified; an unverified finish is stamped on the card
-- **Ship Pipeline** — intent detection, PR command blocking, `/do-ship` builds, bumps, merges and releases to `alpha`; promotions re-tag the same commit on `beta` / `stable`
-- **Delegation Policy** — always-on tiers decide when a task gets background agents, with a budget class from your live plan usage
-- **3-Layer Extension Model** — customize any skill or agent per-project without forking
+<a name="claude-api-credits"></a>
+<details>
+<summary><strong>Claude API credits</strong></summary>
 
-## What it does
+Max and Team plans include monthly API credits ($100 on Max 5x, $200 on Max
+20x, up to $500 pooled on Team) that expire every cycle and do **not** cover
+Claude Code itself. Switched on, the plugin runs its read-only side work there
+first and falls back to the plan:
 
-### Hooks (automatic, no user action needed)
+| Work | Runs on |
+|---|---|
+| Codebase sweeps, research, second-opinion reviews (`claude-api-agent.js`) | credit first, then an in-session agent |
+| Codex second opinion when Codex is skipped (`claude-api-safe.js`) | credit |
+| Month-end code audit (`api-credit-audit.js`, report in `~/.claude/devops-audits/`) | credit |
+| Evals started from your own terminal | credit |
+| Code-writing and test-running agents | always the plan |
 
-<!--devops:count:hooks-->87<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+Same price per token, far less context per agent (~2k instead of 30k+), and
+none of it counts against the 5-hour window or the week.
+
+1. **Claude Code:** say "nutze mein API-Guthaben" (or "API credits for devops") — Claude asks two questions once and can walk you through the Claude Console to create a key. Off: "API-Guthaben nicht mehr nutzen".
+2. **CLI:** `node plugins/devops/scripts/claude-api-safe.js --status` (switches) · `--usage` (what the credit was spent on)
+
+The key is read only as `DEVOPS_ANTHROPIC_API_KEY` from `~/.claude/devops-api.env`.
+Never set `ANTHROPIC_API_KEY` for it — that switches Claude Code itself to API
+billing. Purchased credits cannot be excluded; the workspace spend limit is the
+guardrail. Runbook: [`api-credits.md`](plugins/devops/deep-knowledge/api-credits.md).
+
+</details>
+
+<a name="claude-home-backup"></a>
+<details>
+<summary><strong>Claude home backup</strong></summary>
+
+Settings, `CLAUDE.md`, agents, your skills and commands, project memory and
+helper scripts live only in `~/.claude`. The backup pushes them to a
+**private** GitHub repo (default `<you>/claude-home`) once a day via Task
+Scheduler / crontab — a plain node script, no Claude call.
+
+- **Never included:** `.credentials.json`, `*token*` / `*secret*` / `*credential*` / `.env` files, transcripts, caches, `plugins/`, browser profiles, logs.
+- **Before every commit** each file is scanned for secrets (private keys, `sk-` / `ghp_` / `AKIA` tokens, JWTs, `password=` values) and private data (e-mail, phone, IBAN, card numbers). A hit commits nothing and leaves `~/.claude/home-backup-report.txt` (file, line, rule — never the value); allow a finding on purpose in `~/.claude/.backupallow`.
+- **On:** "richte Home-Backup ein" · **off:** "Home-Backup aus" (the repo stays).
+- **Restore:** install Claude Code, move the fresh `~/.claude` aside, `git clone https://github.com/<you>/claude-home ~/.claude`, `claude plugin update`, then `/login`.
+
+Runbook: [`home-backup.md`](plugins/devops/deep-knowledge/home-backup.md).
+
+</details>
+
+<a name="wip-watch"></a>
+<details>
+<summary><strong>WIP watch</strong></summary>
+
+Once a week (default Sunday) a plain node script scans every git repo under
+your roots (default `~/IdeaProjects`) against the existing `origin/<default>`
+— no fetch, nothing deleted. Squash merges count as landed. Each finding gets
+a suggestion: delete (in main), push + PR, reimplement on current main, commit
+or discard a dirty worktree, secure or drop an old stash, `git worktree prune`.
+
+You get one desktop notification only when a new finding appears. Its prompt
+**`WIP-Report aufräumen`** opens the cleanup page with every suggestion
+pre-selected; nothing runs before the dry-run confirmation. On: "WIP-Wächter
+an" · off: "WIP-Wächter aus". Runbook: [`wip-watch.md`](plugins/devops/deep-knowledge/wip-watch.md).
+
+</details>
+
+## Customize
+
+Every skill reads two extension layers on top of the plugin: your global
+`~/.claude/skills/<skill>/reference.md` and the project's
+`.claude/skills/<skill>/reference.md` (project wins).
+
+1. **Claude Code:** say **"extend skill"** — Claude scaffolds or adapts the extension
+2. **Manually:** create `your-project/.claude/skills/<skill>/reference.md`
+
+Directive headings become orders — `## Add after Step 4`, `## Skip Step 3`,
+`## Replace Step 2`; other text is an extra rule. The card names the override
+it applied. Never name the file `SKILL.md` — Claude Code would load it as a
+skill of its own. Example: `.claude/skills/do-ship/reference.md` with
+"## Add after Step 1 — run ng build --prod". Full guide:
+[`skill-extension-guide.md`](plugins/devops/deep-knowledge/skill-extension-guide.md).
 
 <details>
-<summary><strong>By session lifecycle</strong> — when does it fire?</summary>
+<summary><strong><code>.claude</code> in git</strong> — one managed ignore block</summary>
+
+What of `.claude/` is shared and what stays local is one policy, kept in ONE
+marked block of `.gitignore` (`# >>> claude (managed) >>>`). Versioned:
+`CLAUDE.md`, `.claude/settings.json`, `.claude/skills/`, `commands/`, `hooks/`,
+`agents/`, `deep-knowledge/`, `.claude/project-map.md`,
+`.claude/launch.example.json`, `docs/concepts/`. Local: `settings.local.json`,
+`launch.json`, `worktrees/` and all plugin runtime state.
+
+A new repository gets the block on its own; an existing one gets it in
+`.git/info/exclude` until you move it over:
+
+1. **Claude Code:** say "move this repo's .gitignore to the managed claude block"
+2. **CLI:** `node plugins/devops/scripts/claude-ignore.js migrate` (idempotent; already-committed files are reported with their `git rm --cached` command, never untracked for you)
+
+`claude-ignore.js env-example` writes a `.env.example` with key names only.
+
+</details>
+
+<details>
+<summary><strong>Agents and delegation</strong> — when Claude spawns agents, how to switch it off</summary>
+
+An always-on policy decides per task: inline for small work, one background
+agent when the result is a conclusion (research, test runs, redteam), 2–3
+parallel agents for two analysis lenses, a full multi-agent ceremony only
+offered, never auto-started. A budget class from your live plan usage
+(`free` / `ask-before-parallel` / `sonnet-only`) keeps it honest on small
+plans; an explicit `/do-run` is never downgraded. Every spawn shows an agent
+card (agent · task · model · effort).
+
+Switch it per project or machine in `.claude/delegation.json` (or
+`~/.claude/delegation.json`): `{"mode":"off"}` — no proactive agents —
+or `{"mode":"ask"}` — every agent tier is offered first.
+
+| Agent | Role |
+|---|---|
+| **ai** | AI/ML integration |
+| **core** | Business logic, APIs and platform code |
+| **designer** | UX/UI design, tokens, specs |
+| **feature** | One feature end to end: elaborate, build, verify |
+| **frontend** | UI components and styling |
+| **po** | Product judgment: one lens (customer · tech · business) or the synthesis |
+| **qa** | Test, verify, screenshot |
+| **redteam** | Adversarial review: failure modes, blind spots |
+| **research** | Deep-dive investigations |
+| **scout** | Read-only locator (haiku): "where/how is X?" with `path:line` evidence |
+| **rethinker** | Code-blind fresh-approach ideation through one lens |
+| **concept-author** | Writes one follow-up concept round so long concepts keep the session small |
+
+</details>
+
+## Reference
+
+<a name="token-math"></a>
+<details>
+<summary><strong>Token math</strong> — overhead, plan share, payoff</summary>
+
+| Source | Tokens/week | Notes |
+|---|---|---|
+| SessionStart hooks (once per session) | ~8K | Update check, git check, token scan, MCP deps |
+| Prompt guards (per message) | ~150K–250K | Ship detection, issue tracking, git sync — most exit silently |
+| Tool guards (per tool call) | ~100K–200K | Token budget, ship and branch enforcement, agent cards |
+| Always-on context (per session) | ~200K–400K | Delegation policy, knowledge index, card reminders — mostly cache reads |
+| Skill invocations (~15–25/week) | ~15K–30K | Only when you call `/do-ship`, `/do-run`, … |
+| **Total** | **~500K–900K** | **~0.7M tokens/week** |
+
+| Plan | Model | Weekly budget (approx.) | Plugin overhead |
+|---|---|---|---|
+| Pro ($20) | Sonnet / Opus | ~10M / ~3M | **~7 % / ~23 %** |
+| Max 5x ($100) | Sonnet / Opus | ~55M / ~18M | **~1.3 % / ~3.9 %** |
+| Max 20x ($200) | Sonnet / Opus | ~225M / ~75M | **~0.3 % / ~0.9 %** |
+
+*Rough estimates; Anthropic adjusts limits dynamically.*
+
+**Payoff.** The token guard blocks any single operation above your plan's
+share of the ~200K context window — **5 % (~10K) on Pro, 8 % (~16K) on Max 5×,
+10 % (~20K) on Max 20×**; sub-agents get 4× that, capped at 50 %
+(`subagentConfirmThresholdPct`, per agent `subagentTypeThresholdPct`). A
+typical session attempts 5–15 reads of 20–80K tokens each; across ~10
+sessions/week the guard saves **~1–4M tokens/week** — 1.5–6× the plugin's own
+overhead. Plus 2–4 hours/week from git checks, the ship pipeline and
+root-cause debugging.
+
+</details>
+
+<details>
+<summary><strong>Supported stacks</strong> — what is tested, what degrades</summary>
+
+| Area | Supported | Outside |
+|---|---|---|
+| **OS** | Windows, macOS, Linux | Core git / skill flows still run via Node + git |
+| **Shell** | bash (Git-Bash on Windows), zsh | PowerShell / cmd untested |
+| **Git hosting** | GitHub (`gh` CLI) | GitLab, Gitea, Bitbucket: issues, PRs and ship release fail; local / push-only flows work |
+| **Default branch** | Auto-detected from `origin/HEAD` | Falls back to `main` |
+| **Build system** | `npm` — `build`, `lint`, `test` scripts | No `package.json`: steps skipped; pnpm, yarn, pytest, cargo, … are not invoked |
+| **Local LLM** | AnythingLLM Desktop | `local_generate` unavailable, everything else unchanged |
+| **Node runtime** | Node.js 18.18+ | MCP server and hooks may fail to start |
+
+A different stack: extend the skills per project — see [Customize](#customize).
+
+</details>
+
+<details>
+<summary><strong>Hooks</strong> — <!--devops:count:hooks-->87<!--/devops:count:hooks--> hooks by lifecycle and by category</summary>
 
 ```
 SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolUse  ──>  Stop
@@ -589,10 +600,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `stop.session.autosave` — Safety net for session worktrees: a turn that ends with uncommitted work or unpushed…
 <!--/devops:block:hook-lifecycle-->
 
-</details>
-
-<details>
-<summary><strong>By category</strong> — what does it guard?</summary>
+**By category:**
 
 <!--devops:block:hook-categories-->
 #### tokens & load — keep the context window and the machine free
@@ -709,227 +717,31 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 
 </details>
 
-### Skills (invoked explicitly or by hooks)
-
-Doors (`do-*`) are in the slash menu. Workers
-(`auto-*`) are hidden from it (`user-invocable: false`): Claude invokes them
-from your words, the trigger router or a hook. Old names from before the
-restructure (`/ship`, `/fix`, `/concept`, `/run-backlog`, `/promote`, …)
-are mapped to the new skill when they appear in a prompt, and project
-extensions under an old name (`.claude/skills/ship/`) keep loading.
-
-| Skill | Invocation | Purpose |
-|---|---|---|
-| `/do-ship` | Explicit + Hook | Full shipping pipeline: build, version, PR, merge, cleanup |
-| `/do-ship promote` | Explicit | Channel promotion (alpha→beta→stable): re-tag the same SHA, no rebuild |
-| `/do-run` | Explicit + Router | Door for every run: picks the mode (backlog, autonomous, burn, rethink, audit) or implements the prompt through `auto-agents` |
-| `/auto-fix` (trigger: "debug") | Hidden · Router + Hook | Root-cause analysis, diagnostics, and fix cycle |
-| `/auto-issue` | Hidden · Hook | GitHub issue creation and refinement with labels and milestones — the single owner of every issue write |
-| `/auto-extend` | Hidden | Scaffold or adapt project-level skill extensions |
-| `/auto-cleanup` (trigger: "branch cleanup") | Hidden · Card hint + Router | Branch/worktree/PR hygiene page; open PRs are landed one after another via `/do-ship`. After each ship, `ship_hygiene` removes old leftovers that provably landed and suggests the page when too much piles up (thresholds: "devops settings") |
-| `/auto-update` | Hidden | Update the plugin to the latest version from GitHub |
-| `/auto-concept` | Hidden · Router | Interactive HTML page for analysis, plans, concepts, and prototypes |
-| `/auto-agents` | Hidden · Skills | The execution path for everything that implements (do-run, auto-fix, auto-harden, auto-polish, a concept's implement step): applies the delegation tiers, shows one agent card, runs the waves; full ceremony (plan → confirm → waves) only on a yes |
-| `/do-run autonomous` | Explicit | Fully autonomous agent orchestration while user is AFK |
-| `/do-run burn` | Explicit | Turns budget that would expire this week into landed work: depth per task first, lanes only to fill time; a limit stop is asked about, never burned through |
-| `/do-run backlog` | Explicit | Milestone-centric backlog runner: refine, implement, test/QA, and ship selected milestones/issues unsupervised |
-| `/do-learn` | Explicit | Capture long-term learnings and route to project-specific instructions |
-| `/auto-harden` | Hidden · Router | Stabilization pass: full test suite, autonomous bug fixes, regression + consistency |
-| `/auto-polish` | Hidden · Router + `/do-ship` | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
-| `/do-run rethink` | Explicit | Strategic reset for stuck development: code-blind fresh approaches, autonomous decision (concept page only for a real fork), autonomous implementation |
-| `/do-run audit` | Explicit | Full-spectrum audit (functional, visual, animation, audio, a11y, logging, performance, …) of this chat's work, the last 48h's requirements, or everything; then fixes or a DevOps concept page |
-| `/do-batch` | Explicit + Hook | Collect mode: batch prompts into `.claude/batch.md` instead of executing them, then merge into one feasibility-checked plan |
-| `/auto-guide` | Hidden · Hook | Live tutorial in the user's Edge tab: step panel overlay for logins, API keys, and settings Claude cannot do itself |
-
-#### No longer skills — knowledge + hooks
-
-Four former skills are plain knowledge now (`deep-knowledge/`), reached through
-hooks instead of the skill listing. Their old slash names are never mapped to a
-skill; a prompt that mentions them gets a one-line pointer to the doc.
-
-| Former skill | Now | How it reaches Claude |
-|---|---|---|
-| `/setup-readme` | `readme-standards.md` | `pre.readme.standards` on the first substantial README write of a session; "create a readme", "README erstellen" in a prompt |
-| `/auto-graph` | `graphify.md` | the graphify hooks (auto-install, freshness, search gate); "knowledge graph", "graphify" in a prompt |
-| `/auto-usage` | `usage.md` | the `get_usage` MCP tool (the card fetches by itself); "refresh usage", "wie viel hab ich verbraucht" |
-| `/claude-strict` | `strict.md` | the strict hooks and do-run's "Strikt" answer |
-
-**Strict mode** — the deliverable is exactly what the prompt names, complete
-with the tests, docs and callers of the changed thing; unnamed attributes are chosen and reported; it propagates to agents, skills and concept
-iterations. Switch it with plain words (the whole prompt):
-
-| Type | Effect |
-|---|---|
-| `strict on` / `strikt an` | on for this worktree + branch, until `off` or a branch switch |
-| `strict off` / `strikt aus` | off |
-| `strict status` | status |
-| `strict: <task>` / `strikt: <task>` | strict for this one task |
-| "genau so und nicht mehr", "nur das ändern", "nichts anderes anfassen" in a prompt | strict for this one task |
-
-`/claude-strict on|off|<task>` still works inside a prompt; a prompt that
-*starts* with it may be rejected by Claude Code as an unknown command before
-the hook sees it, so prefer the plain words. A bare "strict" arms nothing.
-
-#### `/do-run` — let Claude execute autonomously
-
-When you want Claude to **run autonomously or semi-autonomously to implement
-something**, reach for `/do-run`. Without a mode it asks one short question
-set (what · how · scope · passes) and implements your prompt through
-`auto-agents`, the multi-agent execution path, while you stay present. There
-are two ways in:
-
-- **`/do-run backlog` — Claude picks the topics itself.** It pulls the planned
-  backlog (open milestones, else loose issues), then refines → implements → tests →
-  **ships** each item unsupervised. An optional **budget mode** (asked at the gate,
-  default *no*) adds burn depth per issue. Under the hood it composes the other
-  runs, so you don't invoke them separately.
-- **You pick the topic** with the other modes:
-  - **`/do-run autonomous`** — one ad-hoc task, fully AFK; it ships at the end
-    only when you chose that at the start (default: you ship by hand).
-  - **`/do-run burn`** — budget-driven: turns budget that would expire this
-    week into landed work — stronger models and a redteam pass per task, lanes
-    only to fill time, a pause instead of a hard stop at the 5-hour window.
-    After a usage limit it asks before it burns on (auto-resume follows your
-    answer given up front). Every decision is `scripts/burn-plan.js`; try it
-    token-free with `node plugins/devops/scripts/burn-plan.js simulate --all --text`
-    (explicit `/do-run burn` only).
-
-Backlog mode uses autonomous mode (implementation) and the same role-agent
-orchestration as `auto-agents` in the background — plus burn mode when budget mode
-is on — so those are listed once here, not repeated per run.
-
-#### Improve what exists — harden, polish, rethink, audit
-
-The counterpart to building: instead of building new work, these **refine existing
-code and UI** — no new features, no fresh scope.
-
-- **`/auto-harden`** — stabilization: full test suite, autonomous bug fixes,
-  consistency + regression coverage. Never adds new UI structure.
-- **`/auto-polish`** — UI refinement: visual consistency, state-visuals,
-  UI-side functionality checks and the standing UI rules from
-  `deep-knowledge/ui-defaults.md` (app style as part of every rule, tooltips
-  with two delay tiers, dropdowns, spacing, hotkeys, scrollbars — extendable
-  per project). Structural UI changes only with approval. `/do-ship`
-  runs its rules-only path on every UI diff; the `post.design.remind` hook
-  puts the rules in context the moment a UI file is written.
-- **`/do-run rethink`** — strategic reset: code-blind fresh approaches for
-  stuck development, decided autonomously (a concept page only for a real
-  fork), then implemented — no questions asked.
-- **`/do-run audit`** — full-spectrum audit: functional requirements traced to
-  evidence plus visual, animation, audio, accessibility, logging, performance,
-  resilience, security basics, tests and build. Asks the scope (this chat's
-  work / functional requirements of the last 48h / everything incl. 48h) and
-  the output (audit + implementation, or a DevOps concept page).
-
-Something actually **broken**? That's **`/auto-fix`** (say "debug") —
-standalone root-cause analysis and repair, not a refinement pass.
-
-### Agents (spawned for parallel work)
-
-Spawning is governed by the always-on delegation policy
-(`deep-knowledge/agent-proactivity.md`, injected at every session start): inline
-for single-domain work, one background agent when the deliverable is a conclusion
-(research, test runs, redteam), 2–3 parallel agents for independent domains, and
-`/auto-agents` only offered — never auto-started — for Complex-tier work.
-A budget class (plan × 5h window × week, read from the local usage snapshot)
-keeps that honest on small plans: `free` / `ask-before-parallel` (a Pro plan
-from 0 % — single agents run on sonnet, a parallel spawn asks one question per
-session) / `sonnet-only`. An explicit `/do-run` is never asked or downgraded.
-Switch it off per project or machine: `.claude/delegation.json` (or
-`~/.claude/delegation.json`) with `{"mode":"off"}` — no proactive agents, no
-offers — or `{"mode":"ask"}` — every agent tier is offered first and runs only on
-a yes. An explicit `/do-run` and "with agents" in a prompt always still spawn.
-Every spawn shows an agent card (agent · task · model · effort) in the chat.
-
-| Agent | Role |
-|---|---|
-| **ai** | AI/ML integration |
-| **core** | Business logic, APIs and platform code (Windows: `deep-knowledge/windows-platform.md`) |
-| **designer** | UX/UI design, tokens, and specs |
-| **feature** | One feature end to end: elaborate (po lenses → synthesis) when unrefined, build, verify |
-| **frontend** | UI components and styling |
-| **po** | Product judgment: one lens (customer · tech · business) or the synthesis/review that weighs them |
-| **qa** | Test, verify, screenshot |
-| **redteam** | Adversarial review: failure modes, blind spots, hidden risks |
-| **research** | Deep-dive investigations |
-| **scout** | Read-only locator (haiku · medium): "where/how is X?" sweeps, answer + `path:line` evidence |
-| **rethinker** | Code-blind fresh-approach ideation through one lens |
-| **concept-author** | Writes one follow-up concept round from a brief and builds the page (opus · high), so long concepts keep the session context small |
-
-## Completion Cards
-
-Every task ends with a completion card — one page, three result lines that
-answer the prompt, one decision. It is always the last thing in the response.
-Full spec: [completion-card-design.md](plugins/devops/deep-knowledge/completion-card-design.md).
-
-**ship-successful** in a channel (ring) project — rendered by the real card
-renderer, the way a terminal shows it:
-
-<!--devops:block:card-example-->
-````
----
-
-### **✨✨✨ Filter dialog moved to settings ✨✨✨**
-› Settings now has a Filter tab with drag & drop, replacing the old dialog
-› The old dialog route still works and redirects to the new tab
-✓ 3/3 Requirements  ✓ 47 tests green
-✓ commit → ✓ push → ✓ PR #42 → ✓ merge   main · Build a3f9b21
-alpha **v0.8.3** › beta v0.8.1 (−2) › stable v0.7.9 (−4 · 9 d)
-
-## 🟩 🚀 Released Alpha — v0.8.3 — promote to beta?
-
----
-````
-<!--/devops:block:card-example-->
-
-Two blocks, nothing between them. Block 1 ("what happened"): the title, up to
-three `›` result lines naming an effect for the user (never a file or hook),
-the evidence row (requirements · tests · live check, deviations first), the
-pipeline line (commit → push → PR → merge · branch · build), the channel
-ladder in ring projects, and — once a usage window is worth a look — the
-budget line `5h ▰▰▰▰▰▰▰│▱▱▱▱▱▱ 3 h 12 m   Wk ▰▰│▱▱▱▱▱▱ 5 d 3 h` (bar =
-elapsed time, `│` = usage). Block 2 ("what to decide"): a heading that leads
-with the same status and activity icons as the session title and asks one
-question, an optional context line, and at most three numbered points.
-
-On the Claude Desktop app the whole card is one widget instead of markdown:
-the same content plus the buttons for the variant's verbs (`Ship` / `Ändern`,
-`Fix` / `Skip`, `Promote beta`, `Nachbessern` with a prepared answer,
-`App starten`, `Web-Guide starten`), each with a tooltip. The terminal shows
-the question heading alone.
-
 <details>
-<summary><strong>All variants</strong> — the decision heading each one ends with</summary>
+<summary><strong>Before reinstalling Windows</strong> — what to back up from Claude Code</summary>
 
-<!--devops:block:card-variants-->
-| Variant / state | Decision heading | When |
+| Path | What it holds | Back up? |
 |---|---|---|
-| `ready` | 👉 📦 Ready — Ship? | Code or doc changes, nothing open, no app to start |
-| `ready + open point` | 👉 ❓ Question — Also retry on HTTP 503? | A decision is still the user's (`open`) — Ship is not offered until it is answered |
-| `ready + red tests` | 👉 ⚠️ Red tests — Ship anyway with 2 red tests? | Tests are red or a requirement is unmet — line 1 says what was not achieved |
-| `test` | 👉 🧪 Test — Test first, then ship? | Code changed and the app can be started — the user tests first |
-| `test-minimal` | 🟩 ✨ Started — have fun | The user only asked to start the app, nothing was edited |
-| `ship-blocked` | 👉 🚧 Blocked — Bypass tsc error and ship anyway? | The ship pipeline ran but did not merge |
-| `ship-successful (plain)` | 🟩 🚀 Released Alpha — v1.4.0 → main. | Merged to main in a project without release channels |
-| `ship-successful (ring)` | 🟩 🚀 Released Alpha — v1.4.0 — promote to beta? | Merged and released to alpha in a channel (ring) project |
-| `released → beta` | 🟩 🎊 Beta — v1.4.0 — to stable? | A promotion re-tagged the same commit on beta |
-| `released → stable` | 🟩 🎊 Stable — v1.4.0 — done. | A promotion reached stable — nothing left to decide |
-| `ready-files` | 👉 📦 Files — Done on disk — anything else? | Files changed outside any git repository |
-| `analysis` | 🟩 📊 Analysis — read through — questions? | An answer or investigation — nothing changed anywhere |
-| `aborted` | 🟥 📦 Aborted — aborted because of no write access — try differently? | The task was stopped, infeasible or hit a limit |
-| `fallback` | 🟩 🖥️ System — done — anything else? | Work done outside the repo with no repo diff (a setting, a deploy, a DB operation) |
-| `paused` | 🟦 🔌 Restart — restart Claude Code | The user pauses, or the next step is a restart, a reboot or a usage-limit reset |
-| `pending (override)` | ⏳ 🤖 Team — not done yet — agent `qa` is working | Background agents still run — replaces the decision of any variant |
-<!--/devops:block:card-variants-->
+| `%USERPROFILE%\.claude\settings.json`, `settings.local.json`, `keybindings.json` | Permissions, hooks, plugins, marketplaces, output style | **Yes** |
+| `%USERPROFILE%\.claude\CLAUDE.md`, `output-styles\`, `agents\`, `skills\`, `commands\` | Your instructions, styles, agents, skills, commands | **Yes** |
+| `%USERPROFILE%\.claude\projects\<project>\memory\` | Auto-memory per project | **Yes** |
+| `%USERPROFILE%\.claude\scheduled-tasks\`, `scripts\` | Scheduled tasks, your helper scripts | **Yes** |
+| `%USERPROFILE%\.claude.json` | User-scoped MCP servers, per-project trust | **Yes** |
+| `%APPDATA%\Claude\claude_desktop_config.json`, `config.json` | Desktop app settings and its MCP servers | **Yes** |
+| `%USERPROFILE%\.claude\plugins\installed_plugins.json`, `known_marketplaces.json`, devops `*.json` state | Installed plugins, plugin preferences | Yes (small) |
+| `%USERPROFILE%\.claude\projects\*.jsonl`, `history.jsonl` | Transcripts (can be GBs) | Only for `--resume` |
+| `%USERPROFILE%\.claude\.credentials.json` | Login token | **Never** — `/login` afterwards |
+| caches, `debug\`, `telemetry\`, `file-history\`, the rest of `%APPDATA%\Claude\` | Caches and logs | No |
 
-Headings follow the user's language; this table is the English rendering.
-The session title in the Desktop sidebar carries the same status and
-activity icons (`👉` your move · `⏳` Claude works · `🟩` done · `🟥`
-aborted · `🟦` paused).
+Connectors, artifacts, cloud sessions and routines live in your account. The
+bigger risk is your code: `git log --branches --not --remotes` lists commits
+that exist only locally — ship or push them first. The
+[home backup](#claude-home-backup) keeps the "Yes" rows current every day.
 
 </details>
 
-## Project Structure
+<details>
+<summary><strong>Project structure</strong></summary>
 
 ```
 plugins/
@@ -950,24 +762,22 @@ plugins/
 └── local-llm/                     ← Optional token saver backed by AnythingLLM
 ```
 
+</details>
+
 ## Troubleshooting
 
-### Plugin update not showing
+**Update not showing** — the marketplace cache is stale.
 
-Claude Code caches plugin marketplace data globally. If `claude plugin update` reports no update available despite a new version being published, clear the global marketplace cache:
+1. **Claude Code:** say "devops update"
+2. **CLI:** clear the cache, then install again (see [Install](#install)):
+   ```bash
+   rm -rf ~/.claude/plugins/cache/dotclaude ~/.claude/plugins/marketplaces/dotclaude ~/.claude/plugins/install-counts-cache.json
+   ```
 
-```bash
-# Git Bash on Windows, WSL, macOS, Linux
-rm -rf ~/.claude/plugins/cache/dotclaude
-rm -rf ~/.claude/plugins/marketplaces/dotclaude
-rm -f ~/.claude/plugins/install-counts-cache.json
-```
+**Card says `ℹ Session server v<old> — restarting the session loads v<new>.`**
+— a session keeps the MCP servers it started with; start a new session. On a
+`stable` pin a fresh ship reaches you only after it is promoted.
 
-Then add the marketplace and install again (see [Installation](#installation)). Start a new session for changes to take effect.
-
-### Update installed but the session still runs the old version
-
-A session keeps the MCP servers it started with. When the card shows
-`ℹ Session server v<old> — restarting the session loads v<new>.`, start a new
-session. On a `stable` pin a fresh ship does not reach you until it is
-promoted — see [Updates](#updates).
+**Hooks or skills missing** — start a new session; check the plugin is enabled
+(CLI: `claude plugin list`; Desktop: **Customize → Personal Plugins**). More in
+[`INSTALL.md`](INSTALL.md#troubleshooting).

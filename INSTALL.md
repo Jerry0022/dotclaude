@@ -31,21 +31,22 @@ loads plugins from your claude.ai account, the CLI from `~/.claude/plugins/`. A
 plugin installed through one does not appear in the other, so install it where
 you work (or in both).
 
-**Desktop App:**
+1. **Claude Code** — paste the sentence at the top of this page into a session.
+2. **CLI (terminal):**
 
-1. Sidebar → **Customize** → **+** next to *Personal Plugins*
-2. Add the marketplace `Jerry0022/dotclaude` (or `https://github.com/Jerry0022/dotclaude`)
-3. Install / enable the plugin **devops**
+   ```bash
+   claude plugin marketplace add Jerry0022/dotclaude
+   ```
 
-**CLI (terminal):**
+   ```bash
+   claude plugin install devops@dotclaude
+   ```
 
-```bash
-claude plugin marketplace add Jerry0022/dotclaude
-claude plugin install devops@dotclaude
-```
-
-Or inside an interactive `claude` session: `/plugin marketplace add Jerry0022/dotclaude`,
-then `/plugin install devops@dotclaude`.
+   Or inside an interactive `claude` session: `/plugin marketplace add Jerry0022/dotclaude`,
+   then `/plugin install devops@dotclaude`.
+3. **Manually (Desktop App):** Sidebar → **Customize** → **+** next to *Personal Plugins* →
+   add the marketplace `Jerry0022/dotclaude` (or `https://github.com/Jerry0022/dotclaude`) →
+   install / enable **devops**.
 
 Requires **git** and **Node.js 18.18+** (the plugin's MCP server runs on Node).
 
@@ -53,19 +54,12 @@ Start a new session for hooks to take effect. Skills are available immediately: 
 
 ## Update
 
-Updates are managed by the Claude Code marketplace:
-
-```bash
-claude plugin update devops@dotclaude
-```
-
-Or enable auto-update for the marketplace (Desktop: **Customize**; CLI: `/plugin` → **Marketplaces**).
-
-Alternatively, ask Claude to run the built-in plugin-update skill (it is hidden from the slash menu — this phrase is its trigger):
-
-```
-devops update
-```
+1. **Claude Code:** say **"devops update"** (the hidden plugin-update skill)
+2. **CLI:**
+   ```bash
+   claude plugin update devops@dotclaude
+   ```
+3. **Manually:** enable auto-update for the marketplace (Desktop: **Customize**; CLI: `/plugin` → **Marketplaces**).
 
 ## Project-specific extensions (optional)
 
@@ -73,9 +67,10 @@ Every skill and agent supports per-project customization. Create extension files
 
 ```
 your-project/.claude/skills/{skill-name}/
-├── SKILL.md        ← override or add steps
-└── reference.md    ← project-specific context
+└── reference.md    ← project rules and step directives (## Add after Step N, ## Skip Step N, ## Replace Step N)
 ```
+
+Never name it `SKILL.md` — Claude Code would load it as a separate skill.
 
 Say "extend skill" (or "customize skill") to interactively scaffold an extension for a specific skill. The plugin keeps Claude and plugin runtime files out of git with one managed block in `.gitignore` (`# >>> claude (managed) >>>`); for a one-time repo setup (.gitignore for your stack, LICENSE) say "set up this project".
 
@@ -155,8 +150,9 @@ Verify the plugin is enabled — Desktop: **Customize → Personal Plugins**; CL
 
 ## Uninstall
 
-```bash
-claude plugin uninstall devops@dotclaude
-```
-
-Desktop App: remove it under **Customize → Personal Plugins**.
+1. **Claude Code:** say "uninstall the devops plugin" (CLI install only)
+2. **CLI:**
+   ```bash
+   claude plugin uninstall devops@dotclaude
+   ```
+3. **Manually (Desktop App):** remove it under **Customize → Personal Plugins**.
