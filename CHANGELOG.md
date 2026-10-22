@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.291.1] — 2026-10-22
+
+The test suite runs on vitest 5, and `npm audit` reports 0 findings. Dev dependencies only — the shipped plugin is unchanged.
+
+### Changed
+- **vitest 3.2 → 5.0.5.** This closes GHSA-82fw-gwwq-j7x9 (moderate, via `@vitest/mocker`), the last 2 npm-audit findings of the v0.290.0 plugin audit. `vite ^8.3.5` is pinned in devDependencies because vitest now requires it as a peer.
+- **Config cleanup.** The `tinypool` override is dropped (vitest 4+ uses its own pool), and so is `minWorkers` (removed in vitest 4; only `maxWorkers` applies). `vitest.yield-setup.mjs` still finds `rpcDone` in the v5 chunk layout.
+
+### Not changed
+- eslint 10 and jsdom stay on their current majors. They move in their own branches.
+
 ## [0.291.0] — 2026-10-22
 
 The card's decision line no longer starts with the `┃` title bar, a delegated ship no longer loses the background plugin audit, and the plugin now records what it saves so the audit can weigh benefit against cost. Implements the 11 suggestions of the v0.290.0 plugin audit.
