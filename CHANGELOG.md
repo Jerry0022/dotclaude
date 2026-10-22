@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.292.1] — 2026-10-22
+
+Sub-agent worktrees that a crashed agent left locked are now removed after their branch merged into the integration branch, instead of piling up.
+
+Root cause: `integration-check.js --remove` (used by auto-agents since #816) ran `git worktree remove` on a worktree whose lock was held by a dead agent process; the call failed and the part was silently skipped on every later run.
+
+### Fixed
+- **Dead-pid locks are lifted.** A lock whose reason names a pid that no longer runs is released with `git worktree unlock` (never forced) right before the removal — the same rule `hygiene.js` already applies to temp worktrees.
+- **Live locks are named.** A lock held by a running process or without a pid keeps the worktree; the CLI lists each kept part with its reason, and the summary adds "gesperrt: N Teile".
+
 ## [0.292.0] — 2026-10-22
 
 Session titles and card headings put the activity icon right after the bar, so both icons sit together: `⏳ ┃ 🤖 Solo Fix Login`, `👉 📦 Ready — Shippen?`. The "Started" state shows ✨ instead of 💡.
