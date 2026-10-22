@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.295.2] — 2026-10-22
+## [0.296.2] — 2026-10-22
 
 New users can install the plugin with one sentence pasted into Claude Code, or by following the README.
 
