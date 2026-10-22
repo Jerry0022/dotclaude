@@ -240,7 +240,7 @@ describe("prompt.flow.title-work — title known from the transcript", () => {
   });
 
   test("a machine turn leaves an outcome alone", () => {
-    expect(out("🟩 ┃ 🚀 Alpha Login", "<task-notification>\n<status>completed</status>\n</task-notification>")).toBe("");
+    expect(out("🟩 ┃ 🚀 Released Alpha Login", "<task-notification>\n<status>completed</status>\n</task-notification>")).toBe("");
   });
 
   test("title unknown (no entry, no transcript) → the get_session fallback", () => {

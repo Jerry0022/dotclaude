@@ -668,7 +668,7 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     });
     expect(text).not.toContain("Variante auf `ready` korrigiert");
     expect(text).toContain("✓ commit → ✓ merge main · nur lokal, kein Remote");
-    expect(text).toMatch(/^## 🟩 🚀 Alpha — v1\.2\.3 → main\.$/m);
+    expect(text).toMatch(/^## 🟩 🚀 Released Alpha — v1\.2\.3 → main\.$/m);
   });
 
   test("ship-successful without a remote downgrades with a note that asks for nothing impossible (#500)", async () => {
@@ -812,17 +812,17 @@ describe("render_completion_card — § 3 per-variant table (de + en)", () => {
     {
       name: "ship-successful (ring)",
       params: { variant: "ship-successful", state: { pushed: true, merged: "main" }, delivery: { ship: { version: "0.1.0" }, promote: { channels: { alpha: "0.1.0" }, current: "alpha" } } },
-      de: /^## 🟩 🚀 Alpha — v0\.1\.0 — nach Beta promoten\?$/m, en: /^## 🟩 🚀 Alpha — v0\.1\.0 — promote to beta\?$/m,
+      de: /^## 🟩 🚀 Released Alpha — v0\.1\.0 — nach Beta promoten\?$/m, en: /^## 🟩 🚀 Released Alpha — v0\.1\.0 — promote to beta\?$/m,
     },
     {
       name: "ship-successful (plain merge, no ring)",
       params: { variant: "ship-successful", state: { pushed: true, merged: "main" }, delivery: { ship: { version: "0.1.0", base: "main" } } },
-      de: /^## 🟩 🚀 Alpha — v0\.1\.0 → main\.$/m, en: /^## 🟩 🚀 Alpha — v0\.1\.0 → main\.$/m,
+      de: /^## 🟩 🚀 Released Alpha — v0\.1\.0 → main\.$/m, en: /^## 🟩 🚀 Released Alpha — v0\.1\.0 → main\.$/m,
     },
     {
       name: "ship-successful kept",
       params: { variant: "ship-successful", state: { pushed: true, merged: "main", kept: true, branch: "feat/x" }, delivery: { ship: { version: "0.1.0" } } },
-      de: /^## 🟩 🚀 Alpha — v0\.1\.0 — weiter in `feat\/x`\?$/m, en: /^## 🟩 🚀 Alpha — v0\.1\.0 — continue on `feat\/x`\?$/m,
+      de: /^## 🟩 🚀 Released Alpha — v0\.1\.0 — weiter in `feat\/x`\?$/m, en: /^## 🟩 🚀 Released Alpha — v0\.1\.0 — continue on `feat\/x`\?$/m,
     },
     {
       name: "ship-successful deployPending",
@@ -984,7 +984,7 @@ describe("render_completion_card — ship + promote in one run (released)", () =
   test("the released heading, the ship's tests AND the promotion facts on one card", async () => {
     const text = await cardText({ ...combined, session_id: "test-combo-1" });
     // Ship + promote in one run (state.merged) reads Released; the userFinalTest is a mandatory step → 👉.
-    expect(text).toMatch(/^## 👉 🚀 Stable — v0\.171\.0 — fertig\.$/m);
+    expect(text).toMatch(/^## 👉 🚀 Released Stable — v0\.171\.0 — fertig\.$/m);
     expect(text).toContain("3462 Tests grün");
     expect(text).toContain("Tags stable/v0.171.0/v0.171.0");
     expect(text).toContain("bit-identisch — deadbee");
@@ -1008,7 +1008,7 @@ describe("render_completion_card — ship + promote in one run (released)", () =
       userFinalTest: ["Login prüfen"],
     });
     // The open point is a mandatory step: 👉, not 🟩.
-    expect(text).toMatch(/^## 👉 🚀 Alpha — v0\.171\.0/m);
+    expect(text).toMatch(/^## 👉 🚀 Released Alpha — v0\.171\.0/m);
     expect(text).toContain("Promotion auf stable ausgesetzt — erst deployen, dann promote stable");
     expect(text).toContain("🧪 Login prüfen");
   });
@@ -1232,18 +1232,18 @@ describe("render_completion_card — concept close-out after the implement ship 
     try {
       const de = await render({ ...kept, summary: "x", lang: "de", session_id: "test-closeout-de", cwd });
       const deText = de.content[de.content.length - 1].text;
-      expect(deText).toMatch(/^## 👉 🚀 Alpha — v0\.1\.0 — Konzept abschließen – Abschlussbericht wartet\.$/m);
+      expect(deText).toMatch(/^## 👉 🚀 Released Alpha — v0\.1\.0 — Konzept abschließen – Abschlussbericht wartet\.$/m);
       expect(deText).toContain("› http://localhost:4321/docs/concepts/x.html");
       expect(deText).not.toMatch(/weiter in/);
       const all = de.content.map(c => c.text).join("\n");
       expect(all).not.toContain("\"🧭 Concept – \" +");
-      expect(all).toContain("set the title to \"" + "👉 ┃ 🚀 Alpha " + "\" +");
+      expect(all).toContain("set the title to \"" + "👉 ┃ 🚀 Released Alpha " + "\" +");
       const en = await cardText({ ...kept, summary: "x", lang: "en", session_id: "test-closeout-en", cwd });
-      expect(en).toMatch(/^## 👉 🚀 Alpha — v0\.1\.0 — Close out the concept – final report is waiting\.$/m);
+      expect(en).toMatch(/^## 👉 🚀 Released Alpha — v0\.1\.0 — Close out the concept – final report is waiting\.$/m);
       expect(en).not.toMatch(/continue on/);
       // A plain merge (no ring) names the base instead of alpha.
       const plain = await cardText({ variant: "ship-successful", state: { mode: "git", pushed: true, merged: "main" }, delivery: { ship: { version: "0.1.0", base: "main" } }, summary: "x", lang: "de", session_id: "test-closeout-plain", cwd });
-      expect(plain).toMatch(/^## 👉 🚀 Alpha — v0\.1\.0 → main — Konzept abschließen – Abschlussbericht wartet\.$/m);
+      expect(plain).toMatch(/^## 👉 🚀 Released Alpha — v0\.1\.0 → main — Konzept abschließen – Abschlussbericht wartet\.$/m);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -1256,7 +1256,7 @@ describe("render_completion_card — concept close-out after the implement ship 
     const cwd = conceptRepo(body);
     try {
       const text = await cardText({ ...kept, summary: "x", lang: "de", session_id: "test-closeout-none", cwd });
-      expect(text).toMatch(/^## 🟩 🚀 Alpha — v0\.1\.0 — weiter in `feat\/x`\?$/m);
+      expect(text).toMatch(/^## 🟩 🚀 Released Alpha — v0\.1\.0 — weiter in `feat\/x`\?$/m);
       expect(text).not.toMatch(/Abschlussbericht wartet/);
     } finally {
       rmSync(cwd, { recursive: true, force: true });

@@ -226,8 +226,8 @@ describe("prompt.ship.detect — a bare affirmation ships only after a ship-aski
 
   test("real case: a ship-successful card + 'ja, passt' → no ship", () => {
     for (const card of [
-      textCard("🟩 🚀 Alpha — v0.212.0 — nach Beta promoten?"),
-      widgetCard("🟩 🚀 Alpha — v0.212.0 — nach Beta promoten?", ["promote beta"]),
+      textCard("🟩 🚀 Released Alpha — v0.212.0 — nach Beta promoten?"),
+      widgetCard("🟩 🚀 Released Alpha — v0.212.0 — nach Beta promoten?", ["promote beta"]),
       textCard("🟩 🎊 Beta — v0.212.0 — nach Stable?"),
     ]) {
       const r = runHook({ prompt: "ja, passt", transcript_path: cardTranscript(card) });

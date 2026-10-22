@@ -15,8 +15,8 @@ describe("title-scheme — new grammar", () => {
   test("head and heading carry the same parts", () => {
     expect(S.head("ready").text).toBe("👉 ┃ 📦 Ready");
     expect(S.headingOf("ready", "Shippen?")).toBe("👉 📦 Ready — Shippen?");
-    expect(S.head("released-alpha").text).toBe("🟩 ┃ 🚀 Alpha");
-    expect(S.head("released-alpha", { mandatory: true }).text).toBe("👉 ┃ 🚀 Alpha");
+    expect(S.head("released-alpha").text).toBe("🟩 ┃ 🚀 Released Alpha");
+    expect(S.head("released-alpha", { mandatory: true }).text).toBe("👉 ┃ 🚀 Released Alpha");
     expect(S.head("paused-restart").text).toBe("🟦 ┃ 🔌 Restart");
     expect(S.head("agents").text).toBe("⏳ ┃ 🤖 Team");
   });
@@ -50,6 +50,13 @@ describe("title-scheme — new grammar", () => {
     expect(S.classify("⏳ ┃ Solo 🤖 X")).toBe("work");
     expect(S.stripPrefixes("🟩 ┃ Started 💡 Spiel")).toBe("Spiel");
     expect(S.stripPrefixes("⏳ ┃ 🤖 Solo 👉 ┃ Ready 📦 Login")).toBe("Login");
+  });
+
+  test("the bare channel word of v0.292 is still recognised", () => {
+    expect(S.classify("🟩 ┃ 🚀 Alpha X")).toBe("outcome");
+    expect(S.stripPrefixes("👉 ┃ 🚀 Stable Login")).toBe("Login");
+    expect(S.stripPrefixes("🟩 ┃ Beta 🚀 Login")).toBe("Login");
+    expect(S.prefixOf("released-alpha")).toBe("🟩 ┃ 🚀 Released Alpha ");
   });
 
   test("Started carries the sparkles, not the light bulb", () => {
