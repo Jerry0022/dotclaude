@@ -121,6 +121,28 @@ describe("parseDeletes — every delete form, with the directory git runs in", (
   });
 
   test.each([
+    ['git -C "$w" status --porcelain'],
+    ['git -C ".claude/worktrees/$w" log --oneline'],
+    ['git -C "$w" diff'],
+    ['git -C "$w" show HEAD'],
+    ['git -C "$w" ls-remote origin'],
+    ['git -C "$w" for-each-ref refs/heads'],
+    ['git -C "$w" worktree list'],
+  ])("read-only with a non-literal -C dir passes (#827): %s", (cmd) => {
+    expect(one(cmd)).toEqual({ deletes: [], unresolved: [] });
+  });
+
+  test.each([
+    ['git -C $x branch -D foo'],
+    ['git -C "$x" push origin --delete foo'],
+    ['git -C "$x" push --prune origin'],
+    ['git -C "$x" update-ref -d refs/heads/foo'],
+    ['git -C "$x" worktree remove foo'],
+  ])("delete with a non-literal -C dir is still refused (#827): %s", (cmd) => {
+    expect(one(cmd).unresolved.length).toBeGreaterThan(0);
+  });
+
+  test.each([
     ['for b in feat/a feat/b; do git branch -D "$b"; done'],
     ['R="/x"; git -C "$R" branch -d feat/a'],
     ["git for-each-ref --format='%(refname:short)' refs/heads | xargs git branch -D"],

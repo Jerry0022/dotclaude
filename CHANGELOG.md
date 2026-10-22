@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.292.3] — 2026-10-22
+
+Under load, the cleanup and governor hooks no longer refuse harmless commands: read-only git passes the cleanup gate, and a slow governor no longer blocks a command at all.
+
+Root cause: on a loaded machine, Node startup plus git probes exceeded the hook budget (cleanup gate 15 s, governor 5 s); the harness then refused even read-only commands, and the cleanup gate refused every `git -C <dir>` with a non-literal path, deletes or not (#827).
+
+### Fixed
+- **Read-only git passes the cleanup gate.** The "repo path is not literal" refusal for a non-literal `git -C <dir>` now applies only to delete subcommands (`branch -d/-D`, `push --delete`/`:ref`/`+:ref`/`--prune`/`--mirror`, `update-ref -d`, `worktree remove`); `status`, `log`, `diff`, `show`, `ls-remote`, `for-each-ref`, `worktree list` pass.
+- **More headroom, deletes stay gated.** `pre.cleanup.gate` timeout 15 → 30 s and still blocks on failure while `/auto-cleanup` is armed.
+- **Governor fails open.** `pre.governor.gate` no longer blocks when it times out (admission control, not a safety gate, as its header says); timeout 5 → 10 s.
+
 ## [0.292.2] — 2026-10-22
 
 Deleting a finished remote branch no longer needs a throwaway worktree: from the main checkout, `git push origin --delete <branch>` now passes the main-branch guard.

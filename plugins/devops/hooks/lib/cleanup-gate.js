@@ -225,8 +225,10 @@ function deletesInTokens(tokens) {
       i += 2;
     } else i++;
   }
-  if (dir !== null && !literal(dir)) return { unresolved: `the repo path "${dir}" is not literal` };
   const sub = tokens[i];
+  // A non-literal -C dir only matters for a delete subcommand (#827); read-only
+  // ones fall through to `return null` below.
+  const dirBad = dir !== null && !literal(dir) ? { unresolved: `the repo path "${dir}" is not literal` } : null;
   const rest = tokens.slice(i + 1);
   const flags = rest.filter(t => t.startsWith('-'));
   const args = rest.filter(t => !t.startsWith('-'));
@@ -260,6 +262,7 @@ function deletesInTokens(tokens) {
   } else {
     return null;
   }
+  if (dirBad) return dirBad;
   if (viaXargs || !out.length) return { unresolved: `git ${sub} gets its targets from a pipe or none at all` };
   const bad = out.find(d => !literal(d.target) || (d.remote !== undefined && !literal(d.remote)));
   if (bad) return { unresolved: `"${bad.target}" is not a literal name` };
