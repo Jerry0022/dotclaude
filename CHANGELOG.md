@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.293.0] — 2026-10-22
+
+`/auto-cleanup` confirms many unmerged branches in one click round: a single multiSelect `Unmerged` question approves every ticked branch, instead of one question per branch.
+
+Why: 46 unmerged branches took 12 click rounds. Consent stays per branch name; only the clicks are bundled (#826).
+
+### Added
+- **Batch Unmerged confirmation.** `pre.cleanup.gate` records one exact approval per ticked option of a multiSelect `Unmerged` question; unticked branches stay refused. The refusal text points to the batch form.
+- **Literal names only.** The batch counts only when every option is a bare branch name (`[A-Za-z0-9._/-]`); free text, "Other" answers, comma lists, prefixes, case variants and Ja/Yes/Behalten labels approve nothing. Approvals are compared literally. The single-select path is unchanged.
+- **Docs.** `auto-cleanup` SKILL.md and `execution.md` describe the batch question (chunked at 4 options) and require the manifest and Dry-Run to name every branch literally (no brace or prefix compression).
+
 ## [0.292.3] — 2026-10-22
 
 Under load, the cleanup and governor hooks no longer refuse harmless commands: read-only git passes the cleanup gate, and a slow governor no longer blocks a command at all.
