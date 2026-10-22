@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.297.1] — 2026-10-22
+## [0.298.1] — 2026-10-22
 
 While `/auto-cleanup` is armed, a PowerShell payload path that starts with `/` and an abbreviated `env --split-string` no longer slip past the delete gate.
 
