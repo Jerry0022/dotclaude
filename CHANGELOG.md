@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.296.3] — 2026-10-22
+
+While `/auto-cleanup` is armed, the gate now refuses every shell command it cannot read in full, instead of letting it through.
+
+Why: the automated security reviews of 0.296.1 (#829) found more fail-open paths in the shell-wrapper parsing. Refusing an unreadable command in an armed cleanup session is safe; passing one could delete a worktree unconfirmed.
+
+### Fixed
+- **PowerShell.** A positional command without an explicit `-Command` is refused, because the value-taking parameter prefixes (`-Exec`, `-ep`, …) cannot all be modeled. `/Command` and other slash switches count as `-Command`. A `-Command -` payload (stdin) and a payload that starts with an option are refused.
+- **Prefixes.** `env -S`, bundled forms such as `-iS` and every prefix of `--split-string` are refused. A prefix option value that is itself a command line (`sudo -u "rm -rf x"`) and a quoted command line after a prefix (`nohup "rm -rf x"`) are refused.
+- **Shells without an inline command.** A shell with no `-c`, `-Command` or `/c` runs a script or reads stdin (pipe, `|&`, `<`, `<<<`, here-doc); every such shell is refused while armed. `|&` counts as a pipe, and `bash -c -- "…"` skips the `--`.
+
+Accepted cost: `bash script.sh` and `powershell "…"` without `-Command` are refused while `/auto-cleanup` is armed. Everyday commands (`git status`, `powershell -NoProfile -Command "…"`, `bash -lc "npm test"`, `sudo -u root ls`, `git log | head`) pass unchanged.
+
 ## [0.296.2] — 2026-10-22
 
 New users can install the plugin with one sentence pasted into Claude Code, or by following the README.
