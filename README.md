@@ -84,23 +84,26 @@ Your mileage may vary. Your sanity will not.
 
 ## Installation
 
-Add the plugin via CLI (recommended):
+**Desktop App:** Sidebar → **Customize** → **+** next to *Personal Plugins* → add `Jerry0022/dotclaude` → enable **devops**.
+
+**CLI:**
 
 ```bash
-claude plugin add devops@Jerry0022
+claude plugin marketplace add Jerry0022/dotclaude
+claude plugin install devops@dotclaude
 ```
 
-> **Desktop App:** The marketplace UI shows the marketplace tab but may not list plugins for installation. Use the CLI command above, or see [`INSTALL.md`](INSTALL.md) for manual registration steps.
+Desktop and CLI keep separate plugin stores — a CLI install (also one Claude runs for you) does not show up in the Desktop App. Requires git and Node.js 18.18+.
 
 Start a new session for hooks to take effect. See [`INSTALL.md`](INSTALL.md) for details, extensions, and uninstall.
 
 ## Updates
 
 ```bash
-claude plugin update devops@Jerry0022
+claude plugin update devops@dotclaude
 ```
 
-Or enable auto-update via **Settings** → **Plugins** → **Marketplaces**. Semantic versioning — breaking changes only in major versions.
+Or enable auto-update for the marketplace (Desktop: **Customize**; CLI: `/plugin` → **Marketplaces**). Semantic versioning — breaking changes only in major versions.
 
 ## Supported Stacks
 
@@ -869,4 +872,4 @@ rm -rf ~/.claude/plugins/marketplaces/dotclaude
 rm -f ~/.claude/plugins/install-counts-cache.json
 ```
 
-Then run `claude plugin update devops@Jerry0022` again. Start a new session for changes to take effect.
+Then run `claude plugin update devops@dotclaude` again. Start a new session for changes to take effect.
