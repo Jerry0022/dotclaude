@@ -113,8 +113,8 @@ const CASES = [
   ["test + open keeps Test (#750)", { variant: "test", userTest: ["Login prüfen"], open: OPEN }, ["👉", "Test", "🧪"]],
   ["test without steps + open → question", { variant: "test", open: OPEN }, ["👉", "Question", "❓"]],
   ["test + no remote (test-local)", { variant: "test", userTest: ["Login prüfen"], state: { mode: "git-no-remote" } }, ["👉", "Test", "🧪"]],
-  ["test-minimal", { variant: "test-minimal" }, ["🟩", "Started", "💡"]],
-  ["test-minimal + userTest (mandatory)", { variant: "test-minimal", userTest: ["Spiel starten"] }, ["👉", "Started", "💡"]],
+  ["test-minimal", { variant: "test-minimal" }, ["🟩", "Started", "✨"]],
+  ["test-minimal + userTest (mandatory)", { variant: "test-minimal", userTest: ["Spiel starten"] }, ["👉", "Started", "✨"]],
   // analysis / fallback
   ["analysis", { variant: "analysis" }, ["🟩", "Analysis", "📊"]],
   ["analysis + open question (mandatory)", { variant: "analysis", open: ["Welche Variante?"] }, ["👉", "Analysis", "📊"]],
@@ -171,9 +171,9 @@ function evaluate(params, lang) {
 describe("title = CTA — every completion-card variant × every heading/prefix flag", () => {
   for (const [name, params, [status, word, activity], opts = {}] of CASES) {
     for (const lang of ["de", "en"]) {
-      test(`${name} (${lang}) → ${status} ┃ ${word} ${activity}`, () => {
+      test(`${name} (${lang}) → ${status} ┃ ${activity} ${word}`, () => {
         const { heading, title } = evaluate(params, lang);
-        const head = `${status} ┃ ${word} ${activity}`;
+        const head = `${status} ┃ ${activity} ${word}`;
         const prefix = (head + " ");
         if (opts.titleOwnedBySkill) {
           // An armed batch owns the title (the card leaves it alone) — and the
@@ -182,16 +182,16 @@ describe("title = CTA — every completion-card variant × every heading/prefix 
           expect(BATCH_PREFIX).toBe(prefix);
         } else {
           expect(typeof title, JSON.stringify(title)).toBe("string");
-          const m = /^(\S+) ┃ (.+?) (\S+) $/u.exec(title.split(TITLE_SCHEME.HAIR).join(""));
+          const m = /^(\S+) ┃ (\S+) (.+?) $/u.exec(title.split(TITLE_SCHEME.HAIR).join(""));
           expect(m, JSON.stringify(title)).not.toBeNull();
           expect(m[1], "status icon").toBe(status);
-          expect(m[2], "keyword").toBe(word);
-          expect(m[3], "activity icon").toBe(activity);
+          expect(m[2], "activity icon").toBe(activity);
+          expect(m[3], "keyword").toBe(word);
           expect(title).toBe(prefix);
         }
         // Title = CTA: the heading starts with the same two icons and keyword,
         // without the title's ┃ bar (it read as a line starting with "|").
-        expect(heading.startsWith(`${status} ${word} ${activity} — `), heading).toBe(true);
+        expect(heading.startsWith(`${status} ${activity} ${word} — `), heading).toBe(true);
         expect(heading).not.toContain("┃");
         expect(heading).not.toMatch(/LIVE/);
         expect(heading.startsWith("✅")).toBe(false);
@@ -200,32 +200,32 @@ describe("title = CTA — every completion-card variant × every heading/prefix 
   }
 
   test("the matrix reaches every scheme state but the card-less F5 one", () => {
-    const reached = new Set(CASES.map(([, , [s, w, a]]) => `${s} ┃ ${w} ${a}`));
+    const reached = new Set(CASES.map(([, , [s, w, a]]) => `${s} ┃ ${a} ${w}`));
     for (const [id, [statusKey, word, act]] of Object.entries(TITLE_SCHEME.STATES)) {
       if (id === "interrupted" || id === "shipping") continue; // F5 (stop hook) and /do-ship Pre-Step C set these
       const status = TITLE_SCHEME.STATUS[statusKey];
-      expect(reached.has(`${status} ┃ ${word} ${act}`), id).toBe(true);
+      expect(reached.has(`${status} ┃ ${act} ${word}`), id).toBe(true);
     }
     // Both statuses of a done state are exercised: 🟩 and the 👉 a mandatory step raises.
-    expect(reached.has("🟩 ┃ Alpha 🚀")).toBe(true);
-    expect(reached.has("👉 ┃ Alpha 🚀")).toBe(true);
+    expect(reached.has("🟩 ┃ 🚀 Alpha")).toBe(true);
+    expect(reached.has("👉 ┃ 🚀 Alpha")).toBe(true);
   });
 
   test("an optional promote offer keeps 🟩, a mandatory step makes it 👉 — the heading follows", () => {
     const optional = evaluate({ variant: "ship-successful", state: SHIPPED, delivery: ring("alpha") }, "de");
-    expect(optional.heading).toBe("🟩 Alpha 🚀 — v0.1.0 — nach Beta promoten?");
+    expect(optional.heading).toBe("🟩 🚀 Alpha — v0.1.0 — nach Beta promoten?");
     const mandatory = evaluate({ variant: "ship-successful", state: SHIPPED, delivery: ring("alpha"), userFinalTest: FINAL }, "en");
-    expect(mandatory.heading).toBe("👉 Alpha 🚀 — v0.1.0 — promote to beta?");
-    expect(mandatory.title).toBe("👉 ┃ Alpha 🚀 ");
+    expect(mandatory.heading).toBe("👉 🚀 Alpha — v0.1.0 — promote to beta?");
+    expect(mandatory.title).toBe("👉 ┃ 🚀 Alpha ");
   });
 
   test("worked examples from the concept read exactly", () => {
-    expect(evaluate({ variant: "ready" }, "de").heading).toBe("👉 Ready 📦 — Shippen?");
-    expect(evaluate({ variant: "ready" }, "en").heading).toBe("👉 Ready 📦 — Ship?");
-    expect(evaluate({ variant: "test-minimal" }, "de").heading).toBe("🟩 Started 💡 — viel Spaß");
+    expect(evaluate({ variant: "ready" }, "de").heading).toBe("👉 📦 Ready — Shippen?");
+    expect(evaluate({ variant: "ready" }, "en").heading).toBe("👉 📦 Ready — Ship?");
+    expect(evaluate({ variant: "test-minimal" }, "de").heading).toBe("🟩 ✨ Started — viel Spaß");
     expect(evaluate({ variant: "paused", pause: { reason: "usage-reset", resetAt: "14:00" } }, "de").heading)
-      .toBe("🟦 Limit reset 🔋 — weiter nach dem Limit-Reset (14:00)");
+      .toBe("🟦 🔋 Limit reset — weiter nach dem Limit-Reset (14:00)");
     expect(evaluate({ variant: "aborted", cta: { reason: "Konflikt", activity: "ship" } }, "en").heading)
-      .toBe("🟥 Ship 🚀 — aborted because of Konflikt — try differently?");
+      .toBe("🟥 🚀 Ship — aborted because of Konflikt — try differently?");
   });
 });

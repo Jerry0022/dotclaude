@@ -84,7 +84,7 @@ describe("do-batch SKILL.md — session title prefix", () => {
     expect(step2).toMatch(/no `get_session`/);
     // The activation card must see the mode file — that is how it swaps its CTA.
     expect(step2).toMatch(/completion\s+card \*\*with `cwd` set to the project root\*\*/);
-    expect(step2).toContain("┃ Batch 📚");
+    expect(step2).toContain("┃ 📚 Batch");
   });
 
   it("every way out strips the prefix: go, off, expiry", () => {
