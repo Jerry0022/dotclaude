@@ -51,6 +51,6 @@ describe("readmeSectionsToCheck — README sections whose sources changed", () =
 
   test("the shipped map catches the card design doc", () => {
     expect(readmeSectionsToCheck(REAL_MAP, ["plugins/devops/deep-knowledge/completion-card-design.md"]))
-      .toEqual(["Completion Cards (prose around the generated examples)"]);
+      .toEqual(["Completion card (prose around the generated examples)"]);
   });
 });

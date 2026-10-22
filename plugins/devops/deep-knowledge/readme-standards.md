@@ -135,3 +135,13 @@ in the response — nothing after the closing `---`.
 - **Version**: Display `**Version: x.y.z**` near the top
 - **No filler**: Every sentence must add information
 - **Feature descriptions**: Start with a verb or the benefit
+- **Ways to do something, always in this order**: 1. **Claude Code** — the
+  phrase or prompt to say in a session; 2. **CLI** — the command; 3.
+  **Manually** — UI clicks or file edits. Applies to install, update,
+  uninstall, enabling a feature and every troubleshooting fix; leave a step
+  out only when it does not exist.
+- **Consumer first, details folded**: the visible page answers what it is,
+  how to install and update, the everyday commands and what the user sees.
+  Everything a reader only needs to understand more (internals, full tables,
+  token math, rosters, runbook detail) goes into `<details>` blocks with a
+  summary line that says what is inside — fold, do not delete.
