@@ -88,6 +88,19 @@ describe('governor hooks', () => {
     expect(fs.existsSync(path.join(home, 'reservations'))).toBe(false); // reservations dropped
   });
 
+  it.runIf(win)('#812: the defer message carries a local HH:MM and says it is a snapshot, not a diagnosis', () => {
+    freshState({ pressure: { priority: ['cpu'], over: [] }, priorityBy: 'c:/games/foo' });
+    const r = run(PRE, bash('ffmpeg -i a.wav b.mp3', { tool_use_id: 't812' }));
+    expect(r.status).toBe(2);
+    const m = r.stderr.match(/^\[governor (\d{2}):(\d{2})\] Not starting/);
+    expect(m).toBeTruthy();
+    expect(Number(m[1])).toBeLessThan(24);
+    expect(Number(m[2])).toBeLessThan(60);
+    expect(r.stderr).toContain(`snapshot of the load at ${m[1]}:${m[2]}, not a diagnosis of errors that show up later`);
+    expect(r.stderr).toMatch(/Pressed: CPU/);
+    expect(r.stderr).toMatch(/cli\.js" wait [\w-]+/);
+  });
+
   it.runIf(win)('the defer message never advertises an opt-out env var', () => {
     freshState({ pressure: { priority: ['cpu'], over: [] } });
     const r = run(PRE, bash('ffmpeg -i a.wav b.mp3'));

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.298.5] — 2026-10-22
+
+A governor block message now carries the local time it was written and says it is a snapshot of the load at that moment, not a diagnosis of errors that show up later.
+
+Why: a block reason quoted turns later ("Pressed: RAM: Anno1800.exe 7.7 GB") read like the cause of a later failing run, and a failure was blamed on load without fresh evidence (#812).
+
+### Changed
+- **Governor block message.** `pre.governor.gate` starts the refusal with `[governor HH:MM]` and adds "This is a snapshot of the load at HH:MM, not a diagnosis of errors that show up later." The `Pressed: …` text and the wait/CLI instructions are unchanged.
+- **Docs.** `load-governor.md` § Reading a governor block: an earlier governor reason is no evidence for a later failure. Check the current load, the process list, or the same command on the base branch, or report "cause unverified". `fact-verification.md` points to it under "Failure causes".
+
 ## [0.298.4] — 2026-10-22
 
 The SessionStart notice about a skipped devops MCP connect no longer blames "another session" when the failure was this session's own. It names another session only when the cached failure predates this session's start.

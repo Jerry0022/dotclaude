@@ -142,6 +142,17 @@ MCP servers are never throttled. Concept:
    permissions — the gate checks it again, it is never bypassed), 2 on
    timeout, 1 for an unknown id. `wait` itself is a light command for the gate.
 
+## Reading a governor block
+
+The refusal starts with `[governor HH:MM]` (local time) and says it is a
+snapshot of the load at that moment, not a diagnosis (#812). A governor
+reason from an earlier turn is **no evidence** for the cause of a later
+failing run — a timeout, a crash or a red test half an hour later may have
+nothing to do with the RAM pressure that deferred a command back then. Before
+blaming load, get fresh evidence: the current load or process list, or the
+same command cross-checked on the base branch. Without it, report the cause
+as "cause unverified", never "because of the governor/RAM".
+
 ## Commands
 
 ```
