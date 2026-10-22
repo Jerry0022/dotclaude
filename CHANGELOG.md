@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.291.2] — 2026-10-22
+
+The answer to "GitHub Actions minutes used up — merge without CI or wait?" is asked once per quota period and GitHub account, and no card asks to catch up CI after the reset anymore.
+
+Root causes: the stored answer expired 7 days after it was given, not at the quota reset, and it was keyed per `owner/repo` although minutes are shared by every private repo of the account, so each other repo of the account asked again. The skill also told every card to add a "re-run CI after the reset" item, which reached the user as a question on each ship.
+
+### Fixed
+- **CI-quota answer for the whole period.** The decision now lasts until the block's reset date (`validUntil`); the first minutes block after the reset asks again. An answer stored without `validUntil` lasts until the 1st of the month after it.
+- **One answer per GitHub account.** The store key is the `owner` of origin; existing per-repo entries are folded into the account on read.
+- **No catch-up item.** The first ship after the reset runs CI on a PR that contains main with everything merged meanwhile — that run is the catch-up, so cards carry only the `tests` line.
+
 ## [0.291.1] — 2026-10-22
 
 The test suite runs on vitest 5, and `npm audit` reports 0 findings. Dev dependencies only — the shipped plugin is unchanged.
