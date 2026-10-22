@@ -331,8 +331,13 @@ function unwrap(tokens, depth = 0, piped = false) {
     else if (prefix && t[0].startsWith('-')) {
       // `env -S "rm -rf X"` runs its value as a command line
       // also bundled (`-iS`) and any prefix of --split-string (`--sp=…`)
-      if (prefix === 'env' && (/^-[^-]*S/.test(t[0]) || /^--sp(l(i(t(-(s(t(r(i(n(g)?)?)?)?)?)?)?)?)?)?(=|$)/.test(t[0]))) {
+      if (prefix === 'env' && (/^-[^-]*S/.test(t[0]) || /^--s(p(l(i(t(-(s(t(r(i(n(g)?)?)?)?)?)?)?)?)?)?)?(=|$)/.test(t[0]))) {
         return unresolvedAs('env -S (a split command line)');
+      }
+      // an inline value (`--opt=…`) that holds a command line
+      const inline = t[0].includes('=') ? t[0].slice(t[0].indexOf('=') + 1) : '';
+      if (/\s/.test(inline) || RUNS_SOMETHING_RE.test(baseName(inline))) {
+        return unresolvedAs(`a "${prefix}" option value that is a command`);
       }
       const re = PREFIX_VALUE_OPTS[prefix];
       const takesValue = re && re.test(t[0]);
@@ -371,11 +376,16 @@ function unwrap(tokens, depth = 0, piped = false) {
     return open([glued, ...rest.slice(c + 1)].filter(Boolean));
   }
   if (/^(powershell|pwsh)$/i.test(name)) {
-    rest = rest.map(a => a.replace(/^\/(?=[a-z])/i, '-')); // PowerShell takes `/Command` like `-Command`
-    if (rest.some(a => PS_ENCODED_RE.test(a))) return unresolvedAs('an encoded command');
-    if (rest.some(a => PS_FILE_RE.test(a))) return unresolvedAs('a script file');
-    const c = rest.findIndex(a => PS_COMMAND_RE.test(a));
+    // PowerShell takes `/Command` like `-Command` — but only the launcher's own
+    // options are rewritten: after -Command the payload stays as typed
+    // (`/tmp/x` is a path, not a switch)
+    const asSwitch = (a) => a.replace(/^\/(?=[a-z])/i, '-');
+    const c = rest.findIndex(a => PS_COMMAND_RE.test(asSwitch(a)));
+    const launcher = (c === -1 ? rest : rest.slice(0, c)).map(asSwitch);
+    if (launcher.some(a => PS_ENCODED_RE.test(a))) return unresolvedAs('an encoded command');
+    if (launcher.some(a => PS_FILE_RE.test(a))) return unresolvedAs('a script file');
     if (c !== -1) return open(rest.slice(c + 1));
+    rest = launcher;
     // no -Command: PowerShell runs the first positional argument, after options
     // the gate cannot all model (any unambiguous prefix of a value parameter)
     if (rest.some(a => !a.startsWith('-'))) return unresolvedAs('a PowerShell command without -Command');
