@@ -240,6 +240,13 @@ injects the notes — the answers and corrections that follow must not be
 collected. Treat the mode as OFF for the rest of this turn and all following
 ones.
 
+**Notes belong to the session that collected them (#841).** `batch-mode.json` records
+the collecting `sessionId`. The marker in a DIFFERENT session passes through untouched: the
+hook archives the orphaned notes (never deletes), names the archive path once and merges
+nothing. The same session keeps its marker after the mode expired. `/do-batch go` adopts
+another session's notes on purpose. A mode file without a `sessionId` (older versions) counts
+as owned by everyone.
+
 **4.0 Bring main into the branch BEFORE reading a single note.** The notes may
 be hours old; a plan checked against a stale base rebuilds what main already
 has or collides with it at ship time.

@@ -8,7 +8,7 @@ import {
   buildAck, buildRearmAck, buildMergeContext, fireMerge, renderSyncLines, buildActivationGuard,
   buildAttachmentGuard, retireTitleLines, buildEmptyQueueNotice, syncMain, INLINE_LIMIT, GIT_SYNC_SCRIPT,
 } from "./prompt.batch.collect.js";
-import { activate, appendNote, readNotes, isModeActive } from "../lib/batch-state.js";
+import { activate, appendNote, readNotes, isModeActive, modePath, notesPath } from "../lib/batch-state.js";
 
 const HOOK = fileURLToPath(new URL("./prompt.batch.collect.js", import.meta.url));
 
@@ -929,5 +929,38 @@ describe("H-B15: the hand-off marker follows the merge context", () => {
     expect(seen[0].marker).toBe(false);
     expect(JSON.parse(fs.readFileSync(handoff(), "utf8")).sessionId).toBe("s1");
     expect(isModeActive(cwd)).toBe(false);
+  });
+});
+
+describe("session scope (#841)", () => {
+  const expire = () => {
+    const m = JSON.parse(fs.readFileSync(modePath(cwd), "utf8"));
+    m.expiresAt = new Date(Date.now() - 1000).toISOString();
+    fs.writeFileSync(modePath(cwd), JSON.stringify(m), "utf8");
+  };
+  beforeEach(() => {
+    activate(cwd, { marker: "los", sessionId: "owner" });
+    appendNote(cwd, "alte Idee");
+    expire();
+  });
+
+  test("foreign session marker: passthrough, notes archived, no hand-off gate", () => {
+    const r = runHook({ prompt: "los, mach das Ding", session_id: "other" });
+    expect(r.code).toBe(0);
+    expect(r.stdout).not.toContain("alte Idee");
+    expect(r.stdout).toContain("archiviert");
+    expect(fs.existsSync(notesPath(cwd))).toBe(false);
+    expect(fs.readdirSync(path.join(cwd, ".claude")).some((f) => /^batch-.*\.md$/.test(f))).toBe(true);
+    expect(fs.existsSync(path.join(cwd, ".claude", "batch-handoff.json"))).toBe(false);
+  });
+
+  test("same session with an expired mode still merges", () => {
+    const r = runHook({ prompt: "los, mach das Ding", session_id: "owner" });
+    expect(r.stdout).toContain("alte Idee");
+  });
+
+  test("explicit /do-batch go adopts another session's notes", () => {
+    const r = runHook({ prompt: "/do-batch go", session_id: "other" });
+    expect(r.stdout).toContain("alte Idee");
   });
 });
