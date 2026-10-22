@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.294.0] — 2026-10-22
+
+`/auto-cleanup` no longer asks for an Unmerged confirmation on sub-agent branches whose work landed through a squash-merged integration branch.
+
+Why: after a feature run, every agent branch looked unmerged to the cleanup gate even though its changes were on main, so each one needed an extra click (#825).
+
+### Added
+- **Chain-landed check.** A branch counts as landed when its tip is inside the head chain of a merged PR and its changes are still in the base tree (files the base later deleted count as landed). The check lives in `scripts/lib/chain-landed.js`; `ship_hygiene`, `pre.cleanup.gate` and `auto-cleanup` Step 3 share it.
+- **Fails closed.** Without merged-PR data, on a `gh` error, without a working directory or after the time budget, a branch counts as not landed, and the gate keeps asking.
+
+### Fixed
+- **Hook budget.** The gate fetches the merged PR heads once per command and shares one 18 s budget across all targets, so a multi-branch delete stays inside the 30 s hook timeout.
+
 ## [0.293.0] — 2026-10-22
 
 `/auto-cleanup` confirms many unmerged branches in one click round: a single multiSelect `Unmerged` question approves every ticked branch, instead of one question per branch.

@@ -214,6 +214,8 @@ For each local branch (excluding worktree/Aktive-Session branches — exclusion 
    - If not ancestor: check if the branch has a corresponding **merged PR** on GitHub
      (`gh pr list --state merged --head <branch> --json number,mergedAt --limit 1`)
    - If merged PR found -> SQUASH-MERGED (content in main via squash, but git doesn't know)
+   - If not: chain/tree check (sub-agent, `rescue/*`, `salvage/*` branches) passes -> SQUASH-MERGED
+     (`deep-knowledge/investigation.md` § Chain- and tree-landed)
    - If neither -> UNMERGED
 
 2. **Check remote tracking status:**
