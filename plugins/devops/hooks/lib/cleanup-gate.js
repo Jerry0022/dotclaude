@@ -334,7 +334,7 @@ function unwrap(tokens, depth = 0, piped = false) {
       if (prefix === 'env' && (/^-[^-]*S/.test(t[0]) || /^--s(p(l(i(t(-(s(t(r(i(n(g)?)?)?)?)?)?)?)?)?)?)?(=|$)/.test(t[0]))) {
         return unresolvedAs('env -S (a split command line)');
       }
-      // an inline value (`--opt=…`, `-u…`) that holds a command line
+      // an inline value (`--opt=…`) that holds a command line
       const inline = t[0].includes('=') ? t[0].slice(t[0].indexOf('=') + 1) : '';
       if (/\s/.test(inline) || RUNS_SOMETHING_RE.test(baseName(inline))) {
         return unresolvedAs(`a "${prefix}" option value that is a command`);

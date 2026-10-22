@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.297.1] — 2026-10-22
+
+While `/auto-cleanup` is armed, a PowerShell payload path that starts with `/` and an abbreviated `env --split-string` no longer slip past the delete gate.
+
+Why: the automated security review of 0.296.3 (#829) found two more fail-open paths in the shell-wrapper parsing; either could delete a worktree unconfirmed.
+
+### Fixed
+- **PowerShell payload.** The `/switch` → `-switch` rewrite now covers only the launcher options before `-Command`. The payload stays as typed, so `pwsh /Command Remove-Item -Recurse /tmp/x` keeps `/tmp/x` as the delete target instead of reading it as a switch.
+- **env prefixes.** Every prefix of `--split-string`, including the `--s=…` form, counts as `-S` and is refused. An inline prefix option value (`--opt=…`) that holds a command line is refused. Harmless options such as `env --chdir=/tmp/x node x.js` still pass.
+
 ## [0.298.0] — 2026-10-22
 
 The README matches the plugin again, and the completion-card examples in it are now drawn by the real card renderer, so they cannot fall behind the card design anymore.
