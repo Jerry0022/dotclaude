@@ -60,7 +60,9 @@ Replaces `python -m http.server` with a custom server that adds:
   Tabs, to none at all — so silence proves nothing (#397).
 - POST /status — Claude advertises a processing phase. Body
   `{"phase": "implemented"}` lights up the third progress step after the
-  implement branch finishes.
+  implement branch finishes. Optional `"progress": {"done": n, "total": m}`
+  (validated by _clean_progress, transient) is echoed as `_progress` on
+  GET /decisions and drives the panel's "Umsetzung n/m" counter.
 - POST /reset — Claude clears decisions after processing; conditional on
   version to avoid dropping submissions that land between GET and POST
   (see /reset docs below). Updates `_processed_at` and clears
@@ -233,6 +235,12 @@ _picked_up_at = ''
 # for `implemented` (after the implement-branch finished its code changes,
 # before /reload). Cleared on /decisions POST and /reset.
 _phase = ''
+# Optional implement progress set by Claude via POST /status
+# {"phase": "implementing", "progress": {"done": n, "total": m}}: m = the
+# number of approved requirements, n = done so far. Drives the panel's
+# "Umsetzung n/m" bar; None = the browser shows an indeterminate bar. Not
+# persisted (transient UI hint), cleared together with _phase.
+_progress = None
 # Submission-id de-dup ring (#finding-10). The offline queue's own check
 # (GET /decisions, compare submission_id) only works until Claude POSTs
 # /reset — that clears `_decisions`, so a payload that was already fsynced
@@ -601,6 +609,21 @@ def _state_write(snapshot):
     _durable_write(_state_path, json.dumps(snapshot, ensure_ascii=False).encode('utf-8'))
 
 
+def _clean_progress(raw):
+    """Validate the optional /status `progress` field: {"done": n, "total": m}
+    with 0 <= n <= m, m >= 1, both ints. Anything else is dropped (None)."""
+    if not isinstance(raw, dict):
+        return None
+    done, total = raw.get('done'), raw.get('total')
+    if isinstance(done, bool) or isinstance(total, bool):
+        return None
+    if not isinstance(done, int) or not isinstance(total, int):
+        return None
+    if total < 1 or done < 0 or done > total:
+        return None
+    return {"done": done, "total": total}
+
+
 def _snapshot(decisions, version, processed_at, picked_up_at, phase):
     return {
         'decisions': decisions,
@@ -730,7 +753,7 @@ def _store_restore():
     submission and version it held before it died. This single function is
     what turns #284's "version: 0, indistinguishable from never submitted"
     into a faithful resume."""
-    global _decisions, _version, _processed_at, _picked_up_at, _phase
+    global _decisions, _version, _processed_at, _picked_up_at, _phase, _progress
     if not _store_ok or not os.path.exists(_state_path):
         return None
     try:
@@ -1300,6 +1323,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 processed_at = _processed_at
                 picked_up_at = _picked_up_at
                 phase = _phase
+                progress = _progress
             try:
                 obj = json.loads(data)
                 if not isinstance(obj, dict):
@@ -1310,6 +1334,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             obj["_processed_at"] = processed_at
             obj["_picked_up_at"] = picked_up_at
             obj["_phase"] = phase
+            obj["_progress"] = progress
             self._json_response(obj)
         elif route == '/pending':
             # Deterministic one-shot signal for Claude's cron: unambiguous
@@ -1493,7 +1518,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_POST(self):
-        global _server_ts, _claude_ts, _claude_pulser, _decisions, _version, _processed_at, _reload_counter, _picked_up_at, _phase, _browser_bye_ts, _reload_at_submit
+        global _server_ts, _claude_ts, _claude_pulser, _decisions, _version, _processed_at, _reload_counter, _picked_up_at, _phase, _progress, _browser_bye_ts, _reload_at_submit
         if not self._host_ok():
             self.send_error(403, "forbidden host")
             return
@@ -1594,6 +1619,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                         # before Claude's cron had actually noticed it.
                         _picked_up_at = ''
                         _phase = ''
+                        _progress = None
                         _reload_at_submit = _reload_counter
                         # Only remember an id once it is actually on disk — a
                         # non-durable accept (store unwritable) has nothing on
@@ -1759,6 +1785,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 self._error_response(400, {"ok": False, "reason": "bad_content_length"})
                 return
             phase_val = ''
+            progress_val = None
             expected_version = None
             if length > 0:
                 try:
@@ -1766,13 +1793,15 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                     payload = json.loads(raw) if raw else {}
                     phase_val = str(payload.get('phase') or '')
                     expected_version = payload.get('version')
+                    progress_val = _clean_progress(payload.get('progress'))
                 except Exception:
                     phase_val = ''
                     expected_version = None
             with _lock:
                 if expected_version is None or expected_version == _version:
                     _phase = phase_val
-                    self._json_response({"ok": True, "phase": _phase, "version": _version})
+                    _progress = progress_val
+                    self._json_response({"ok": True, "phase": _phase, "progress": _progress, "version": _version})
                 else:
                     self._conflict_response({
                         "ok": False,
@@ -1900,6 +1929,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                     # state so the next submission starts from a clean panel.
                     _picked_up_at = ''
                     _phase = ''
+                    _progress = None
                     # Durable side of the reset. The journal is append-only,
                     # so the processed submission stays recoverable forever;
                     # only the LIVE payload is cleared. Dropping the marker

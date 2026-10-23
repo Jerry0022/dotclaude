@@ -529,12 +529,15 @@ function _setCacheHints(visible) {
 // --- Status line (all templates) ---
 // The one renderer for the pinned .panel-status line. Inputs, in priority:
 //   frozen tab (body.viewing-frozen)        → 🕘 {tab label} · nur lesen
-//   submission in flight (_submittedAt)     → ⏳ Übermittelt · Claude arbeitet  + dots
-//   disconnected                            → ⚠ Nur lokal gespeichert · getrennt
-//   draft mirror failing, not disconnected  → ⚠ Nur lokal gespeichert
-//   draft flush pending                     → … Speichert
-//   heartbeat still connecting              → ◐ Gespeichert · verbinde…
-//   otherwise                               → ✓ Gespeichert · verbunden
+//   submission in flight (_submittedAt)     → 🤖 überdenkt | setzt um · gespeichert
+//   disconnected                            → 👉 Du bist dran · alles gespeichert · verbinde…
+//   draft mirror failing, not disconnected  → 👉 Du bist dran · nur in diesem Browser gespeichert
+//   draft flush pending                     → 👉 Du bist dran · speichert…
+//   heartbeat still connecting              → 👉 Du bist dran · verbindet…
+//   otherwise                               → 👉 Du bist dran · gespeichert
+// The turn half (.status-turn, created on first render) and
+// #panel-status[data-turn] = you | rethinking | implementing | frozen feed the
+// journey row (§ Submit → Journey row); data-status keeps its six values.
 // The raw heartbeat stays on #connection-status[data-state] (written by
 // checkClaudeConnection); the draft phase comes from § State Persistence
 // (_draftPhase). Every writer of those inputs calls this, so the line can
@@ -549,32 +552,50 @@ function renderPanelStatus() {
   const submitted = (typeof _submittedAt === 'number' && _submittedAt > 0)
     || document.body.classList.contains('concept-submitted');
   const frozen = document.body.classList.contains('viewing-frozen');
-  let status, glyph, text;
+  const implementing = submitted && typeof _submittedAction === 'string' && _submittedAction === 'implement';
+  let status, glyph, text, turn = '', turnKey;
   if (frozen) {
     const tab = document.querySelector('.iteration-tab[aria-selected="true"]');
     const label = tab ? (tab.dataset.tabLabel || tab.textContent.trim()) : '';
     status = 'frozen'; glyph = '🕘'; text = label + ' · {{panel.status_frozen}}';
+    turnKey = 'frozen';
   } else if (submitted) {
-    status = 'submitted'; glyph = '⏳'; text = '{{panel.status_working}}';
-  } else if (conn === 'disconnected') {
-    status = 'local-only'; glyph = '⚠'; text = '{{panel.status_local_only}}';
-  } else if (draft === 'local') {
-    // Same state, no "· getrennt": the heartbeat reports no disconnect, so
-    // the draft mirror failed for another reason (§ State Persistence,
-    // _draftStripText). Claiming a disconnect here is what made a running
-    // bridge look dead.
-    status = 'local-only'; glyph = '⚠'; text = '{{panel.status_local_only_connected}}';
-  } else if (draft === 'saving') {
-    status = 'saving'; glyph = '…'; text = '{{panel.status_saving}}';
-  } else if (conn === 'connecting') {
-    status = 'connecting'; glyph = '◐'; text = '{{panel.status_connecting}}';
+    // "🤖 überdenkt · gespeichert" / "🤖 setzt um · gespeichert" — the save
+    // half says "verbinde…" while the bridge is away.
+    status = 'submitted'; glyph = '🤖';
+    turn = implementing ? '{{panel.turn_implementing}}' : '{{panel.turn_rethinking}}';
+    text = conn === 'disconnected' ? '{{panel.status_reconnecting}}' : '{{panel.status_working}}';
+    turnKey = implementing ? 'implementing' : 'rethinking';
   } else {
-    status = 'saved'; glyph = '✓'; text = '{{panel.status_saved}}';
+    glyph = '👉'; turn = '{{panel.turn_you}}'; turnKey = 'you';
+    if (conn === 'disconnected') {
+      status = 'local-only'; text = '{{panel.status_local_only}}';
+    } else if (draft === 'local') {
+      // Same state, no "· verbinde…": the heartbeat reports no disconnect, so
+      // the draft mirror failed for another reason (§ State Persistence,
+      // _draftStripText). Claiming a disconnect here is what made a running
+      // bridge look dead.
+      status = 'local-only'; text = '{{panel.status_local_only_connected}}';
+    } else if (draft === 'saving') {
+      status = 'saving'; text = '{{panel.status_saving}}';
+    } else if (conn === 'connecting') {
+      status = 'connecting'; text = '{{panel.status_connecting}}';
+    } else {
+      status = 'saved'; text = '{{panel.status_saved}}';
+    }
   }
   host.dataset.status = status;
+  host.dataset.turn = turnKey;
   const glyphEl = line.querySelector('.status-glyph');
   const labelEl = line.querySelector('.conn-label');
+  let turnEl = line.querySelector('.status-turn');
+  if (!turnEl && labelEl) {
+    turnEl = document.createElement('b');
+    turnEl.className = 'status-turn';
+    line.insertBefore(turnEl, labelEl);
+  }
   if (glyphEl) glyphEl.textContent = glyph;
+  if (turnEl) turnEl.textContent = turn;
   if (labelEl) labelEl.textContent = text;
   // The heartbeat wording lives in the tooltip — the line itself says what
   // the user wants to know (is my work safe / delivered), not what the
@@ -585,50 +606,130 @@ function renderPanelStatus() {
   const detail = document.getElementById('status-detail');
   if (detail) detail.hidden = (status !== 'submitted');
   if (typeof renderStatusDots === 'function') renderStatusDots();
-  if (typeof renderSubmittedToast === 'function') renderSubmittedToast(status === 'submitted');
+  if (typeof renderJourney === 'function') renderJourney();
+  // Toast: while the round is in flight, and while it is the user's turn but
+  // the bridge is away ("👉 Du bist dran · alles gespeichert" + verbinde…).
+  if (typeof renderSubmittedToast === 'function') {
+    renderSubmittedToast(status === 'submitted' || (!frozen && conn === 'disconnected'));
+  }
 }
 
-// --- Submitted toast (all templates) ---
+// --- Status toast (all templates) ---
 // The veil after a submit is clicked away by reflex, and with the panel
-// closed nothing on the page said the round was already sent. A pinned
-// bottom-centre toast repeats the panel's state — "✓ Entscheidungen
-// übermittelt · ⏳ Claude arbeitet" plus the same progress dots — for as
-// long as the round is in flight; a click opens the panel. CSS hides it
-// while the panel is open (the panel says the same) and on a past tab.
-// Built here, not in the skeleton, so every template gets it from the one
-// renderer that already knows the submitted state.
-function renderSubmittedToast(show) {
+// closed nothing on the page said the round was already sent. A bottom-centre
+// toast repeats the panel's pill — the SAME run bar (buildRunBar), the same
+// counter — under a small caption ("Runde 3" / "Neue Runde"). No ring, no
+// box, no open button; a click on it opens the panel. Disconnected while 🤖
+// runs: the pill dims (last known state) and "verbinde…" floats below it.
+// Disconnected on the user's turn: the blue pill stays bright ("👉 Du bist
+// dran · alles gespeichert") with the same floating "verbinde…". A finished
+// implement bar hides itself after it has been visible with focus ~2.5 s.
+// CSS hides it while the panel is open and on a past tab.
+function _liveRound() {
+  const live = document.querySelector('section[data-iteration][data-active]');
+  return live ? live.dataset.iteration : '';
+}
+function _ensureStatusToast() {
   let toast = document.getElementById('submitted-toast');
-  if (!toast) {
-    if (!show) return;
-    toast = document.createElement('button');
-    toast.type = 'button';
-    toast.id = 'submitted-toast';
-    toast.className = 'submitted-toast';
-    toast.setAttribute('aria-live', 'polite');
-    toast.dataset.tip = '{{panel.toast_open}}';
-    const part = (cls, text) => {
-      const n = document.createElement('span');
-      n.className = cls;
-      n.textContent = text;
-      toast.appendChild(n);
-      return n;
-    };
-    part('submitted-toast-check', '✓');
-    part('submitted-toast-label', '{{panel.submitted}}');
-    part('submitted-toast-sep', '·');
-    part('submitted-toast-working', '⏳ {{panel.toast_working}}');
-    part('status-dots submitted-toast-dots', '').setAttribute('aria-hidden', 'true');
-    toast.addEventListener('click', () => {
-      if (typeof openPanel === 'function') openPanel();
-      else document.getElementById('panel-toggle')?.click();
-    });
-    document.body.appendChild(toast);
+  if (toast) return toast;
+  toast = document.createElement('div');
+  toast.id = 'submitted-toast';
+  toast.className = 'jr-toast';
+  toast.hidden = true;
+  toast.setAttribute('role', 'status');
+  toast.setAttribute('aria-live', 'polite');
+  toast.dataset.tip = '{{panel.toast_open}}';
+  const cap = document.createElement('small');
+  cap.className = 'jr-toast-cap';
+  const you = document.createElement('span');
+  you.className = 'jr-toast-you';
+  const run = (typeof buildRunBar === 'function') ? buildRunBar('') : document.createElement('span');
+  run.classList.add('jr-toast-run');
+  const fl = document.createElement('span');
+  fl.className = 'jr-float';
+  fl.innerHTML = '{{panel.toast_reconnecting}}<i>.</i><i>.</i><i>.</i>';
+  toast.append(cap, run, you, fl);
+  toast.addEventListener('click', () => {
+    if (typeof openPanel === 'function') openPanel();
+    else document.getElementById('panel-toggle')?.click();
+  });
+  document.body.appendChild(toast);
+  return toast;
+}
+let _toastShow = false;
+let _toastMode = null;        // 'status' | 'new-round' | null
+let _toastDoneMs = 0;
+let _toastDoneTimer = null;
+function renderSubmittedToast(show) {
+  _toastShow = !!show;
+  if (show) _toastMode = 'status';
+  else if (_toastMode === 'status') _toastMode = null;
+  refreshStatusToast();
+}
+function refreshStatusToast() {
+  const toast = _toastMode ? _ensureStatusToast() : document.getElementById('submitted-toast');
+  if (!toast) return;
+  if (!_toastMode) { toast.hidden = true; return; }
+  const phase = (typeof journeyPhase === 'function') ? journeyPhase() : 'you';
+  const conn = (document.getElementById('connection-status') || { dataset: {} }).dataset.state;
+  const away = conn === 'disconnected';
+  const cap = toast.querySelector('.jr-toast-cap');
+  const run = toast.querySelector('.jr-toast-run');
+  const you = toast.querySelector('.jr-toast-you');
+  const fl = toast.querySelector('.jr-float');
+  const round = _liveRound();
+  const running = _toastMode === 'status' && (phase === 'rethinking' || phase === 'implementing');
+  toast.dataset.mode = running ? phase : (_toastMode === 'new-round' ? 'new-round' : 'you');
+  if (cap) cap.textContent = _toastMode === 'new-round'
+    ? '{{panel.toast_new_round}}' : '{{panel.toast_round}}'.replace('{n}', round);
+  if (run) {
+    run.hidden = !running;
+    if (running) {
+      const lab = run.querySelector('.jr-run-label');
+      if (lab) lab.textContent = phase === 'implementing' ? '{{panel.journey_implement}}' : '{{panel.journey_rethinking}}';
+      if (typeof paintRunBar === 'function') paintRunBar(run, phase, away);
+    }
   }
-  toast.hidden = !show;
-  const dots = toast.querySelector('.submitted-toast-dots');
-  const src = document.getElementById('status-dots');
-  if (dots) dots.replaceChildren(...(show && src ? [...src.children].map(i => i.cloneNode(true)) : []));
+  if (you) {
+    you.hidden = running;
+    you.innerHTML = '👉 <b>{{panel.turn_you}}</b>' + (away ? ' <span>· {{panel.toast_all_saved}}</span>' : '');
+  }
+  if (fl) fl.hidden = !(away && _toastMode === 'status');
+  toast.hidden = false;
+  // Green "done" auto-hide: count only time the toast is actually seen.
+  const done = running && phase === 'implementing' && typeof _journeyDone !== 'undefined' && _journeyDone;
+  if (done && !_toastDoneTimer) {
+    _toastDoneMs = 0;
+    _toastDoneTimer = setInterval(() => {
+      if (document.visibilityState === 'visible' && document.hasFocus()
+          && !document.body.classList.contains('panel-open')) _toastDoneMs += 250;
+      if (_toastDoneMs >= 2500) {
+        clearInterval(_toastDoneTimer); _toastDoneTimer = null;
+        _toastMode = null; toast.hidden = true;
+      }
+    }, 250);
+  }
+}
+// "Neue Runde": the first load of a round later than the last one this
+// browser saw shows the blue pill for ~4 s of focused time.
+function maybeShowNewRoundToast() {
+  const round = _liveRound();
+  if (!round || document.body.classList.contains('viewing-final')) return;
+  const base = (typeof STORAGE_KEY === 'string') ? STORAGE_KEY : 'concept';
+  let last = null;
+  try { last = localStorage.getItem(base + '-jr-last-round'); _guardedSetItem(base + '-jr-last-round', round); }
+  catch (e) { return; }
+  if (last === null || Number(round) <= Number(last) || _toastMode === 'status') return;
+  _toastMode = 'new-round';
+  refreshStatusToast();
+  let seen = 0;
+  const t = setInterval(() => {
+    if (document.visibilityState === 'visible' && document.hasFocus()) seen += 250;
+    if (seen >= 4000 || _toastMode !== 'new-round') {
+      clearInterval(t);
+      if (_toastMode === 'new-round') { _toastMode = null; refreshStatusToast(); }
+    }
+  }, 250);
 }
 
 function checkClaudeConnection() {

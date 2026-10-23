@@ -58,15 +58,15 @@ must see their own language. The locale hint is authoritative.
 | `panel.heading`                | Decisions                      | Entscheidungen |
 | `panel.submit`                 | Submit decisions               | Entscheidungen abschicken |
 | `panel.submit_hint`            | Your selection goes straight to Claude. | Deine Auswahl wird direkt an Claude übermittelt. |
-| `panel.submit_iterate`         | Next iteration                 | Zur nächsten Iteration |
-| `panel.submit_iterate_hint`    | Your selection goes to Claude for the next iteration. No code changes. | Deine Auswahl geht an Claude für die nächste Iteration. Es wird kein Code geschrieben. |
-| `panel.submit_implement`       | Implement with feedback       | Mit Feedback implementieren |
-| `panel.submit_implement_hint`  | Claude applies the selection as real changes now. | Claude setzt die Auswahl jetzt in echte Änderungen um. |
-| `panel.submit_implement_confirm` | Implement with feedback now? Claude will write code changes. | Mit Feedback jetzt implementieren? Claude schreibt jetzt Code-Änderungen. |
-| `panel.submitted`              | Decisions submitted            | Entscheidungen übermittelt |
-| `panel.submitted_hint`         | Claude is processing your selection. Switch to the Claude chat to follow progress. | Claude verarbeitet deine Auswahl. Wechsle zum Claude-Chat, um den Fortschritt zu sehen. |
+| `panel.submit_iterate` | 👉 Next round | 👉 Zur nächsten Runde |
+| `panel.submit_iterate_hint` | Your selection goes into the next round. No code changes. | Deine Auswahl geht in die nächste Runde. Es wird kein Code geschrieben. |
+| `panel.submit_implement` | Implement now | Jetzt umsetzen |
+| `panel.submit_implement_hint` | You approve the scope — it is turned into real changes now. | Du gibst den Umfang frei — er wird jetzt in echte Änderungen umgesetzt. |
+| `panel.submit_implement_confirm` | Implement now? Real code changes will be written. | Jetzt umsetzen? Es werden echte Code-Änderungen geschrieben. |
+| `panel.submitted` | Submitted | Übermittelt |
+| `panel.submitted_hint` | Your selection is on its way into the next round. | Deine Auswahl ist unterwegs in die nächste Runde. |
 | `panel.step_submitted`         | Submitted                      | Übermittelt |
-| `panel.step_received`          | Claude is processing           | Claude verarbeitet |
+| `panel.step_received` | In progress | In Arbeit |
 | `panel.step_implemented`       | Implementation complete        | Implementierung abgeschlossen |
 | `panel.step_implemented_active`| Implementation in progress     | Implementierung läuft |
 | `panel.step_waiting`           | Waiting…                       | Warten… |
@@ -78,9 +78,9 @@ must see their own language. The locale hint is authoritative.
 | `panel.frozen_back`            | Back to the current round      | Zurück zur aktuellen Runde |
 | `frozen.bar_hint`              | · earlier round, read-only     | · frühere Runde, schreibgeschützt |
 | `frozen.bar_back`              | Go to current round            | Zur aktuellen Runde |
-| `panel.connecting_title`       | Claude is connecting           | Claude verbindet sich |
-| `panel.connected_title`        | Claude connected               | Claude verbunden |
-| `panel.disconnected_title`     | Claude not connected           | Claude nicht verbunden |
+| `panel.connecting_title` | Connecting to the bridge | Verbindung wird aufgebaut |
+| `panel.connected_title` | Connected — every change is saved | Verbunden — jede Änderung ist gespeichert |
+| `panel.disconnected_title` | Not connected — your input stays saved and is sent on reconnect | Nicht verbunden — deine Eingaben bleiben gespeichert und gehen beim Verbinden raus |
 | `panel.btn_cache_hint`         | cached — sent on reconnect     | gecached — wird beim Verbinden gesendet |
 | `panel.empty_iterate_confirm`  | Nothing was changed. Submit "Next iteration" anyway? | Du hast nichts geändert. Trotzdem "Zur nächsten Iteration" absenden? |
 | `panel.empty_implement_confirm`| Nothing was changed. Implement with feedback anyway? Claude will still write code. | Du hast nichts geändert. Trotzdem mit Feedback implementieren? Claude schreibt dann Code. |
@@ -91,15 +91,32 @@ must see their own language. The locale hint is authoritative.
 | `theme.to_light`               | Switch to the light theme      | Zum hellen Theme wechseln |
 | `theme.to_dark`                | Switch to the dark theme       | Zum dunklen Theme wechseln |
 | `panel.dim_dismiss`            | Dismiss overlay                | Schimmer entfernen |
-| `panel.status_saved`           | Saved · connected              | Gespeichert · verbunden |
-| `panel.status_saving`          | Saving…                        | Speichert… |
-| `panel.status_connecting`      | Saved · connecting…            | Gespeichert · verbinde… |
-| `panel.status_local_only`      | Saved locally only · disconnected | Nur lokal gespeichert · getrennt |
-| `panel.status_local_only_connected` | Saved locally only       | Nur lokal gespeichert |
-| `panel.status_working`         | Submitted · Claude is working  | Übermittelt · Claude arbeitet |
-| `panel.toast_working`          | Claude is working              | Claude arbeitet |
-| `panel.toast_open`             | Show progress                  | Fortschritt anzeigen |
+| `panel.status_saved` | saved | gespeichert |
+| `panel.status_saving` | saving… | speichert… |
+| `panel.status_connecting` | connecting… | verbindet… |
+| `panel.status_local_only` | all saved · reconnecting… | alles gespeichert · verbinde… |
+| `panel.status_local_only_connected` | saved in this browser only | nur in diesem Browser gespeichert |
+| `panel.status_working` | saved | gespeichert |
+| `panel.toast_open` | Open the panel | Panel öffnen |
 | `panel.status_frozen`          | read-only                      | nur lesen |
+| `panel.submit_implement_sub` | no further round | keine weitere Runde |
+| `panel.turn_you` | Your turn | Du bist dran |
+| `panel.turn_rethinking` | rethinking | überdenkt |
+| `panel.turn_implementing` | implementing | setzt um |
+| `panel.status_reconnecting` | reconnecting… | verbinde… |
+| `panel.journey_label` | Round progress | Rundenverlauf |
+| `panel.journey_rethinking` | Rethinking | Rethinking |
+| `panel.journey_implement` | Implementation | Umsetzung |
+| `panel.journey_finish` | Close-out | Abschluss |
+| `panel.journey_lock` | Enough rounds? Implement now | Genug Runden? Jetzt umsetzen |
+| `panel.journey_back` | Back — one more round | Zurück — doch noch eine Runde |
+| `panel.journey_done` | Approved | Freigegeben |
+| `panel.journey_step` | Step {n} of {m}: {label} | Schritt {n} von {m}: {label} |
+| `panel.journey_req` | Requirement {n} of {m} | Anforderung {n} von {m} |
+| `panel.toast_round` | Round {n} | Runde {n} |
+| `panel.toast_new_round` | New round | Neue Runde |
+| `panel.toast_all_saved` | all saved | alles gespeichert |
+| `panel.toast_reconnecting` | reconnecting | verbinde |
 | `panel.status_detail`          | Progress                       | Fortschritt |
 | `panel.submit_menu`            | More submit options            | Weitere Absende-Optionen |
 | `panel.submit_menu_hint`       | The primary button never writes code. | Kein Code beim Primär-Button. |
@@ -219,6 +236,16 @@ must see their own language. The locale hint is authoritative.
 | `design.change_same`           | Unchanged                       | Unverändert |
 | `design.change_preview`        | Preview: {page}                 | Vorschau: {page} |
 | `design.change_dot`            | New since the last round        | Neu seit der letzten Runde |
+| `design.change_rethought` | Rethought | Neugedacht |
+| `design.change_improved` | Improved | Verbessert |
+| `design.keys_dock` | Notes dock open / closed | Notiz-Dock auf / zu |
+| `design.keys_level` | Level up / down (overview, variant) | Ebene hoch / runter (Übersicht, Variante) |
+| `nudge.alt` | Hold Alt for all hotkeys | Halte Alt für alle Hotkeys |
+| `nudge.variants` | Hotkeys 1–{n} switch the variant | Hotkeys 1–{n} wechseln die Variante |
+| `nudge.pages` | Hotkeys ←/→ page through the screens | Hotkeys ←/→ blättern durch die Seiten |
+| `nudge.dock` | Hotkey Space opens your notes | Hotkey Leertaste öffnet deine Notizen |
+| `nudge.submit` | Hotkey Ctrl + Enter starts the next round | Hotkey Strg + Enter startet die nächste Runde |
+| `nudge.dismiss` | Hide this tip for 30 days | Tipp 30 Tage ausblenden |
 | `design.questions`             | Questions                       | Fragen |
 | `design.questions_open`        | {n} questions still open        | {n} Fragen noch offen |
 | `design.questions_progress`    | {done} of {n} answered          | {done} von {n} beantwortet |
@@ -446,7 +473,7 @@ the `[ui-locale: ...]` hint produced.
            CSS, "Panel anatomy"):
              .panel-here        pinned   "› TOC entry" sub-line + the 🕘 rounds list
              .panel-nav-scroll  flex 1   iteration tabs (hidden) + live TOC
-             .panel-status      pinned   ONE status line (+ progress dots after submit)
+             .panel-status      pinned   journey row (#journey, built by mountJourney) + ONE status line
              .panel-cta         pinned   #panel-ready | #panel-submitted | #panel-frozen | #panel-final-report
            The pin is structural (flex split), never position:sticky inside the
            scroll box: the call to action is reachable without scrolling the
@@ -598,16 +625,11 @@ the `[ui-locale: ...]` hint produced.
         </div>
       </div>
 
-      <!-- Post-submit state: the status line above now reads "Übermittelt ·
-           Claude arbeitet" and carries the progress dots; this block only
-           tells the user where to look next. -->
-      <div id="panel-submitted" style="display: none;">
-        <div class="submitted-indicator">
-          <span class="check-icon">✓</span>
-          <strong>{{panel.submitted}}</strong>
-        </div>
-        <p class="submitted-hint">{{panel.submitted_hint}}</p>
-      </div>
+      <!-- Post-submit state marker. Empty on purpose: the journey row's run
+           bar and the status line ("🤖 überdenkt · gespeichert") above carry
+           the submitted state (§ Submit → Journey row); the old green box and
+           its hint are gone. JS still flips its display as the state flag. -->
+      <div id="panel-submitted" style="display: none;" aria-hidden="true"></div>
 
       <!-- Frozen state: shown while the user reviews a PAST iteration tab.
            showIteration() flips this on for every non-live tab (and sets
