@@ -5,8 +5,8 @@ import { build } from "../../scripts/build-concept-fixture.js";
 import { readTemplates } from "./templates-source.js";
 
 // The variant overview (templates-design.md § Variant overview (≥2 designs)):
-// a design round with two or more designs gets an engine-built overview as
-// its first top-level item, a header (top left) and a quick nav (top centre)
+// a design round with two or more designs gets an engine-built overview
+// carousel as its first top-level item, a header (top left) and a quick nav (top centre)
 // in place of the screen indicator and the design switcher, a favourite that
 // travels in the payload, hotkeys, and Ctrl + click user pins persisted like
 // annotation answers. A single-design round must render exactly as before.
@@ -89,12 +89,26 @@ describe("variant overview — quick nav pages and open questions", () => {
     '<section data-view="q2" data-view-kind="decision" data-nav-label="Wie lang ist eine Phase?" hidden><textarea data-comment="q2-note"></textarea></section>';
   const withViews = (designs) => page(designs).replace('<section data-design="d2"', VIEWS + '<section data-design="d2"');
 
-  test("the questions segment counts open views, the overview carries a questions card, the panel a submit hint", async () => {
+  test("the questions segment counts open views, the carousel ends on a questions slide, the panel a submit hint", async () => {
     const { window, document, errors } = await boot(withViews(2));
     expect(errors).toEqual([]);
     const badge = () => document.querySelector("#design-quick .design-quick-badge");
     expect(badge().textContent).toBe("2");
-    expect(document.querySelector("[data-design-overview] .design-ov-qcard").querySelectorAll(".design-quick-qitem").length).toBe(2);
+    const slides = [...document.querySelectorAll("[data-design-overview] .design-ov-slide")];
+    expect(slides.length, "two designs + the questions slide").toBe(3);
+    const qslide = slides[slides.length - 1];
+    expect(qslide.classList.contains("design-ov-qslide")).toBe(true);
+    expect(qslide.querySelector(".design-ov-qcard").querySelectorAll(".design-quick-qitem").length).toBe(2);
+    expect(document.querySelector("[data-design-overview] .design-ov-grid, [data-design-overview] .design-ov-card")).toBeNull();
+    // Three slides wrap: the questions peek in left of design 1.
+    expect(qslide.dataset.pos).toBe("prev");
+    // A neighbour click only turns; on the centre, an item opens its view.
+    qslide.querySelector(".design-quick-qitem").click();
+    expect(document.body.dataset.overviewActive).toBe("true");
+    expect(qslide.dataset.pos).toBe("cur");
+    qslide.querySelector(".design-quick-qitem").click();
+    expect(document.body.dataset.viewActive).toBe("true");
+    window.showOverview();
     const hint = () => document.querySelector("#panel-ready .submit-open-questions");
     expect(hint().hidden).toBe(false);
     const answer = (id, text) => {
@@ -143,7 +157,7 @@ describe("variant overview — generated only for ≥2 designs", () => {
     expect(payload.userPins).toEqual([]);
   }, BOOT_TIMEOUT);
 
-  test("three designs: one card each, the overview is the first top-level item and the boot lands on it", async () => {
+  test("three designs: one slide each, the overview is the first top-level item and the boot lands on it", async () => {
     const { window, document, errors } = await boot(page(3));
     expect(errors).toEqual([]);
     const it = live(document);
@@ -154,12 +168,18 @@ describe("variant overview — generated only for ≥2 designs", () => {
     expect(document.body.dataset.overviewActive).toBe("true");
     expect(ov.hidden).toBe(false);
     expect([...it.querySelectorAll(":scope > section[data-design]")].every((d) => d.hidden)).toBe(true);
-    const cards = [...ov.querySelectorAll(".design-ov-card")];
+    const cards = [...ov.querySelectorAll(".design-ov-slide[data-design-id]")];
     expect(cards.map((c) => c.dataset.designId)).toEqual(["d2", "d2b", "d2c"]);
-    expect(cards[0].querySelector(".design-ov-motto").textContent).toBe("Weniger ist Ruhe.");
-    expect([...cards[0].querySelectorAll(".design-ov-traits li")].map((li) => li.textContent)).toEqual(["Ein Ziel pro Tag", "Pflanze", "Keine Pushes"]);
+    expect(cards.map((c) => c.dataset.pos)).toEqual(["cur", "next", "prev"]);
+    const overlay = cards[0].querySelector(".design-ov-overlay");
+    expect(overlay.querySelector(".design-ov-motto").textContent).toBe("Weniger ist Ruhe.");
+    expect([...overlay.querySelectorAll(".design-ov-traits li")].map((li) => li.textContent)).toEqual(["Ein Ziel pro Tag", "Pflanze", "Keine Pushes"]);
+    expect(overlay.querySelector(".design-ov-kicker .design-ov-num").textContent).toBe("1");
+    expect(overlay.querySelector(".design-ov-kicker .design-ov-name").textContent).toBe("Design 2");
     expect(cards[0].style.getPropertyValue("--dz-color")).toBe("#5f8b6a");
-    expect(cards[0].querySelectorAll(".design-ov-chip").length, "one chip per page").toBe(3);
+    // No page chips, no notes row, no second navigation.
+    expect(ov.querySelector(".design-ov-chip, .design-ov-chips, .design-ov-notes, .design-ov-foot, .design-ov-dots")).toBeNull();
+    expect(cards[0].querySelector(".design-ov-open").textContent).toContain("↗");
     // The preview is an inert clone outside every collector.
     const clone = cards[0].querySelector(".design-ov-scale");
     expect(clone.hasAttribute("inert")).toBe(true);
@@ -181,7 +201,10 @@ describe("variant overview — generated only for ≥2 designs", () => {
     expect(seg.dataset.tip).toBe("Design 2");
     expect(seg.dataset.tipKey).toBe("1");
     expect(seg.querySelector("kbd")).toBeNull();
-    // The card opens its design; Esc goes back.
+    // A neighbour click turns the carousel; the centre preview opens its design; Esc goes back.
+    cards[1].querySelector(".design-ov-preview").click();
+    expect(document.body.dataset.overviewActive, "a neighbour never opens").toBe("true");
+    expect(cards[1].dataset.pos).toBe("cur");
     cards[1].querySelector(".design-ov-preview").click();
     expect(document.body.dataset.overviewActive).toBe("false");
     expect(activeDesign(document).dataset.design).toBe("d2b");
@@ -207,20 +230,30 @@ describe("variant overview — generated only for ≥2 designs", () => {
   }, BOOT_TIMEOUT);
 });
 
+/** The overlay star of a design, with the carousel turned to it first (a neighbour only turns). */
+function starOf(window, document, id) {
+  const slides = [...document.querySelectorAll("[data-design-overview] .design-ov-slide")];
+  window.designOverviewGo(slides.findIndex((s) => s.dataset.designId === id));
+  return document.querySelector(`.design-ov-slide[data-design-id="${id}"] .design-ov-star`);
+}
+
 describe("favourite — at most one, toggled until submit, in the payload", () => {
-  test("card button sets, a second design swaps, a second click clears; payload.favorite follows", async () => {
+  test("overlay star sets, a second design swaps, a second click clears; payload.favorite follows", async () => {
     const { window, document } = await boot(page(3));
-    const btn = (id) => document.querySelector(`.design-ov-card[data-design-id="${id}"] .design-fav-btn`);
+    const btn = (id) => starOf(window, document, id);
+    expect(btn("d2b").hidden).toBe(false);
+    expect(btn("d2b").textContent).toBe("☆");
     btn("d2b").click();
     expect(window.collectDecisions("iterate").favorite).toBe("d2b");
-    expect(document.querySelector('.design-ov-card[data-design-id="d2b"]').dataset.favorite).toBe("true");
-    expect(document.querySelector('.design-ov-card[data-design-id="d2b"] .design-ov-badge').hidden).toBe(false);
-    expect(document.querySelector(".design-ov-grid").dataset.hasFavorite).toBe("true");
+    expect(document.querySelector('.design-ov-slide[data-design-id="d2b"]').dataset.favorite).toBe("true");
+    expect(btn("d2b").textContent).toBe("★");
+    expect(document.querySelector("[data-design-overview]").dataset.hasFavorite).toBe("true");
     expect(document.querySelector("#design-header .design-header-star").textContent).toBe("★ Design 2 B");
     btn("d2c").click();
     expect(window.collectDecisions("iterate").favorite).toBe("d2c");
-    expect(document.querySelectorAll('.design-ov-card[data-favorite="true"]').length).toBe(1);
-    btn("d2c").click();
+    expect(document.querySelectorAll('.design-ov-slide[data-favorite="true"]').length).toBe(1);
+    // F on the overview toggles the CENTRE slide's design.
+    key(window, document.body, { key: "f", code: "KeyF" });
     expect(window.collectDecisions("iterate").favorite).toBeNull();
     expect(document.querySelector("#design-header .design-header-star").hidden).toBe(true);
     // F on a design page toggles that design; the raw store never reaches allFields.
@@ -235,10 +268,123 @@ describe("favourite — at most one, toggled until submit, in the payload", () =
 
   test("the favourite survives a reload (localStorage, like a note)", async () => {
     const a = await boot(page(2));
-    a.document.querySelector('.design-ov-card[data-design-id="d2b"] .design-fav-btn').click();
+    starOf(a.window, a.document, "d2b").click();
     const b = await boot(page(2), stateOf(a.window));
     expect(b.window.collectDecisions("iterate").favorite).toBe("d2b");
-    expect(b.document.querySelector('.design-ov-card[data-design-id="d2b"]').dataset.favorite).toBe("true");
+    expect(b.document.querySelector('.design-ov-slide[data-design-id="d2b"]').dataset.favorite).toBe("true");
+  }, BOOT_TIMEOUT);
+
+  for (const set of [null, "topics"]) {
+    test(`no favourite without data-design-set="alternatives" (${set || "unmarked"}): no star, no F, no header ★, payload null`, async () => {
+      const strip = (html) => html.replace(/ data-design-set="alternatives"/g, set ? ` data-design-set="${set}"` : "");
+      const { window, document, errors } = await boot(strip(page(3)));
+      expect(errors).toEqual([]);
+      expect([...document.querySelectorAll(".design-ov-star")].every((b) => b.hidden)).toBe(true);
+      expect(document.querySelector("[data-design-overview]").dataset.favorites).toBe("false");
+      key(window, document.body, { key: "f", code: "KeyF" });
+      expect(window.collectDecisions("iterate").favorite).toBeNull();
+      expect(document.querySelector("#design-header .design-header-name").dataset.tip).not.toMatch(/Favorit/);
+      window.showDesign("d2b");
+      expect(document.querySelector("#design-header .design-header-star").hidden).toBe(true);
+      key(window, document.body, { key: "f", code: "KeyF" });
+      expect(window.collectDecisions("iterate").favorite).toBeNull();
+      expect(document.querySelector('#design-quick .design-quick-star')).toBeNull();
+    }, BOOT_TIMEOUT);
+  }
+});
+
+describe("carousel — turns, overlay, no scrolling", () => {
+  test("arrows and ←/→ turn the carousel (wrapping), never while typing; Enter opens the centre", async () => {
+    const { window, document, errors } = await boot(page(3));
+    expect(errors).toEqual([]);
+    const ov = document.querySelector("[data-design-overview]");
+    const cur = () => ov.querySelector('.design-ov-slide[data-pos="cur"]').dataset.designId;
+    expect(cur()).toBe("d2");
+    ov.querySelector('.design-ov-arrow[data-dir="next"]').click();
+    expect(cur()).toBe("d2b");
+    key(window, document.body, { key: "ArrowRight", code: "ArrowRight" });
+    expect(cur()).toBe("d2c");
+    key(window, document.body, { key: "ArrowRight", code: "ArrowRight" });
+    expect(cur(), "wraps around").toBe("d2");
+    ov.querySelector('.design-ov-arrow[data-dir="prev"]').click();
+    expect(cur()).toBe("d2c");
+    const ta = document.querySelector('#feedback-dock textarea[data-comment="general"]');
+    ta.focus();
+    key(window, ta, { key: "ArrowLeft", code: "ArrowLeft" });
+    expect(cur(), "R4b: no hotkey in a text field").toBe("d2c");
+    ta.blur();
+    // Only the centre is in the tab order.
+    expect(ov.querySelector('.design-ov-slide[data-pos="cur"] .design-ov-preview').tabIndex).toBe(0);
+    expect(ov.querySelector('.design-ov-slide[data-pos="next"] .design-ov-preview').tabIndex).toBe(-1);
+    const preview = ov.querySelector('.design-ov-slide[data-pos="cur"] .design-ov-preview');
+    key(window, preview, { key: "Enter", code: "Enter" });
+    expect(document.body.dataset.overviewActive).toBe("false");
+    expect(activeDesign(document).dataset.design).toBe("d2c");
+    // Back on the overview, the design the user came from is in the centre.
+    window.showOverview();
+    expect(cur()).toBe("d2c");
+  }, BOOT_TIMEOUT);
+
+  test("overlay anchor + tone are authored per design; bl / bluish by default", async () => {
+    const html = page(3)
+      .replace('<section data-design="d2b"', '<section data-design="d2b" data-design-overlay="tr" data-design-overlay-tone="warm"')
+      .replace('<section data-design="d2c"', '<section data-design="d2c" data-design-overlay="middle"');
+    const { document, errors } = await boot(html);
+    expect(errors).toEqual([]);
+    const o = (id) => document.querySelector(`.design-ov-slide[data-design-id="${id}"] .design-ov-overlay`);
+    expect(o("d2").dataset.anchor).toBe("bl");
+    expect(o("d2").dataset.tone).toBeUndefined();
+    expect(o("d2b").dataset.anchor).toBe("tr");
+    expect(o("d2b").dataset.tone).toBe("warm");
+    expect(o("d2c").dataset.anchor, "an unknown anchor falls back").toBe("bl");
+    const css = md.match(/```css\n([\s\S]*?)```/g).join("\n");
+    for (const a of ["tl", "tr", "bl", "br", "tc", "bc"]) expect(css).toContain(`.design-ov-overlay[data-anchor="${a}"]`);
+    expect(css).toContain('.design-ov-overlay[data-tone="warm"]');
+  }, BOOT_TIMEOUT);
+
+  test("Space toggles the overlay (default on), remembered per viewer, never while typing", async () => {
+    const a = await boot(page(2));
+    const ov = () => a.document.querySelector("[data-design-overview]");
+    expect(ov().dataset.overlay).toBe("on");
+    const ta = a.document.querySelector('#feedback-dock textarea[data-comment="general"]');
+    ta.focus();
+    key(a.window, ta, { key: " ", code: "Space" });
+    expect(ov().dataset.overlay).toBe("on");
+    ta.blur();
+    const ev = key(a.window, a.document.body, { key: " ", code: "Space" });
+    expect(ev.defaultPrevented).toBe(true);
+    expect(ov().dataset.overlay).toBe("off");
+    const btn = a.document.querySelector("#design-header .design-header-overlay");
+    expect(btn.hidden).toBe(false);
+    expect(btn.getAttribute("aria-pressed")).toBe("false");
+    const k = Object.keys(a.window.localStorage).find((x) => x.startsWith("concept-ov-overlay:"));
+    expect(a.window.localStorage.getItem(k)).toBe("off");
+    const b = await boot(page(2), { key: k, blob: "off" });
+    expect(b.document.querySelector("[data-design-overview]").dataset.overlay, "persisted").toBe("off");
+    b.document.querySelector("#design-header .design-header-overlay").click();
+    expect(b.document.querySelector("[data-design-overview]").dataset.overlay, "the touch path").toBe("on");
+    b.window.showDesign("d2");
+    expect(b.document.querySelector("#design-header .design-header-overlay").hidden, "overview only").toBe(true);
+  }, BOOT_TIMEOUT);
+
+  test("the overview never scrolls: no overflow-y, sized from the viewport", () => {
+    const css = md.match(/```css\n([\s\S]*?)```/g).join("\n");
+    const rule = /\[data-template="design"\] \.design-ov \{([^}]*)\}/.exec(css);
+    expect(rule, ".design-ov rule").not.toBeNull();
+    expect(rule[1]).toMatch(/overflow: hidden/);
+    expect(rule[1]).not.toMatch(/overflow-y: auto|padding/);
+    expect(css).toMatch(/\.design-ov-stage \{[^}]*container-type: size/);
+    expect(css).toMatch(/--dz-ov-w: min\(78cqw, 160cqh\)/);
+  });
+
+  test("the quick nav's band ends before the header's real right edge", async () => {
+    const { window, document } = await boot(page(3));
+    const header = document.getElementById("design-header");
+    Object.defineProperty(header, "offsetWidth", { configurable: true, get: () => 400 });
+    Object.defineProperty(header, "offsetLeft", { configurable: true, get: () => 16 });
+    window.dispatchEvent(new window.Event("resize"));
+    const vw = document.documentElement.clientWidth || window.innerWidth;
+    expect(document.getElementById("design-quick").style.maxWidth).toBe(Math.floor(2 * (vw / 2 - 416 - 12)) + "px");
   }, BOOT_TIMEOUT);
 });
 
@@ -418,22 +564,27 @@ describe("Ctrl + click user pins", () => {
 });
 
 describe("bake + gate", () => {
-  test("bake writes favorite and userPins into the frozen-feedback blob", () => {
-    const frag = '<section data-iteration="1" data-iteration-template="design"><section data-design="a"></section></section>';
+  test("bake writes favorite (alternatives round only) and userPins into the frozen-feedback blob", () => {
+    const frag = (set) => `<section data-iteration="1" data-iteration-template="design"${set}><section data-design="a"></section></section>`;
     const payload = { iteration: 1, allFields: {}, comments: { general: { text: "", attachments: [] } }, favorite: "a",
       userPins: [{ id: "up-1", design: "a", screen: "a-s1", x: 1, y: 2, target: "h1", text: "t" }] };
-    const { html } = conceptBuild.bake(frag, payload);
-    const json = JSON.parse(/data-frozen-feedback>([\s\S]*?)<\/script>/.exec(html)[1]);
+    const blobOf = (html) => JSON.parse(/data-frozen-feedback>([\s\S]*?)<\/script>/.exec(html)[1]);
+    const json = blobOf(conceptBuild.bake(frag(' data-design-set="alternatives"'), payload).html);
     expect(json.favorite).toBe("a");
     expect(json.userPins[0].text).toBe("t");
+    const topics = blobOf(conceptBuild.bake(frag(' data-design-set="topics"'), payload).html);
+    expect(topics.favorite).toBeUndefined();
+    expect(topics.userPins[0].text).toBe("t");
   });
 
-  test("≥2 designs without motto / traits / icon → warnings, never a failure; one design or a complete set → none", () => {
-    const it = (designs) => `<section data-iteration="1" data-iteration-template="design">${designs}</section>`;
-    const bare = it('<section data-design="a" data-nav-label="A"></section><section data-design="b"></section>');
+  test("≥2 designs without motto / traits / icon / data-design-set → warnings, never a failure; one design or a complete set → none", () => {
+    const it = (designs, set = ' data-design-set="alternatives"') => `<section data-iteration="1" data-iteration-template="design"${set}>${designs}</section>`;
+    const bare = it('<section data-design="a" data-nav-label="A"></section><section data-design="b"></section>', "");
     const w = gate.findDesignAuthoringWarnings(bare);
-    expect(w.length).toBe(2);
-    expect(w[0].why).toMatch(/data-design-motto, data-design-traits, data-design-icon/);
+    expect(w.map((x) => x.kind)).toEqual(["overview-set", "overview-authoring", "overview-authoring"]);
+    expect(w[1].why).toMatch(/data-design-motto, data-design-traits, data-design-icon/);
+    const odd = gate.findDesignAuthoringWarnings(it('<section data-design="a" data-design-overlay="mid" data-design-motto="M" data-design-traits="x | y | z" data-design-icon="leaf"></section><section data-design="b" data-design-motto="M" data-design-traits="x | y | z" data-design-icon="leaf"></section>', ' data-design-set="mixed"'));
+    expect(odd.map((x) => x.kind)).toEqual(["overview-set", "overview-overlay"]);
     expect(gate.findDesignAuthoringWarnings(it('<section data-design="a"></section>'))).toEqual([]);
     const full = (id, traits = "x | y | z") => `<section data-design="${id}" data-design-motto="M" data-design-traits="${traits}" data-design-icon="leaf"></section>`;
     expect(gate.findDesignAuthoringWarnings(it(full("a") + full("b")))).toEqual([]);
@@ -442,11 +593,11 @@ describe("bake + gate", () => {
   });
 
   test("a `>` inside a quoted motto neither drops the design nor truncates its tag", () => {
-    const it = (designs) => `<section data-iteration="1" data-iteration-template="design">${designs}</section>`;
+    const it = (designs) => `<section data-iteration="1" data-iteration-template="design" data-design-set="topics">${designs}</section>`;
     const before = `<section data-design-motto="Fast -> simple" data-design="a" data-design-traits="x | y | z" data-design-icon="leaf"></section>`;
     const after = `<section data-design="b" data-design-motto="Slow -> calm" data-design-traits="x | y | z" data-design-icon="leaf"></section>`;
     expect(gate.findDesignAuthoringWarnings(it(before + after))).toEqual([]);
-    const bare = gate.findDesignAuthoringWarnings(it(`<section data-design-motto="a > b" data-design="a"></section><section data-design="b"></section>`));
+    const bare = gate.findDesignAuthoringWarnings(it(`<section data-design-motto="a > b" data-design="a"></section><section data-design="b"></section>`)).filter((x) => x.kind === "overview-authoring");
     expect(bare.map((x) => x.why.match(/design "(\w)"/)[1])).toEqual(["a", "b"]);
   });
 

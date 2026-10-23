@@ -111,9 +111,15 @@ stay on one template throughout.
    designs — never something they all share), `data-design-icon` (a built-in
    icon name or an entity-escaped inline SVG — pick it thematically per
    concept, it is how the user tells the designs apart) and optionally
-   `data-design-color` (never the accent blue). The engine builds the
-   variant overview, the header and the quick nav from them; the gate warns
-   when one is missing. See `deep-knowledge/templates-design.md` § Variant
+   `data-design-color` (never the accent blue), `data-design-overlay`
+   (`tl|tr|bl|br|tc|bc`, default `bl` — the corner of the preview that hides
+   the least) and `data-design-overlay-tone="warm"` (for a bluish preview).
+   The iteration carries `data-design-set="alternatives"` whenever the
+   designs are alternatives for the same thing (the usual case — one visual
+   topic per round; only then the favourite ☆ exists) or `"topics"` when they
+   show different topics. The engine builds the variant overview carousel,
+   the header and the quick nav from them; the gate warns when one is
+   missing. See `deep-knowledge/templates-design.md` § Variant
    overview (≥2 designs).
 
    **Single-screen, single-design (exactly one `data-screen`):** no

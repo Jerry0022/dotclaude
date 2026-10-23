@@ -53,7 +53,10 @@ the sidebar on the hourglass while the page waits for the user.
 
 **Favourite and user pins (design rounds with ≥2 designs):** the payload
 always carries `favorite` (a design id or `null`) and `userPins[]`
-(`templates-design-wiring.md` § Decision schema).
+(`templates-design-wiring.md` § Decision schema). A favourite can only be
+set on a round marked `data-design-set="alternatives"`; on a `topics` or
+unmarked round `favorite` is always `null` — read the comments per topic
+instead, there is no starting point to pick.
 
 - **`favorite` set** → that design is the **starting point** of the next
   round: build on it, keep its structure. Comments on the OTHER designs are

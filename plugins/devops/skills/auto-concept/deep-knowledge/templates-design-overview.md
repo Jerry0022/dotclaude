@@ -22,12 +22,33 @@ returns — the single-design page is untouched.
   of collectDecisions types it into `favorite` / `userPins`.
 - **Frozen rounds** read the same two keys from the round's
   `data-frozen-feedback` blob (`favorite`, `userPins`, written by
-  `concept-build.js bake`): the cards and the header show the favourite, the
-  pins render read-only, nothing can be changed.
+  `concept-build.js bake`): the overlay star and the header show the
+  favourite, the pins render read-only, nothing can be changed.
+- **Favourite only for alternatives.** ☆/★, `F`, the header ★ and the
+  favourite dimming exist only while the iteration carries
+  `data-design-set="alternatives"` (`favOn()`); unmarked or `topics` → no
+  star anywhere and `designOverviewState().favorite` is always `null`.
+- **Carousel.** The overview is one slide per design plus a trailing
+  questions slide (`section[data-view]`s). The current slide sits large in
+  the centre; its neighbours peek in cut off at the edges (`data-pos`
+  `prev` / `next`, dimmed). A click on a neighbour, an arrow button or
+  `←` / `→` only turns the carousel; the centre preview opens its design
+  (click / `Enter`). Everything is sized from the viewport (CSS container
+  units on the stage), so the overview never scrolls.
+- **Overlay** on the current preview: kicker `icon · N · name` (+ ☆/★),
+  motto, the three traits. Anchor from `data-design-overlay`
+  (`tl|tr|bl|br|tc|bc`, default `bl`), tint from
+  `data-design-overlay-tone="warm"`. `Space` (and the header's layers
+  button, the touch path) hides / shows it; the choice is a per-viewer
+  convenience in localStorage (`concept-ov-overlay:<path>`).
 - **Previews** are clones of each design's first screen (`prefixClone`-style
   id namespacing, every `data-comment` / `data-field` / `data-screen-link` /
   `data-tip` stripped, `inert`, inside `[data-device-clone]` so neither
   `saveState()` nor `collectAllFormFields()` sees a cloned control).
+- **Quick-nav band.** The quick nav is centred; its `max-width` is measured
+  against the header's real right edge and the ☰ FAB on every render, so the
+  two never overlap. Too little room → pages fold into the "2 / 7 ▾" chip,
+  then (overview / view) the designs shrink to their icons.
 - **Hotkeys** never fire while focus is in a text field, the dock, a bubble or
   a pin editor, nor while the ☰ panel is open (`Esc` aside, which the panel
   owns then). `Tab` advances the page only while nothing is focused, so the
@@ -65,10 +86,15 @@ returns — the single-design page is untouched.
     upinTap: '{{design.upin_tap_hint}}', upinPlaceholder: '{{design.upin_placeholder}}',
     upinKeys: '{{design.upin_keys}}', upinDelete: '{{design.upin_delete}}',
     upinLabel: '{{design.upin_label}}', submit: '{{panel.submit_iterate}}',
-    views: '{{design.nav_views_heading}}', anno: '{{anno.toggle_hide}}'
+    views: '{{design.nav_views_heading}}', anno: '{{anno.toggle_hide}}',
+    prev: '{{design.overview_prev}}', nextDesign: '{{design.overview_next}}',
+    countPlain: '{{design.overview_count_plain}}', overlay: '{{design.overview_overlay}}',
+    keysCarousel: '{{design.keys_carousel}}', keysOverlay: '{{design.keys_overlay}}',
+    space: '{{design.key_space}}'
   };
   // Never the accent blue: the icons are drawn in it (one uniform tint), the
   // background must stay distinguishable (§ Variant overview — authoring).
+  const OV_ANCHORS = new Set(['tl', 'tr', 'bl', 'br', 'tc', 'bc']);
   const PALETTE = ['#5f8b6a', '#e8622c', '#8250df', '#d29922', '#db61a2', '#1f9e89', '#b0563a', '#6e7781', '#c2408f'];
   const ICONS = {
     leaf: ['M5 21c0-9 6-15 15-16-1 9-7 15-16 16z', 'M5 21l8-8'],
@@ -197,7 +223,11 @@ returns — the single-design page is untouched.
       motto: (d.dataset.designMotto || '').trim(),
       traits,
       icon: d.dataset.designIcon || '',
-      color: (d.dataset.designColor || '').trim() || PALETTE[idx % PALETTE.length]
+      color: (d.dataset.designColor || '').trim() || PALETTE[idx % PALETTE.length],
+      // Overlay anchor + tint, authored per design (§ Variant overview —
+      // authoring); anything else falls back to bottom-left, bluish.
+      anchor: OV_ANCHORS.has(d.dataset.designOverlay) ? d.dataset.designOverlay : 'bl',
+      tone: d.dataset.designOverlayTone === 'warm' ? 'warm' : ''
     };
   }
   // A view's short nav title — the layout's viewNavTitle() (§ Views
@@ -265,34 +295,25 @@ returns — the single-design page is untouched.
     if (typeof _userInteracted !== 'undefined') { try { _userInteracted = true; } catch (e) {} }
     refresh();
   }
+  // The favourite exists only where the designs are alternatives for the
+  // same thing: `data-design-set="alternatives"` on the iteration. Unmarked
+  // or `topics` → no ☆/★, no F, no header ★, no dimming, payload null.
+  const favOn = it => !!(it && it.dataset.designSet === 'alternatives' && designsOf(it).length >= 2);
   window.designOverviewState = function(it) {
-    return readState(it || document.querySelector('section[data-iteration][data-active]'));
+    const r = it || document.querySelector('section[data-iteration][data-active]');
+    const st = readState(r);
+    st.favorite = validFavorite(r, st);
+    return st;
   };
   function validFavorite(it, st) {
-    return st.favorite && designsOf(it).some(d => d.dataset.design === st.favorite) ? st.favorite : null;
+    return favOn(it) && st.favorite && designsOf(it).some(d => d.dataset.design === st.favorite) ? st.favorite : null;
   }
   function toggleFavorite(designId) {
     const it = visibleIteration();
-    if (!isLive(it) || body.classList.contains('viewing-frozen') || !designId) return;
+    if (!isLive(it) || !favOn(it) || body.classList.contains('viewing-frozen') || !designId) return;
     const st = readState(it);
     st.favorite = validFavorite(it, st) === designId ? null : designId;
     writeState(it, st);
-  }
-
-  // ── Notes count per design ─────────────────────────────────────────────
-  function notesCount(it, designId, st) {
-    let n = 0;
-    const filled = ta => !!(ta && (ta.value || '').trim());
-    document.querySelectorAll('#feedback-dock [data-design-comment]').forEach(ta => {
-      if (ta.dataset.designComment === designId && filled(ta)) n++;
-    });
-    document.querySelectorAll('#feedback-dock [data-screen-comment]').forEach(ta => {
-      if (ta.dataset.screenDesign === designId && filled(ta)) n++;
-    });
-    const d = it && it.querySelector(`:scope > section[data-design="${CSS.escape(designId)}"]`);
-    if (d) d.querySelectorAll('textarea[data-annotation]').forEach(ta => { if (filled(ta)) n++; });
-    n += st.pins.filter(p => p.design === designId && p.text.trim()).length;
-    return n;
   }
 
   // ── Round changes: what this round changed against the one before ──────
@@ -406,10 +427,6 @@ returns — the single-design page is untouched.
     document.querySelectorAll('#screen-nav .screen-nav-design-heading').forEach(h => setDot(h, u.design(h.dataset.designId)));
     document.querySelectorAll('#screen-nav .screen-nav-item').forEach(b =>
       setDot(b, u.screens(b.dataset.designId).includes(b.dataset.screenId)));
-    document.querySelectorAll('.design-ov-card').forEach(card => {
-      const id = card.dataset.designId;
-      card.querySelectorAll('.design-ov-chip').forEach(chip => setDot(chip, u.screens(id).includes(chip.dataset.screenId)));
-    });
   }
   function noteVisit(it) {
     if (!isLive(it) || mode() !== 'design') return;
@@ -420,7 +437,7 @@ returns — the single-design page is untouched.
     markSeen([ch.round + '/' + d.dataset.design + '/' + sec.id, ch.round + '/' + d.dataset.design + '/*']);
   }
 
-  // ── Overview cards ─────────────────────────────────────────────────────
+  // ── Overview previews ──────────────────────────────────────────────────
   function cloneScreen(first, prefix) {
     const wrap = el('div', 'design-ov-scale');
     wrap.dataset.deviceClone = 'overview';
@@ -443,30 +460,39 @@ returns — the single-design page is untouched.
     });
     return wrap;
   }
-  function buildCard(it, d, m) {
-    const card = el('article', 'design-ov-card');
-    card.dataset.designId = m.id;
-    card.style.setProperty('--dz-color', m.color);
-    const badge = el('div', 'design-ov-badge', '★ ' + L.favBadge);
-    badge.hidden = true;
-    card.appendChild(badge);
-    const head = el('button', 'design-ov-head');
-    head.type = 'button';
-    head.appendChild(iconEl(m.icon, { color: m.color }));
-    head.appendChild(el('span', 'design-ov-num', String(m.n)));
-    head.appendChild(el('span', 'design-ov-name', m.label));
-    setTip(head, m.label, String(m.n));
-    head.addEventListener('click', () => window.showDesign(m.id));
-    card.appendChild(head);
-    if (m.motto) card.appendChild(el('h3', 'design-ov-motto', m.motto));
+  // ── Overview carousel ──────────────────────────────────────────────────
+  // One slide per design, the questions as the last slide. The current one
+  // sits large in the centre, its neighbours peek in at the edges. A click
+  // on a neighbour (or an arrow, ← / →) only turns the carousel; the centre
+  // preview opens its design. No page chips, no notes row, no second
+  // navigation: the pages live in the quick nav.
+  let ovIndex = 0;
+  const slidesOf = it => { const ov = overviewOf(it); return ov ? [...ov.querySelectorAll('.design-ov-slide')] : []; };
+  function wireSlide(slide, onOpen) {
+    // Capture: a neighbour swallows the click before any control inside it.
+    slide.addEventListener('click', e => {
+      if (slide.dataset.pos === 'cur') return;
+      e.preventDefault();
+      e.stopPropagation();
+      goSlide(slidesOf(visibleIteration()).indexOf(slide));
+    }, true);
+    if (onOpen) slide.addEventListener('click', e => {
+      if (slide.dataset.pos === 'cur' && !(e.target.closest && e.target.closest('button'))) onOpen();
+    });
+  }
+  function buildSlide(it, d, m) {
+    const slide = el('article', 'design-ov-slide');
+    slide.dataset.designId = m.id;
+    slide.dataset.anchor = m.anchor;
+    slide.style.setProperty('--dz-color', m.color);
     const preview = el('div', 'design-ov-preview');
     preview.setAttribute('role', 'button');
-    preview.tabIndex = 0;
+    preview.tabIndex = -1;
     preview.setAttribute('aria-label', L.open + ': ' + m.label);
     setTip(preview, L.open, String(m.n));
     // An unchanged first page would show the same picture round after round
     // while the change sits on page 4: the preview then shows the first
-    // CHANGED page, and opening the card lands there too.
+    // CHANGED page, and opening the slide lands there too.
     const screens = [...d.querySelectorAll('section[data-screen][id]')];
     const ch = changesOf(it);
     const delta = ch && ch.designs[m.id];
@@ -476,14 +502,14 @@ returns — the single-design page is untouched.
     }
     const open = () => (shown && shown !== screens[0] ? window.showDesign(m.id, shown.id) : window.showDesign(m.id));
     preview.appendChild(cloneScreen(shown, 'ov' + m.n + '-'));
-    preview.appendChild(el('span', 'design-ov-zoom', '⤢'));
+    // "Open ↗" shows on hover / focus only — at rest the preview is a still.
+    preview.appendChild(el('span', 'design-ov-open', L.open + ' ↗'));
     if (delta) {
       const flag = el('div', 'design-ov-change');
       const kind = delta.isNew ? 'new' : delta.screens.length ? 'changed' : 'same';
       flag.dataset.kind = kind;
-      card.dataset.change = kind;
-      const head = el('strong', '', kind === 'new' ? L.chNew : kind === 'changed' ? L.chChanged : L.chSame);
-      flag.appendChild(head);
+      slide.dataset.change = kind;
+      flag.appendChild(el('strong', '', kind === 'new' ? L.chNew : kind === 'changed' ? L.chChanged : L.chSame));
       if (kind === 'changed') {
         const names = delta.screens.map(id => {
           const s = screens.find(x => x.id === id);
@@ -493,45 +519,102 @@ returns — the single-design page is untouched.
         flag.appendChild(el('span', 'design-ov-change-list', list));
         flag.dataset.tip = names.join('\n');
       }
-      preview.appendChild(flag);
       if (shown && shown !== screens[0]) {
-        preview.appendChild(el('span', 'design-ov-shown', L.chPreview.replace('{page}', shown.dataset.navLabel || shown.id)));
+        flag.appendChild(el('span', 'design-ov-shown', L.chPreview.replace('{page}', shown.dataset.navLabel || shown.id)));
       }
+      preview.appendChild(flag);
     }
-    preview.addEventListener('click', open);
     preview.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+      if (e.key === 'Enter' && slide.dataset.pos === 'cur') { e.preventDefault(); open(); }
     });
-    card.appendChild(preview);
-    if (screens.length > 1) {
-      const chips = el('div', 'design-ov-chips');
-      screens.forEach(sec => {
-        const chip = el('button', 'design-ov-chip', sec.dataset.navLabel || sec.id);
-        chip.type = 'button';
-        chip.dataset.screenId = sec.id;
-        chip.addEventListener('click', () => window.showDesign(m.id, sec.id));
-        chips.appendChild(chip);
-      });
-      card.appendChild(chips);
-    }
+    slide.appendChild(preview);
+    // Overlay: kicker (icon · N · name + ☆/★), motto, three traits — at the
+    // anchor the author picked, in the tint the author picked.
+    const ov = el('div', 'design-ov-overlay');
+    ov.dataset.anchor = m.anchor;
+    if (m.tone) ov.dataset.tone = m.tone;
+    const kick = el('div', 'design-ov-kicker');
+    kick.append(iconEl(m.icon, { color: m.color }), el('span', 'design-ov-num', String(m.n)), el('span', 'design-ov-name', m.label));
+    const star = el('button', 'design-ov-star');
+    star.type = 'button';
+    star.dataset.designId = m.id;
+    star.hidden = true;
+    star.setAttribute('aria-pressed', 'false');
+    star.addEventListener('click', e => { e.stopPropagation(); toggleFavorite(m.id); });
+    kick.appendChild(star);
+    ov.appendChild(kick);
+    if (m.motto) ov.appendChild(el('h3', 'design-ov-motto', m.motto));
     if (m.traits.length) {
       const ul = el('ul', 'design-ov-traits');
       m.traits.forEach(t => ul.appendChild(el('li', '', t)));
-      card.appendChild(ul);
+      ov.appendChild(ul);
     }
-    const foot = el('div', 'design-ov-foot');
-    const notes = el('span', 'design-ov-notes', '💬 0');
-    notes.dataset.tip = L.notes;
-    foot.appendChild(notes);
-    const fav = el('button', 'design-fav-btn');
-    fav.type = 'button';
-    fav.dataset.designId = m.id;
-    fav.setAttribute('aria-pressed', 'false');
-    setTip(fav, L.favSet, 'F');
-    fav.addEventListener('click', () => toggleFavorite(m.id));
-    foot.appendChild(fav);
-    card.appendChild(foot);
-    return card;
+    slide.appendChild(ov);
+    wireSlide(slide, open);
+    return slide;
+  }
+  function buildQuestionsSlide() {
+    const slide = el('article', 'design-ov-slide design-ov-qslide');
+    slide.dataset.questions = 'true';
+    slide.setAttribute('aria-label', L.qLabel);
+    slide.appendChild(el('div', 'design-ov-qcard'));
+    wireSlide(slide, null);
+    return slide;
+  }
+  // Places every slide relative to the current one (`--dz-off`, `data-pos`).
+  // Three or more slides wrap around (the questions peek in left of design
+  // 1); two stay linear. Only the current slide's controls are tabbable.
+  function layoutCarousel(it) {
+    const ov = overviewOf(it || visibleIteration());
+    if (!ov) return;
+    const slides = [...ov.querySelectorAll('.design-ov-slide')];
+    const n = slides.length;
+    if (!n) return;
+    ovIndex = ((ovIndex % n) + n) % n;
+    slides.forEach((s, i) => {
+      let off = i - ovIndex;
+      if (n >= 3) { if (off > n / 2) off -= n; else if (off <= -n / 2) off += n; }
+      s.style.setProperty('--dz-off', String(off));
+      s.dataset.pos = off === 0 ? 'cur' : off === -1 ? 'prev' : off === 1 ? 'next' : 'far';
+      s.setAttribute('aria-hidden', String(off !== 0));
+      s.querySelectorAll('button, .design-ov-preview').forEach(b => { b.tabIndex = off === 0 ? 0 : -1; });
+    });
+    ov.dataset.index = String(ovIndex);
+    ov.querySelectorAll('.design-ov-arrow').forEach(a => { a.hidden = n < 2; });
+  }
+  function goSlide(i) {
+    const it = visibleIteration();
+    if (i < 0 && slidesOf(it).length) i = (i % slidesOf(it).length) + slidesOf(it).length;
+    const hadFocus = !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.design-ov-slide'));
+    ovIndex = i;
+    layoutCarousel(it);
+    if (hadFocus) overviewOf(it)?.querySelector('.design-ov-slide[data-pos="cur"] .design-ov-preview, .design-ov-slide[data-pos="cur"] button')?.focus();
+  }
+  const stepSlide = dir => goSlide(ovIndex + dir);
+  window.designOverviewGo = goSlide;
+  // Arriving on the overview centres the design the user came from.
+  document.addEventListener('overview:changed', () => {
+    if (mode() !== 'overview') return;
+    const it = visibleIteration();
+    const d = activeDesignOf(it);
+    const i = d ? slidesOf(it).findIndex(s => s.dataset.designId === d.dataset.design) : -1;
+    if (i >= 0) ovIndex = i;
+    layoutCarousel(it);
+  });
+
+  // Overlay on / off (Space, header button). A per-viewer convenience like
+  // the seen pages: localStorage only, never persisted anywhere Claude reads.
+  const OVERLAY_KEY = 'concept-ov-overlay:' + location.pathname;
+  let overlayShown = (() => { try { return localStorage.getItem(OVERLAY_KEY) !== 'off'; } catch (e) { return true; } })();
+  function paintOverlay() {
+    document.querySelectorAll('.design-ov').forEach(o => { o.dataset.overlay = overlayShown ? 'on' : 'off'; });
+    if (H.overlay) H.overlay.setAttribute('aria-pressed', String(overlayShown));
+  }
+  function setOverlay(v) {
+    overlayShown = !!v;
+    const val = overlayShown ? 'on' : 'off';
+    if (typeof _guardedSetItem === 'function') _guardedSetItem(OVERLAY_KEY, val);
+    paintOverlay();
   }
 
   // ── Header ─────────────────────────────────────────────────────────────
@@ -573,11 +656,20 @@ returns — the single-design page is untouched.
     H.pin.appendChild(svgFromPaths(ICONS.pin));
     setTip(H.pin, L.upinArm, L.ctrl + '+' + L.keysClick);
     H.pin.addEventListener('click', () => (armed === 'tap' ? disarm() : arm('tap')));
+    // Overlay toggle: the touch path of Space, shown on the overview only.
+    H.overlay = el('button', 'design-header-overlay');
+    H.overlay.type = 'button';
+    H.overlay.setAttribute('aria-pressed', String(overlayShown));
+    H.overlay.setAttribute('aria-label', L.overlay);
+    H.overlay.appendChild(svgFromPaths(ICONS.layers));
+    setTip(H.overlay, L.overlay, L.space);
+    H.overlay.setAttribute('aria-keyshortcuts', 'Space');
+    H.overlay.addEventListener('click', () => setOverlay(!overlayShown));
     // Icon + name sit in one pill, the same shape as the active quick-nav
     // segment, so the header reads as "this variant", not as loose text.
     H.pill = el('span', 'design-header-title');
     H.pill.append(H.iconSlot, H.name);
-    H.main.append(H.back, H.sep, H.pill, H.star, H.eye, H.pin);
+    H.main.append(H.back, H.sep, H.pill, H.star, H.eye, H.overlay, H.pin);
     // One row only: pages live in the quick nav, the favourite on ★ — the
     // header never grows a second row over the content.
     header.append(H.main);
@@ -661,7 +753,24 @@ returns — the single-design page is untouched.
   // row does not fit between the header and the ☰ FAB, the pages fold into
   // one "2 / 7 ▾" chip that opens downwards. The questions segment counts the
   // unanswered views and carries their list as a tab hanging off it.
-  let quickCompact = false;
+  // 0 = everything named, 1 = the active design's pages folded into the
+  // "2 / 7 ▾" chip, 2 = every design an icon (overview / view).
+  let quickLevel = 0;
+  const quickCompact = () => quickLevel > 0;
+  // The quick nav is centred; its band ends a gap before the header's REAL
+  // right edge and before the ☰ FAB. Offsets, not getBoundingClientRect():
+  // the intro animation translates / scales both, a rect read mid-animation
+  // would size the band wrong for good.
+  function fitQuickBand() {
+    const vw = document.documentElement.clientWidth || window.innerWidth || 0;
+    if (!vw || !quick) return;
+    const GAP = 12;
+    let half = vw / 2;
+    if (header && header.offsetWidth) half = Math.min(half, vw / 2 - (header.offsetLeft + header.offsetWidth) - GAP);
+    const fab = document.querySelector('.panel-fab');
+    if (fab && fab.offsetWidth) half = Math.min(half, fab.offsetLeft - vw / 2 - GAP);
+    quick.style.maxWidth = Math.max(0, Math.floor(2 * half)) + 'px';
+  }
   function quickSeg(m, named, u, fav) {
     const seg = el('button', 'design-quick-seg');
     seg.type = 'button';
@@ -702,7 +811,7 @@ returns — the single-design page is untouched.
       });
       return b;
     };
-    if (!quickCompact) {
+    if (!quickCompact()) {
       screens.forEach((sec, i) => g.appendChild(pageBtn(sec, i, 'design-quick-page')));
       return g;
     }
@@ -774,23 +883,26 @@ returns — the single-design page is untouched.
     const row = el('div', 'design-quick-row design-quick-designs');
     metas.forEach(m => {
       if (d && d.dataset.design === m.id) row.appendChild(quickGroup(d, m, u, fav));
-      else row.appendChild(quickSeg(m, md !== 'design', u, fav));
+      else row.appendChild(quickSeg(m, md !== 'design' && quickLevel < 2, u, fav));
     });
     const qs = questionsOf(it);
     if (qs.length) row.appendChild(quickQuestions(it, qs, md));
     quick.appendChild(row);
-    quick.dataset.compact = String(quickCompact);
+    quick.dataset.compact = String(quickCompact());
+    quick.dataset.level = String(quickLevel);
+    fitQuickBand();
     // Measured right away (the read forces layout): a requestAnimationFrame
     // never fires in a background tab, which left the row overflowing.
-    if (!quickCompact && d && row.scrollWidth > quick.getBoundingClientRect().width + 1) {
-      quickCompact = true;
+    // clientWidth, not the rect: the intro bounce scales the quick nav.
+    if (quickLevel < 2 && row.scrollWidth > quick.clientWidth + 1) {
+      quickLevel = d && quickLevel === 0 ? 1 : 2;
       renderQuick(it);
     }
   }
-  function buildQuick(it) { quickCompact = false; renderQuick(it); }
+  function buildQuick(it) { quickLevel = 0; renderQuick(it); }
   window.addEventListener('resize', () => {
     if (!on()) return;
-    quickCompact = false;
+    quickLevel = 0;
     renderQuick(visibleIteration());
   });
   document.addEventListener('pointerdown', e => {
@@ -810,7 +922,7 @@ returns — the single-design page is untouched.
     q.addEventListener('animationend', () => { q.dataset.pulse = 'false'; }, { once: true });
   });
 
-  // ── Questions card (overview) + submit hint ────────────────────────────
+  // ── Questions slide (overview) + submit hint ────────────────────────────
   function renderQuestionsCard(it) {
     const card = overviewOf(it)?.querySelector('.design-ov-qcard');
     if (!card) return;
@@ -851,6 +963,7 @@ returns — the single-design page is untouched.
     renderQuick(it);
     renderQuestionsCard(it);
     renderSubmitHint(it);
+    layoutCarousel(it);
   }
 
   // ── ☰ panel: icon prefix + hover keycap per design row ─────────────────
@@ -903,7 +1016,7 @@ returns — the single-design page is untouched.
     sheet.appendChild(el('h2', '', L.keysTitle));
     const dl = el('dl');
     [['Esc', L.overview], ['1–9', L.keysDesign], ['⇧+1–9', L.keysView], ['Tab', L.keysNext],
-     ['F', L.fav], ['Alt+1–9', L.keysRound], ['N', L.keysNotes], [L.ctrl + '+Enter', L.submit],
+     ['←/→', L.keysCarousel], [L.space, L.keysOverlay], ['F', L.fav], ['Alt+1–9', L.keysRound], ['N', L.keysNotes], [L.ctrl + '+Enter', L.submit],
      [L.ctrl + '+' + L.keysClick, L.keysPin], ['?', L.keysTitle]].forEach(([k, label]) => {
       const dt = el('dt');
       dt.appendChild(kbdNode(k));
@@ -942,9 +1055,9 @@ returns — the single-design page is untouched.
       disarm();
       return;
     }
-    // Header and quick nav on every design round; the overview grid (and
-    // with it favourite and Esc-to-overview) only where there is something
-    // to compare.
+    // Header and quick nav on every design round; the overview carousel
+    // (and with it Esc-to-overview) only where there is something to
+    // compare; the favourite only where the round says they are alternatives.
     metas = all.map(metaOf);
     if (all.length >= 2) {
       ensureStore(it);
@@ -952,16 +1065,27 @@ returns — the single-design page is untouched.
       ov.dataset.designOverview = '';
       ov.hidden = true;
       ov.setAttribute('role', 'region');
+      ov.setAttribute('aria-roledescription', 'carousel');
       ov.setAttribute('aria-label', L.overview);
-      const grid = el('div', 'design-ov-grid');
-      all.forEach((d, i) => grid.appendChild(buildCard(it, d, metas[i])));
-      if (viewsOf(it).length) {
-        const qcard = el('article', 'design-ov-qcard');
-        qcard.setAttribute('aria-label', L.qLabel);
-        grid.appendChild(qcard);
-      }
-      ov.appendChild(grid);
+      ov.dataset.overlay = overlayShown ? 'on' : 'off';
+      const stage = el('div', 'design-ov-stage');
+      const track = el('div', 'design-ov-track');
+      all.forEach((d, i) => track.appendChild(buildSlide(it, d, metas[i])));
+      if (viewsOf(it).length) track.appendChild(buildQuestionsSlide());
+      stage.appendChild(track);
+      [['prev', '‹', L.prev, '←', 'ArrowLeft', -1], ['next', '›', L.nextDesign, '→', 'ArrowRight', 1]].forEach(([dir, glyph, label, k, aria, step]) => {
+        const a = el('button', 'design-ov-arrow', glyph);
+        a.type = 'button';
+        a.dataset.dir = dir;
+        a.setAttribute('aria-label', label);
+        setTip(a, label, k);
+        a.setAttribute('aria-keyshortcuts', aria);
+        a.addEventListener('click', () => stepSlide(step));
+        stage.appendChild(a);
+      });
+      ov.appendChild(stage);
       it.insertBefore(ov, all[0]);
+      if (ovIndex >= track.children.length) ovIndex = 0;
     }
     buildHeader();
     buildQuick(it);
@@ -983,17 +1107,24 @@ returns — the single-design page is untouched.
       wrap.style.setProperty('--dz-ov-scale', '1');
       wrap.style.setProperty('--dz-ov-x', '0px');
       const origin = wrap.getBoundingClientRect().left;
-      let left = Infinity, right = -Infinity;
+      const originTop = wrap.getBoundingClientRect().top;
+      let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
       wrap.querySelectorAll(':scope > *, :scope > * > *').forEach(n => {
         const r = n.getBoundingClientRect();
         if (!r.width || !r.height) return;
         left = Math.min(left, r.left - origin);
         right = Math.max(right, r.right - origin);
+        top = Math.min(top, r.top - originTop);
+        bottom = Math.max(bottom, r.bottom - originTop);
       });
       const PAD = 24;
       const content = right > left ? Math.min(1000, right - left + 2 * PAD) : 1000;
       const from = right > left ? Math.max(0, left - PAD) : 0;
-      const scale = Math.min(1, w / content);
+      // The carousel preview is large: a desktop mock may grow past 1:1; a
+      // narrow (phone) mock is fitted by height too, so it is seen whole.
+      let scale = Math.min(2, w / content);
+      const h = p.clientHeight;
+      if (content < 700 && h > 0 && bottom > top) scale = Math.min(scale, h / (bottom + PAD));
       wrap.style.removeProperty('--dz-ov-scale');
       wrap.style.removeProperty('--dz-ov-x');
       p.style.setProperty('--dz-ov-scale', String(scale));
@@ -1003,7 +1134,7 @@ returns — the single-design page is untouched.
   window.addEventListener('resize', () => requestAnimationFrame(fitPreviews));
   document.addEventListener('overview:changed', () => requestAnimationFrame(fitPreviews));
 
-  // ── Projection: header, quick nav, cards, pins ─────────────────────────
+  // ── Projection: header, quick nav, carousel, pins ─────────────────────────
   function updateChrome() {
     const it = visibleIteration();
     noteVisit(it);
@@ -1032,11 +1163,12 @@ returns — the single-design page is untouched.
         H.iconSlot.appendChild(iconEl('grid'));
         H.name.textContent = L.overview;
         H.star.textContent = favMeta ? '★ ' + favMeta.label : '';
+        // Only the alternatives round invites a favourite.
         H.star.dataset.kind = 'label';
         H.star.disabled = false;
         H.star.removeAttribute('aria-pressed');
         if (favMeta) setTip(H.star, L.open + ': ' + favMeta.label);
-        motto = L.count.replace('{n}', String(metas.length));
+        motto = (favOn(it) ? L.count : L.countPlain).replace('{n}', String(metas.length));
       } else if (md === 'view') {
         const v = it.querySelector(':scope > section[data-view][data-view-active="true"]');
         H.iconSlot.appendChild(iconEl('question', { kind: 'plain' }));
@@ -1053,7 +1185,7 @@ returns — the single-design page is untouched.
         H.star.setAttribute('aria-pressed', String(isFav));
         H.star.setAttribute('aria-label', isFav ? L.favUnset : L.favSet);
         setTip(H.star, isFav ? L.favUnset : L.favSet, 'F');
-        if (!hasOverview) H.star.textContent = '';
+        if (!hasOverview || !favOn(it)) H.star.textContent = '';
         motto = m.motto;
       }
       H.star.hidden = !H.star.textContent;
@@ -1061,27 +1193,31 @@ returns — the single-design page is untouched.
       if (motto) setTip(H.name, motto);
       else { delete H.name.dataset.tip; delete H.name.dataset.tipTier; }
       H.pin.hidden = !(md === 'design' && live);
+      H.overlay.hidden = !(md === 'overview' && hasOverview);
+      H.overlay.setAttribute('aria-pressed', String(overlayShown));
       H.pin.setAttribute('aria-pressed', String(armed === 'tap'));
     }
     renderQuick(it);
     renderQuestionsCard(it);
     renderSubmitHint(it);
-    const grid = overviewOf(it)?.querySelector('.design-ov-grid');
-    if (grid) {
-      grid.dataset.hasFavorite = String(!!fav);
-      grid.querySelectorAll('.design-ov-card').forEach(card => {
-        const id = card.dataset.designId;
-        const isFav = id === fav;
-        card.dataset.favorite = String(isFav);
-        card.querySelector('.design-ov-badge').hidden = !isFav;
-        const btn = card.querySelector('.design-fav-btn');
+    const ov = overviewOf(it);
+    if (ov) {
+      const favs = favOn(it);
+      ov.dataset.favorites = String(favs);
+      ov.dataset.hasFavorite = String(!!fav);
+      ov.querySelectorAll('.design-ov-slide[data-design-id]').forEach(slide => {
+        const isFav = slide.dataset.designId === fav;
+        slide.dataset.favorite = String(isFav);
+        const btn = slide.querySelector('.design-ov-star');
+        btn.hidden = !favs;
+        btn.textContent = isFav ? '★' : '☆';
         btn.setAttribute('aria-pressed', String(isFav));
-        btn.textContent = (isFav ? '★ ' : '☆ ') + L.fav;
+        btn.setAttribute('aria-label', isFav ? L.favUnset : L.favSet);
         btn.disabled = !live;
         setTip(btn, isFav ? L.favUnset : L.favSet, 'F');
-        const notes = card.querySelector('.design-ov-notes');
-        if (notes) notes.textContent = '💬 ' + notesCount(it, id, st);
       });
+      layoutCarousel(it);
+      paintOverlay();
     }
     if (md !== 'design' || !live) disarm();
     renderPins(it, st, live);
@@ -1102,15 +1238,6 @@ returns — the single-design page is untouched.
   }
   document.addEventListener('input', onAnswerChange);
   document.addEventListener('change', () => setTimeout(onAnswerChange, 0));
-  document.addEventListener('input', e => {
-    if (!on() || (e.target && e.target.dataset && e.target.dataset.engineStore)) return;
-    const it = visibleIteration();
-    const st = readState(it);
-    document.querySelectorAll('.design-ov-card').forEach(card => {
-      const notes = card.querySelector('.design-ov-notes');
-      if (notes) notes.textContent = '💬 ' + notesCount(it, card.dataset.designId, st);
-    });
-  });
   document.addEventListener('iteration:changed', () => toggleSheet(false));
 
   // ── User pins (Ctrl + click) ───────────────────────────────────────────
@@ -1363,6 +1490,22 @@ returns — the single-design page is untouched.
     }
     if (e.key === '?') { e.preventDefault(); toggleSheet(); return; }
     if (e.shiftKey) return;
+    if (mode() === 'overview' && overviewOf(it)) {
+      // Space: overlay on / off — a focused native button keeps its own Space.
+      if (e.key === ' ' || e.code === 'Space') {
+        const t = document.activeElement;
+        if (t && t.closest && t.closest('button, a[href], summary')) return;
+        e.preventDefault();
+        setOverlay(!overlayShown);
+        return;
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        if (slidesOf(it).length < 2) return;
+        e.preventDefault();
+        stepSlide(e.key === 'ArrowLeft' ? -1 : 1);
+        return;
+      }
+    }
     const k = (e.key || '').toLowerCase();
     if (e.key === 'Tab') {
       const t = document.activeElement;
@@ -1378,8 +1521,8 @@ returns — the single-design page is untouched.
     if (k === 'f') {
       let id = null;
       if (mode() === 'design') id = activeDesignOf(it)?.dataset.design;
-      else if (mode() === 'overview') id = document.activeElement?.closest?.('.design-ov-card')?.dataset.designId || null;
-      if (id) { e.preventDefault(); toggleFavorite(id); }
+      else if (mode() === 'overview') id = overviewOf(it)?.querySelector('.design-ov-slide[data-pos="cur"]')?.dataset.designId || null;
+      if (id && favOn(it)) { e.preventDefault(); toggleFavorite(id); }
       return;
     }
     if (k === 'n') {
@@ -1419,93 +1562,129 @@ html:not([data-template="design"]) .design-ov,
 html:not([data-template="design"]) .upin-layer,
 html:not([data-template="design"]) .upin-hint { display: none !important; }
 
-/* ── Overview (first top-level item) ── */
+/* ── Overview: carousel (first top-level item) ──
+   Sized from the viewport only: the stage is the viewport minus the
+   header / quick-nav row, a slide is min(78 % of the stage width, stage
+   height × 1.6) at 16:10 (container units). Nothing is in the flow, so the
+   overview never scrolls — not at 1920 × 1080, not at 1366 × 768, not in a
+   narrow window. */
 [data-template="design"] .design-ov {
-  position: absolute; inset: 0;
-  padding: var(--chrome-safe-top, 5.75rem) 2rem var(--chrome-safe-bottom, 2rem);
-  overflow-y: auto;
+  position: absolute; inset: 0; overflow: hidden;
+  --dz-ov-top: 4rem; --dz-ov-bottom: 1.25rem;
+  /* The overlay sits on arbitrary previews, not on the app surface: its own
+     two tints, the bluish default and the warm graphite for bluish mocks. */
+  --dz-ov-tint: rgba(34, 66, 138, 0.62); --dz-ov-tint-line: rgba(150, 185, 255, 0.45);
+  --dz-ov-warm: rgba(46, 36, 30, 0.76); --dz-ov-warm-line: rgba(255, 210, 165, 0.4);
   animation: screen-in 0.25s ease;
 }
 .design-ov[hidden] { display: none; }
 body:not([data-overview-active="true"]) .design-ov { display: none; }
-.design-ov-grid {
-  display: grid; gap: 1.25rem; align-items: stretch;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
-  max-width: 1680px; margin: 0 auto;
-  /* Room for the favourite's lift + badge so neither is clipped (R8). */
-  padding-top: 0.75rem;
+.design-ov-stage {
+  position: absolute; left: 0; right: 0; top: var(--dz-ov-top); bottom: var(--dz-ov-bottom);
+  container-type: size; overflow: hidden;
 }
-.design-ov-card {
+.design-ov-track { position: absolute; inset: 0; }
+.design-ov-slide {
   --dz-color: var(--accent-color);
-  position: relative; display: flex; flex-direction: column; gap: 0.75rem;
-  padding: 1.1rem 1.1rem 1rem; border-radius: 16px;
-  background: color-mix(in srgb, var(--dz-color) 9%, var(--panel-bg, #161b22));
-  border: 2px solid color-mix(in srgb, var(--dz-color) 35%, var(--border-color, #30363d));
-  color: var(--text-color, #e6edf3);
-  transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  --dz-ov-w: min(78cqw, 160cqh);
+  position: absolute; top: 50%; left: 50%; box-sizing: border-box;
+  width: var(--dz-ov-w); aspect-ratio: 16 / 10;
+  /* Neighbours: 82 %, cut off by the stage edge, dimmed and desaturated. */
+  transform: translate(-50%, -50%) translateX(calc(var(--dz-off, 0) * (var(--dz-ov-w) * 0.91 + 1.5rem))) scale(0.82);
+  opacity: 0.32; filter: saturate(0.55); cursor: pointer;
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease, filter 0.25s ease;
 }
-.design-ov-card::before {
-  content: ""; position: absolute; inset: 0 0 auto 0; height: 6px;
-  border-radius: 14px 14px 0 0; background: var(--dz-color);
-}
-.design-ov-card[data-favorite="true"] {
-  border-color: var(--warning-color, #d29922);
-  transform: translateY(-6px);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning-color, #d29922) 35%, transparent),
-              0 16px 40px color-mix(in srgb, var(--warning-color, #d29922) 28%, transparent);
-}
-.design-ov-grid[data-has-favorite="true"] .design-ov-card:not([data-favorite="true"]) { opacity: 0.62; }
-.design-ov-grid[data-has-favorite="true"] .design-ov-card:not([data-favorite="true"]):hover,
-.design-ov-grid[data-has-favorite="true"] .design-ov-card:not([data-favorite="true"]):focus-within { opacity: 1; }
-.design-ov-badge {
-  position: absolute; top: -0.8rem; right: 1rem;
-  padding: 0.2rem 0.7rem; border-radius: 8px;
-  background: var(--warning-color, #d29922); color: var(--panel-bg, #0d1117);
-  font-weight: 800; font-size: 0.75rem; letter-spacing: 0.1em;
-}
-.design-ov-head {
-  display: flex; align-items: center; gap: 0.5rem; padding: 0; border: 0;
-  background: none; cursor: pointer; text-align: left; font: inherit;
-  color: var(--dz-color); font-size: 0.8rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.06em;
-}
-.design-ov-head:hover .design-ov-name { text-decoration: underline; }
-.design-ov-motto { margin: 0; font-size: 1.45rem; line-height: 1.15; font-weight: 700; color: var(--text, #e6edf3); }
+.design-ov-slide[data-pos="cur"] { transform: translate(-50%, -50%); opacity: 1; filter: none; cursor: default; z-index: 1; }
+.design-ov-slide[data-pos="prev"]:hover, .design-ov-slide[data-pos="next"]:hover { opacity: 0.55; }
+.design-ov-slide[data-pos="far"] { visibility: hidden; opacity: 0; }
 .design-ov-preview {
-  /* Tall enough to read the mock, not just recognise it (was 220px). */
-  position: relative; display: block; width: 100%; height: clamp(300px, 48vh, 600px);
-  border-radius: 12px; overflow: hidden; cursor: zoom-in;
-  border: 1px solid var(--border-color, #30363d);
+  position: absolute; inset: 0; display: block; overflow: hidden; border-radius: 22px;
   background: var(--bg-secondary, var(--panel-bg, #0d1117));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5), 0 0 0 2px var(--dz-color);
 }
-.design-ov-preview:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+.design-ov-slide[data-pos="cur"] .design-ov-preview { cursor: pointer; }
+.design-ov-preview:focus-visible { outline: 3px solid var(--accent-color); outline-offset: 4px; }
 /* The scaled clone: laid out at a fixed 1000px virtual width, scaled to the box by
-   fitOverviewPreviews() (--dz-ov-scale). pointer-events none + inert keep
-   the mock's own controls out of reach — the preview is one button. */
+   fitPreviews() (--dz-ov-scale). pointer-events none + inert keep
+   the mock's own controls out of reach — the preview is one still image. */
 .design-ov-scale {
   position: absolute; top: 0; left: 0; width: 1000px;
   transform: translateX(var(--dz-ov-x, 0px)) scale(var(--dz-ov-scale, 0.28)); transform-origin: 0 0;
   pointer-events: none; padding: 1.5rem; box-sizing: border-box;
 }
 .design-ov-scale > * { width: 100%; }
-.design-ov-zoom {
-  position: absolute; right: 0.5rem; bottom: 0.5rem; padding: 0.15rem 0.5rem;
-  border-radius: 999px; font-size: 0.8rem;
-  background: color-mix(in srgb, var(--panel-bg, #0d1117) 85%, transparent);
-  color: var(--text, #e6edf3);
+/* "Open ↗" — only on hover / keyboard focus of the centre preview. */
+.design-ov-open {
+  position: absolute; right: 1rem; bottom: 1rem; z-index: 1; pointer-events: none;
+  padding: 0.35rem 0.85rem; border-radius: 999px; font-size: 0.9rem; font-weight: 700;
+  background: color-mix(in srgb, var(--panel-bg, #0d1117) 88%, transparent);
+  color: var(--text, #e6edf3); border: 1px solid var(--dz-color);
+  opacity: 0; transition: opacity 0.15s ease;
 }
-.design-ov-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-.design-ov-chip {
-  border: 1px solid var(--border-color, #30363d); background: transparent;
-  color: var(--text-secondary, #8b949e); border-radius: 999px;
-  padding: 0.15rem 0.6rem; font: inherit; font-size: 0.78rem; cursor: pointer;
+.design-ov-slide[data-anchor="br"] .design-ov-open { right: auto; left: 1rem; }
+.design-ov-slide[data-pos="cur"]:hover .design-ov-open,
+.design-ov-slide[data-pos="cur"] .design-ov-preview:focus-visible .design-ov-open { opacity: 1; }
+/* Arrows on the centre slide's edges — they turn, never open. */
+.design-ov-arrow {
+  position: absolute; top: 50%; z-index: 3; transform: translateY(-50%);
+  width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; padding: 0;
+  border: 1px solid var(--border-color, #30363d);
+  background: color-mix(in srgb, var(--panel-bg, #0d1117) 75%, transparent);
+  color: var(--text, #e6edf3); font: inherit; font-size: 1.7rem; line-height: 1; cursor: pointer;
+  opacity: 0.6; transition: opacity 0.15s ease;
 }
-.design-ov-chip:hover { color: var(--text, #e6edf3); border-color: var(--dz-color); }
+.design-ov-arrow:hover, .design-ov-arrow:focus-visible { opacity: 1; }
+.design-ov-arrow[data-dir="prev"] { left: max(0.5rem, calc(50% - min(39cqw, 80cqh) - 28px)); }
+.design-ov-arrow[data-dir="next"] { right: max(0.5rem, calc(50% - min(39cqw, 80cqh) - 28px)); }
+
+/* ── Overlay: kicker, motto, three traits — authored anchor and tint ── */
+.design-ov-overlay {
+  position: absolute; z-index: 2; box-sizing: border-box; max-width: 40%;
+  padding: 1.1rem 1.4rem 1.25rem; border-radius: 16px; color: #fff; line-height: 1.4;
+  background: var(--dz-ov-tint); border: 1px solid var(--dz-ov-tint-line);
+  backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+.design-ov-overlay[data-tone="warm"] { background: var(--dz-ov-warm); border-color: var(--dz-ov-warm-line); }
+.design-ov-overlay[data-anchor="tl"] { top: 1.4rem; left: 1.4rem; }
+.design-ov-overlay[data-anchor="tr"] { top: 1.4rem; right: 1.4rem; }
+.design-ov-overlay[data-anchor="bl"] { bottom: 1.4rem; left: 1.4rem; }
+.design-ov-overlay[data-anchor="br"] { bottom: 1.4rem; right: 1.4rem; }
+.design-ov-overlay[data-anchor="tc"] { top: 1.4rem; left: 50%; transform: translateX(-50%); }
+.design-ov-overlay[data-anchor="bc"] { bottom: 1.4rem; left: 50%; transform: translateX(-50%); }
+.design-ov-slide:not([data-pos="cur"]) .design-ov-overlay,
+.design-ov[data-overlay="off"] .design-ov-overlay { opacity: 0; visibility: hidden; }
+.design-ov-kicker {
+  display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;
+  font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.9;
+}
+.design-ov-num::before, .design-ov-name::before { content: "·"; margin-right: 0.5rem; opacity: 0.7; }
+.design-ov-motto { margin: 0 0 0.6rem; font-size: clamp(1.1rem, 1.5vw, 1.65rem); line-height: 1.15; font-weight: 800; letter-spacing: -0.01em; }
+.design-ov-traits { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.35rem; font-size: clamp(0.85rem, 0.95vw, 1rem); }
+.design-ov-traits li { display: flex; gap: 0.6rem; align-items: baseline; }
+.design-ov-traits li::before {
+  content: ""; flex: none; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--dz-color); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6); transform: translateY(-1px);
+}
+/* ☆ / ★ — only on an alternatives round (the engine un-hides it). */
+.design-ov-star {
+  margin-left: auto; padding: 0 0 0 0.5rem; border: 0; background: transparent; cursor: pointer;
+  font: inherit; font-size: 1.3rem; line-height: 1; letter-spacing: 0; color: var(--warning-color, #d29922);
+}
+.design-ov-star:disabled { opacity: 0.55; cursor: default; }
+.design-ov-slide[data-favorite="true"] .design-ov-preview {
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5), 0 0 0 3px var(--warning-color, #d29922);
+}
+.design-ov[data-has-favorite="true"] .design-ov-slide[data-design-id]:not([data-favorite="true"]) .design-ov-preview { filter: saturate(0.6) brightness(0.8); }
+@media (max-width: 900px) {
+  .design-ov-overlay { max-width: 62%; padding: 0.7rem 0.9rem 0.8rem; }
+  .design-ov-arrow { width: 40px; height: 40px; font-size: 1.3rem; }
+}
 
 /* ── Round changes: overlay on the preview, dots on menu entries ── */
 .design-ov, .design-header, .design-quick, .screen-nav { --dz-new-color: var(--success-color, #3fb950); }
 .design-ov-change {
-  position: absolute; top: 0.5rem; left: 0.5rem; right: 0.5rem; z-index: 1;
+  position: absolute; top: 1rem; left: 1rem; z-index: 1; max-width: calc(100% - 2rem); box-sizing: border-box;
   display: flex; align-items: baseline; gap: 0.45rem; min-width: 0;
   padding: 0.35rem 0.65rem; border-radius: 10px; font-size: 0.8rem;
   background: color-mix(in srgb, var(--panel-bg, #0d1117) 90%, transparent);
@@ -1518,29 +1697,20 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
   border-radius: 50%; background: currentColor; vertical-align: 1px;
 }
 .design-ov-change-list { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The overlay owns a top anchor → the change flag moves to the bottom. */
+.design-ov-slide[data-anchor^="t"] .design-ov-change { top: auto; bottom: 1rem; }
 .design-ov-change[data-kind="same"] {
-  right: auto; border-color: var(--border-color, #30363d); box-shadow: none;
+  border-color: var(--border-color, #30363d); box-shadow: none;
   color: var(--text-secondary, #8b949e);
 }
 .design-ov-change[data-kind="same"] strong { color: var(--text-secondary, #8b949e); font-weight: 600; }
 .design-ov-change[data-kind="same"] strong::before { display: none; }
-.design-ov-shown {
-  position: absolute; left: 0.5rem; bottom: 0.5rem; padding: 0.15rem 0.55rem;
-  border-radius: 999px; font-size: 0.75rem; max-width: calc(100% - 4rem);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  background: color-mix(in srgb, var(--panel-bg, #0d1117) 85%, transparent);
-  color: var(--text, #e6edf3);
-}
+.design-ov-shown { flex: none; color: var(--text-secondary, #8b949e); white-space: nowrap; }
 .dz-new-dot {
   display: inline-block; flex: none; width: 7px; height: 7px; margin-left: 0.4rem;
   border-radius: 50%; background: var(--dz-new-color, #3fb950); vertical-align: middle;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--dz-new-color, #3fb950) 30%, transparent);
 }
-.design-ov-chip[data-changed="true"] { color: var(--text, #e6edf3); border-color: var(--dz-new-color); }
-.design-ov-traits { margin: 0; padding: 0 0 0 1.1rem; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.92rem; font-weight: 600; }
-.design-ov-traits li::marker { color: var(--dz-color); }
-.design-ov-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-.design-ov-notes { font-size: 0.85rem; color: var(--text-secondary, #8b949e); }
 
 /* ── Design icon — one uniform accent tint, the design colour behind it ── */
 .dz-icon {
@@ -1553,17 +1723,6 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .dz-icon svg { width: 62%; height: 62%; display: block; }
 .dz-icon[data-size="s"] { width: 18px; height: 18px; border-radius: 5px; font-size: 10px; }
 .dz-icon[data-kind="plain"] { background: transparent; color: var(--text-secondary, #8b949e); }
-
-/* ── Favourite button (card, header) ── */
-.design-fav-btn {
-  display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap;
-  border: 1px solid var(--warning-color, #d29922); background: transparent;
-  color: var(--warning-color, #d29922); border-radius: 8px;
-  padding: 0.3rem 0.7rem; font: inherit; font-size: 0.85rem; font-weight: 700; cursor: pointer;
-}
-.design-fav-btn:hover { background: color-mix(in srgb, var(--warning-color, #d29922) 15%, transparent); }
-.design-fav-btn[aria-pressed="true"] { background: var(--warning-color, #d29922); color: var(--panel-bg, #0d1117); }
-.design-fav-btn:disabled { opacity: 0.55; cursor: default; }
 
 /* ── Header — one compact row, never grows ── */
 .design-header {
@@ -1640,13 +1799,27 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-header-pin[hidden] { display: none; }
 .design-header-pin svg { width: 13px; height: 13px; display: block; }
 .design-header-pin[aria-pressed="true"] { border-color: #f78166; background: #f78166; color: #fff; }
+/* Overlay toggle (overview only) — same round shape as the eye and the pin. */
+.design-header-overlay {
+  flex: none; width: 24px; height: 24px; padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-color, #30363d);
+  background: var(--anno-bubble-bg, var(--panel-bg, #161b22));
+  color: var(--text-secondary, #8b949e); cursor: pointer; transition: transform 0.15s;
+}
+.design-header-overlay:hover { transform: scale(1.08); }
+.design-header-overlay[hidden] { display: none; }
+.design-header-overlay svg { width: 13px; height: 13px; display: block; }
+.design-header-overlay[aria-pressed="true"] { border-color: var(--accent-color, #58a6ff); color: var(--accent-color, #58a6ff); }
 
 /* ── Quick nav — top centre, one row ── */
 .design-quick {
   position: fixed; top: 0.75rem; left: 50%; transform: translateX(-50%); z-index: 95;
   flex-direction: column; align-items: center;
-  /* The band between the header (left) and the ☰ FAB (right). */
-  max-width: calc(100vw - 2 * (1rem + min(33vw - 1.5rem, 280px) + 0.75rem));
+  /* The band between the header (left) and the ☰ FAB (right). First-paint
+     value from the header's cap; fitQuickBand() replaces it with the
+     measured band on every render, so the two never overlap. */
+  max-width: calc(100vw - 2 * (1rem + min(33vw - 1.5rem, 30rem) + 0.75rem));
   opacity: 0.8; transition: opacity 0.16s ease;
 }
 .design-quick:hover, .design-quick:focus-within { opacity: 1; z-index: 98; }
@@ -1790,22 +1963,28 @@ body.panel-open .design-quick, body.panel-open .design-header { opacity: 0; poin
   .design-quick-seg { padding: 0.2rem; }
 }
 
-/* ── Questions card (overview grid) ── */
+/* ── Questions slide (last slide of the carousel) ── */
 .design-ov-qcard {
   --q: var(--warning-color, #d29922);
-  display: flex; flex-direction: column; gap: 0.5rem; align-self: start;
-  padding: 1.1rem; border-radius: 16px;
-  border: 2px solid color-mix(in srgb, var(--q) 55%, var(--border-color, #30363d));
-  background: color-mix(in srgb, var(--q) 7%, var(--panel-bg, #161b22));
+  position: absolute; inset: 0; box-sizing: border-box; overflow: hidden auto;
+  display: flex; flex-direction: column; gap: 0.6rem;
+  padding: 5% 6%; border-radius: 22px;
+  background: color-mix(in srgb, var(--q) 6%, var(--panel-bg, #161b22));
+  box-shadow: 0 0 0 2px var(--q), 0 24px 70px rgba(0, 0, 0, 0.5);
 }
 .design-ov-qcard[data-state="done"] { --q: var(--success-color, #3fb950); }
-.design-ov-qhead { display: flex; align-items: center; gap: 0.5rem; color: var(--q); font-size: 1.05rem; }
+.design-ov-qhead { display: flex; align-items: center; gap: 0.75rem; color: var(--q); font-size: clamp(1.2rem, 2vw, 2.2rem); }
 .design-ov-qmark {
-  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  width: 1.4em; height: 1.4em; border-radius: 50%; display: grid; place-items: center;
   background: var(--q); color: var(--panel-bg, #0d1117); font-weight: 900;
 }
-.design-ov-qprogress { margin: 0; font-size: 0.85rem; color: var(--text-secondary, #8b949e); }
-.design-ov-qcard .design-quick-qbar { margin: 0 0 0.25rem; }
+.design-ov-qprogress { margin: 0; font-size: clamp(0.85rem, 1vw, 1.05rem); color: var(--text-secondary, #8b949e); }
+.design-ov-qcard .design-quick-qbar { margin: 0 0 0.5rem; }
+.design-ov-qcard .design-quick-qitem {
+  padding: 0.85rem 0.5rem; border-radius: 0; font-size: clamp(0.95rem, 1.3vw, 1.4rem);
+  border-top: 1px solid color-mix(in srgb, var(--border-color, #30363d) 70%, transparent);
+}
+.design-ov-qcard .design-quick-qstate { width: 1.1em; height: 1.1em; }
 
 /* ── Submit hint: open questions, never a blocker ── */
 .submit-open-questions {
@@ -1936,6 +2115,6 @@ body.upin-armed section[data-screen][data-screen-active="true"] * { cursor: cros
 }
 .upin-editor textarea:focus { outline-offset: 0; }
 @media (prefers-reduced-motion: reduce) {
-  .design-ov-card, .design-header, .design-quick { transition: none; }
+  .design-ov-slide, .design-ov-overlay, .design-header, .design-quick { transition: none; }
 }
 ```
