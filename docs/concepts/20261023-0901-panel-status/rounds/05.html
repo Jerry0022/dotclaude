@@ -1,0 +1,254 @@
+<section data-iteration="5" data-iteration-template="design" data-design-set="alternatives" data-baked>
+  <script type="application/json" data-frozen-feedback>{"general":{"text":"","attachments":[]},"designs":{},"screens":{},"views":{"page-numbers-2":"lass uns einfach römische zahlen für die detailseiten machen ;)"},"favorite":"knot"}</script>
+<style>
+.mock-stage{display:flex;gap:36px;align-items:center;justify-content:center;max-width:1120px;margin:0 auto;padding:16px;box-sizing:border-box;font-family:"Inter","Segoe UI Variable","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.mock-note{max-width:330px;color:#c9d1d9;font-size:14px;line-height:1.6}
+.mock-note h4{margin:0 0 8px;font-size:17px;font-weight:650;color:#f0f6fc;letter-spacing:-.01em}
+.mock-note p{margin:0}
+.mock-panel{width:392px;height:568px;flex:none;background:linear-gradient(180deg,#171c23,#12161c);border:1px solid rgba(255,255,255,.08);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;color:#c9d1d9;box-shadow:0 24px 60px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.04)}
+.mock-head{display:flex;align-items:center;gap:8px;padding:15px 18px;border-bottom:1px solid rgba(255,255,255,.06);font-weight:650;font-size:15px;color:#f0f6fc;letter-spacing:-.01em}
+.mock-x{margin-left:auto;color:#6e7681;font-weight:400}
+.mock-toc{list-style:none;margin:0;padding:12px;display:flex;flex-direction:column;gap:4px;flex:1 1 auto}
+.mock-toc li{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;font-size:14px;color:#c9d1d9}
+.mock-toc li.mock-cur{background:rgba(56,139,253,.12);color:#f0f6fc;box-shadow:inset 0 0 0 1px rgba(56,139,253,.35)}
+.mock-toc b{width:20px;height:20px;border-radius:6px;background:rgba(255,255,255,.05);color:#8b949e;font-size:11px;display:flex;align-items:center;justify-content:center}
+.mock-toc li.mock-cur b{background:rgba(56,139,253,.25);color:#79c0ff}
+.mock-foot{padding:12px 14px 12px;display:flex;flex-direction:column;gap:9px;background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.015));border-top:1px solid rgba(255,255,255,.05)}
+.mock-save{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#6e7681;padding:0 4px}
+.mock-dot{width:6px;height:6px;border-radius:50%;background:#3fb950;box-shadow:0 0 0 3px rgba(63,185,80,.15);flex:none}
+.mock-save.mock-amber{color:#d29922}
+.mock-save.mock-amber .mock-dot{background:#d29922;box-shadow:0 0 0 3px rgba(210,153,34,.18)}
+.mock-chev{color:#484f58;font-size:15px;font-weight:300;padding:0 1px}
+.mock-rd{display:flex;gap:6px;height:46px}
+.mock-go{flex:1;border:0;border-radius:999px;background:linear-gradient(180deg,#388bfd,#1f6feb);color:#fff;font:600 14px "Inter","Segoe UI",system-ui,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 6px 18px rgba(31,111,235,.35),inset 0 1px 0 rgba(255,255,255,.22)}
+.mock-go small{font-weight:500;font-size:11px;opacity:.85}
+.mock-go-arr{transition:transform .2s}
+.mock-go:hover .mock-go-arr{transform:translateX(4px)}
+.mock-more{width:46px;border:0;border-radius:999px;background:rgba(255,255,255,.06);color:#c9d1d9;font-size:15px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.mock-run{position:relative;height:46px;border-radius:999px;background:#0c1f14;overflow:hidden;display:flex;align-items:center;gap:11px;padding:0 16px 0 6px;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(63,185,80,.45),0 6px 20px rgba(35,134,54,.25)}
+.mock-run-fill{position:absolute;top:0;bottom:0;left:0;background:linear-gradient(90deg,rgba(46,160,67,.25),rgba(63,185,80,.6) 50%,rgba(46,160,67,.25));background-size:200% 100%;animation:mock-flow 1.3s linear infinite;border-radius:999px}
+.mock-run-sweep{position:absolute;top:0;bottom:0;width:40%;left:-40%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.14),transparent);animation:mock-sweep 2.4s ease-in-out infinite}
+@keyframes mock-flow{from{background-position:200% 0}to{background-position:0 0}}
+@keyframes mock-sweep{0%{left:-40%}60%,100%{left:110%}}
+.mock-run-bot{position:relative;width:34px;height:34px;border-radius:50%;background:linear-gradient(180deg,#2ea043,#238636);display:flex;align-items:center;justify-content:center;font-size:16px;animation:mock-ring 1.6s ease-out infinite}
+@keyframes mock-ring{0%{box-shadow:0 0 0 0 rgba(63,185,80,.55)}100%{box-shadow:0 0 0 10px rgba(63,185,80,0)}}
+.mock-run-txt{position:relative;display:flex;flex-direction:column;line-height:1.2;font-size:13.5px;font-weight:600;color:#f0f6fc}
+.mock-run-txt small{font-size:10.5px;font-weight:600;color:#7ee787;letter-spacing:.03em;text-transform:uppercase}
+.mock-run-n{position:relative;margin-left:auto;font-size:13px;font-weight:700;color:#7ee787;font-variant-numeric:tabular-nums}
+.mock-back{height:46px;border-radius:999px;border:0;background:rgba(56,139,253,.1);color:#79c0ff;font:600 14px "Inter","Segoe UI",system-ui,sans-serif;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(56,139,253,.35)}
+.mock-ta{display:flex;flex-direction:column}
+.mock-ta-row{display:flex;align-items:flex-end;gap:4px;font-size:12px;font-weight:600;padding:0 6px}
+.mock-ta-loop{display:flex;align-items:flex-end;gap:2px;padding:0 2px;border-radius:10px 10px 0 0}
+.mock-ta-ico{color:#6e7681;font-size:13px;padding:0 4px 7px}
+.mock-ta-s{padding:6px 10px 7px;color:#6e7681;border-radius:10px 10px 0 0;white-space:nowrap}
+.mock-ta-done{color:#3fb950}
+.mock-ta-tab{color:#fff;padding-bottom:10px;margin-bottom:-1px;position:relative}
+.mock-ta-you{background:#2f81f7}
+.mock-ta-ai{background:#1f6f37}
+.mock-ta .mock-go,.mock-ta .mock-run,.mock-ta .mock-back,.mock-ta .mock-more{border-radius:14px}
+.mock-ta-you .mock-go{}
+.mock-ta .mock-go{background:#2f81f7;box-shadow:0 8px 20px rgba(31,111,235,.3)}
+.mock-ta .mock-run{background:#0f2a18;box-shadow:inset 0 0 0 1px #1f6f37,0 8px 20px rgba(35,134,54,.22)}
+.mock-ta-impl .mock-ta-row .mock-ta-s:nth-last-child(3),.mock-ta-impl .mock-ta-tab{background:#1f6f37;color:#fff}
+.mock-tb{position:relative;display:flex;flex-direction:column;gap:12px;padding:12px;border-radius:16px;background:rgba(255,255,255,.025);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)}
+.mock-tb-track{position:relative;display:grid;grid-template-columns:repeat(4,1fr);padding-top:14px}
+.mock-tb-track::before{content:"";position:absolute;left:12.5%;right:12.5%;top:19px;height:2px;background:linear-gradient(90deg,#30363d,#30363d);border-radius:2px}
+.mock-tb-loopmark{position:absolute;left:25%;top:-2px;transform:translateX(-50%);font-size:12px;color:#6e7681}
+.mock-tb-n{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#6e7681;text-align:center}
+.mock-tb-n i{width:12px;height:12px;border-radius:50%;background:#21262d;box-shadow:0 0 0 2px #30363d}
+.mock-tb-n b{font-weight:600;white-space:nowrap}
+.mock-tb-done{color:#3fb950}
+.mock-tb-done i{background:#3fb950;box-shadow:0 0 0 2px rgba(63,185,80,.3)}
+.mock-tb-you{color:#79c0ff}
+.mock-tb-you i{background:#2f81f7;box-shadow:0 0 0 4px rgba(47,129,247,.25)}
+.mock-tb-ai{color:#7ee787}
+.mock-tb-ai i{background:#3fb950;box-shadow:0 0 0 4px rgba(63,185,80,.25);animation:mock-ring 1.6s ease-out infinite}
+.mock-tb-drop{position:absolute;top:26px;height:30px;width:2px;left:calc(12.5% + var(--at) * 25%);background:linear-gradient(180deg,#3fb950,transparent);transform:translateX(-1px)}
+.mock-tb-you .mock-tb-drop,.mock-tb-old .mock-tb-drop{background:linear-gradient(180deg,#2f81f7,transparent)}
+.mock-tb .mock-go,.mock-tb .mock-more,.mock-tb .mock-run,.mock-tb .mock-back{border-radius:12px}
+.mock-cm{display:flex;align-items:center;gap:4px;padding:4px;border-radius:999px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)}
+.mock-cm-loop{flex:1;display:flex;align-items:center;gap:4px;min-width:0}
+.mock-cm-ico{width:38px;height:38px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#8b949e;background:rgba(255,255,255,.04)}
+.mock-cm-done{color:#3fb950;background:rgba(63,185,80,.12)}
+.mock-cm-loop > .mock-rd,.mock-cm-loop > .mock-run,.mock-cm-loop > .mock-back,.mock-cm > .mock-run{flex:1}
+.mock-cm .mock-back{height:38px}
+.mock-rd-in{flex:1;height:38px}
+.mock-rd-in .mock-go{box-shadow:none}
+.mock-rd-in .mock-more{display:none}
+.mock-run-in{flex:1;height:38px}
+.mock-run-in .mock-run-bot{width:28px;height:28px;font-size:14px}
+.mock-run-in .mock-run-txt small{display:none}
+.mock-page{width:100%;max-width:940px;height:540px;margin:0 auto;border-radius:16px;border:1px solid rgba(255,255,255,.07);background:radial-gradient(1200px 400px at 50% 120%,#13233a,#0d1117 60%);position:relative;overflow:hidden;font-family:"Inter","Segoe UI Variable","Segoe UI",system-ui,sans-serif}
+.mock-page-body{padding:40px 60px;display:flex;flex-direction:column;gap:16px;opacity:.35}
+.mock-page-body i{display:block;height:14px;border-radius:7px;background:#21262d}
+.mock-toasts{position:absolute;left:0;right:0;bottom:22px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.mock-trow{display:flex;align-items:center;gap:16px}
+.mock-toast-tag{width:100px;text-align:right;font-size:11.5px;color:#6e7681}
+.mock-t{position:relative;overflow:hidden;display:flex;align-items:center;gap:12px;width:400px;box-sizing:border-box;padding:9px 16px 9px 9px;border-radius:16px;background:rgba(28,33,40,.72);backdrop-filter:blur(16px) saturate(140%);box-shadow:0 12px 32px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.08),inset 0 1px 0 rgba(255,255,255,.06)}
+.mock-t-body{display:flex;flex-direction:column;line-height:1.3;min-width:0;flex:1}
+.mock-t-body b{font-size:13.5px;font-weight:650;color:#f0f6fc;letter-spacing:-.005em}
+.mock-t-body span{font-size:12px;color:#8b949e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mock-t em{font-style:normal;font-size:12.5px;font-weight:700;color:#7ee787;font-variant-numeric:tabular-nums}
+.mock-tav{width:36px;height:36px;border-radius:12px;flex:none;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700}
+.mock-tav-ring{border-radius:50%;background:conic-gradient(#3fb950 calc(var(--p)*1%),rgba(255,255,255,.08) 0)}
+.mock-tav-ring span{width:30px;height:30px;border-radius:50%;background:#161b22;display:flex;align-items:center;justify-content:center;font-size:15px}
+.mock-tav-ok{background:linear-gradient(180deg,#2ea043,#1a7f37);color:#fff;box-shadow:0 0 18px rgba(46,160,67,.45)}
+.mock-tav-warn{background:linear-gradient(180deg,#d29922,#9e6a03);color:#fff}
+.mock-t-ok{background:rgba(16,40,24,.72);box-shadow:0 12px 32px rgba(0,0,0,.45),inset 0 0 0 1px rgba(63,185,80,.35)}
+.mock-t-warn{background:rgba(48,36,10,.72);box-shadow:0 12px 32px rgba(0,0,0,.45),inset 0 0 0 1px rgba(210,153,34,.35)}
+.mock-t-warn b{color:#e3b341}
+.mock-t-timer{position:absolute;left:16px;right:16px;bottom:0;height:2px;border-radius:2px;background:linear-gradient(90deg,#3fb950,#7ee787);transform-origin:left;animation:mock-timer 6s linear infinite}
+@keyframes mock-timer{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+@media (prefers-reduced-motion: reduce){.mock-run-fill,.mock-run-sweep,.mock-run-bot,.mock-tb-ai i,.mock-t-timer{animation:none}}
+
+.mock-k1{position:relative;display:flex;align-items:center;gap:8px;padding:10px 4px 4px}
+.mock-k1-line{position:absolute;left:14px;right:14px;top:calc(50% + 3px);height:2px;background:linear-gradient(90deg,rgba(255,255,255,.12),rgba(255,255,255,.06));border-radius:2px}
+.mock-k1-loop{position:relative;display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.mock-k1-arc{position:absolute;top:-12px;left:0;right:0;text-align:center;font-style:normal;font-size:11px;color:#6e7681;border-top:1px solid rgba(255,255,255,.1);border-radius:12px 12px 0 0;line-height:0;height:6px}
+.mock-k-cell{position:relative;display:flex;align-items:center;flex:none}
+.mock-k-wide{flex:1;min-width:0;gap:6px}
+.mock-k-node{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#8b949e;background:#1b2027;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);cursor:default}
+.mock-k-node.mock-k-done{color:#3fb950;background:#122117;box-shadow:inset 0 0 0 1px rgba(63,185,80,.4)}
+.mock-k-go{flex:1;height:44px;border:0;border-radius:999px;background:linear-gradient(180deg,#388bfd,#1f6feb);color:#fff;font:600 14px "Inter","Segoe UI",system-ui,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 6px 18px rgba(31,111,235,.35),inset 0 1px 0 rgba(255,255,255,.22)}
+.mock-k-go small{font-weight:500;font-size:11px;opacity:.85}
+.mock-k-go:hover .mock-go-arr{transform:translateX(4px)}
+.mock-k-more{width:30px;height:30px;flex:none;border:0;border-radius:50%;background:rgba(255,255,255,.06);color:#c9d1d9;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+.mock-k-run{flex:1;height:44px}
+.mock-k-back{flex:1;height:44px;border:0;border-radius:999px;background:rgba(56,139,253,.12);color:#79c0ff;font:600 14px "Inter","Segoe UI",system-ui,sans-serif;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(56,139,253,.35)}
+.mock-k2{position:relative;display:flex;flex-direction:column;gap:10px}
+.mock-k2-track{position:relative;display:grid;grid-template-columns:repeat(4,1fr);justify-items:center;padding:2px 0}
+.mock-k2-track::before{content:"";position:absolute;left:12.5%;right:12.5%;top:50%;height:2px;background:rgba(255,255,255,.09);border-radius:2px}
+.mock-k2-loop{position:absolute;left:25%;top:-11px;transform:translateX(-50%);font-size:11px;color:#6e7681}
+.mock-k2-n{position:relative;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#8b949e;background:#1b2027;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+.mock-k2-n.mock-k-done{color:#3fb950;background:#122117;box-shadow:inset 0 0 0 1px rgba(63,185,80,.4)}
+.mock-k2-you{background:#2f81f7;color:#fff;box-shadow:0 0 0 4px rgba(47,129,247,.22)}
+.mock-k2-ai{background:#238636;color:#fff;box-shadow:0 0 0 4px rgba(63,185,80,.22);animation:mock-ring 1.6s ease-out infinite}
+.mock-k2-drop{position:absolute;top:24px;height:12px;width:2px;left:calc(12.5% + var(--at) * 25%);background:linear-gradient(180deg,rgba(255,255,255,.3),transparent)}
+.mock-k2-body{display:flex;align-items:center;gap:6px}
+</style>
+<header class="iteration-intro">
+  <h2>Runde 5 · Track trifft Morph</h2>
+  <p>Deine Mischung aus „Karte mit Track“ und „Segment-Morph“: Knoten, damit man sieht, was kommt; die aktive Etappe wird selbst zum Button; die Namen der Etappen stehen nur noch im Tooltip. Zwei Ausprägungen — alles in einer Zeile oder Track fein darüber. Toasts unverändert aus Runde 4. Dazu drei neue Wege für die Seitennummern.</p>
+</header>
+<section data-design="knot" data-nav-label="Knoten-Morph" data-design-motto="Eine Zeile, eine Linie" data-design-traits="Alles in einer Zeile|Linie läuft durch die Knoten|↻-Bogen über der Schleife" data-design-icon="bolt" data-design-color="#d29922" data-design-active="true">
+<section id="d1-s1" data-nav-label="Bereit" data-screen data-screen-active="true">
+<div class="mock-stage"><div class="mock-note"><h4>Bereit · du bist dran</h4><p><b>Knoten-Morph.</b> Eine Zeile. Eine Linie läuft durch alle Etappen (man sieht, was kommt), die aktive Etappe wächst zum Button. Namen der Etappen nur im Tooltip. Der ↻-Bogen über den ersten beiden Knoten markiert die Schleife.</p></div><div class="mock-panel"><div class="mock-head">Runde 3<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1</b>Variante Ruhig</li><li class=""><b>2</b>Variante Bunt ★</li><li class=""><b>3</b>Variante Kompakt</li><li class=""><b>4</b>Fragen</li><li class=""><b>5</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-k1 "><span class="mock-k1-line"></span><span class="mock-k1-loop" title="Schleife: so viele Runden wie nötig"><span class="mock-k-cell mock-k-wide"><button class="mock-k-go" data-screen-link="d1-s3"><span>Zur nächsten Runde</span><span class="mock-go-arr">→</span></button><button class="mock-k-more" aria-label="Mehr" title="Mehr: direkt umsetzen …">⌄</button></span><span class="mock-k-cell"><span class="mock-k-node " title="Rethinking — die AI überdenkt deine Auswahl">🤖</span></span><i class="mock-k1-arc">↻</i></span><span class="mock-k-cell"><span class="mock-k-node " title="Umsetzung">🛠</span></span><span class="mock-k-cell"><span class="mock-k-node " title="Abschluss">🏁</span></span></div><div class="mock-save "><span class="mock-dot"></span>Gespeichert · du entscheidest</div></div></div></div>
+<div class="anno-layer" data-anno-layer><div class="anno" data-anno="r5-d1-s1-a1" data-anno-side="top" data-anno-target=".mock-k1-arc" style="--anno-x:60%;--anno-y:80%">
+  <button class="anno-pin" type="button" data-anno-pin="r5-d1-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r5-d1-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+  <div class="anno-bubble" id="anno-bubble-r5-d1-s1-a1" data-anno-bubble="r5-d1-s1-a1" data-open="false">
+    <button type="button" class="anno-bubble-summary" data-anno-summary="r5-d1-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r5-d1-s1-a1"><span class="anno-bubble-question">↻ über „3“ und 🤖 als Zeichen der Schleife — sichtbar genug?</span><span class="anno-chevron" aria-hidden="true">›</span></button>
+    <div class="anno-bubble-body"><textarea class="anno-answer" data-comment="anno-r5-d1-s1-a1" data-annotation="r5-d1-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}">das ist einfach nicht ausreichend</textarea><div class="attach-slot" data-attach-slot="anno-r5-d1-s1-a1"></div></div>
+  </div>
+</div><div class="anno" data-anno="r5-d1-s1-a2" data-anno-side="top" data-anno-target=".mock-k-more" style="--anno-x:60%;--anno-y:80%">
+  <button class="anno-pin" type="button" data-anno-pin="r5-d1-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r5-d1-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+  <div class="anno-bubble" id="anno-bubble-r5-d1-s1-a2" data-anno-bubble="r5-d1-s1-a2" data-open="false">
+    <button type="button" class="anno-bubble-summary" data-anno-summary="r5-d1-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r5-d1-s1-a2"><span class="anno-bubble-question">Menü ⌄ (direkt umsetzen) als kleiner Knopf rechts im breiten Knoten — passt das?</span><span class="anno-chevron" aria-hidden="true">›</span></button>
+    <div class="anno-bubble-body"><textarea class="anno-answer" data-comment="anno-r5-d1-s1-a2" data-annotation="r5-d1-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}">Ja aber eher vor dem umsetzen und nach claude ai. dort auch eher ein unlock feeling, ein ok, jetzt vollgas voran feeling. </textarea><div class="attach-slot" data-attach-slot="anno-r5-d1-s1-a2"></div></div>
+  </div>
+</div></div>
+</section>
+<section id="d1-s2" data-nav-label="Getrennt" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Getrennt</h4><p>Nur die unterste Zeile wird gelb, der Klick wird nachgereicht.</p></div><div class="mock-panel"><div class="mock-head">Runde 3<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1</b>Variante Ruhig</li><li class=""><b>2</b>Variante Bunt ★</li><li class=""><b>3</b>Variante Kompakt</li><li class=""><b>4</b>Fragen</li><li class=""><b>5</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-k1 "><span class="mock-k1-line"></span><span class="mock-k1-loop" title="Schleife: so viele Runden wie nötig"><span class="mock-k-cell mock-k-wide"><button class="mock-k-go" data-screen-link="d1-s3"><span>Zur nächsten Runde</span><small>wird nachgereicht</small><span class="mock-go-arr">→</span></button><button class="mock-k-more" aria-label="Mehr" title="Mehr: direkt umsetzen …">⌄</button></span><span class="mock-k-cell"><span class="mock-k-node " title="Rethinking — die AI überdenkt deine Auswahl">🤖</span></span><i class="mock-k1-arc">↻</i></span><span class="mock-k-cell"><span class="mock-k-node " title="Umsetzung">🛠</span></span><span class="mock-k-cell"><span class="mock-k-node " title="Abschluss">🏁</span></span></div><div class="mock-save mock-amber"><span class="mock-dot"></span>Getrennt — arbeite einfach weiter, alles bleibt lokal gespeichert</div></div></div></div>
+
+</section>
+<section id="d1-s3" data-nav-label="Rethinking" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>🤖 Rethinking</h4><p>Der 🤖-Knoten ist jetzt der breite: Fortschritt mit zweizeiligem Text. „Runde 3“ ist zum ✓-Punkt geschrumpft.</p></div><div class="mock-panel"><div class="mock-head">Runde 3<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1</b>Variante Ruhig</li><li class=""><b>2</b>Variante Bunt ★</li><li class=""><b>3</b>Variante Kompakt</li><li class=""><b>4</b>Fragen</li><li class=""><b>5</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-k1 "><span class="mock-k1-line"></span><span class="mock-k1-loop" title="Schleife: so viele Runden wie nötig"><span class="mock-k-cell"><span class="mock-k-node mock-k-done" title="Runde 3 — du entscheidest">✓</span></span><span class="mock-k-cell mock-k-wide"><div class="mock-run mock-k-run" data-screen-link="d1-s4"><i class="mock-run-fill" style="width:50%"></i><i class="mock-run-sweep"></i><span class="mock-run-bot">🤖</span><span class="mock-run-txt"><small>Rethinking · 2/4</small>überdenkt deine Auswahl</span><span class="mock-run-n">2/4</span></div></span><i class="mock-k1-arc">↻</i></span><span class="mock-k-cell"><span class="mock-k-node " title="Umsetzung">🛠</span></span><span class="mock-k-cell"><span class="mock-k-node " title="Abschluss">🏁</span></span></div><div class="mock-save "><span class="mock-dot"></span>Gespeichert · 🤖 arbeitet</div></div></div></div>
+<div class="anno-layer" data-anno-layer><div class="anno" data-anno="r5-d1-s3-a1" data-anno-side="left" data-anno-target=".mock-k-run" style="--anno-x:60%;--anno-y:80%">
+  <button class="anno-pin" type="button" data-anno-pin="r5-d1-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r5-d1-s3-a1" aria-label="{{anno.pin_label}}">1</button>
+  <div class="anno-bubble" id="anno-bubble-r5-d1-s3-a1" data-anno-bubble="r5-d1-s3-a1" data-open="false">
+    <button type="button" class="anno-bubble-summary" data-anno-summary="r5-d1-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r5-d1-s3-a1"><span class="anno-bubble-question">Ab hier ist das Bild fertig für die Umsetzung — fehlt noch etwas?</span><span class="anno-chevron" aria-hidden="true">›</span></button>
+    <div class="anno-bubble-body"><textarea class="anno-answer" data-comment="anno-r5-d1-s3-a1" data-annotation="r5-d1-s3-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea><div class="attach-slot" data-attach-slot="anno-r5-d1-s3-a1"></div></div>
+  </div>
+</div></div>
+</section>
+<section id="d1-s4" data-nav-label="Umsetzung" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Umsetzung</h4><p>Schleife durch (zwei ✓), der 🛠-Knoten ist breit: Anforderung 3 von 7.</p></div><div class="mock-panel"><div class="mock-head">Umsetzung<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1</b>Variante Ruhig</li><li class=""><b>2</b>Variante Bunt ★</li><li class=""><b>3</b>Variante Kompakt</li><li class=""><b>4</b>Fragen</li><li class=""><b>5</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-k1 "><span class="mock-k1-line"></span><span class="mock-k1-loop" title="Schleife: so viele Runden wie nötig"><span class="mock-k-cell"><span class="mock-k-node mock-k-done" title="Runde 3 — du entscheidest">✓</span></span><span class="mock-k-cell"><span class="mock-k-node mock-k-done" title="Rethinking — die AI überdenkt deine Auswahl">✓</span></span><i class="mock-k1-arc">↻</i></span><span class="mock-k-cell mock-k-wide"><div class="mock-run mock-k-run" data-screen-link="d1-s5"><i class="mock-run-fill" style="width:43%"></i><i class="mock-run-sweep"></i><span class="mock-run-bot">🤖</span><span class="mock-run-txt"><small>Umsetzung · 3/7</small>Toast blendet sich aus</span><span class="mock-run-n">3/7</span></div></span><span class="mock-k-cell"><span class="mock-k-node " title="Abschluss">🏁</span></span></div><div class="mock-save "><span class="mock-dot"></span>Gespeichert · 🤖 arbeitet</div></div></div></div>
+
+</section>
+<section id="d1-s5" data-nav-label="Alte Runde" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Alte Runde · nur lesen</h4><p>Der Runden-Knoten trägt den Rückweg.</p></div><div class="mock-panel"><div class="mock-head">Runde 2<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1</b>Variante Ruhig</li><li class=""><b>2</b>Variante Bunt ★</li><li class=""><b>3</b>Variante Kompakt</li><li class=""><b>4</b>Fragen</li><li class=""><b>5</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-k1 "><span class="mock-k1-line"></span><span class="mock-k1-loop" title="Schleife: so viele Runden wie nötig"><span class="mock-k-cell mock-k-wide"><button class="mock-k-back" data-screen-link="d1-s1">← Zur aktuellen Runde 3</button></span><span class="mock-k-cell"><span class="mock-k-node " title="Rethinking — die AI überdenkt deine Auswahl">🤖</span></span><i class="mock-k1-arc">↻</i></span><span class="mock-k-cell"><span class="mock-k-node " title="Umsetzung">🛠</span></span><span class="mock-k-cell"><span class="mock-k-node " title="Abschluss">🏁</span></span></div><div class="mock-save mock-amber"><span class="mock-dot"></span>Runde 2 · nur lesen</div></div></div></div>
+
+</section>
+<section id="d1-s6" data-nav-label="Toasts (Panel zu)" data-screen hidden>
+<div class="mock-page">
+  <div class="mock-page-body"><i style="width:60%"></i><i style="width:85%"></i><i style="width:72%"></i><i style="width:40%"></i></div>
+  <div class="mock-toasts"><div class="mock-trow"><span class="mock-toast-tag">Rethinking</span><div class="mock-t"><span class="mock-tav mock-tav-ring" style="--p:50"><span>🤖</span></span><div class="mock-t-body"><b>Runde 3 · Rethinking</b><span>überdenkt deine Auswahl</span></div><em>2/4</em></div></div><div class="mock-trow"><span class="mock-toast-tag">Umsetzung</span><div class="mock-t"><span class="mock-tav mock-tav-ring" style="--p:43"><span>🤖</span></span><div class="mock-t-body"><b>Umsetzung</b><span>Anforderung 3 von 7 · Toast blendet aus</span></div><em>3/7</em></div></div><div class="mock-trow"><span class="mock-toast-tag">Neue Runde da</span><div class="mock-t mock-t-ok"><span class="mock-tav mock-tav-ok">✓</span><div class="mock-t-body"><b>Runde 4 ist da</b><span>du bist dran</span></div><i class="mock-t-timer"></i></div></div><div class="mock-trow"><span class="mock-toast-tag">Abschluss</span><div class="mock-t mock-t-ok"><span class="mock-tav mock-tav-ok">✓</span><div class="mock-t-body"><b>Umgesetzt</b><span>der Abschluss wartet auf dich</span></div><i class="mock-t-timer"></i></div></div><div class="mock-trow"><span class="mock-toast-tag">Getrennt</span><div class="mock-t mock-t-warn"><span class="mock-tav mock-tav-warn">!</span><div class="mock-t-body"><b>Getrennt</b><span>arbeite weiter — alles bleibt lokal gespeichert</span></div></div></div></div>
+</div>
+
+</section>
+</section>
+<section data-design="twotier" data-nav-label="Track + Leiste" data-design-motto="Fein darüber, groß darunter" data-design-traits="Feiner Knoten-Track als eigene Zeile|Breite Leiste darunter|Kurze Linie verbindet Knoten und Leiste" data-design-icon="layers" data-design-color="#3fb950" hidden>
+<section id="d2-s1" data-nav-label="Bereit" data-screen data-screen-active="true">
+<div class="mock-stage"><div class="mock-note"><h4>Bereit · du bist dran</h4><p><b>Track + Morph-Leiste.</b> Zwei flache Ebenen: oben ein feiner Knoten-Track ohne Beschriftung (Tooltips), darunter die Leiste, in der der aktive Knoten zum Button wird; eine kurze Linie verbindet beide.</p></div><div class="mock-panel"><div class="mock-head">Runde 3<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1</b>Variante Ruhig</li><li class=""><b>2</b>Variante Bunt ★</li><li class=""><b>3</b>Variante Kompakt</li><li class=""><b>4</b>Fragen</li><li class=""><b>5</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-k2" style="--at:0"><div class="mock-k2-track"><span class="mock-k2-loop" title="Schleife">↻</span><span class="mock-k2-n mock-k2-you" title="Runde 3 — du entscheidest">3</span><span class="mock-k2-n " title="Rethinking — die AI überdenkt deine Auswahl">🤖</span><span class="mock-k2-n " title="Umsetzung">🛠</span><span class="mock-k2-n " title="Abschluss">🏁</span></div><span class="mock-k2-drop"></span><div class="mock-k2-body"><button class="mock-k-go" data-screen-link="d2-s3"><span>Zur nächsten Runde</span><span class="mock-go-arr">→</span></button><button class="mock-k-more" aria-label="Mehr" title="Mehr: direkt umsetzen …">⌄</button></div></div><div class="mock-save "><span class="mock-dot"></span>Gespeichert · du entscheidest</div></div></div></div>
+<div class="anno-layer" data-anno-layer><div class="anno" data-anno="r5-d2-s1-a1" data-anno-side="top" data-anno-target=".mock-k2-track" style="--anno-x:60%;--anno-y:80%">
+  <button class="anno-pin" type="button" data-anno-pin="r5-d2-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r5-d2-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+  <div class="anno-bubble" id="anno-bubble-r5-d2-s1-a1" data-anno-bubble="r5-d2-s1-a1" data-open="false">
+    <button type="button" class="anno-bubble-summary" data-anno-summary="r5-d2-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r5-d2-s1-a1"><span class="anno-bubble-question">Track als eigene feine Zeile oben — klarer als alles in einer Zeile?</span><span class="anno-chevron" aria-hidden="true">›</span></button>
+    <div class="anno-bubble-body"><textarea class="anno-answer" data-comment="anno-r5-d2-s1-a1" data-annotation="r5-d2-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}">Zwei zielen ok wenn sie verbunden sind, aber nicht so. </textarea><div class="attach-slot" data-attach-slot="anno-r5-d2-s1-a1"></div></div>
+  </div>
+</div></div>
+</section>
+<section id="d2-s2" data-nav-label="Getrennt" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Getrennt</h4><p>Nur die unterste Zeile wird gelb, der Klick wird nachgereicht.</p></div><div class="mock-panel"><div class="mock-head">Runde 3<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1</b>Variante Ruhig</li><li class=""><b>2</b>Variante Bunt ★</li><li class=""><b>3</b>Variante Kompakt</li><li class=""><b>4</b>Fragen</li><li class=""><b>5</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-k2" style="--at:0"><div class="mock-k2-track"><span class="mock-k2-loop" title="Schleife">↻</span><span class="mock-k2-n mock-k2-you" title="Runde 3 — du entscheidest">3</span><span class="mock-k2-n " title="Rethinking — die AI überdenkt deine Auswahl">🤖</span><span class="mock-k2-n " title="Umsetzung">🛠</span><span class="mock-k2-n " title="Abschluss">🏁</span></div><span class="mock-k2-drop"></span><div class="mock-k2-body"><button class="mock-k-go" data-screen-link="d2-s3"><span>Zur nächsten Runde</span><small>wird nachgereicht</small><span class="mock-go-arr">→</span></button><button class="mock-k-more" aria-label="Mehr" title="Mehr: direkt umsetzen …">⌄</button></div></div><div class="mock-save mock-amber"><span class="mock-dot"></span>Getrennt — arbeite einfach weiter, alles bleibt lokal gespeichert</div></div></div></div>
+
+</section>
+<section id="d2-s3" data-nav-label="Rethinking" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>🤖 Rethinking</h4><p>Der 🤖-Knoten ist jetzt der breite: Fortschritt mit zweizeiligem Text. „Runde 3“ ist zum ✓-Punkt geschrumpft.</p></div><div class="mock-panel"><div class="mock-head">Runde 3<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1</b>Variante Ruhig</li><li class=""><b>2</b>Variante Bunt ★</li><li class=""><b>3</b>Variante Kompakt</li><li class=""><b>4</b>Fragen</li><li class=""><b>5</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-k2" style="--at:1"><div class="mock-k2-track"><span class="mock-k2-loop" title="Schleife">↻</span><span class="mock-k2-n mock-k-done" title="Runde 3 — du entscheidest">✓</span><span class="mock-k2-n mock-k2-ai" title="Rethinking — die AI überdenkt deine Auswahl">🤖</span><span class="mock-k2-n " title="Umsetzung">🛠</span><span class="mock-k2-n " title="Abschluss">🏁</span></div><span class="mock-k2-drop"></span><div class="mock-k2-body"><div class="mock-run mock-k-run" data-screen-link="d2-s4"><i class="mock-run-fill" style="width:50%"></i><i class="mock-run-sweep"></i><span class="mock-run-bot">🤖</span><span class="mock-run-txt"><small>Rethinking · 2/4</small>überdenkt deine Auswahl</span><span class="mock-run-n">2/4</span></div></div></div><div class="mock-save "><span class="mock-dot"></span>Gespeichert · 🤖 arbeitet</div></div></div></div>
+
+</section>
+<section id="d2-s4" data-nav-label="Umsetzung" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Umsetzung</h4><p>Schleife durch (zwei ✓), der 🛠-Knoten ist breit: Anforderung 3 von 7.</p></div><div class="mock-panel"><div class="mock-head">Umsetzung<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1</b>Variante Ruhig</li><li class=""><b>2</b>Variante Bunt ★</li><li class=""><b>3</b>Variante Kompakt</li><li class=""><b>4</b>Fragen</li><li class=""><b>5</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-k2" style="--at:2"><div class="mock-k2-track"><span class="mock-k2-loop" title="Schleife">↻</span><span class="mock-k2-n mock-k-done" title="Runde 3 — du entscheidest">✓</span><span class="mock-k2-n mock-k-done" title="Rethinking — die AI überdenkt deine Auswahl">✓</span><span class="mock-k2-n mock-k2-ai" title="Umsetzung">🛠</span><span class="mock-k2-n " title="Abschluss">🏁</span></div><span class="mock-k2-drop"></span><div class="mock-k2-body"><div class="mock-run mock-k-run" data-screen-link="d2-s5"><i class="mock-run-fill" style="width:43%"></i><i class="mock-run-sweep"></i><span class="mock-run-bot">🤖</span><span class="mock-run-txt"><small>Umsetzung · 3/7</small>Toast blendet sich aus</span><span class="mock-run-n">3/7</span></div></div></div><div class="mock-save "><span class="mock-dot"></span>Gespeichert · 🤖 arbeitet</div></div></div></div>
+
+</section>
+<section id="d2-s5" data-nav-label="Alte Runde" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Alte Runde · nur lesen</h4><p>Der Runden-Knoten trägt den Rückweg.</p></div><div class="mock-panel"><div class="mock-head">Runde 2<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1</b>Variante Ruhig</li><li class=""><b>2</b>Variante Bunt ★</li><li class=""><b>3</b>Variante Kompakt</li><li class=""><b>4</b>Fragen</li><li class=""><b>5</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-k2" style="--at:0"><div class="mock-k2-track"><span class="mock-k2-loop" title="Schleife">↻</span><span class="mock-k2-n mock-k-done" title="Runde 3 — du entscheidest">✓</span><span class="mock-k2-n " title="Rethinking — die AI überdenkt deine Auswahl">🤖</span><span class="mock-k2-n " title="Umsetzung">🛠</span><span class="mock-k2-n " title="Abschluss">🏁</span></div><span class="mock-k2-drop"></span><div class="mock-k2-body"><button class="mock-k-back" data-screen-link="d2-s1">← Zur aktuellen Runde 3</button></div></div><div class="mock-save mock-amber"><span class="mock-dot"></span>Runde 2 · nur lesen</div></div></div></div>
+
+</section>
+<section id="d2-s6" data-nav-label="Toasts (Panel zu)" data-screen hidden>
+<div class="mock-page">
+  <div class="mock-page-body"><i style="width:60%"></i><i style="width:85%"></i><i style="width:72%"></i><i style="width:40%"></i></div>
+  <div class="mock-toasts"><div class="mock-trow"><span class="mock-toast-tag">Rethinking</span><div class="mock-t"><span class="mock-tav mock-tav-ring" style="--p:50"><span>🤖</span></span><div class="mock-t-body"><b>Runde 3 · Rethinking</b><span>überdenkt deine Auswahl</span></div><em>2/4</em></div></div><div class="mock-trow"><span class="mock-toast-tag">Umsetzung</span><div class="mock-t"><span class="mock-tav mock-tav-ring" style="--p:43"><span>🤖</span></span><div class="mock-t-body"><b>Umsetzung</b><span>Anforderung 3 von 7 · Toast blendet aus</span></div><em>3/7</em></div></div><div class="mock-trow"><span class="mock-toast-tag">Neue Runde da</span><div class="mock-t mock-t-ok"><span class="mock-tav mock-tav-ok">✓</span><div class="mock-t-body"><b>Runde 4 ist da</b><span>du bist dran</span></div><i class="mock-t-timer"></i></div></div><div class="mock-trow"><span class="mock-toast-tag">Abschluss</span><div class="mock-t mock-t-ok"><span class="mock-tav mock-tav-ok">✓</span><div class="mock-t-body"><b>Umgesetzt</b><span>der Abschluss wartet auf dich</span></div><i class="mock-t-timer"></i></div></div><div class="mock-trow"><span class="mock-toast-tag">Getrennt</span><div class="mock-t mock-t-warn"><span class="mock-tav mock-tav-warn">!</span><div class="mock-t-body"><b>Getrennt</b><span>arbeite weiter — alles bleibt lokal gespeichert</span></div></div></div></div>
+</div>
+
+</section>
+</section>
+<section data-view="page-numbers-2" data-view-kind="decision" data-nav-label="Seitennummern (2)" hidden>
+  <div class="view-frame">
+    <h2>Seitennummern — drei neue Wege</h2>
+    <p>Alle drei Vorschläge aus Runde 4 hast du verworfen (zu viel Info, zu gleichförmig). Diese drei setzen anders an: an der Bedeutung der Tasten, am Zeitpunkt der Anzeige oder am Verzicht.</p>
+    <div class="variant-evaluation" data-decision="q-digits-pages" data-label="Ziffern = Seiten">
+      <h3>Ziffern = Seiten</h3><p>Die Ziffern 1–9 springen zu den Seiten der aktuellen Variante — genau die Nummern, die dort stehen. Varianten wechselt man mit Shift + Ziffer bzw. über ihr Symbol. Nummern bleiben, und sie bedeuten, was sie zeigen.</p>
+      <div class="eval-group">
+        <label class="eval-option"><input type="radio" name="eval-q-digits-pages" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+        <label class="eval-option"><input type="radio" name="eval-q-digits-pages" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+      </div>
+      <div class="field-row decision-comment-row">
+        <label for="q-digits-pages-note">{{decision.comment_label}}</label>
+        <textarea id="q-digits-pages-note" data-comment="q-digits-pages-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+      </div>
+    </div>
+<div class="variant-evaluation" data-decision="q-hold" data-label="Nummern nur beim Halten">
+      <h3>Nummern nur beim Halten</h3><p>Im Ruhezustand stehen nur Seitennamen da. Erst wer Alt hält, sieht kleine Ziffern an Seiten und Varianten — wie bei Office-Tastenkürzeln. Null Zusatz-Info im Alltag.</p>
+      <div class="eval-group">
+        <label class="eval-option"><input type="radio" name="eval-q-hold" value="discard"><span class="eval-label">Verwerfen</span></label>
+        <label class="eval-option"><input type="radio" name="eval-q-hold" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+      </div>
+      <div class="field-row decision-comment-row">
+        <label for="q-hold-note">{{decision.comment_label}}</label>
+        <textarea id="q-hold-note" data-comment="q-hold-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">Das finde ich generell gut für alle hotkeys!</textarea>
+      </div>
+    </div>
+<div class="variant-evaluation" data-decision="q-tab" data-label="Ohne Nummern, Tab-Hinweis">
+      <h3>Ohne Nummern, Tab-Hinweis</h3><p>Seiten nur mit Namen; ein einziges dezentes „⇥“ am Ende der Seitenleiste sagt, dass Tab zur nächsten Seite springt.</p>
+      <div class="eval-group">
+        <label class="eval-option"><input type="radio" name="eval-q-tab" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+        <label class="eval-option"><input type="radio" name="eval-q-tab" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+      </div>
+      <div class="field-row decision-comment-row">
+        <label for="q-tab-note">{{decision.comment_label}}</label>
+        <textarea id="q-tab-note" data-comment="q-tab-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+      </div>
+    </div>
+  </div>
+</section>
+</section>
