@@ -1672,6 +1672,11 @@ function evidenceHasDeviation(input) {
   return tests.some(t => classifyGate(t) === 'test' && glyphForResult(t.result) !== '✓');
 }
 
+/** A ship that is one item of an orchestrated queue: do-ship's `(Queue n/N)` summary suffix. */
+function isQueuedShip(input) {
+  return typeof input.summary === 'string' && /\(Queue \d+\s*\/\s*\d+\)/i.test(input.summary);
+}
+
 /** The § 3 table row this card renders, before the pending/concept/batch overrides. */
 function resolveCardKey(input) {
   const variant = input.variant;
@@ -1691,7 +1696,11 @@ function resolveCardKey(input) {
     // report appended) is the one step left — never "weiter in <branch>",
     // even when the worktree was kept for exactly that close-out.
     if (!hasConcept(input.concept) && conceptCloseoutOnly(input.cwd)) return 'ship-successful-closeout';
-    if (state.kept) return 'ship-successful-kept';
+    // A queued ship (`--queued=n/N`: /do-run backlog, an auto-cleanup queue)
+    // keeps its worktree for the orchestrator, not for the user: "weiter in
+    // <branch>?" + a Continue button made the user type "weiter" for a run
+    // that goes on by itself. It gets the plain merge heading.
+    if (state.kept && !isQueuedShip(input)) return 'ship-successful-kept';
     return 'ship-successful';
   }
   if (variant === 'released') {

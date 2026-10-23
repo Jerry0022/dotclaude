@@ -1251,6 +1251,19 @@ describe("render_completion_card — concept close-out after the implement ship 
     }
   });
 
+  test("a queued kept ship (do-run backlog) gets the plain merge heading, no 'weiter in <branch>'", async () => {
+    const cwd = conceptRepo('<section data-iteration="1" data-active></section>');
+    try {
+      const de = await cardText({ ...kept, summary: "Notizen pro Session (Queue 15/16)", lang: "de", session_id: "test-queued-kept-de", cwd });
+      expect(de).not.toMatch(/weiter in/);
+      expect(de).toMatch(/^## 🟩 🚀 Released Alpha — v0\.1\.0/m);
+      const en = await cardText({ ...kept, summary: "Notes per session (Queue 15/16)", lang: "en", session_id: "test-queued-kept-en", cwd });
+      expect(en).not.toMatch(/continue on/);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
   test("no final report on the page (or only in script/comment): today's kept card stays", async () => {
     const body = '<section data-iteration="1" data-active></section>' +
       '<!-- <section data-final-report> -->' +
