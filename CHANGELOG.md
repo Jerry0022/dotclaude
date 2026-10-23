@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.300.2] — 2026-10-23
+
+A queued ship card no longer asks "weiter in <branch>?". A kept ship whose summary carries do-ship's `(Queue n/N)` suffix now renders the plain merge heading without a Continue button.
+
+Why: in a `/do-run backlog` run every ship is `--queued` and `--keep`, so each ship card asked to continue on its branch, and the user — who sees only this one thread and background agents — had to type "weiter" for a run that continues on its own. Rejected: a new card field for queue mode — the existing `(Queue n/N)` suffix already identifies the case.
+
+### Fixed
+- **Queued keep heading.** `render_completion_card` resolves a queued kept ship to the plain `ship-successful` key; a user-driven keep (no queue suffix) still asks "weiter in <branch>?".
+- **Docs.** do-ship `completion-card-payloads.md` § Keep-mode variant: "Not for a queued ship".
+
 ## [0.300.1] — 2026-10-22
 
 A session title no longer keeps its hourglass once all background work is done. A turn that answers a task notification without a card, while no background agent or command of the session is still open, now replaces a leftover `⏳` Shipping, Team or Testing title.
