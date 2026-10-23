@@ -141,6 +141,12 @@ With `state.kept: true` the decision heading asks `<version> — weiter in <bran
 line still names the merge target (`state.merged`); there is no separate
 "kept locally" marker.
 
+**Not for a queued ship.** A `--queued=n/N` ship (its summary carries
+`(Queue n/N)`) keeps the worktree for the orchestrator, not for the user: the
+renderer gives it the plain merge heading, no "weiter in <branch>?" and no
+Continue button — the run goes on by itself, and a still-running queue shows
+as `pending` on the orchestrator's card, never as a step the user must take.
+
 ## Deploy gate heading
 
 When Step 4d raised the gate, pass `state.deployPending: true` and the `deployGate`
