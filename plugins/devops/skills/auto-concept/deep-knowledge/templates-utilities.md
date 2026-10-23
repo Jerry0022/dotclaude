@@ -717,7 +717,10 @@ function maybeShowNewRoundToast() {
   if (!round || document.body.classList.contains('viewing-final')) return;
   const base = (typeof STORAGE_KEY === 'string') ? STORAGE_KEY : 'concept';
   let last = null;
-  try { last = localStorage.getItem(base + '-jr-last-round'); _guardedSetItem(base + '-jr-last-round', round); }
+  // Key deliberately NOT prefixed "concept": tools and tests take the first
+  // "concept*" localStorage key to be the page state blob.
+  const key = 'jr-last-round:' + base;
+  try { last = localStorage.getItem(key); _guardedSetItem(key, round); }
   catch (e) { return; }
   if (last === null || Number(round) <= Number(last) || _toastMode === 'status') return;
   _toastMode = 'new-round';

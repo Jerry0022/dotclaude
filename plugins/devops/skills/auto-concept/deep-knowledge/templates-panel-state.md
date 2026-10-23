@@ -1209,15 +1209,15 @@ body.viewing-frozen .journey, body.viewing-final .journey { display: none; }
 #panel-submitted { display: none !important; }
 .submit-split[hidden], #submit-menu.jr-retired { display: none !important; }
 .jr-wire {
-  flex: none; display: block; width: 10px; height: 2px; border-radius: 2px;
+  flex: none; display: block; width: 6px; height: 2px; border-radius: 2px;
   background: color-mix(in srgb, var(--text-color, #c9d1d9) 14%, transparent);
   transition: width .38s var(--jr-ease) .06s, opacity .15s, background .3s;
 }
 .jr-wire[data-ok] { background: color-mix(in srgb, var(--jr-ai) 55%, transparent); }
 .jr-node {
-  width: 34px; height: 34px; flex: none; border-radius: 50%;
+  width: 28px; height: 28px; flex: none; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px; line-height: 1; color: var(--text-secondary, #8b949e);
+  font-size: 13px; line-height: 1; color: var(--text-secondary, #8b949e);
   background: var(--jr-track);
   box-shadow: 0 2px 6px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .05);
   overflow: hidden;
@@ -1265,14 +1265,14 @@ body.viewing-frozen .journey, body.viewing-final .journey { display: none; }
   display: flex; align-items: center; justify-content: center;
   line-height: 1; color: var(--text-secondary, #8b949e);
 }
-.jr-other { width: 38px; height: 38px; font-size: 15px; }
+.jr-other { width: 30px; height: 30px; font-size: 14px; }
 .jr-other[data-ok] { color: var(--jr-ai); background: color-mix(in srgb, var(--jr-ai) 14%, transparent); }
 .jr-chk { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
 .journey .jr-fill, .journey .submit-btn.jr-fill, .journey .implement-btn.jr-fill {
-  flex: 1 1 auto; min-width: 0; width: auto; height: 38px; margin: 0; padding: 0 12px;
+  flex: 1 1 auto; min-width: 0; width: auto; height: 38px; margin: 0; padding: 0 8px;
   border: 0; border-radius: 999px;
   display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 8px;
-  font: inherit; font-size: 14px; font-weight: 600; line-height: 1;
+  font: inherit; font-size: 13px; font-weight: 600; line-height: 1;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   color: #fff; cursor: pointer;
   background: linear-gradient(180deg, color-mix(in srgb, var(--jr-you) 88%, #fff), var(--jr-you));
