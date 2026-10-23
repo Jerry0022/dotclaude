@@ -756,15 +756,30 @@ icon, when the traits are not exactly three, when the round has no
   **carousel** that fills the viewport and never scrolls. One design large
   in the centre (≈ 78 % of the width, up to the viewport height minus the
   header row, 16:10), its neighbours peeking in cut off at the left and
-  right edges (dimmed, desaturated). A click on a neighbour, the ‹ › arrows
-  or `←` / `→` turn the carousel — they never open anything. The centre is a
+  right edges (smaller than before, dimmed, desaturated). There are no ‹ ›
+  buttons: hovering a side card scales it ~8 % and lays a glowing arrow over
+  it; a click on it, `←` / `→` turn the carousel — they never open anything.
+  The entrance is staged: main card, then the info box, then the side cards
+  (off under reduced motion). A NEW round always opens on this start page
+  (first card; plain mode: the first page). The centre is a
   live preview of the design's first (or first changed) screen — a scaled,
-  inert clone, a still image: click or `Enter` opens the design, "Öffnen ↗"
-  shows on hover / focus only. On it sits the **overlay**: kicker
+  inert clone, a still image: click, `Enter` or `↓` opens the design, "Design öffnen ↗"
+  shows on hover / focus only — its hotkey (`1`–`9`) hangs on THAT button, on
+  a long hover or while `Alt` is held, never as a tooltip over the centre nav. On it sits the **overlay**: kicker
   `icon · N · name` (+ ☆/★ on an alternatives round), the motto as heading,
   the three traits — at `data-design-overlay`, tinted per
-  `data-design-overlay-tone`. `Space` (or the header's layers button) hides /
-  shows the overlay; default on, remembered per viewer. With
+  `data-design-overlay-tone`. The header's layers button hides /
+  shows the overlay (Space no longer does: Space is the notes dock); default
+  on, remembered per viewer. A variant new or changed this round carries ONE
+  chip inside this info box — "Neugedacht" or "Verbessert", never two.
+  **Why the previews can be wrong:** `fitPreviews()` measures the clone at
+  scale 1 with `getBoundingClientRect()`, and that rect includes every
+  ancestor transform — a side card sits at `scale(.74)`, so its content read
+  26 % smaller and the preview was fitted that much too large, cropped to a
+  corner that missed what the variants differ in (the first card, built while
+  centred, looked right). The measured extents are divided by the wrap's
+  ancestor scale (`rect.width / offsetWidth`); never fit from untransformed
+  geometry read through a transformed parent. With
   `section[data-view]`s the questions are the **last slide** (open /
   answered list, click opens the view). No page chips, no notes row, no
   second navigation — the pages live in the quick nav. A fresh page lands on
@@ -788,11 +803,17 @@ icon, when the traits are not exactly three, when the round has no
   (fan-out animation) and every other design shrinks to its icon (name in
   the tooltip); on the overview and on a question view every design keeps
   its name. Too little room between header and ☰ FAB → the pages fold into
-  a "2 / 7 ▾" chip that opens downwards. `★` on the favourite. With
-  `section[data-view]`s, a trailing amber `?` segment counts the unanswered
-  questions (a note or a clicked bi-state answers one) and carries their
-  list as a tab hanging off it (ring = open, ✓ = answered, progress bar);
-  it pulses on every arrival on the overview. The carousel gets a questions
+  a "2 / 7 ▾" chip that opens downwards. `★` on the favourite. Detail pages are
+  numbered with roman numerals (I, II, III …; the ☰ rows too) so the digits
+  stay free for the variant hotkeys. Quick-nav controls act on `pointerdown`
+  (the bar is rebuilt on every state change; a rebuild between pointerdown and
+  click used to swallow the first click). With `section[data-view]`s, a
+  trailing amber "Fragen" segment (no `?` mark) counts the unanswered
+  questions: one question → it opens directly; several → a click opens the
+  first open one, a click while inside the questions the next open one. A
+  question counts as answered on any interaction or scroll in it (a note, a
+  clicked bi-state, a scroll), not on a mere visit; it pulses on every
+  arrival on the overview. The carousel gets a questions
   slide, and the panel's submit area a non-blocking "N Fragen noch
   offen — zur ersten springen" line. The quick nav's band is measured
   against the header's real right edge and the ☰ FAB on every render, so the
@@ -805,12 +826,19 @@ icon, when the traits are not exactly three, when the round has no
   motion).
 - **Hotkeys** — `Esc` overview · `1`–`9` design N · `Shift`+`1`–`9` view N ·
   `Tab` next page of the current design (only while nothing is focused) ·
-  `←` / `→` turn the overview carousel · `Space` overlay on / off (overview) ·
-  `F` favourite (alternatives round only) · `Alt`+`1`–`9` iteration tab · `?` shortcut sheet ·
+  `←` / `→` same level (carousel cards, pages) · `↑` / `↓` one level
+  (variant → overview, overview → variant) · `Space` notes dock (every
+  template; only when no field is focused; it never scrolls) ·
+  `V` viewport · `F` favourite (alternatives round only) · `Alt`+`1`–`9` iteration tab · `?` shortcut sheet ·
   `Ctrl`+`Enter` submit · `N` notes dock. A digit or quick-nav switch keeps
   the page: design A page 2 → design B page 2 (B's first page when it has
   none); a view tied to a design maps to the target design's view at the
-  same position. None fires while focus is in a text
+  same position. Holding `Alt` shows every hotkey badge
+  (`body.hk-alt`, `#hk-overlay`) plus an example own pin "Strg + Klick".
+  Situational **nudges** (`wireChromeHotkeys()`, templates-design-overview.md):
+  a quiet tip tab on top of the status toast appears when the user does by
+  mouse what a hotkey does faster; ✕ silences that tip for 30 days
+  (localStorage). None of the hotkeys fires while focus is in a text
   field, the dock, a bubble or a user-pin editor. The hint is ONE app tooltip
   per element carrying label + keycap ("Cockpit [1]", `data-tip-key`,
   § App Tooltips), Info tier.
@@ -823,8 +851,9 @@ icon, when the traits are not exactly three, when the round has no
 - **Round changes** — from round 2 on, every page is compared with the same
   design + page id of the previous design round (markup signature, runtime
   attributes ignored). A card whose first page is unchanged previews its
-  first CHANGED page instead and names it; an overlay on the preview reads
-  "Geändert: <pages>", "Neu in dieser Runde" or "Unverändert". Every menu
+  first CHANGED page instead and names it; the info box of the card carries
+  the chip "Neugedacht" (new design) or "Verbessert" (changed pages);
+  an unchanged design gets none. Every menu
   entry leading to a changed page (quick nav, ☰ rows) carries a green dot until that page was opened once (per viewer,
   localStorage). Keep ids stable across rounds — a renamed page id reads as
   new. Nothing to author.

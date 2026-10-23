@@ -989,7 +989,7 @@ design round has: the three row builders and the ordering of stash → rebuild
     const labelEl = document.getElementById('active-screen-label');
     if (labelEl) labelEl.textContent = label;
     const idxEl = document.getElementById('active-screen-idx');
-    if (idxEl) idxEl.textContent = idx + 1;
+    if (idxEl) idxEl.textContent = romanNumeral(idx + 1);
     const dockLabel = document.getElementById('dock-screen-label');
     if (dockLabel) dockLabel.textContent = label;
     const dockScreenDesign = document.getElementById('dock-screen-design');
