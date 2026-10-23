@@ -58,7 +58,7 @@ const CATEGORIES = [
   { title: "tokens & load — keep the context window and the machine free", domains: ["tokens", "governor", "crawl", "claude"] },
   { title: "git & branches — keep work in sync and off main", domains: ["git", "main", "edit", "worktree", "orphan", "session", "cleanup"] },
   { title: "ship — the release pipeline", domains: ["ship"] },
-  { title: "flow — completion card, verification, session title", domains: ["flow", "ask", "guide", "batch"] },
+  { title: "flow — completion card, verification, session title", domains: ["flow", "ask", "guide", "batch", "title"] },
   { title: "agents & runs — delegation, do-run contract, burn", domains: ["agent", "run", "burn"] },
   { title: "skills & knowledge — routing, overrides, injected docs", domains: ["skill", "knowledge", "strict", "readme", "design", "concept"] },
   { title: "plugin & MCP — updates, dependencies, server health", domains: ["plugin", "mcp", "permissions", "statusline", "thinking", "watchdog", "tmp", "project"] },

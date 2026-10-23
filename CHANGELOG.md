@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.302.0] — 2026-10-23
+
+Session titles that a crash or an app quit left on ⏳ are now marked `👉 ➜ ⚡ Interrupted ┃ <title>` as soon as any session is started again. The Quiet style ends an answer with actions under a "Was nun?" heading, with a 👉 line and a 🤖 line instead of "Du:"/"Ich:".
+
+Why: a killed process runs no Stop hook, so after a restart every session that was working still read "working" until the user resumed it. The sidebar could not tell which sessions needed the user. "Du: nichts" read as if the user had nothing to do, yet the work only starts once they click.
+
+### Added
+- **`ss.title.sweep`** (SessionStart) with `lib/stale-titles.js`. It reads the Desktop app's `custom-title.json` sidecars and finds sessions that show ⏳, whose transcript has been idle for 2 minutes or more and whose governor pid is gone. It hands Claude the exact old → new titles, and Claude renames only the sessions that `list_sessions` reports as `isRunning:false`. Already-reported sessions are kept in `~/.claude/title-sweep-seen.json`, so a session is not reported again. The hook is silent when nothing is stale.
+
+### Changed
+- **Quiet style "Was nun?".** The 👉 line never says "nichts". While 🤖 has work waiting, it names the card's button.
+- **Docs.** `session-title-scheme.md` § F5 after a crash. The README hook roster files `title` under flow.
+
+Known limits: nothing runs before a session is started, and an interrupted session waits for the next prompt. It asks no question of its own.
+
 ## [0.301.0] — 2026-10-23
 
 The auto-concept variant overview is now a full-viewport carousel. Each design gets a large live preview with its motto and three traits as an overlay, the neighbours peek in at the sides, and the questions move to the last slide. The favourite star only appears when the designs are real alternatives.
