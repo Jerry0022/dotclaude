@@ -1382,6 +1382,31 @@ returns — the single-design page is untouched.
     };
     renderPins(it, readState(it), true);
   }, true);
+  // Touch path for an own pin: a long-press (~500 ms, no movement) on the
+  // content does what Ctrl+click does — it replays a Ctrl+click at that point
+  // into the handler above, then swallows the click the lift would fire.
+  const LONG_PRESS_MS = 500, LONG_PRESS_SLOP = 10;
+  let lp = null, swallowClickUntil = 0;
+  function cancelLongPress() { if (lp) { clearTimeout(lp.timer); lp = null; } }
+  document.addEventListener('pointerdown', e => {
+    cancelLongPress();
+    if (e.pointerType === 'mouse' || !e.isPrimary || !on() || mode() !== 'design') return;
+    if (e.target.closest('.upin, .anno, .device-stage, button, a, textarea, input, select, #feedback-dock')) return;
+    const x = e.clientX, y = e.clientY, target = e.target;
+    lp = { x, y, timer: setTimeout(() => {
+      lp = null;
+      swallowClickUntil = Date.now() + 1500;
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: x, clientY: y, ctrlKey: true, view: window }));
+    }, LONG_PRESS_MS) };
+  }, true);
+  document.addEventListener('pointermove', e => {
+    if (lp && Math.hypot(e.clientX - lp.x, e.clientY - lp.y) > LONG_PRESS_SLOP) cancelLongPress();
+  }, true);
+  ['pointerup', 'pointercancel', 'scroll'].forEach(t => document.addEventListener(t, cancelLongPress, true));
+  document.addEventListener('contextmenu', e => { if (lp || Date.now() < swallowClickUntil) e.preventDefault(); }, true);
+  document.addEventListener('click', e => {
+    if (e.isTrusted && Date.now() < swallowClickUntil) { swallowClickUntil = 0; e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true);
   function savePin(pin, text) {
     const it = visibleIteration();
     const st = readState(it);
@@ -1453,23 +1478,9 @@ returns — the single-design page is untouched.
     placeEditor(w);
     w.querySelector('textarea').focus();
   }
-  // While one note's input is open, body[data-note-editing] makes the CSS hide
-  // the connectors and summaries of all others and fade their pins.
-  function syncNoteEditing() {
-    const open = document.querySelector('.upin-editor:not([hidden])');
-    const bubble = document.querySelector('[data-anno-bubble][data-open="true"]');
-    document.querySelectorAll('.upin[data-editing], .anno[data-editing]').forEach(n => n.removeAttribute('data-editing'));
-    const owner = (open && open.closest('.upin')) || (bubble && bubble.closest('.anno'));
-    if (owner) { owner.dataset.editing = 'true'; body.dataset.noteEditing = 'true'; }
-    else delete body.dataset.noteEditing;
-  }
-  window.syncNoteEditing = syncNoteEditing;
-  let noteSyncQueued = false;
-  new MutationObserver(() => {
-    if (noteSyncQueued) return;
-    noteSyncQueued = true;
-    requestAnimationFrame(() => { noteSyncQueued = false; syncNoteEditing(); });
-  }).observe(body, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'data-open'] });
+  // body[data-note-editing] (hide the others while one note is open) lives in
+  // the annotation layer (templates-design-wiring.md) so single-design pages
+  // get it too; own-pin editors open here and are picked up by its observer.
   function pinNode(pin, k, live, isDraft) {
     const wrap = el('div', 'upin');
     wrap.dataset.upinId = pin.id;

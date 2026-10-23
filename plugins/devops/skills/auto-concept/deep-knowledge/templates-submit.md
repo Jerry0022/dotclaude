@@ -183,7 +183,7 @@ function collectDecisionDecisions() {
 > menu CSS below remain as the no-JS source both skeletons share.
 
 Every decision panel carries **two** submit actions, not one, in a
-**split button**. The primary button ("Zur nächsten Iteration") fills the
+**split button**. The primary button ("Zur nächsten Runde") fills the
 row and fires `action: "iterate"` — a Claude turn that never touches code.
 The ▾ caret next to it opens a small menu (`#submit-menu`, `role="menu"`)
 holding the secondary action ("Mit Feedback implementieren"), which fires
@@ -719,7 +719,7 @@ document.addEventListener('change', e => {
 
 // --- Final-report close-out sheet (action: "finalize") ---
 // The final report used to hand the user four independent controls at once —
-// Shippen, Issues erstellen, Concept beenden, Iterationen ansehen — each with
+// Shippen, Issues erstellen, Concept beenden, Runden ansehen — each with
 // its own submit and an execution order nobody could see. A four-step wizard
 // fixed the ordering but bought a new confusion: every "Weiter" looked like it
 // might already have done something, and the consequence list — the thing
@@ -1567,7 +1567,7 @@ function markCloseoutStalled() {
   setCloseoutButtonState('stalled');
 }
 
-// No "Iterationen ansehen" link under the sheet: earlier rounds are one click
+// No "Runden ansehen" link under the sheet: earlier rounds are one click
 // away through the panel head's rounds chip (🕘 N, `#panel-here-rounds-btn`)
 // and the tab bar, so a third way only cost the sheet a row of height.
 

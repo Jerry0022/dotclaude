@@ -15,6 +15,24 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
   const toggle = document.getElementById('anno-toggle');
   if (!toggle) return; // no eye pill mounted — layer not used on this page
 
+  // While one note's input is open, body[data-note-editing] makes the CSS hide
+  // the connectors and summaries of all others and fade their pins.
+  function syncNoteEditing() {
+    const open = document.querySelector('.upin-editor:not([hidden])');
+    const bubble = document.querySelector('[data-anno-bubble][data-open="true"]');
+    document.querySelectorAll('.upin[data-editing], .anno[data-editing]').forEach(n => n.removeAttribute('data-editing'));
+    const owner = (open && open.closest('.upin')) || (bubble && bubble.closest('.anno'));
+    if (owner) { owner.dataset.editing = 'true'; document.body.dataset.noteEditing = 'true'; }
+    else delete document.body.dataset.noteEditing;
+  }
+  window.syncNoteEditing = syncNoteEditing;
+  let noteSyncQueued = false;
+  new MutationObserver(() => {
+    if (noteSyncQueued) return;
+    noteSyncQueued = true;
+    requestAnimationFrame(() => { noteSyncQueued = false; syncNoteEditing(); });
+  }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'data-open'] });
+
   function activeScreen() {
     // Scoped through the visible iteration and its active design, exactly
     // like wireDesignLayout()'s own activeDesign()/activeScreen() lookups —
@@ -587,7 +605,7 @@ with `data-screen`:
 <section data-iteration="1" data-iteration-template="design" data-active
          data-viewports="desktop phone" data-viewport-default="phone">
   <header class="iteration-intro">
-    <h2>Iteration 1 · Login flow mockup</h2>
+    <h2>{{iteration.tab}} 1 · Login flow mockup</h2>
     <p>High-fidelity walkthrough of the three-step sign-in flow.</p>
   </header>
 

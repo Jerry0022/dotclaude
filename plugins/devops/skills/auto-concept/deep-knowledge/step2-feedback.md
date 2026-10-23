@@ -221,6 +221,36 @@ signal Claude monitors.
   journey row is hidden, the status line reads "🕘 Runde N · nur lesen"
 - After Claude processes and resets the page → back to **Ready**
 
+**Notes, pins and hotkeys** (chrome polish; the engine owns all of it):
+- **Wording**: "Notiz"/"Notizen" (en "note(s)") for every note surface — never
+  "Kommentar"/"Anmerkung" — and "Runde" (en "Round") for what the payload
+  calls `iteration`; round chips read `{{iteration.tab}} N`. UI strings never
+  name the assistant ("Claude"/"AI"): bridge and connection strings are
+  neutral; user-addressed lines start with "Du"/"You".
+  `locale-wording.test.js` enforces this on the locale table.
+- **Notes dock** (💬): each field has a breadcrumb (Concept › Variante › Seite;
+  fewer levels on plain pages) with a scope tag, and a "Wusstest du schon?" tip
+  rotating through a static pool of plugin facts, a different one per open.
+- **Pins**: automatic pins are glow-only bubbles, answered ones show a bold ✓.
+  An own pin is set with Ctrl+click or — on touch — a ~500 ms long-press
+  without movement; the whole pin drags, takes attachments, and opening one
+  closes any other. While one note's input is open (`body[data-note-editing]`,
+  maintained by the annotation layer, so single-design pages get it too) the
+  connectors and summaries of all others hide and their pins fade.
+- **Eye (👁)**: toggles all notes; its counter shows the OPEN automatic notes
+  of the current page, also while they are hidden; it hides on pages with no
+  notes at all.
+- **Hotkeys** (hold Alt to show every hint as `<kbd>`): Space opens/closes the
+  notes dock, ←/→ page through screens (or slides on the overview), ↑/↓ change
+  level, 1–9 pick a design / question / round tab, Ctrl+Enter starts the next
+  round; ignored while typing in a field. One-time nudges point at the useful
+  ones and stay dismissed for 30 days.
+- **Staged entrance**: the journey row builds up left to right once per round
+  on the first panel open; a new round opens at the first page/top (overview
+  start page on overview concepts, scroll top on plain pages). Reduced motion
+  turns all of it off. The final report has no journey row, so nothing builds
+  up there.
+
 ## File naming and iteration tabs
 
 **Fixed naming pattern** (both segments mandatory, in this order):

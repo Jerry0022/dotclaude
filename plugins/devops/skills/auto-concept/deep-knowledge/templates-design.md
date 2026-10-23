@@ -1328,7 +1328,7 @@ icon, when the traits are not exactly three, when the round has no
        aria-label="{{panel.dim_dismiss}}"
        data-tip="{{panel.dim_dismiss}}" hidden></div>
   <div class="frozen-bar" id="frozen-bar" role="status" hidden>
-    <span class="frozen-bar-text">🕘 <strong data-frozen-bar-title>Iteration 1</strong> {{frozen.bar_hint}}</span>
+    <span class="frozen-bar-text">🕘 <strong data-frozen-bar-title>{{iteration.tab}} 1</strong> {{frozen.bar_hint}}</span>
     <button type="button" id="frozen-bar-back">{{frozen.bar_back}}</button>
   </div>
 </body>

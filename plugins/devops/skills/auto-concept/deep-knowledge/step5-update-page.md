@@ -140,7 +140,7 @@ lives in the single built `{date}-{slug}.html` and its source folder
      below or nowhere
 4. `build`. The build generates the final-report chip:
    **tab label `iteration.final_tab`** (locale: "Abschlussbericht" /
-   "Final report"), never "Iteration N+1", with `aria-selected="true"` and
+   "Final report"), never "{{iteration.tab}} N+1", with `aria-selected="true"` and
    `data-final-report` so the tab-bar JS can style it distinctly. A second
    final report, or one that is not the last round, blocks the build.
 5. `submitted: false` in `#concept-decisions` and the body class come fresh

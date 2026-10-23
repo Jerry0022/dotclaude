@@ -188,7 +188,7 @@ body.chrome-glow .panel-fab, body.chrome-glow .feedback-fab { animation: chromeG
    The aside's first child. Right-aligned so the ✕ keeps its top-right
    corner; the toggle sits to its left on the same line, the 🕘 rounds chip
    (+ the frozen-round back link) to the left of that, and the round label
-   ("Iteration 8 (Variante)") takes the left end — `margin-right: auto` on
+   ("{{iteration.tab}} 8 (Variante)") takes the left end — `margin-right: auto` on
    it is what keeps the controls flush right. One row instead of chrome row
    + "you are here" line: the label used to sit on its own line below the ✕,
    a line of panel height spent on nothing (the user's call, 2026-09-20).

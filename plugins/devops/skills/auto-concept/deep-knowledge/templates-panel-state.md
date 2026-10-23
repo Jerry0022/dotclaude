@@ -473,7 +473,7 @@ body:has(.draft-offline-strip:not([hidden])) .submitted-toast { bottom: 4.75rem;
 /* The hint paragraph does not render in the foot (#341): at panel width it
    wraps to three lines (67px) and pushes the frozen block to 157px — past the
    120px cap, with the back button clipped below it. The same sentence is
-   already on screen twice: the status line ("🕘 Iteration N · nur lesen") and
+   already on screen twice: the status line ("🕘 Runde N · nur lesen") and
    the frozen bar over the content. The markup stays (screen readers, older
    pages) — the foot is indicator + back button, ≈85px. */
 #panel-frozen .hint { display: none; font-size: 0.78rem; line-height: 1.35; margin: 0; }
@@ -659,7 +659,7 @@ body:has(.draft-offline-strip:not([hidden])) .submitted-toast { bottom: 4.75rem;
    hint are `flex: none` — a live check found `flex: 0 1 auto; min-height:
    0` on a foot element let it collapse to 7px (invisible) exactly when
    space was tight; a fixed pixel floor on `.closeout-rows` (above) pushed
-   the foot AND the "Iterationen ansehen" link below the viewport instead,
+   the foot AND the "Runden ansehen" link below the viewport instead,
    clipped by `.panel-cta`'s own `overflow: hidden`. `min-height: 0` on the
    rows region (this time paired with sticky heads, not a floor) is what
    lets the rows region give ground to this pinned foot rather than the
