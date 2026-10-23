@@ -1919,12 +1919,13 @@ body.hk-alt .design-ov-slide[data-pos="cur"] .design-ov-open-key { opacity: 1; t
 body.chrome-glow .design-header { animation: chromeGlowIsland 1.4s ease-in-out 2; }
 @media (prefers-reduced-motion: reduce) { body.chrome-glow .design-header { animation: none; } }
 .design-header-main { display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; min-width: 0; min-height: 28px; }
-/* The name carries its OWN cap: 19rem ≈ everything else on the row (back,
-   pill chrome, ★, eye, pin, gaps, padding), so the row never exceeds the
-   header's cap; the full name and motto live in its tooltip. */
+/* The name carries its OWN cap: 17rem ≈ everything else on the row (back,
+   pill chrome, ★, eye, gaps, padding — the 📍 left the header), so the row
+   never exceeds the header's cap; the full name and motto live in its
+   tooltip. The 4.5rem floor keeps a short name like "Übersicht" whole. */
 .design-header-name {
   color: var(--text, #e6edf3); font-weight: 600; min-width: 0;
-  max-width: max(3rem, min(12rem, calc(var(--dz-head-cap) - 19rem)));
+  max-width: max(4.5rem, min(12rem, calc(var(--dz-head-cap) - 17rem)));
   overflow: hidden; text-overflow: ellipsis;
 }
 .design-header-title {
