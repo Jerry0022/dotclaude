@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.301.0] — 2026-10-23
+
+The auto-concept variant overview is now a full-viewport carousel. Each design gets a large live preview with its motto and three traits as an overlay, the neighbours peek in at the sides, and the questions move to the last slide. The favourite star only appears when the designs are real alternatives.
+
+Why: the card grid with page chips and a second nav repeated what the quick nav already links, and the previews were too small to compare designs. A favourite on a round of different topics meant nothing, yet the star was always offered.
+
+### Changed
+- **Carousel overview.** `templates-design-overview.md`: peeking neighbours, an inert preview (click or Enter opens the design), the overlay at an authored anchor (`data-design-overlay` tl|tr|bl|br|tc|bc, default bl; `data-design-overlay-tone="warm"`), Space toggles the overlay. Page chips, the notes count and the card grid are gone.
+- **Favourite only for alternatives.** Star, `F` hotkey and payload `favorite` only when the iteration carries `data-design-set="alternatives"`; `"topics"` or no set shows no star. `concept-build` bakes `favorite` into a frozen round only for alternatives; the fixture marks rounds with two or more designs as alternatives.
+- **Gate warnings.** `concept-gate` warns `overview-set` (two or more designs without a valid `data-design-set`) and `overview-overlay` (unknown anchor). Advisory only, never blocks.
+- **Quick nav.** Measures its width against `#design-header`'s right edge and the menu button on every render, so it folds before it overlaps.
+- **Docs.** auto-concept SKILL.md, `templates-design.md`, `templates-common.md`, `step1-templates.md`, `step5-process.md`, `validation-gate.md`.
+
+Known limits: pages written before this version have no `data-design-set` and lose the star until the next round sets it (the gate names it).
+
 ## [0.300.2] — 2026-10-23
 
 A queued ship card no longer asks "weiter in <branch>?". A kept ship whose summary carries do-ship's `(Queue n/N)` suffix now renders the plain merge heading without a Continue button.
