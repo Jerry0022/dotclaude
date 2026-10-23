@@ -90,7 +90,9 @@ returns — the single-design page is untouched.
     prev: '{{design.overview_prev}}', nextDesign: '{{design.overview_next}}',
     countPlain: '{{design.overview_count_plain}}', overlay: '{{design.overview_overlay}}',
     keysCarousel: '{{design.keys_carousel}}', keysOverlay: '{{design.keys_overlay}}',
-    space: '{{design.key_space}}'
+    space: '{{design.key_space}}', chRethought: '{{design.change_rethought}}',
+    chImproved: '{{design.change_improved}}', keysDock: '{{design.keys_dock}}',
+    keysLevel: '{{design.keys_level}}'
   };
   // Never the accent blue: the icons are drawn in it (one uniform tint), the
   // background must stay distinguishable (§ Variant overview — authoring).
@@ -242,6 +244,27 @@ returns — the single-design page is untouched.
       node.setAttribute('aria-keyshortcuts', key.replace('⇧', 'Shift').replace(L.ctrl, 'Control'));
     }
   }
+
+  // Quick-nav controls act on pointerdown, not on click. A click needs the
+  // SAME node under pointerdown and pointerup, and the quick nav is rebuilt
+  // (renderQuick: innerHTML = '') whenever a panel / dock closes or an
+  // answer flips — a blur / change between the two events swallowed the
+  // first click (the "needs two clicks" bug). The click listener stays for
+  // the keyboard (Enter / Space on a focused button) and is skipped when
+  // the pointerdown already acted.
+  function press(node, fn) {
+    let at = 0;
+    node.addEventListener('pointerdown', e => {
+      if (e.button > 0 || e.isPrimary === false) return;
+      at = Date.now();
+      fn(e);
+    });
+    node.addEventListener('click', e => {
+      if (at && Date.now() - at < 900) { at = 0; return; }
+      fn(e);
+    });
+  }
+  const roman = n => (typeof window.romanNumeral === 'function' ? window.romanNumeral(n) : String(n));
 
   // ── Engine store: favourite + user pins ────────────────────────────────
   const EMPTY = () => ({ favorite: null, pins: [] });
@@ -489,7 +512,7 @@ returns — the single-design page is untouched.
     preview.setAttribute('role', 'button');
     preview.tabIndex = -1;
     preview.setAttribute('aria-label', L.open + ': ' + m.label);
-    setTip(preview, L.open, String(m.n));
+    preview.setAttribute('aria-keyshortcuts', String(m.n));
     // An unchanged first page would show the same picture round after round
     // while the change sits on page 4: the preview then shows the first
     // CHANGED page, and opening the slide lands there too.
@@ -503,27 +526,15 @@ returns — the single-design page is untouched.
     const open = () => (shown && shown !== screens[0] ? window.showDesign(m.id, shown.id) : window.showDesign(m.id));
     preview.appendChild(cloneScreen(shown, 'ov' + m.n + '-'));
     // "Open ↗" shows on hover / focus only — at rest the preview is a still.
-    preview.appendChild(el('span', 'design-ov-open', L.open + ' ↗'));
-    if (delta) {
-      const flag = el('div', 'design-ov-change');
-      const kind = delta.isNew ? 'new' : delta.screens.length ? 'changed' : 'same';
-      flag.dataset.kind = kind;
-      slide.dataset.change = kind;
-      flag.appendChild(el('strong', '', kind === 'new' ? L.chNew : kind === 'changed' ? L.chChanged : L.chSame));
-      if (kind === 'changed') {
-        const names = delta.screens.map(id => {
-          const s = screens.find(x => x.id === id);
-          return s ? (s.dataset.navLabel || s.id) : id;
-        });
-        const list = names.length > 3 ? names.slice(0, 3).join(', ') + ' +' + (names.length - 3) : names.join(', ');
-        flag.appendChild(el('span', 'design-ov-change-list', list));
-        flag.dataset.tip = names.join('\n');
-      }
-      if (shown && shown !== screens[0]) {
-        flag.appendChild(el('span', 'design-ov-shown', L.chPreview.replace('{page}', shown.dataset.navLabel || shown.id)));
-      }
-      preview.appendChild(flag);
-    }
+    // The hotkey belongs to THIS button: shown on a long hover of it or while
+    // Alt is held (body.hk-alt), never as a tooltip over the centre nav.
+    const openBtn = el('span', 'design-ov-open', L.open + ' ↗');
+    openBtn.appendChild(el('kbd', 'app-kbd design-ov-open-key', String(m.n)));
+    preview.appendChild(openBtn);
+    // ONE chip, merged into the info box below: "Neugedacht" (new variant)
+    // or "Verbessert" (changed this round); an unchanged variant gets none.
+    const kind = delta ? (delta.isNew ? 'new' : delta.screens.length ? 'changed' : 'same') : '';
+    if (kind) slide.dataset.change = kind;
     preview.addEventListener('keydown', e => {
       if (e.key === 'Enter' && slide.dataset.pos === 'cur') { e.preventDefault(); open(); }
     });
@@ -533,6 +544,11 @@ returns — the single-design page is untouched.
     const ov = el('div', 'design-ov-overlay');
     ov.dataset.anchor = m.anchor;
     if (m.tone) ov.dataset.tone = m.tone;
+    if (kind === 'new' || kind === 'changed') {
+      const chip = el('span', 'design-ov-change', kind === 'new' ? L.chRethought : L.chImproved);
+      chip.dataset.kind = kind;
+      ov.appendChild(chip);
+    }
     const kick = el('div', 'design-ov-kicker');
     kick.append(iconEl(m.icon, { color: m.color }), el('span', 'design-ov-num', String(m.n)), el('span', 'design-ov-name', m.label));
     const star = el('button', 'design-ov-star');
@@ -580,7 +596,6 @@ returns — the single-design page is untouched.
       s.querySelectorAll('button, .design-ov-preview').forEach(b => { b.tabIndex = off === 0 ? 0 : -1; });
     });
     ov.dataset.index = String(ovIndex);
-    ov.querySelectorAll('.design-ov-arrow').forEach(a => { a.hidden = n < 2; });
   }
   function goSlide(i) {
     const it = visibleIteration();
@@ -600,6 +615,12 @@ returns — the single-design page is untouched.
     const i = d ? slidesOf(it).findIndex(s => s.dataset.designId === d.dataset.design) : -1;
     if (i >= 0) ovIndex = i;
     layoutCarousel(it);
+    const ov = overviewOf(it);
+    if (ov) {
+      ov.dataset.enter = 'true';
+      clearTimeout(ov._enterTimer);
+      ov._enterTimer = setTimeout(() => { ov.dataset.enter = 'false'; }, 1600);
+    }
   });
 
   // Overlay on / off (Space, header button). A per-viewer convenience like
@@ -716,6 +737,7 @@ returns — the single-design page is untouched.
   // (`data-touched`, set by the change listener of § Submit). The default
   // "include" alone is not an answer.
   function viewAnswered(v) {
+    if (v.dataset.interacted === 'true') return true;
     const filled = ta => !!(ta && (ta.value || '').trim());
     if ([...v.querySelectorAll('textarea')].some(filled)) return true;
     if (v.querySelector('input[data-touched]')) return true;
@@ -781,7 +803,7 @@ returns — the single-design page is untouched.
     seg.appendChild(el('span', 'design-quick-name', m.label));
     if (fav === m.id) seg.appendChild(el('span', 'design-quick-star', '★'));
     setTip(seg, m.label, m.n <= 9 ? String(m.n) : '');
-    seg.addEventListener('click', () => { if (typeof closePanel === 'function') closePanel(); showDesignAligned(m.id); });
+    press(seg, () => { if (typeof closePanel === 'function') closePanel(); showDesignAligned(m.id); });
     if (u) setDot(seg, u.design(m.id));
     return seg;
   }
@@ -802,10 +824,10 @@ returns — the single-design page is untouched.
       b.type = 'button';
       b.dataset.screenId = sec.id;
       b.dataset.active = String(sec === cur);
-      b.append(el('span', 'design-quick-num', String(i + 1)), el('span', 'design-quick-name', sec.dataset.navLabel || sec.id));
+      b.append(el('span', 'design-quick-num', roman(i + 1)), el('span', 'design-quick-name', sec.dataset.navLabel || sec.id));
       setDot(b, fresh.includes(sec.id));
       setTip(b, sec.dataset.navLabel || sec.id, sec !== cur && i === (idx + 1) % screens.length ? 'Tab' : '');
-      b.addEventListener('click', () => {
+      press(b, () => {
         if (typeof closePanel === 'function') closePanel();
         window.showScreen(sec.id);
       });
@@ -838,6 +860,25 @@ returns — the single-design page is untouched.
     g.appendChild(wrap);
     return g;
   }
+  // "Fragen" is one segment, no "?" mark, no submenu. One question: it opens
+  // directly. Several: a click opens the first open one, a click while inside
+  // the questions opens the next open one (wrapping; all answered -> the
+  // questions in order).
+  function nextQuestion(it) {
+    const qs = questionsOf(it);
+    if (!qs.length) return null;
+    const open = qs.filter(q => !q.done);
+    const pool = open.length ? open : qs;
+    if (pool.length === 1) return pool[0];
+    const cur = mode() === 'view' ? it.querySelector(':scope > section[data-view][data-view-active="true"]') : null;
+    const at = cur ? qs.findIndex(q => q.v === cur) : -1;
+    for (let i = 1; i <= qs.length; i++) {
+      const cand = qs[(at + i + qs.length) % qs.length];
+      if (pool.includes(cand)) return cand;
+    }
+    return pool[0];
+  }
+  window.designNextQuestion = () => { const q = nextQuestion(visibleIteration()); if (q) goQuestion(q.id); return q ? q.id : null; };
   function quickQuestions(it, qs, md) {
     const open = qs.filter(q => !q.done);
     const wrap = el('span', 'design-quick-qwrap');
@@ -846,30 +887,11 @@ returns — the single-design page is untouched.
     btn.dataset.state = open.length ? 'open' : 'done';
     const viewOn = md === 'view' ? it.querySelector(':scope > section[data-view][data-view-active="true"]') : null;
     btn.dataset.active = String(!!viewOn);
-    btn.setAttribute('aria-haspopup', 'true');
-    btn.setAttribute('aria-expanded', 'false');
-    btn.appendChild(el('span', 'design-quick-qmark', '?'));
-    if (md !== 'design') btn.appendChild(el('span', 'design-quick-name', L.qLabel));
+    btn.appendChild(el('span', 'design-quick-name', L.qLabel));
     btn.appendChild(open.length ? el('span', 'design-quick-badge', String(open.length)) : el('span', 'design-quick-qok', '✓'));
     setTip(btn, open.length ? (open.length === 1 ? L.qOpen1 : L.qOpen.replace('{n}', String(open.length))) : L.qAllDone);
-    btn.addEventListener('click', () => {
-      wrap.dataset.open = wrap.dataset.open === 'true' ? 'false' : 'true';
-      btn.setAttribute('aria-expanded', wrap.dataset.open);
-    });
-    const pop = el('div', 'design-quick-qpop');
-    pop.setAttribute('role', 'menu');
-    const head = el('div', 'design-quick-qhead');
-    head.append(el('strong', '', L.qLabel),
-      el('span', '', L.qProgress.replace('{done}', String(qs.length - open.length)).replace('{n}', String(qs.length))));
-    pop.append(head, progressBar(qs.length - open.length, qs.length));
-    qs.forEach((q, i) => {
-      const item = questionItem(q, () => { wrap.dataset.open = 'false'; goQuestion(q.id); });
-      item.setAttribute('role', 'menuitem');
-      item.dataset.active = String(viewOn === q.v);
-      setTip(item, q.v.dataset.navLabel || q.id, i < 9 ? '⇧+' + (i + 1) : '');
-      pop.appendChild(item);
-    });
-    wrap.append(btn, pop);
+    press(btn, () => { const q = nextQuestion(visibleIteration()); if (q) goQuestion(q.id); });
+    wrap.append(btn);
     return wrap;
   }
   function renderQuick(it) {
@@ -1016,7 +1038,7 @@ returns — the single-design page is untouched.
     sheet.appendChild(el('h2', '', L.keysTitle));
     const dl = el('dl');
     [['Esc', L.overview], ['1–9', L.keysDesign], ['⇧+1–9', L.keysView], ['Tab', L.keysNext],
-     ['←/→', L.keysCarousel], [L.space, L.keysOverlay], ['F', L.fav], ['Alt+1–9', L.keysRound], ['N', L.keysNotes], [L.ctrl + '+Enter', L.submit],
+     ['←/→', L.keysCarousel], ['↑/↓', L.keysLevel], [L.space, L.keysDock], ['F', L.fav], ['Alt+1–9', L.keysRound], ['N', L.keysNotes], [L.ctrl + '+Enter', L.submit],
      [L.ctrl + '+' + L.keysClick, L.keysPin], ['?', L.keysTitle]].forEach(([k, label]) => {
       const dt = el('dt');
       dt.appendChild(kbdNode(k));
@@ -1073,16 +1095,6 @@ returns — the single-design page is untouched.
       all.forEach((d, i) => track.appendChild(buildSlide(it, d, metas[i])));
       if (viewsOf(it).length) track.appendChild(buildQuestionsSlide());
       stage.appendChild(track);
-      [['prev', '‹', L.prev, '←', 'ArrowLeft', -1], ['next', '›', L.nextDesign, '→', 'ArrowRight', 1]].forEach(([dir, glyph, label, k, aria, step]) => {
-        const a = el('button', 'design-ov-arrow', glyph);
-        a.type = 'button';
-        a.dataset.dir = dir;
-        a.setAttribute('aria-label', label);
-        setTip(a, label, k);
-        a.setAttribute('aria-keyshortcuts', aria);
-        a.addEventListener('click', () => stepSlide(step));
-        stage.appendChild(a);
-      });
       ov.appendChild(stage);
       it.insertBefore(ov, all[0]);
       if (ovIndex >= track.children.length) ovIndex = 0;
@@ -1106,16 +1118,22 @@ returns — the single-design page is untouched.
       if (!(w > 0) || !wrap) return;
       wrap.style.setProperty('--dz-ov-scale', '1');
       wrap.style.setProperty('--dz-ov-x', '0px');
-      const origin = wrap.getBoundingClientRect().left;
-      const originTop = wrap.getBoundingClientRect().top;
+      // Rects are measured through every ancestor transform: a side slide
+      // sits at scale(.74), so its content read 26 % smaller and the preview
+      // was fitted 26 % too large — cropped to a corner that no longer showed
+      // what differs between the variants. k = that ancestor scale.
+      const box0 = wrap.getBoundingClientRect();
+      const k = wrap.offsetWidth && box0.width ? box0.width / wrap.offsetWidth : 1;
+      const origin = box0.left;
+      const originTop = box0.top;
       let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
       wrap.querySelectorAll(':scope > *, :scope > * > *').forEach(n => {
         const r = n.getBoundingClientRect();
         if (!r.width || !r.height) return;
-        left = Math.min(left, r.left - origin);
-        right = Math.max(right, r.right - origin);
-        top = Math.min(top, r.top - originTop);
-        bottom = Math.max(bottom, r.bottom - originTop);
+        left = Math.min(left, (r.left - origin) / k);
+        right = Math.max(right, (r.right - origin) / k);
+        top = Math.min(top, (r.top - originTop) / k);
+        bottom = Math.max(bottom, (r.bottom - originTop) / k);
       });
       const PAD = 24;
       const content = right > left ? Math.min(1000, right - left + 2 * PAD) : 1000;
@@ -1236,9 +1254,33 @@ returns — the single-design page is untouched.
     answeredKey = key;
     refreshQuestions();
   }
+  // Any interaction or scroll inside a question counts as answering it — a
+  // mere visit does not. Runtime only; typed notes persist through the fields.
+  function markInteracted(e) {
+    const v = e.target && e.target.closest && e.target.closest('section[data-view]');
+    if (!v || v.dataset.interacted === 'true' || !on()) return;
+    v.dataset.interacted = 'true';
+    onAnswerChange();
+  }
+  ['click', 'input', 'change', 'keydown', 'wheel', 'touchmove', 'scroll'].forEach(t =>
+    document.addEventListener(t, markInteracted, true));
   document.addEventListener('input', onAnswerChange);
   document.addEventListener('change', () => setTimeout(onAnswerChange, 0));
   document.addEventListener('iteration:changed', () => toggleSheet(false));
+  // A NEW round always opens on the overview start page (first card), not
+  // where the previous round was left. Per viewer: localStorage remembers the
+  // last live round this page showed; the first ever visit restores as usual.
+  const ROUND_KEY = 'concept-last-round:' + location.pathname;
+  document.addEventListener('iteration:changed', () => {
+    setTimeout(() => {
+      const it = visibleIteration();
+      if (!on() || !isLive(it)) return;
+      let last = null;
+      const now = String(it.dataset.iteration);
+      try { last = localStorage.getItem(ROUND_KEY); localStorage.setItem(ROUND_KEY, now); } catch (e) { /* private mode */ }
+      if (last && last !== now && overviewOf(it)) { ovIndex = 0; window.showOverview(); layoutCarousel(it); }
+    }, 0);
+  });
 
   // ── User pins (Ctrl + click) ───────────────────────────────────────────
   let armed = null;   // 'ctrl' while the key is held, 'tap' after the header button
@@ -1490,13 +1532,20 @@ returns — the single-design page is untouched.
     }
     if (e.key === '?') { e.preventDefault(); toggleSheet(); return; }
     if (e.shiftKey) return;
+    // Space is the notes dock (wireChromeHotkeys, every template). Arrows:
+    // left / right = same level, up / down = one level (overview <-> variant).
+    if (e.key === 'ArrowUp' && mode() !== 'overview' && overviewOf(it)) {
+      e.preventDefault();
+      window.showOverview();
+      return;
+    }
     if (mode() === 'overview' && overviewOf(it)) {
-      // Space: overlay on / off — a focused native button keeps its own Space.
-      if (e.key === ' ' || e.code === 'Space') {
-        const t = document.activeElement;
-        if (t && t.closest && t.closest('button, a[href], summary')) return;
+      if (e.key === 'ArrowDown') {
+        const cur = overviewOf(it).querySelector('.design-ov-slide[data-pos="cur"]');
+        if (!cur) return;
         e.preventDefault();
-        setOverlay(!overlayShown);
+        if (cur.dataset.designId) cur.querySelector('.design-ov-preview')?.click();
+        else window.designNextQuestion();
         return;
       }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -1589,13 +1638,25 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
   --dz-ov-w: min(78cqw, 160cqh);
   position: absolute; top: 50%; left: 50%; box-sizing: border-box;
   width: var(--dz-ov-w); aspect-ratio: 16 / 10;
-  /* Neighbours: 82 %, cut off by the stage edge, dimmed and desaturated. */
-  transform: translate(-50%, -50%) translateX(calc(var(--dz-off, 0) * (var(--dz-ov-w) * 0.91 + 1.5rem))) scale(0.82);
+  /* Neighbours: 74 %, cut off by the stage edge, dimmed and desaturated; a
+     hover grows them ~8 % and lays a glowing arrow over them. */
+  transform: translate(-50%, -50%) translateX(calc(var(--dz-off, 0) * (var(--dz-ov-w) * 0.86 + 1.5rem))) scale(var(--dz-s, 0.74));
   opacity: 0.32; filter: saturate(0.55); cursor: pointer;
   transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease, filter 0.25s ease;
 }
-.design-ov-slide[data-pos="cur"] { transform: translate(-50%, -50%); opacity: 1; filter: none; cursor: default; z-index: 1; }
-.design-ov-slide[data-pos="prev"]:hover, .design-ov-slide[data-pos="next"]:hover { opacity: 0.55; }
+.design-ov-slide[data-pos="cur"] { --dz-s: 1; transform: translate(-50%, -50%); opacity: 1; filter: none; cursor: default; z-index: 1; }
+.design-ov-slide[data-pos="prev"]:hover, .design-ov-slide[data-pos="next"]:hover { opacity: 0.7; --dz-s: 0.8; }
+/* No ‹ › buttons: the side card itself is the control. */
+.design-ov-slide[data-pos="prev"]::after, .design-ov-slide[data-pos="next"]::after {
+  content: "‹"; position: absolute; top: 50%; z-index: 3; width: 64px; height: 64px; margin-top: -32px;
+  display: grid; place-items: center; border-radius: 50%; pointer-events: none;
+  font-size: 2.4rem; line-height: 1; color: #fff; background: color-mix(in srgb, var(--dz-color) 55%, #0d1117);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55), 0 0 34px 8px var(--dz-color);
+  opacity: 0; transform: scale(0.85); transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.design-ov-slide[data-pos="prev"]::after { right: 14%; }
+.design-ov-slide[data-pos="next"]::after { left: 14%; content: "›"; }
+.design-ov-slide[data-pos="prev"]:hover::after, .design-ov-slide[data-pos="next"]:hover::after { opacity: 1; transform: none; }
 .design-ov-slide[data-pos="far"] { visibility: hidden; opacity: 0; }
 .design-ov-preview {
   position: absolute; inset: 0; display: block; overflow: hidden; border-radius: 22px;
@@ -1615,28 +1676,19 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-ov-scale > * { width: 100%; }
 /* "Open ↗" — only on hover / keyboard focus of the centre preview. */
 .design-ov-open {
-  position: absolute; right: 1rem; bottom: 1rem; z-index: 1; pointer-events: none;
+  position: absolute; right: 1rem; bottom: 1rem; z-index: 1; display: inline-flex; align-items: center; gap: 0.5rem;
   padding: 0.35rem 0.85rem; border-radius: 999px; font-size: 0.9rem; font-weight: 700;
   background: color-mix(in srgb, var(--panel-bg, #0d1117) 88%, transparent);
   color: var(--text, #e6edf3); border: 1px solid var(--dz-color);
   opacity: 0; transition: opacity 0.15s ease;
 }
 .design-ov-slide[data-anchor="br"] .design-ov-open { right: auto; left: 1rem; }
+.design-ov-open-key { opacity: 0; transition: opacity 0.15s ease 0s; margin: 0; }
+.design-ov-open:hover .design-ov-open-key { opacity: 1; transition-delay: 0.8s; }
+body.hk-alt .design-ov-slide[data-pos="cur"] .design-ov-open,
+body.hk-alt .design-ov-slide[data-pos="cur"] .design-ov-open-key { opacity: 1; transition-delay: 0s; }
 .design-ov-slide[data-pos="cur"]:hover .design-ov-open,
 .design-ov-slide[data-pos="cur"] .design-ov-preview:focus-visible .design-ov-open { opacity: 1; }
-/* Arrows on the centre slide's edges — they turn, never open. */
-.design-ov-arrow {
-  position: absolute; top: 50%; z-index: 3; transform: translateY(-50%);
-  width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; padding: 0;
-  border: 1px solid var(--border-color, #30363d);
-  background: color-mix(in srgb, var(--panel-bg, #0d1117) 75%, transparent);
-  color: var(--text, #e6edf3); font: inherit; font-size: 1.7rem; line-height: 1; cursor: pointer;
-  opacity: 0.6; transition: opacity 0.15s ease;
-}
-.design-ov-arrow:hover, .design-ov-arrow:focus-visible { opacity: 1; }
-.design-ov-arrow[data-dir="prev"] { left: max(0.5rem, calc(50% - min(39cqw, 80cqh) - 28px)); }
-.design-ov-arrow[data-dir="next"] { right: max(0.5rem, calc(50% - min(39cqw, 80cqh) - 28px)); }
-
 /* ── Overlay: kicker, motto, three traits — authored anchor and tint ── */
 .design-ov-overlay {
   position: absolute; z-index: 2; box-sizing: border-box; max-width: 40%;
@@ -1678,34 +1730,29 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-ov[data-has-favorite="true"] .design-ov-slide[data-design-id]:not([data-favorite="true"]) .design-ov-preview { filter: saturate(0.6) brightness(0.8); }
 @media (max-width: 900px) {
   .design-ov-overlay { max-width: 62%; padding: 0.7rem 0.9rem 0.8rem; }
-  .design-ov-arrow { width: 40px; height: 40px; font-size: 1.3rem; }
 }
 
 /* ── Round changes: overlay on the preview, dots on menu entries ── */
 .design-ov, .design-header, .design-quick, .screen-nav { --dz-new-color: var(--success-color, #3fb950); }
+/* One chip in the top-3 info box: "Neugedacht" / "Verbessert". */
 .design-ov-change {
-  position: absolute; top: 1rem; left: 1rem; z-index: 1; max-width: calc(100% - 2rem); box-sizing: border-box;
-  display: flex; align-items: baseline; gap: 0.45rem; min-width: 0;
-  padding: 0.35rem 0.65rem; border-radius: 10px; font-size: 0.8rem;
-  background: color-mix(in srgb, var(--panel-bg, #0d1117) 90%, transparent);
-  border: 1px solid var(--dz-new-color); color: var(--text, #e6edf3);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); backdrop-filter: blur(4px);
+  display: inline-flex; align-items: center; gap: 0.4rem; margin: 0 0 0.55rem; box-sizing: border-box;
+  padding: 0.2rem 0.65rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.02em;
+  color: #fff; background: color-mix(in srgb, var(--dz-new-color) 38%, transparent);
+  border: 1px solid var(--dz-new-color); box-shadow: 0 0 14px color-mix(in srgb, var(--dz-new-color) 45%, transparent);
 }
-.design-ov-change strong { flex: none; color: var(--dz-new-color); }
-.design-ov-change strong::before {
-  content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 0.4rem;
-  border-radius: 50%; background: currentColor; vertical-align: 1px;
+.design-ov-change::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--dz-new-color); }
+.design-ov-change[data-kind="changed"] { --dz-new-color: var(--warning-color, #d29922); }
+/* Staged entrance: main card, then the info box, then the side cards. */
+@keyframes dz-ov-in { from { opacity: 0; transform: translateY(14px); } }
+@keyframes dz-ov-fade { from { opacity: 0; } }
+.design-ov[data-enter="true"] .design-ov-slide[data-pos="cur"] .design-ov-preview { animation: dz-ov-in 0.45s ease both; }
+.design-ov[data-enter="true"] .design-ov-slide[data-pos="cur"] .design-ov-overlay { animation: dz-ov-fade 0.4s ease 0.35s both; }
+.design-ov[data-enter="true"] .design-ov-slide:not([data-pos="cur"]) .design-ov-preview { animation: dz-ov-fade 0.45s ease 0.7s both; }
+@media (prefers-reduced-motion: reduce) {
+  .design-ov[data-enter="true"] .design-ov-preview, .design-ov[data-enter="true"] .design-ov-overlay { animation: none !important; }
+  .design-ov-slide, .design-ov-slide::after, .design-ov-open-key { transition: none !important; }
 }
-.design-ov-change-list { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* The overlay owns a top anchor → the change flag moves to the bottom. */
-.design-ov-slide[data-anchor^="t"] .design-ov-change { top: auto; bottom: 1rem; }
-.design-ov-change[data-kind="same"] {
-  border-color: var(--border-color, #30363d); box-shadow: none;
-  color: var(--text-secondary, #8b949e);
-}
-.design-ov-change[data-kind="same"] strong { color: var(--text-secondary, #8b949e); font-weight: 600; }
-.design-ov-change[data-kind="same"] strong::before { display: none; }
-.design-ov-shown { flex: none; color: var(--text-secondary, #8b949e); white-space: nowrap; }
 .dz-new-dot {
   display: inline-block; flex: none; width: 7px; height: 7px; margin-left: 0.4rem;
   border-radius: 50%; background: var(--dz-new-color, #3fb950); vertical-align: middle;
