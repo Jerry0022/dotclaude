@@ -977,6 +977,7 @@ icon, when the traits are not exactly three, when the round has no
             data-label-hide="{{anno.toggle_hide}}">
       <svg class="anno-eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
       <svg class="anno-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/></svg>
+      <span class="anno-eye-count" id="anno-eye-count" hidden></span>
     </button>
 
     <!-- Design switcher (ghost bar, top centre) — one segment per
@@ -1278,8 +1279,7 @@ icon, when the traits are not exactly three, when the round has no
         <!-- The scope suffix names the design this page belongs to, so the
              row says "this page of A · Briefing" — not just a page name that
              could belong to any design. Hidden on single-design rounds. -->
-        <label>{{proto.feedback_current}}: <strong id="dock-screen-label">Welcome</strong>
-          <span class="dock-scope">{{design.feedback_in}} <span id="dock-screen-design">Dispatch</span></span></label>
+        <label class="dock-crumb"><span class="dock-crumb-lv">{{dock.crumb_concept}}</span><span class="dock-scope"><i>›</i><span class="dock-crumb-lv" id="dock-screen-design">Dispatch</span></span><i>›</i><strong class="dock-crumb-last"><span id="dock-screen-idx"></span> <span id="dock-screen-label">Welcome</span></strong><span class="dock-tag">{{proto.feedback_current}}</span></label>
         <!-- One hidden textarea per screen. Only the active one is shown.
              Each carries data-comment="{screen-id}" AND
              data-screen-comment="{screen-id}" — so saveState/restoreState
@@ -1293,7 +1293,7 @@ icon, when the traits are not exactly three, when the round has no
            same swap mechanism as the per-screen row above. Each carries
            data-comment="design-{id}" AND data-design-comment="{id}". -->
       <div class="feedback-section">
-        <label>{{design.feedback_design}}: <strong id="dock-design-label">Dispatch</strong></label>
+        <label class="dock-crumb"><span class="dock-crumb-lv">{{dock.crumb_concept}}</span><i>›</i><strong id="dock-design-label">Dispatch</strong><span class="dock-tag">{{design.feedback_design}}</span></label>
         <div id="design-textareas" data-placeholder="{{design.feedback_design_placeholder}}"><!-- auto-populated --></div>
       </div>
       <div class="feedback-divider"></div>
@@ -1307,12 +1307,12 @@ icon, when the traits are not exactly three, when the round has no
            the design/screen rows. Each carries data-comment="view-{id}" AND
            data-view-comment="{id}". -->
       <div class="feedback-section">
-        <label>{{design.feedback_view}}: <strong id="dock-view-label">Navigation model</strong></label>
+        <label class="dock-crumb"><span class="dock-crumb-lv">{{dock.crumb_concept}}</span><i>›</i><strong id="dock-view-label">Navigation model</strong><span class="dock-tag">{{design.feedback_view}}</span></label>
         <div id="view-textareas" data-placeholder="{{design.feedback_view_placeholder}}"><!-- auto-populated --></div>
       </div>
       <div class="feedback-divider"></div>
       <div class="feedback-section">
-        <label>{{proto.feedback_general}}</label>
+        <label class="dock-crumb"><strong class="dock-crumb-last">{{dock.crumb_concept}}</strong><span class="dock-tag">{{dock.tag_general}}</span></label>
         <textarea id="design-general-feedback" data-comment="general" data-attachable
                   placeholder="{{proto.feedback_general}}"></textarea>
         <div class="attach-slot" data-attach-slot="general"></div>

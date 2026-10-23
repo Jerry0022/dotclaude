@@ -195,24 +195,24 @@ must see their own language. The locale hint is authoritative.
 | `final.handoffs_hint`          | Claude cannot do these — they stay with you once this is through. | Das kann Claude nicht übernehmen — das bleibt bei dir, sobald das hier durch ist. |
 | `proto.feedback_title`         | Feedback                       | Feedback |
 | `proto.feedback_toggle`        | Open feedback                  | Feedback öffnen |
-| `proto.feedback_general`       | General notes on this concept  | Allgemeine Anmerkungen zum Konzept |
+| `proto.feedback_general`       | General notes on this concept  | Allgemeine Notizen zum Konzept |
 | `proto.feedback_general_hint`  | Persists across all screens    | Screen-übergreifend persistent |
-| `proto.feedback_current`       | This page only                 | Nur diese Seite |
+| `proto.feedback_current`       | this page                      | diese Seite |
 | `proto.feedback_placeholder`   | A note on just this page…      | Notiz nur zu dieser Seite… |
 | `design.feedback_in`           | in                             | in |
 | `proto.screen_counter`         | Screen {n} / {total}           | Screen {n} / {total} |
-| `design.feedback_design`       | The whole design, all pages    | Das ganze Design, alle Seiten |
-| `design.feedback_design_placeholder` | A note on the design as a whole… | Notiz zum Design als Ganzes… |
+| `design.feedback_design` | whole variant | ganze Variante |
+| `design.feedback_design_placeholder` | A note on the variant as a whole… | Notiz zur Variante als Ganzes… |
 | `design.switch_label`          | Switch design                  | Design wechseln |
 | `design.position_iteration`    | Iteration                      | Iteration |
 | `design.position_page`         | Page                           | Seite |
-| `anno.toggle_show`             | Show annotations                | Anmerkungen einblenden |
-| `anno.toggle_hide`             | Hide annotations                | Anmerkungen ausblenden |
+| `anno.toggle_show` | Show notes | Notizen einblenden |
+| `anno.toggle_hide` | Hide notes | Notizen ausblenden |
 | `anno.answer_placeholder`      | Your answer…                    | Deine Antwort… |
 | `anno.pin_label`                | Question {n}                    | Frage {n} |
 | `design.nav_views_heading`     | Questions                       | Fragen |
-| `design.feedback_view`         | Notes on this view               | Anmerkungen zu dieser Ansicht |
-| `design.feedback_view_placeholder` | Write a note on this view…  | Notiz zu dieser Ansicht… |
+| `design.feedback_view` | this view | diese Ansicht |
+| `design.feedback_view_placeholder` | Write a note on this view… | Notiz zu dieser Ansicht… |
 | `design.overview`              | Overview                        | Übersicht |
 | `design.overview_back`         | Back to the overview            | Zurück zur Übersicht |
 | `design.overview_count`        | {n} designs · pick a favourite or just comment | {n} Designs · Favorit wählen oder einfach kommentieren |
@@ -229,7 +229,7 @@ must see their own language. The locale hint is authoritative.
 | `design.favorite_badge`        | FAVOURITE                       | FAVORIT |
 | `design.favorite_set`          | Mark as favourite               | Als Favorit markieren |
 | `design.favorite_unset`        | Remove the favourite            | Favorit entfernen |
-| `design.favorite_hint_set`     | The favourite is the starting point; comments on every design still count. | Der Favorit ist der Startpunkt; Kommentare zu allen Designs fließen ein. |
+| `design.favorite_hint_set` | The favourite is the starting point; notes on every design still count. | Der Favorit ist der Startpunkt; Notizen zu allen Designs fließen ein. |
 | `design.next_screen`           | Next page                       | Nächste Seite |
 | `design.change_new`            | New this round                  | Neu in dieser Runde |
 | `design.change_changed`        | Changed                         | Geändert |
@@ -261,17 +261,21 @@ must see their own language. The locale hint is authoritative.
 | `design.keys_next`             | Next page of this design        | Nächste Seite dieses Designs |
 | `design.keys_round`            | Iteration tab 1–9               | Iterations-Tab 1–9 |
 | `design.keys_notes`            | Open or close the notes         | Notizen öffnen oder schließen |
-| `design.keys_pin`              | Your own comment on a spot      | Eigener Kommentar an einer Stelle |
+| `design.keys_pin` | Your own note on a spot | Eigene Notiz an einer Stelle |
 | `design.keys_click`            | click                           | Klick |
 | `design.keys_close`            | Close                           | Schließen |
 | `design.key_ctrl`              | Ctrl                            | Strg |
-| `design.upin_hint`             | + click places your own comment here | + Klick setzt hier einen eigenen Kommentar |
-| `design.upin_arm`              | Place a comment pin             | Kommentar-Pin setzen |
-| `design.upin_tap_hint`         | Tap the spot for your comment · Esc cancels | Tippe auf die Stelle für deinen Kommentar · Esc bricht ab |
-| `design.upin_placeholder`      | Your comment on this spot…      | Dein Kommentar zu dieser Stelle… |
+| `design.upin_hint` | + click places your own note here | + Klick setzt hier eine eigene Notiz |
+| `design.upin_arm` | Place a note pin | Notiz-Pin setzen |
+| `design.upin_tap_hint` | Tap the spot for your note · Esc cancels | Tippe auf die Stelle für deine Notiz · Esc bricht ab |
+| `design.upin_placeholder` | Your note on this spot… | Deine Notiz zu dieser Stelle… |
 | `design.upin_keys`             | Enter saves · Esc discards      | Enter speichert · Esc verwirft |
-| `design.upin_delete`           | Delete comment                  | Kommentar löschen |
-| `design.upin_label`            | Your comment {n}                | Dein Kommentar {n} |
+| `design.upin_delete` | Delete note | Notiz löschen |
+| `design.upin_label` | Your note {n} | Deine Notiz {n} |
+| `dock.crumb_concept`           | Concept                         | Concept |
+| `dock.tag_general`             | general                         | allgemein |
+| `dock.tip_title`               | Did you know?                   | Wusstest du schon? |
+| `anno.open_count`              | {n} open notes                  | {n} offene Notizen |
 | `view.compare_favourite`       | Favourite                       | Favorit |
 | `view.compare_no_preference`   | No preference                   | Keine Präferenz |
 | `view.compare_criteria`        | Criteria                        | Kriterien |
@@ -945,7 +949,7 @@ the `[ui-locale: ...]` hint produced.
         <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.minimize}}" data-tip="{{panel.minimize}}">−</button>
       </div>
       <div class="feedback-section">
-        <label>{{proto.feedback_general}}</label>
+        <label class="dock-crumb"><strong class="dock-crumb-last">{{dock.crumb_concept}}</strong><span class="dock-tag">{{dock.tag_general}}</span></label>
         <textarea id="design-general-feedback" data-comment="general" data-attachable
                   placeholder="{{proto.feedback_general}}"></textarea>
         <div class="attach-slot" data-attach-slot="general"></div>

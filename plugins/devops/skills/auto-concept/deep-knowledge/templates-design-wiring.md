@@ -77,21 +77,54 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
 
   // data-anno-target is a CSS selector resolved INSIDE the pin's own screen,
   // so the same selector may repeat on other screens without colliding.
+  // Robust anchoring: the spot comes from the LAYOUT boxes (offsetLeft /
+  // offsetTop up the offsetParent chain), never from getBoundingClientRect —
+  // that one reads transforms, so a note hung on an element whose mock
+  // animates (a scale/translate entrance, a pulsing card) used to jump with
+  // every frame, most visibly while the user was typing into it. Positions
+  // are re-measured on resize, scroll and screen change only, and are frozen
+  // while the note's own input has focus.
+  function layoutOrigin(node) {
+    let x = 0, y = 0, n = node;
+    while (n && n.nodeType === 1) {
+      x += n.offsetLeft || 0; y += n.offsetTop || 0;
+      const p = n.offsetParent;
+      if (p) { x += p.clientLeft || 0; y += p.clientTop || 0; }
+      n = p;
+    }
+    return { x, y };
+  }
+  // The target's spot as percent of the layer, from layout boxes; null when
+  // one of them is not laid out yet (or is no HTML element: then the caller
+  // falls back to the painted rects).
+  function layoutSpot(target, layer) {
+    if (typeof target.offsetWidth !== 'number' || typeof layer.offsetWidth !== 'number') return null;
+    if (!layer.offsetWidth || !layer.offsetHeight || !target.offsetWidth) return null;
+    const lo = layoutOrigin(layer), to = layoutOrigin(target);
+    return {
+      x: ((to.x + target.offsetWidth - lo.x) / layer.offsetWidth) * 100,
+      y: ((to.y + target.offsetHeight / 2 - lo.y) / layer.offsetHeight) * 100
+    };
+  }
   function anchorToTarget(anno) {
     const sel = anno.dataset.annoTarget;
     if (!sel) return;                       // authored --anno-x/--anno-y wins
     if (anno.dataset.annoMoved) return;     // the user dragged it — their spot wins
+    if (anno.contains(document.activeElement)) return;   // typing: the note stays put
     const screen = anno.closest('section[data-screen]');
     const layer = annoLayerOf(anno);
     if (!screen || !layer) return;
     let target = null;
     try { target = screen.querySelector(sel); } catch (e) { target = null; }
     if (!target) return;                    // stale selector: keep last known spot
-    const box = layer.getBoundingClientRect();
-    const t = target.getBoundingClientRect();
-    if (!box.width || !box.height || !t.width) return;   // not laid out yet
-    const x = ((t.right - box.left) / box.width) * 100;
-    const y = ((t.top + t.height / 2 - box.top) / box.height) * 100;
+    let spot = layoutSpot(target, layer);
+    if (!spot) {
+      const box = layer.getBoundingClientRect();
+      const t = target.getBoundingClientRect();
+      if (!box.width || !box.height || !t.width) return;   // not laid out yet
+      spot = { x: ((t.right - box.left) / box.width) * 100, y: ((t.top + t.height / 2 - box.top) / box.height) * 100 };
+    }
+    const x = spot.x, y = spot.y;
     anno.style.setProperty('--anno-x', Math.max(0, Math.min(100, x)).toFixed(2) + '%');
     anno.style.setProperty('--anno-y', Math.max(0, Math.min(100, y)).toFixed(2) + '%');
   }
@@ -306,10 +339,21 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     // (reported: the eye vanished and could not be switched back on).
     const onOverview = document.body.dataset.overviewActive === 'true';
     const it = document.querySelector('section[data-iteration]:not([hidden])');
-    toggle.hidden = onOverview
-      ? !(it && it.querySelector('section[data-design] [data-anno]'))
-      : all.length === 0;
     const hidden = document.body.classList.contains('anno-hidden');
+    // Counter = open (unanswered) notes of the page; the eye itself is hidden
+    // only when the page has nothing to hide (no notes, no own pins, no
+    // overview box) — and never while the layer is off, or it could not be
+    // switched back on.
+    const scope = onOverview ? (it ? [...it.querySelectorAll('section[data-design] [data-anno]')] : []) : all;
+    const openCount = scope.filter(a => {
+      const p = a.querySelector('[data-anno-pin]');
+      return !(p && p.dataset.answered === 'true');
+    }).length;
+    const hideable = scope.length > 0 || !!document.querySelector('.upin')
+      || (onOverview && !!document.querySelector('.design-ov'));
+    toggle.hidden = !hideable && !hidden;
+    const badge = document.getElementById('anno-eye-count');
+    if (badge) { badge.textContent = String(openCount); badge.hidden = openCount === 0; }
     const label = (hidden ? toggle.dataset.labelShow : toggle.dataset.labelHide) || '';
     if (label) { toggle.setAttribute('aria-label', label); toggle.setAttribute('data-tip', label); }
     toggle.setAttribute('aria-pressed', String(!hidden));
@@ -318,6 +362,7 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
   // restoreState() has applied the persisted body.anno-hidden class — see
   // the note there. Exposed the same way updateNoteMarkers() is.
   window.updateAnnoUI = updateAnnoUI;
+  window.closeAnnoBubbles = closeAllBubbles;
 
   document.querySelectorAll('[data-anno]').forEach(recomputeAnswered);
 
@@ -1003,7 +1048,11 @@ function collectDesignDecisions() {
     ? window.designOverviewState(active) : { favorite: null, pins: [] };
   const userPins = (ovState.pins || [])
     .filter(p => p && typeof p.text === 'string' && p.text.trim())
-    .map(p => ({ id: p.id, design: p.design, screen: p.screen, x: p.x, y: p.y, target: p.target || '', text: p.text.trim() }));
+    .map(p => ({
+      id: p.id, design: p.design, screen: p.screen, x: p.x, y: p.y, target: p.target || '', text: p.text.trim(),
+      // Own pins take attachments like every other note (slot `upin-ta-<id>`).
+      attachments: (typeof attachmentsFor === 'function') ? attachmentsFor('upin-ta-' + p.id) : []
+    }));
   return {
     submitted: true,
     template: 'design',

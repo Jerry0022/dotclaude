@@ -141,8 +141,27 @@ returns — the single-design page is untouched.
   // The page builds itself up in stages on load (CSS § Intro): content,
   // header, quick nav, then the FABs. The class goes again afterwards, so
   // a later tab switch or display toggle never replays it.
+  // Staged entrance: the header islands, the quick nav and the FABs come LAST
+  // and only on the very first open of this page in this browser (later
+  // opens keep them in place); then the glow pulses once. A new round pulses
+  // the glow too (see the round handler below).
+  let firstOpen = true;
+  try {
+    const seenKey = 'concept-chrome-seen:' + location.pathname;
+    firstOpen = !localStorage.getItem(seenKey);
+    if (typeof _guardedSetItem === 'function') _guardedSetItem(seenKey, '1');
+  } catch (e) { /* private mode: treat as first open, harmless */ }
+  const pulseChromeGlow = () => {
+    body.classList.add('chrome-glow');
+    setTimeout(() => body.classList.remove('chrome-glow'), 3200);
+  };
+  window.pulseChromeGlow = pulseChromeGlow;
   body.classList.add('dz-intro');
-  setTimeout(() => body.classList.remove('dz-intro'), 2200);
+  if (firstOpen) body.classList.add('dz-intro-first');
+  setTimeout(() => {
+    body.classList.remove('dz-intro', 'dz-intro-first');
+    if (firstOpen) pulseChromeGlow();
+  }, firstOpen ? 3000 : 2200);
   const header = document.getElementById('design-header');
   const quick = document.getElementById('design-quick');
   const hint = document.getElementById('upin-hint');
@@ -673,15 +692,9 @@ returns — the single-design page is untouched.
       if (d) toggleFavorite(d.dataset.design);
     });
     H.eye = el('span', 'design-header-eye');
-    // Comment pin: an icon next to the eye, drawn like it (round, ringed),
-    // its label lives in the tooltip. Shown on a live design page only.
-    H.pin = el('button', 'design-header-pin');
-    H.pin.type = 'button';
-    H.pin.setAttribute('aria-pressed', 'false');
-    H.pin.setAttribute('aria-label', L.upinArm);
-    H.pin.appendChild(svgFromPaths(ICONS.pin));
-    setTip(H.pin, L.upinArm, L.ctrl + '+' + L.keysClick);
-    H.pin.addEventListener('click', () => (armed === 'tap' ? disarm() : arm('tap')));
+    // No 📍 pin-hint in the header any more: Ctrl + click is taught by the Alt
+    // example pin and the dock tips.
+    H.pin = null;
     // Overlay toggle: the touch path of Space, shown on the overview only.
     H.overlay = el('button', 'design-header-overlay');
     H.overlay.type = 'button';
@@ -695,7 +708,7 @@ returns — the single-design page is untouched.
     // segment, so the header reads as "this variant", not as loose text.
     H.pill = el('span', 'design-header-title');
     H.pill.append(H.iconSlot, H.name);
-    H.main.append(H.back, H.sep, H.pill, H.star, H.eye, H.overlay, H.pin);
+    H.main.append(H.back, H.sep, H.pill, H.star, H.eye, H.overlay);
     // One row only: pages live in the quick nav, the favourite on ★ — the
     // header never grows a second row over the content.
     header.append(H.main);
@@ -1215,10 +1228,8 @@ returns — the single-design page is untouched.
       // The motto is the name's tooltip, not a line of its own.
       if (motto) setTip(H.name, motto);
       else { delete H.name.dataset.tip; delete H.name.dataset.tipTier; }
-      H.pin.hidden = !(md === 'design' && live);
       H.overlay.hidden = !(md === 'overview' && hasOverview);
       H.overlay.setAttribute('aria-pressed', String(overlayShown));
-      H.pin.setAttribute('aria-pressed', String(armed === 'tap'));
     }
     renderQuick(it);
     renderQuestionsCard(it);
@@ -1285,6 +1296,7 @@ returns — the single-design page is untouched.
       try { last = localStorage.getItem(ROUND_KEY); } catch (e) { /* private mode */ }
       if (typeof _guardedSetItem === 'function') _guardedSetItem(ROUND_KEY, now);
       if (last && last !== now && overviewOf(it)) { ovIndex = 0; window.showOverview(); layoutCarousel(it); }
+      if (last && last !== now) pulseChromeGlow();
     }, 0);
   });
 
@@ -1359,6 +1371,9 @@ returns — the single-design page is untouched.
     e.stopPropagation();
     e.stopImmediatePropagation();
     if (armed === 'tap') disarm();
+    // Setting a new pin closes every other open note first (own editors and
+    // annotation bubbles), keeping what was typed in them.
+    closeOtherNotes(null);
     draft = {
       id: 'up-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       design: d.dataset.design, screen: screen.id,
@@ -1412,13 +1427,56 @@ returns — the single-design page is untouched.
       ed.style.bottom = 'auto';
     }
   }
+  // Own pins take attachments like every other note: the textarea carries
+  // data-attachable and an .attach-slot, slot key `upin-ta-<pin id>`.
+  const upinSlot = id => 'upin-ta-' + id;
+  function commitEditor(ed) {
+    const wrap = ed.closest('.upin');
+    const ta = ed.querySelector('textarea');
+    if (!wrap || !ta || ta.readOnly) return;
+    const id = wrap.dataset.upinId;
+    if (draft && draft.id === id) { if (ta.value.trim()) savePin(draft, ta.value); else draft = null; return; }
+    const p = readState(visibleIteration()).pins.find(x => x.id === id);
+    if (p && ta.value.trim() !== p.text.trim()) savePin(p, ta.value);
+  }
+  function closeOtherNotes(except) {
+    document.querySelectorAll('.upin-editor').forEach(x => {
+      if (x !== except && !x.hidden) { commitEditor(x); x.hidden = true; }
+    });
+    if (typeof window.closeAnnoBubbles === 'function') window.closeAnnoBubbles();
+  }
+  function openPinEditor(id) {
+    const w = document.querySelector('.upin[data-upin-id="' + CSS.escape(id) + '"]');
+    const e = w && w.querySelector('.upin-editor');
+    if (!e) return;
+    e.hidden = false;
+    placeEditor(w);
+    w.querySelector('textarea').focus();
+  }
+  // While one note's input is open, body[data-note-editing] makes the CSS hide
+  // the connectors and summaries of all others and fade their pins.
+  function syncNoteEditing() {
+    const open = document.querySelector('.upin-editor:not([hidden])');
+    const bubble = document.querySelector('[data-anno-bubble][data-open="true"]');
+    document.querySelectorAll('.upin[data-editing], .anno[data-editing]').forEach(n => n.removeAttribute('data-editing'));
+    const owner = (open && open.closest('.upin')) || (bubble && bubble.closest('.anno'));
+    if (owner) { owner.dataset.editing = 'true'; body.dataset.noteEditing = 'true'; }
+    else delete body.dataset.noteEditing;
+  }
+  window.syncNoteEditing = syncNoteEditing;
+  let noteSyncQueued = false;
+  new MutationObserver(() => {
+    if (noteSyncQueued) return;
+    noteSyncQueued = true;
+    requestAnimationFrame(() => { noteSyncQueued = false; syncNoteEditing(); });
+  }).observe(body, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'data-open'] });
   function pinNode(pin, k, live, isDraft) {
     const wrap = el('div', 'upin');
     wrap.dataset.upinId = pin.id;
     wrap.style.setProperty('--upin-x', pin.x + '%');
     wrap.style.setProperty('--upin-y', pin.y + '%');
     const label = L.upinLabel.replace('{n}', String(k));
-    const btn = el('button', 'upin-pin', String(k));
+    const btn = el('button', 'upin-pin');   // no number: bubble + glow only
     btn.type = 'button';
     btn.setAttribute('aria-label', label);
     btn.dataset.tip = pin.text || label;
@@ -1426,11 +1484,16 @@ returns — the single-design page is untouched.
     ed.hidden = !isDraft;
     ed.appendChild(el('div', 'upin-editor-head', label));
     const ta = el('textarea');
+    ta.id = upinSlot(pin.id);
+    ta.setAttribute('data-attachable', '');
     ta.placeholder = L.upinPlaceholder;
     ta.value = pin.text;
     ta.readOnly = !live;
     ta.setAttribute('aria-label', label);
     ed.appendChild(ta);
+    const slot = el('div', 'attach-slot');
+    slot.dataset.attachSlot = upinSlot(pin.id);
+    ed.appendChild(slot);
     const foot = el('div', 'upin-editor-foot');
     foot.appendChild(el('span', '', live ? L.upinKeys : ''));
     if (live && !isDraft) {
@@ -1441,11 +1504,56 @@ returns — the single-design page is untouched.
     }
     ed.appendChild(foot);
     wrap.append(btn, ed);
+    // The WHOLE pin is the drag handle (a press only becomes a drag after a
+    // few px, so a click still opens the note). The spot is stored as percent
+    // of the content box, like at placement.
+    if (live) btn.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      const host = wrap.closest('.upin-host');
+      if (!host) return;
+      const g = { x0: e.clientX, y0: e.clientY, moved: false, id: e.pointerId };
+      const move = ev => {
+        if (ev.pointerId !== g.id) return;
+        if (!g.moved) {
+          if (Math.hypot(ev.clientX - g.x0, ev.clientY - g.y0) < 6) return;
+          g.moved = true;
+          wrap.dataset.dragging = 'true';
+          try { btn.setPointerCapture(ev.pointerId); } catch (err) { /* released */ }
+        }
+        ev.preventDefault();
+        const r = host.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        pin.x = Math.round(Math.min(100, Math.max(0, ((ev.clientX - r.left) / r.width) * 100)) * 10) / 10;
+        pin.y = Math.round(Math.min(100, Math.max(0, ((ev.clientY - r.top) / r.height) * 100)) * 10) / 10;
+        wrap.style.setProperty('--upin-x', pin.x + '%');
+        wrap.style.setProperty('--upin-y', pin.y + '%');
+      };
+      const up = ev => {
+        if (ev.pointerId !== g.id) return;
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        document.removeEventListener('pointercancel', up);
+        delete wrap.dataset.dragging;
+        if (!g.moved) return;
+        wrap.dataset.justDragged = 'true';
+        setTimeout(() => { delete wrap.dataset.justDragged; }, 0);
+        if (isDraft) return;   // the draft object already carries the new spot
+        const it = visibleIteration();
+        const st = readState(it);
+        const i = st.pins.findIndex(p => p.id === pin.id);
+        if (i >= 0) { st.pins[i].x = pin.x; st.pins[i].y = pin.y; writeState(it, st); }
+      };
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+      document.addEventListener('pointercancel', up);
+    });
     btn.addEventListener('click', () => {
+      if (wrap.dataset.justDragged) return;
       const open = ed.hidden;
-      document.querySelectorAll('.upin-editor').forEach(x => { if (x !== ed) x.hidden = true; });
-      ed.hidden = !open;
-      if (open) { placeEditor(wrap); ta.focus(); }
+      closeOtherNotes(ed);
+      if (!open) { ed.hidden = true; return; }
+      // Committing another editor may have re-rendered the layer.
+      if (ed.isConnected) { ed.hidden = false; placeEditor(wrap); ta.focus(); } else openPinEditor(pin.id);
     });
     ta.addEventListener('keydown', e => {
       e.stopPropagation();
@@ -1491,6 +1599,7 @@ returns — the single-design page is untouched.
       layer.appendChild(drafted.wrap);
     }
     box.appendChild(layer);
+    if (typeof initCommentAttachments === 'function') initCommentAttachments();
     if (drafted) { placeEditor(drafted.wrap); drafted.ta.focus(); }
   }
 
@@ -1783,16 +1892,21 @@ body.hk-alt .design-ov-slide[data-pos="cur"] .design-ov-open-key { opacity: 1; t
   flex-direction: column; box-sizing: border-box;
   --dz-head-cap: min(calc(33vw - 1.5rem), 30rem);
   width: max-content; max-width: var(--dz-head-cap);
-  padding: 0.35rem 0.7rem; border-radius: 12px;
-  background: color-mix(in srgb, var(--panel-bg, #161b22) 70%, transparent);
-  border: 1px solid var(--border-color, #30363d);
-  border-left: 4px solid var(--dz-color, var(--accent-color));
+  padding: 0.4rem 0.8rem 0.4rem 0.9rem; border-radius: 14px;
+  /* Island (variant C): filled inside, soft outer glow, accent edge as an
+     inset — no frame, no light-blue border. */
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 94%, #fff);
+  border: 0;
+  box-shadow: inset 3px 0 0 var(--dz-color, var(--accent-color)), 0 0 22px color-mix(in srgb, var(--dz-color, var(--accent-color)) 18%, transparent), 0 4px 14px rgba(0, 0, 0, 0.35);
   color: var(--text-secondary, #8b949e); font-size: 0.85rem;
-  backdrop-filter: blur(6px);
-  opacity: 0.6;
-  transition: opacity 0.16s ease, background 0.16s ease;
+  transition: box-shadow 0.2s ease;
 }
-.design-header:hover, .design-header:focus-within { opacity: 1; background: var(--panel-bg, #161b22); }
+.design-header:hover, .design-header:focus-within { box-shadow: inset 3px 0 0 var(--dz-color, var(--accent-color)), 0 0 30px color-mix(in srgb, var(--dz-color, var(--accent-color)) 30%, transparent), 0 4px 14px rgba(0, 0, 0, 0.35); }
+@keyframes chromeGlowIsland {
+  50% { box-shadow: inset 3px 0 0 var(--dz-color, var(--accent-color)), 0 0 42px color-mix(in srgb, var(--dz-color, var(--accent-color)) 45%, transparent), 0 4px 14px rgba(0, 0, 0, 0.35); }
+}
+body.chrome-glow .design-header { animation: chromeGlowIsland 1.4s ease-in-out 2; }
+@media (prefers-reduced-motion: reduce) { body.chrome-glow .design-header { animation: none; } }
 .design-header-main { display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; min-width: 0; min-height: 28px; }
 /* The name carries its OWN cap: 19rem ≈ everything else on the row (back,
    pill chrome, ★, eye, pin, gaps, padding), so the row never exceeds the
@@ -1836,7 +1950,7 @@ body.hk-alt .design-ov-slide[data-pos="cur"] .design-ov-open-key { opacity: 1; t
 .design-header-back svg { width: 14px; height: 14px; display: block; flex: none; }
 .design-header-sep { width: 1px; height: 18px; background: var(--border-color, #30363d); flex: none; }
 /* The eye moves in here (wireDesignOverview) — same control, inline size. */
-.design-header .anno-toggle-fab { position: static; flex: none; width: 24px; height: 24px; border-width: 1px; box-shadow: none; }
+.design-header .anno-toggle-fab { position: relative; flex: none; width: 24px; height: 24px; border-width: 1px; box-shadow: none; }
 .design-header .anno-toggle-fab svg { width: 13px; height: 13px; }
 .design-header-name[data-tip] { cursor: help; }
 /* Same shape as the header eye (.design-header .anno-toggle-fab). */
@@ -2059,9 +2173,13 @@ body.panel-open .design-quick, body.panel-open .design-header { opacity: 0; poin
   78% { transform: translate(-50%, -3px) scale(0.97); }
 }
 body.dz-intro .concept-content { animation: dz-intro-fade 0.45s ease both; }
-body.dz-intro #design-header { animation: dz-intro-slide 0.4s ease 0.3s both; }
-body.dz-intro #design-quick { animation: dz-intro-quick 0.75s cubic-bezier(0.2, 0.8, 0.2, 1) 0.6s both; }
-body.dz-intro .panel-fab, body.dz-intro .feedback-fab { animation: dz-intro-fade 0.5s ease 1.3s both; }
+/* Header islands, quick nav and FABs come last and only on the very first
+   open (.dz-intro-first); on every later open they are simply there. */
+body.dz-intro:not(.dz-intro-first) #design-header, body.dz-intro:not(.dz-intro-first) #design-quick,
+body.dz-intro:not(.dz-intro-first) .panel-fab, body.dz-intro:not(.dz-intro-first) .feedback-fab { animation: none; }
+body.dz-intro-first #design-header { animation: dz-intro-slide 0.45s ease 1.4s both; }
+body.dz-intro-first #design-quick { animation: dz-intro-quick 0.75s cubic-bezier(0.2, 0.8, 0.2, 1) 1.6s both; }
+body.dz-intro-first .panel-fab, body.dz-intro-first .feedback-fab { animation: dz-intro-fade 0.5s ease 2.2s both; }
 @media (prefers-reduced-motion: reduce) {
   body.dz-intro .concept-content, body.dz-intro #design-header, body.dz-intro #design-quick,
   body.dz-intro .panel-fab, body.dz-intro .feedback-fab,
@@ -2130,31 +2248,37 @@ body.upin-armed section[data-screen][data-screen-active="true"] * { cursor: cros
 .upin-host { position: relative; }
 .upin-layer { position: absolute; inset: 0; pointer-events: none; z-index: 30; }
 .upin {
-  --upin-color: #f78166;
+  --upin-color: #d2a8ff;
   position: absolute; left: var(--upin-x); top: var(--upin-y);
   transform: translate(-4px, -100%); pointer-events: auto;
 }
 .upin-pin {
-  width: 26px; height: 26px; padding: 0; border-radius: 50% 50% 50% 4px;
-  border: 0; background: var(--upin-color); color: #0d1117;
-  font: 800 0.78rem/1 system-ui, sans-serif; cursor: pointer;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--upin-color) 30%, transparent), 0 6px 16px rgba(0, 0, 0, 0.4);
+  position: relative; width: 28px; height: 28px; padding: 0; border-radius: 50% 50% 50% 4px; border: 0;
+  background: linear-gradient(160deg, #ecd9ff, var(--upin-color));
+  cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; transition: transform 0.15s, opacity 0.2s;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--upin-color) 22%, transparent), 0 0 24px color-mix(in srgb, var(--upin-color) 65%, transparent), 0 6px 14px rgba(0, 0, 0, 0.4);
 }
+.upin-pin::after { content: ''; position: absolute; inset: 0; margin: auto; width: 8px; height: 8px; border-radius: 50%; background: #fff; opacity: 0.92; }
+.upin[data-dragging="true"] { z-index: 3; }
+.upin[data-dragging="true"] .upin-pin { cursor: grabbing; transform: scale(1.15); transition: none; }
 .upin-pin:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
 .upin-editor {
   position: absolute; left: 32px; top: 0; width: min(280px, 70vw);
   padding: 0.6rem 0.7rem; border-radius: 12px; box-sizing: border-box;
   background: var(--panel-bg, #161b22); color: var(--text-color, #e6edf3);
-  border: 1px solid var(--upin-color); box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5);
+  border: 0; box-shadow: 0 0 26px color-mix(in srgb, var(--upin-color) 35%, transparent), 0 14px 30px rgba(0, 0, 0, 0.5);
   cursor: auto;
 }
 .upin[data-flip-x="true"] .upin-editor { left: auto; right: 32px; }
 .upin[data-flip-y="true"] .upin-editor { top: auto; bottom: 30px; }
 .upin-editor[hidden] { display: none; }
+.upin-editor .attach-slot { position: relative; }
+.upin-editor .attach-slot .attach-btn { position: absolute; right: 8px; top: -30px; opacity: 0.7; }
+.upin-editor textarea { padding-bottom: 1.7rem; }
 .upin-editor-head { font-size: 0.72rem; color: var(--text-secondary, #8b949e); margin-bottom: 0.35rem; }
 .upin-editor textarea {
   width: 100%; min-height: 56px; box-sizing: border-box; resize: vertical;
-  padding: 0.45rem; border-radius: 8px; font: inherit; font-size: 0.85rem;
+  padding: 0.45rem 0.45rem 1.7rem; border-radius: 8px; font: inherit; font-size: 0.85rem;
   background: var(--input-bg, #0d1117); color: var(--text-color, #e6edf3);
   border: 1px solid var(--border-color, #30363d);
 }
