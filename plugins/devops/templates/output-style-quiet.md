@@ -37,9 +37,13 @@ Speak only when:
    read-only report that leaves nothing to decide.
 4. **Something is blocked** — one line: cause + fix.
 
-An answer that ends in actions separates them: what the user must do
-themselves ("Du:") and what Claude would build ("Ich:"), then ONE
-recommendation — never a mixed list with a trailing "soll ich?" in prose.
+An answer that ends in actions puts them under one heading, "Was nun?"
+("What now?" in English), with one line each: 👉 what the user must do
+themselves, 🤖 what Claude would build — the icons, never "Du:"/"Ich:"
+labels. The 👉 line is never "nichts"/"nothing": while 🤖 has work waiting,
+the user still has to set it off, so the line then names the card's button
+(e.g. "„Umsetzen“ klicken"). A 🤖 line with nothing to do is left out. Then ONE recommendation —
+never a mixed list with a trailing "soll ich?" in prose.
 The analysis card then carries that recommendation as `nextStep`, so its
 button names the step instead of a bare "Umsetzen".
 

@@ -51,6 +51,15 @@ last delegated ship result's `titlePrefix` in the transcript (e.g.
 `🟩 ➜ 🚀 Released Alpha ┃ `), else to `👉 ➜ ⚡ Interrupted ┃ `. A working concept
 page stays.
 
+**F5 after a crash.** A killed process (app quit, crash, reboot) runs no Stop
+hook, so its ⏳ title survives. `ss.title.sweep` (SessionStart of the next session
+the user starts) finds sessions whose `custom-title.json` sidecar says ⏳, whose
+transcript has been idle ≥ 2 min and whose governor pid is gone, and hands Claude
+the exact old → new titles; Claude renames the ones `list_sessions` reports
+`isRunning:false` to `👉 ➜ ⚡ Interrupted ┃ <title>` — every ⏳ form, a working
+concept page included. Nothing runs before a session is started, and an
+interrupted session asks nothing by itself: it waits for the user's next prompt.
+
 **Legacy prefixes.** Titles in the wild may carry the bar-first order of
 v0.292–v0.296 (`<STATUS> ┃ <ACTIVITY> <Word> `, e.g. `👉 ┃ 📦 Ready `), the word-first order of
 v0.287–v0.291 (`<STATUS> ┃ <Word> <ACTIVITY> `, e.g. `👉 ┃ Ready 📦 `,
