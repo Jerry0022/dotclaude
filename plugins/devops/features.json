@@ -18,7 +18,8 @@
         "deep-knowledge/frustrated-mode.md"
       ],
       "scripts": [
-        "scripts/frustration-replay.js"
+        "scripts/frustration-replay.js",
+        "hooks/lib/run-contract-plan.js"
       ],
       "skills": [
         "skills/auto-frustrated"
