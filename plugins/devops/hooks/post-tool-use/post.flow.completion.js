@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.32.1
+ * @version 0.33.0
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -251,8 +251,7 @@ function contextOf(lines) {
 }
 
 const SHIP_RELEASE_TOOL = 'mcp__plugin_devops_dotclaude__ship_release';
-// One release of tolerance: a session still running the pre-merge dotclaude-ship server.
-const isShipReleaseTool = (name) => name === SHIP_RELEASE_TOOL || name === 'mcp__plugin_devops_dotclaude-ship__ship_release';
+const isShipReleaseTool = (name) => name === SHIP_RELEASE_TOOL;
 
 /**
  * Did a ship_release response report a merge? MCP results arrive as

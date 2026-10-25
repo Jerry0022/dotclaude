@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.mcp.health
- * @version 0.4.0
+ * @version 0.5.0
  * @event PreToolUse
  * @plugin devops
  * @description Detects dead or stale MCP servers before tool calls fail cryptically.
@@ -44,10 +44,7 @@
  *      blocking a live pre-0.3.0 server.
  *
  *   Since v0.309 there is ONE devops server, `dotclaude` (tool prefix
- *   mcp__plugin_devops_dotclaude__). Its tools map to that server; the three
- *   pre-merge prefixes (dotclaude-completion / -ship / -issues) still map to
- *   their own heartbeat names for one release, for a session that is still
- *   running the old servers. Every block names the exact recovery step: the
+ *   mcp__plugin_devops_dotclaude__). Its tools map to that server. Every block names the exact recovery step: the
  *   offline card renderer (mcp-server/index.js --render-card) and the offline
  *   ship CLI (mcp-server/ship/cli.js) work without the server; the server
  *   itself only comes back with a new session.
@@ -62,13 +59,9 @@ const { heartbeatState } = require('../lib/mcp-heartbeat');
 const home = process.env.HOME || process.env.USERPROFILE || '';
 const sentinelFile = path.join(home, '.claude', 'plugins', '.mcp-stale.json');
 
-// Map tool-name prefixes to MCP server names (heartbeat names). The legacy
-// keys are the pre-v0.309 servers, kept one release for still-running sessions.
+// Map tool-name prefixes to MCP server names (heartbeat names).
 const SERVER_MAP = {
   'dotclaude': 'dotclaude',
-  'dotclaude-completion': 'dotclaude-completion',
-  'dotclaude-ship': 'dotclaude-ship',
-  'dotclaude-issues': 'dotclaude-issues',
 };
 
 const PLUGIN_ROOT = (process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..')).split(path.sep).join('/');

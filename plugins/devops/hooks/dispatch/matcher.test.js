@@ -13,7 +13,7 @@ describe("Claude Code matcher semantics", () => {
     expect(matches("BashOutput", "Bash|PowerShell")).toBe(false);
     expect(matches("Agent", "Agent")).toBe(true);
     // "mcp__plugin_devops_" has only word characters → exact, matches no real tool
-    expect(matches("mcp__plugin_devops_dotclaude-ship__ship_release", "mcp__plugin_devops_")).toBe(false);
+    expect(matches("mcp__plugin_devops_dotclaude__ship_release", "mcp__plugin_devops_")).toBe(false);
   });
   test("legacy aliases: exact Task matches Agent; regex sees the legacy name too", () => {
     expect(matches("Agent", "Task")).toBe(true);

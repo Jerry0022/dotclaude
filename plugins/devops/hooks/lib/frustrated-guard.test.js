@@ -123,7 +123,7 @@ describe("decide while armed", () => {
 
   test("Workflow is always denied; mutating ship/GitHub MCP tools are denied; reads and other tools pass", () => {
     expect(g.decide(hook("Workflow", { script: "x" }), opts).block).toBe(true);
-    expect(g.decide(hook("mcp__plugin_devops_dotclaude-ship__ship_release", {}), opts).block).toBe(true);
+    expect(g.decide(hook("mcp__plugin_devops_dotclaude__ship_release", {}), opts).block).toBe(true);
     expect(g.decide(hook("mcp__github__create_pull_request", {}), opts).block).toBe(true);
     expect(g.decide(hook("mcp__github__get_issue", {}), opts).block).toBe(false);
     expect(g.decide(hook("Read", { file_path: "src/a.js" }), opts).block).toBe(false);

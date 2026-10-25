@@ -5,7 +5,7 @@
  * @plugin devops
  * @description THE devops MCP server (`dotclaude`) — one process per session
  *   for every devops tool. Until 0.15.0 there were three servers per session
- *   (dotclaude-completion, dotclaude-ship, dotclaude-issues, ~85-98 MB each);
+ *   (three separate servers, ~85-98 MB each);
  *   the ship tools (ship/server.js) and match_issues (issues/server.js) are
  *   now tool groups of this server, each imported on its own after the card
  *   tools, so a broken group drops its own tools and nothing else.

@@ -49,8 +49,8 @@ describe("mcp-server stdout discipline", () => {
   test("the walk finds the real server modules (guards against an empty pass)", () => {
     const rel = files.map((f) => path.relative(HERE, f).split(path.sep).join("/"));
     expect(rel).toContain("index.js");
-    expect(rel).toContain("ship/index.js");
-    expect(rel).toContain("issues/index.js");
+    expect(rel).toContain("ship/server.js");
+    expect(rel).toContain("issues/server.js");
     expect(files.length).toBeGreaterThan(10);
   });
 
