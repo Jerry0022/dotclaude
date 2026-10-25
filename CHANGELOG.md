@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.316.0] — 2026-10-25
+## [0.317.0] — 2026-10-25
 
 On a concept page the eye now hides everything the page adds to the design. From round 2 the pins say what improved.
 
