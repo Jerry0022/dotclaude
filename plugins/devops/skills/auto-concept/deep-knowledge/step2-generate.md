@@ -154,6 +154,27 @@ column of four parts; only part 2 scrolls, parts 1, 3 and 4 are pinned):**
 The iteration tab bar must NEVER live inside the left-hand content area.
 The content area is reserved for the actual concept.
 
+### Card content — readable without the sources
+
+The reader decides on the page, not in the specs behind it. So:
+
+- **Every decision card explains itself:** which part of the system it
+  belongs to (component, file, hook), the open question in one or two
+  sentences, the options that were weighed (at least the rejected one), and
+  the recommendation **with its reason** and what choosing otherwise costs.
+  A card that only names the recommended outcome ("Shadow-Log in `~/.claude/`,
+  ~300 lines") is not decidable. Group many related decisions by component,
+  with a short header per group, instead of a flat D1…Dn list.
+- **A page that summarises analysis work** (research issues, a spec set, a
+  run's results) opens with what the thing is, end to end, and carries the
+  **evaluation itself** before the cards: per building block what it brings,
+  what it costs or risks, and the verdict (build now / later / not) with the
+  evidence behind it. Commit hashes and file names are evidence, never the
+  content.
+- Why: a backlog-result page (2026-10-25) listed 41 decisions as one-line
+  outcomes with commits; the plugin developer could neither see the analysis
+  the issues had asked for nor tell what each decision was about.
+
 ### Interactive Elements (per variant)
 - **Toggles/checkboxes**: For binary decisions (accept/reject, include/exclude)
 - **Selectors/sliders**: For prioritization, weighting, or rating

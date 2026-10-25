@@ -446,9 +446,13 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
    ends in things for the user to decide — research/concept issues whose specs
    carry open questions or a go/no-go, a proposed issue split, competing
    recommendations across items — start `/auto-concept` with the run's results
-   as its subject (one card per item: outcome, evidence, the open decisions with
-   the recommended option first; plus one card for the proposed follow-up
-   issues), right after the static report. The HTML report and the completion
+   as its subject, right after the static report. Build the subject from the
+   specs' content, not from the report: an intro to what was worked on, the
+   evaluation the issues asked for (what is worth building, what it brings,
+   why or why not), then the open decisions grouped by component — each with
+   its context, the options and the recommendation with its reason (auto-concept
+   `step2-generate.md` § Card content — readable without the sources) — plus
+   one card per proposed follow-up issue. The HTML report and the completion
    card summarise; they never stand in for the decisions. Under "Autonom" the
    page waits for the user's return. Why: a backlog of 8 research/epic issues
    (2026-10-25) ended with 16 open decisions and 10 proposed issues delivered
