@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.team.changelog
- * @version 0.3.1
+ * @version 0.4.0
  * @event SessionStart
  * @plugin devops
  * @description Show a summary of changes made by other contributors on remote main
@@ -51,6 +51,10 @@ function runOk(cmd, cwd, timeout = 15000) {
 // worktree session in the repo root (see hook-input sessionCwd).
 // Only as the hook entry point: imported by a test, a sync stdin read blocks forever.
 const cwd = require.main === module ? require('../lib/hook-input').sessionCwd().cwd : process.cwd();
+
+// Off the critical path (fetch + gh api = seconds of network at SessionStart).
+// Only as the hook entry point: a test importing this file must not spawn.
+if (require.main === module && require('../lib/deferred-results').deferOrRun({ name: 'team-changelog', script: __filename })) process.exit(0);
 
 // --- Persistent "last shown" timestamp (worktree-independent) ---
 const remoteUrl = run('git remote get-url origin', cwd);

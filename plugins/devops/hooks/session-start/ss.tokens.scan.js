@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 /**
  * @hook ss.tokens.scan
- * @version 0.2.1
+ * @version 0.3.0
  * @event SessionStart
  * @plugin devops
  * @description Scan project for expensive files and update config for the
  *   pre.tokens.guard hook. Detects the user's Claude plan and writes
  *   plan-specific thresholds. Identifies the top 20 largest source files.
+ *   Runs detached (lib/deferred-results): the repo walk never holds SessionStart;
+ *   its only output was a stderr note, so nothing is delivered later.
  */
 
 require('../lib/plugin-guard');
@@ -112,6 +114,10 @@ try {
   const stat = fs.statSync(CONFIG_PATH);
   if (Date.now() - stat.mtimeMs < COOLDOWN_MS) process.exit(0);
 } catch {}
+
+// Off the critical path: the walk timed out 22x in the 2026-10 audit and its
+// output (stderr only) is informational. The worker re-runs this script.
+if (require.main === module && require('../lib/deferred-results').deferOrRun({ name: 'tokens-scan', script: __filename })) process.exit(0);
 
 // Main
 const cfg = loadConfig();
