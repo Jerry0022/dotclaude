@@ -274,7 +274,30 @@ function isShipIntent(prompt) {
   return parseShipRequest(prompt).ship;
 }
 
+/**
+ * Work first, ship last: "<work>, dann ship" / "<work> and then ship". The
+ * ship is still asked for, but only after the named work — a red card's Fix
+ * button ends this way (2026-10-25), and so does the user's own style
+ * ("fix den error und dann ship"). Plain "ship", "ship it" and an "und dann
+ * ship" with nothing before it are not deferred.
+ */
+const DEFERRED_SHIP_RE = /\S.*?(?:,|\s)\s*(?:und\s+|and\s+)?(?:dann|danach|anschlie(?:ß|ss)end|then|afterwards)\s+(?:erneut\s+|nochmal\s+)?(?:ship|shippen)(?:\s+(?:it|again|es))?\s*[.!]*\s*$/i;
+const BARE_THEN_SHIP_RE = /^\s*(?:und\s+|and\s+)?(?:dann|danach|then)\s/i;
+
+/**
+ * True when the prompt asks to ship only AFTER other work it names.
+ *
+ * @param {string} prompt
+ * @returns {boolean}
+ */
+function isDeferredShip(prompt) {
+  const raw = String(prompt || '');
+  if (!isShipIntent(raw) || parseShipRequest(raw).promote) return false;
+  if (BARE_THEN_SHIP_RE.test(raw)) return false;
+  return DEFERRED_SHIP_RE.test(raw.trim());
+}
+
 module.exports = {
   SHIP_SLASH, PROMOTE_SLASH, SHIP_KEYWORDS, KEYWORD_MAX_CHARS, CHANNELS,
-  isShipIntent, parseShipRequest,
+  isShipIntent, isDeferredShip, parseShipRequest,
 };

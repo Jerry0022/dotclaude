@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.307.1] — 2026-10-25
+
+The session title now says ❓ Question whenever a call waits for you, not only for an AskUserQuestion. A red card's Fix button ends in a ship.
+
+Why: a Backlog run waited on a `start_session` approval card with ⏳ in the sidebar, as if Claude were still working. The Fix button said "then render the card again", although the only other way out of that card row is shipping.
+
+### Fixed
+- **Question title for every blocking call.** `pre.ask.title` / `post.ask.title` (0.2.0) now match `AskUserQuestion`, `ExitPlanMode` and `mcp__ccd_session__start_session` (all initiations except `own_initiative`, and not a start by `proposal_id`). The rule lives in `lib/ask-title.js` `isBlockingCall`.
+- **Fix button ends in ship.** For red findings the button now ends in "dann ship" / "then ship", for a blocker in "dann erneut ship" / "then ship again". `prompt.ship.detect` reads a "<work>, dann ship" prompt as a deferred ship (`lib/ship-intent.js` `isDeferredShip`): the work comes first and do-ship runs last. Until then `prompt.flow.title-work` keeps the work title instead of switching to Shipping.
+- **Load-proof hook tests.** Three tests failed only on a machine under heavy load. Spawned cleanup-gate runs now get `DEVOPS_GIT_TIMEOUT_MS=30000` (`lib/git-timeout.js` never goes below 5000). The parse ceilings rise to 1000 ms, and RT3-R4 may run for 120 s.
+
 ## [0.307.0] — 2026-10-25
 
 The design overview, the notes dock and the tips were reworked from a full round of feedback on an example concept.

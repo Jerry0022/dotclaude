@@ -546,6 +546,7 @@ describe("RT3: red-team pass 3 (pre)", () => {
   const withWork = (over = {}) => { armPrompt({ ship: "auto", passes: [], ...over }); ev({ k: "skill", name: "auto-agents" }); ev({ k: "edit" }); };
   const MERGE = "mcp__plugin_github_github__merge_pull_request";
 
+  // Seven spawned hook runs plus a checkout: 30 s ran out on a loaded machine (2026-10-25).
   test("RT3-R4: a push of the current branch is a release only on main / master under ship: auto", () => {
     withWork();
     for (const command of ["git push", "git push origin HEAD", "git push -u origin HEAD"]) {
@@ -556,7 +557,7 @@ describe("RT3: red-team pass 3 (pre)", () => {
     git("checkout", "-q", "-b", "feat/x");
     expect(run("Bash", { command: "git push -u origin HEAD" }).code).toBe(0);
     expect(run("Bash", { command: "git push" }).code).toBe(0);
-  });
+  }, 120_000);
 
   test("RT3-R4: pushHead on main is not gated under ship: manual; do-ship clears it under auto", () => {
     withWork({ ship: "manual" });

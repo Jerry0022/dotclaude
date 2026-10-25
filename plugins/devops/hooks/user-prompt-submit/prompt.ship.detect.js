@@ -38,7 +38,7 @@
 // A lib that fails to load (half-written during a plugin update, version skew)
 // makes this hook a silent no-op instead of a hook error on every prompt
 // (AUD-028).
-let gitOut, parseShipRequest, cardDelivered, deliveredCardText, lastAssistantText, isCardWidgetCall,
+let gitOut, parseShipRequest, isDeferredShip, cardDelivered, deliveredCardText, lastAssistantText, isCardWidgetCall,
   safeReadTranscript, CARD_MARKER, isPromptEntry, lastUserPromptText,
   hasUnshippedWork, currentContextTokens, shouldDelegate, shipDelegateInstruction, shipResumeInstruction, shipResumeFor, cleanupLeftoverFor, cleanupLeftoverInstruction, isContinuation;
 try {
@@ -46,7 +46,7 @@ try {
   ({ gitOut } = require('../lib/git-timeout'));
   ({ cardDelivered, deliveredCardText, lastAssistantText, isCardWidgetCall, safeReadTranscript, CARD_MARKER } = require('../lib/card-guard'));
   ({ isPromptEntry, lastUserPromptText } = require('../lib/skill-invocations'));
-  ({ parseShipRequest } = require('../lib/ship-intent'));
+  ({ parseShipRequest, isDeferredShip } = require('../lib/ship-intent'));
   ({ hasUnshippedWork } = require('../lib/ship-unshipped'));
   ({ currentContextTokens } = require('../lib/context-size'));
   ({ shouldDelegate, shipDelegateInstruction, shipResumeInstruction } = require('../lib/ship-delegate'));
@@ -246,9 +246,15 @@ process.stdin.on('end', () => {
   } else {
     promoteNote = 'A promotion without a channel: do-ship asks which promotion (skills/do-ship/modes/promote.md).';
   }
+  // "<work>, dann ship": the work first, the ship as the turn's last step —
+  // a red card's Fix button ends this way (2026-10-25).
+  const deferred = isDirectShipIntent && isDeferredShip(hook.prompt || hook.user_message || hook.message || '');
   let mandate = promoteArgs
     ? [`MANDATORY: Use Skill("devops:do-ship") with args "${promoteArgs}".`, promoteNote]
-    : ['MANDATORY: Use Skill("devops:do-ship") to execute the full shipping pipeline.'];
+    : deferred
+      ? ['MANDATORY, in this order: first do the work the prompt names before the ship (fix, tests, edits) until it is done and green;',
+        'then use Skill("devops:do-ship") to execute the full shipping pipeline. Never ship before that work — and still red after an honest fix → no ship, a card naming what stays red.']
+      : ['MANDATORY: Use Skill("devops:do-ship") to execute the full shipping pipeline.'];
 
   // --- Large context: the ship runs in a fresh-context subagent
   // (lib/ship-delegate.js has the numbers and the why). Only user prompts
