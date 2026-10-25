@@ -5,8 +5,8 @@ Live token usage (5h + weekly windows, burn rate) for the completion card's batt
 ## How it reaches you
 
 Not a skill any more. The **automatic path is the MCP tool**
-`mcp__plugin_devops_dotclaude-completion__get_usage` (server
-`dotclaude-completion`): it reads the fresh statusLine file first, falls back
+`mcp__plugin_devops_dotclaude__get_usage` (server
+`dotclaude`): it reads the fresh statusLine file first, falls back
 to the headless fetch, never opens a login window, and returns percentages,
 reset times, deltas, staleness (`cached` / `ageMinutes` / `stale`), a
 pre-rendered meter and the delegation `budget` class.
@@ -50,7 +50,7 @@ usage schema with **no browser and no extra Claude turn**. If the file's
 skip the Edge scrape entirely. Only when it is stale/absent (pre-first-API
 response, an unsupported login, `weeklySonnet` needed, or a host without
 the statusLine writer) fall through to the Edge scraper below. The
-`dotclaude-completion` MCP server applies this same warm-read-first logic
+`dotclaude` MCP server applies this same warm-read-first logic
 automatically in `get_usage` / `render_completion_card`.
 
 **Automatic path is zero-interaction.** The MCP fallback always runs the scraper

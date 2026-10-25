@@ -318,8 +318,8 @@ describe("decideAction — relay gate", () => {
     // The guard never compares payloads — the second render's markdown is the
     // one relayed, and its marker is all Gate 1b asks for.
     const transcript = jsonl(
-      assistantMsg({ type: "tool_use", name: "mcp__plugin_devops_dotclaude-completion__render_completion_card", input: {} }),
-      assistantMsg({ type: "tool_use", name: "mcp__plugin_devops_dotclaude-completion__render_completion_card", input: {} }),
+      assistantMsg({ type: "tool_use", name: "mcp__plugin_devops_dotclaude__render_completion_card", input: {} }),
+      assistantMsg({ type: "tool_use", name: "mcp__plugin_devops_dotclaude__render_completion_card", input: {} }),
       assistantMsg({ type: "text", text: `<!-- ${CARD_MARKER} Shipped v2 ${CARD_MARKER} -->` }),
     );
     const d = decideAction({ ...base, cardRendered: true, cardRelayed: cardDelivered(transcript) });
@@ -328,8 +328,8 @@ describe("decideAction — relay gate", () => {
 
   test("render followed by a tool call and no relay → marker missing → BLOCK", () => {
     const transcript = jsonl(
-      assistantMsg({ type: "tool_use", name: "mcp__plugin_devops_dotclaude-completion__render_completion_card", input: {} }),
-      assistantMsg({ type: "tool_use", name: "mcp__plugin_devops_dotclaude-ship__ship_release", input: {} }),
+      assistantMsg({ type: "tool_use", name: "mcp__plugin_devops_dotclaude__render_completion_card", input: {} }),
+      assistantMsg({ type: "tool_use", name: "mcp__plugin_devops_dotclaude__ship_release", input: {} }),
       assistantMsg({ type: "text", text: "Released." }),
     );
     const d = decideAction({ ...base, cardRendered: true, cardRelayed: cardDelivered(transcript) });
@@ -363,7 +363,7 @@ describe("showWidgetCalledThisTurn", () => {
 
   test("a call from an EARLIER turn does not count", () => {
     const t = jsonl(userMsg("first"), toolUse("mcp__visualize__show_widget"), toolResult(),
-      userMsg("second"), toolUse("mcp__plugin_devops_dotclaude-completion__render_completion_card"), toolResult());
+      userMsg("second"), toolUse("mcp__plugin_devops_dotclaude__render_completion_card"), toolResult());
     expect(showWidgetCalledThisTurn(t)).toBe(false);
   });
 
@@ -1332,7 +1332,7 @@ describe("buildTitleStatusWordReason / buildResultLinesReason / buildPointsReaso
 });
 
 describe("cardDelivered / deliveredCardText — the card shown after the last render", () => {
-  const render = assistantMsg({ type: "tool_use", id: "r1", name: "mcp__plugin_devops_dotclaude-completion__render_completion_card", input: {} });
+  const render = assistantMsg({ type: "tool_use", id: "r1", name: "mcp__plugin_devops_dotclaude__render_completion_card", input: {} });
   const renderResult = { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "r1", content: "card" }] } };
 
   test("terminal: the ✨ marker text after the render counts", () => {
@@ -1513,7 +1513,7 @@ describe("buildBlockReason", () => {
 
   test("contains the MCP tool name, points at the tool description for the variant rules, and keeps the offline variant list", () => {
     const r = buildBlockReason();
-    expect(r).toMatch(/mcp__plugin_devops_dotclaude-completion__render_completion_card/);
+    expect(r).toMatch(/mcp__plugin_devops_dotclaude__render_completion_card/);
     expect(r).toContain("render_completion_card tool description");
     expect(r).toMatch(/ship-successful/);
     expect(r).toMatch(/ship-blocked/);
@@ -1563,7 +1563,7 @@ describe("buildBlockReason", () => {
 // showed it under a title of its own, the guard never saw a card and every
 // re-show stacked another identical one (four cards in one turn).
 describe("card widget recognized by its marker, not only its title (#713)", () => {
-  const render = assistantMsg({ type: "tool_use", id: "r1", name: "mcp__plugin_devops_dotclaude-completion__render_completion_card", input: {} });
+  const render = assistantMsg({ type: "tool_use", id: "r1", name: "mcp__plugin_devops_dotclaude__render_completion_card", input: {} });
   const renderResult = { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "r1", content: "card" }] } };
   // The shape card-widget.js renders: #dc-card mount point + #dc-card-data JSON.
   const cardHtml = '<details><summary>Lines</summary></details>\n<div id="dc-card"><h3 class="card-title" style="margin:0">🚀 v0.9.0 Lobby Harbour</h3></div>\n<script type="application/json" id="dc-card-data">{"ti":"x"}</script>';

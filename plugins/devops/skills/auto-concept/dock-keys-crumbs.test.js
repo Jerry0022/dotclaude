@@ -218,6 +218,27 @@ describe("5 · no Ctrl-pin hint while the ☰ panel is open", () => {
   }, BOOT_TIMEOUT);
 });
 
+describe("7 · a field never glows when the user clicked elsewhere", () => {
+  test("a click on the design releases the focused dock field; a click on a button does not", async () => {
+    const { window, document } = await boot();
+    window.showDesign("d2");
+    window.openDock();
+    const ta = [...document.querySelectorAll("#feedback-dock textarea")].find((t) => !t.closest("[hidden]"));
+    ta.focus();
+    expect(document.activeElement).toBe(ta);
+    const design = document.querySelector("section[data-design='d2'] section[data-screen]");
+    design.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true, cancelable: true }));
+    expect(document.activeElement).not.toBe(ta);
+    ta.focus();
+    document.getElementById("feedback-toggle").dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(ta);
+  }, BOOT_TIMEOUT);
+  test("the eye counter wears the notes FAB's blue, never purple", () => {
+    expect(css()).toMatch(/\.anno-eye-count \{[^}]*background: var\(--accent-color/);
+    expect(css()).not.toContain("#8957e5");
+  });
+});
+
 describe("6 · one divider above the panel foot", () => {
   test("the screen nav's own bottom border is neutralised inside the scroll box", () => {
     const c = css();

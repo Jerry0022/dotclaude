@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * @hook pre.run.contract
- * @version 0.5.0
+ * @version 0.5.1
  * @event PreToolUse
  * @plugin devops
- * @matcher Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card
+ * @matcher Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude__ship_release|mcp__plugin_devops_dotclaude__render_completion_card|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card|mcp__.*__merge_pull_request
  * @description Refuse (exit 2) the tool call that would walk past an open
  *   obligation of the do-run RUN CONTRACT, or past a pending do-batch
  *   hand-off. Spec: docs/superpowers/specs/2026-09-24-run-contract-design.md
@@ -72,7 +72,7 @@ function onMainBranch(root, C, budget, fallbackTimeoutMs) {
 
 /** The gates this call hits: {gates:[], batch:boolean, closes, base}. */
 function classify(hook, root, cwd, C, budget) {
-  const tool = hook.tool_name || '';
+  const tool = C.canonicalToolName(hook.tool_name || '');
   const input = C.toolInput(hook);
   if (C.EDIT_TOOLS.has(tool)) {
     return C.isGatedEdit(tool, input, root, cwd) ? { gates: ['edit'], batch: true } : null;

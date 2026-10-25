@@ -2,7 +2,7 @@
  * Claude Code's machine-wide MCP failure cache.
  *
  * Claude Code records a failed MCP connect in ~/.claude/mcp-needs-auth-cache.json,
- * keyed by server name ("plugin:devops:dotclaude-ship": { timestamp, id }), and
+ * keyed by server name ("plugin:devops:dotclaude": { timestamp, id }), and
  * skips that server in EVERY session that starts within the next 15 minutes
  * ("Skipping connection (recent failure cached …)"). One session's
  * CONNECT_TIMEOUT under start-up load therefore takes ship/completion/issues
@@ -64,7 +64,7 @@ function clearPluginEntries(file, now = Date.now()) {
 
   // Atomic replace: a half-written file would make Claude Code drop the whole
   // cache (or worse, fail to parse it) for every other server too.
-  const tmp = `${file}.${process.pid}.tmp`;
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data));
   fs.renameSync(tmp, file);
   return { cleared, active, activeEntries };

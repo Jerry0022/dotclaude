@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.mcp.health
- * @version 0.3.1
+ * @version 0.4.0
  * @event PreToolUse
  * @plugin devops
  * @description Detects dead or stale MCP servers before tool calls fail cryptically.
@@ -42,6 +42,15 @@
  *      DOWN. Dead per-process evidence without a dead legacy file is treated
  *      as inconclusive leftover — fail open with a warning instead of
  *      blocking a live pre-0.3.0 server.
+ *
+ *   Since v0.309 there is ONE devops server, `dotclaude` (tool prefix
+ *   mcp__plugin_devops_dotclaude__). Its tools map to that server; the three
+ *   pre-merge prefixes (dotclaude-completion / -ship / -issues) still map to
+ *   their own heartbeat names for one release, for a session that is still
+ *   running the old servers. Every block names the exact recovery step: the
+ *   offline card renderer (mcp-server/index.js --render-card) and the offline
+ *   ship CLI (mcp-server/ship/cli.js) work without the server; the server
+ *   itself only comes back with a new session.
  */
 
 require('../lib/plugin-guard');
@@ -53,15 +62,41 @@ const { heartbeatState } = require('../lib/mcp-heartbeat');
 const home = process.env.HOME || process.env.USERPROFILE || '';
 const sentinelFile = path.join(home, '.claude', 'plugins', '.mcp-stale.json');
 
-// Map tool-name prefixes to MCP server names
+// Map tool-name prefixes to MCP server names (heartbeat names). The legacy
+// keys are the pre-v0.309 servers, kept one release for still-running sessions.
 const SERVER_MAP = {
+  'dotclaude': 'dotclaude',
   'dotclaude-completion': 'dotclaude-completion',
-  'dotclaude-ship':       'dotclaude-ship',
-  'dotclaude-issues':     'dotclaude-issues',
+  'dotclaude-ship': 'dotclaude-ship',
+  'dotclaude-issues': 'dotclaude-issues',
 };
 
+const PLUGIN_ROOT = (process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..')).split(path.sep).join('/');
+
+/** The exact way to keep working while the server is gone, for the tool about to be called. */
+function recoveryLines(toolName) {
+  const tool = toolName.split('__').pop() || '';
+  const lines = [];
+  if (tool === 'render_completion_card') {
+    lines.push('Now: render the card offline — write the same arguments as JSON to a file, then');
+    lines.push(`  node "${PLUGIN_ROOT}/mcp-server/index.js" --render-card <payload.json>`);
+    lines.push('and relay its stdout verbatim.');
+  } else if (tool.startsWith('ship_')) {
+    lines.push('Now: run the same step through the offline ship CLI (same handlers,');
+    lines.push('same gates, same checkpoint — a resumed ship continues where it stopped):');
+    lines.push(`  node "${PLUGIN_ROOT}/mcp-server/ship/cli.js" ${tool} <params.json>`);
+  } else if (tool === 'match_issues') {
+    lines.push('Now: skip issue matching for this prompt (a hint, not a gate).');
+  }
+  if (lines.length) lines.push('');
+  lines.push('Then: start a new Claude Code session — MCP servers are only');
+  lines.push('spawned on session init and cannot be restarted mid-conversation.');
+  lines.push('Crash details, if any: <TEMP>/dotclaude-mcp-crash.log');
+  return lines;
+}
+
 function resolveServer(toolName) {
-  // tool names look like: mcp__plugin_devops_dotclaude-ship__ship_build
+  // tool names look like: mcp__plugin_devops_dotclaude__ship_build
   // extract the server key between "plugin_devops_" and the next "__"
   const match = toolName.match(/plugin_devops_([a-z0-9-]+)__/);
   if (!match) return null;
@@ -128,9 +163,7 @@ process.stdin.on('end', () => {
       console.error('installPath, which has been replaced. File reads will');
       console.error('fail or return stale data.');
       console.error('');
-      console.error('Fix: Start a new Claude Code session. MCP servers are');
-      console.error('only spawned on session init — they cannot be');
-      console.error('reconnected mid-conversation.');
+      for (const l of recoveryLines(toolName)) console.error(l);
       console.error(line);
       process.exit(2);
     }
@@ -165,11 +198,10 @@ process.stdin.on('end', () => {
   console.error(`⚠️  MCP SERVER DOWN — ${serverName}`);
   console.error(line);
   console.error(`PID ${hb.dead.map(d => d.pid).filter(Boolean).join(', ') || '?'} no longer running.`);
-  console.error(`The server died (likely due to a hard PC shutdown).`);
+  console.error('The server process ended (hard PC shutdown, or a crash');
+  console.error('it could not survive).');
   console.error('');
-  console.error('Fix: Start a new Claude Code session.');
-  console.error('MCP servers are started on session init and cannot');
-  console.error('be restarted mid-conversation.');
+  for (const l of recoveryLines(toolName)) console.error(l);
   console.error(line);
 
   // Clean up the stale PID files so the message doesn't repeat after the user

@@ -114,9 +114,14 @@ function hookDescription(file) {
   return text.length > 88 ? text.slice(0, 85).trimEnd() + "…" : text;
 }
 
-/** Parse hooks.json → { SessionStart: [{id, desc}], ... } excluding deprecated. */
+/**
+ * Parse the hook roster → { SessionStart: [{id, desc}], ... } excluding deprecated.
+ * The roster is hooks/dispatch/manifest.json (hooks.json registers one
+ * dispatcher per event); a plugin without a dispatcher keeps hooks.json.
+ */
 function readHooks() {
-  const hooksJson = JSON.parse(readFileSync(join(pluginDir, "hooks", "hooks.json"), "utf8"));
+  const manifest = join(pluginDir, "hooks", "dispatch", "manifest.json");
+  const hooksJson = JSON.parse(readFileSync(existsSync(manifest) ? manifest : join(pluginDir, "hooks", "hooks.json"), "utf8"));
   const byEvent = {};
   for (const ev of EVENTS) byEvent[ev.name] = [];
 

@@ -39,9 +39,7 @@ allowed-tools: >-
   mcp__computer-use__*, mcp__claude-in-chrome__*, mcp__Claude_in_Chrome__*,
   mcp__Claude_Preview__*, mcp__Claude_Browser__*,
   mcp__plugin_playwright_playwright__*,
-  mcp__plugin_devops_dotclaude-completion__*,
-  mcp__plugin_devops_dotclaude-ship__*,
-  mcp__plugin_devops_dotclaude-issues__*,
+  mcp__plugin_devops_dotclaude__*,
   mcp__ccd_session_mgmt__*
 ---
 

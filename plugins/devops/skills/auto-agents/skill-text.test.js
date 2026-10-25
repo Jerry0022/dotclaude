@@ -190,7 +190,7 @@ describe("auto-agents arguments — the mode comes from the caller", () => {
   });
 
   it("reads plan and usage through get_usage", () => {
-    expect(step1).toContain("mcp__plugin_devops_dotclaude-completion__get_usage");
+    expect(step1).toContain("mcp__plugin_devops_dotclaude__get_usage");
     expect(step1).toMatch(/budget\.cls/);
   });
 });

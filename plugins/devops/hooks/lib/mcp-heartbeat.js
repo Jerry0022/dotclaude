@@ -1,6 +1,6 @@
 /**
  * @module mcp-heartbeat
- * @version 0.3.1
+ * @version 0.4.0
  * @description Best-effort liveness probe for the plugin's MCP servers, read
  *   from the PID files each server writes on boot (mcp-server/lib/heartbeat.js).
  *
@@ -126,14 +126,24 @@ function heartbeatState(serverName, opts) {
 }
 
 /**
- * @param {string} serverName — e.g. 'dotclaude-completion'
+ * @param {string} serverName — e.g. 'dotclaude'
  * @returns {boolean} true when any heartbeat file names a process that answers.
+ *   For the single server 'dotclaude' a live pre-merge server of a still-running
+ *   older session ('dotclaude-completion' / '-ship' / '-issues') also counts —
+ *   one release of tolerance (LEGACY_SERVERS), so no hook calls it dead.
  */
 function isMcpServerAlive(serverName) {
-  return heartbeats(serverName, { stopAtLive: true }).some((h) => h.pid && isProcessAlive(h.pid));
+  const live = (name) => heartbeats(name, { stopAtLive: true }).some((h) => h.pid && isProcessAlive(h.pid));
+  if (live(serverName)) return true;
+  return serverName === SERVER_NAME && LEGACY_SERVERS.some(live);
 }
 
+/** The one devops MCP server (mcp-server/index.js, .mcp.json key). */
+const SERVER_NAME = 'dotclaude';
+/** The three servers it replaced in v0.309 — accepted for one release. */
+const LEGACY_SERVERS = ['dotclaude-completion', 'dotclaude-ship', 'dotclaude-issues'];
+
 module.exports = {
-  PREFIX, HEARTBEAT_DIR, pidFileFor, processPidFileFor, isProcessAlive,
+  PREFIX, HEARTBEAT_DIR, SERVER_NAME, LEGACY_SERVERS, pidFileFor, processPidFileFor, isProcessAlive,
   heartbeats, heartbeatState, isMcpServerAlive,
 };

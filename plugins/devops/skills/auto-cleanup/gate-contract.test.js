@@ -13,7 +13,8 @@ const read = (...p) => fs.readFileSync(path.join(__dirname, ...p), "utf8");
 const flat = (s) => s.replace(/\n>[ \t]?/g, "\n").replace(/\s+/g, " ");
 const SKILL = read("SKILL.md");
 const EXEC = read("deep-knowledge", "execution.md");
-const HOOKS = JSON.parse(read("..", "..", "hooks", "hooks.json"));
+// the per-hook roster (hooks.json registers one dispatcher per event)
+const HOOKS = JSON.parse(read("..", "..", "hooks", "dispatch", "manifest.json"));
 
 function section(text, start, end) {
   const a = text.indexOf(start);

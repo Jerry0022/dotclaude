@@ -527,7 +527,7 @@ function claimImages(cwd, images, at) {
     captured[img.file] = dest;
     return dest;
   });
-  const tmp = `${capturedPath(cwd)}.${process.pid}.tmp`;
+  const tmp = `${capturedPath(cwd)}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(captured, null, 2), 'utf8');
   fs.renameSync(tmp, capturedPath(cwd));
   return copies;
@@ -633,7 +633,7 @@ function pruneAssets(cwd, { maxAgeDays = ASSET_MAX_AGE_DAYS, now = Date.now() } 
     const captured = readCaptured(cwd);
     // A truthy marker, not null: the source must still count as taken.
     for (const [src, copy] of Object.entries(captured)) if (gone.has(copy)) captured[src] = 'pruned';
-    const tmp = `${capturedPath(cwd)}.${process.pid}.tmp`;
+    const tmp = `${capturedPath(cwd)}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(captured, null, 2), 'utf8');
     fs.renameSync(tmp, capturedPath(cwd));
   }
@@ -666,7 +666,7 @@ function addNoteLines(cwd, at, lines) {
   const end = next < 0 ? raw.length : start + header.length + next;
   const body = raw.slice(0, end).replace(/\s+$/, '');
   const out = `${body}${eol}${lines.join(eol)}${eol}${raw.slice(end).replace(/^\s*/, next < 0 ? '' : eol)}`;
-  const tmp = `${file}.${process.pid}.tmp`;
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
   fs.writeFileSync(tmp, out, 'utf8');
   fs.renameSync(tmp, file);
   return true;
@@ -730,7 +730,7 @@ function rescueTranscriptImages(cwd, transcriptPath) {
     return { at: p.at, text: p.text, files };
   });
   if (changed) {
-    const tmp = `${capturedPath(cwd)}.${process.pid}.tmp`;
+    const tmp = `${capturedPath(cwd)}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(captured, null, 2), 'utf8');
     fs.renameSync(tmp, capturedPath(cwd));
   }

@@ -21,12 +21,12 @@ triggers:
   en: ["ship it", "push and merge", "release", "promote", "promotion", "channel release", "promote to beta", "promote to stable"]
   de: ["auf stable heben"]
 argument-hint: "[beta|stable|promote] [<version>] [--cwd <path>] [--keep] [--queued] [--delegated] [--card-data] [--inline]"
-allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Bash(bash *), Bash(nohup *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, Agent, SendMessage, TaskList, TaskCreate, TaskUpdate, Skill, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title, mcp__ccd_session_mgmt__archive_session
+allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Bash(bash *), Bash(nohup *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, Agent, SendMessage, TaskList, TaskCreate, TaskUpdate, Skill, mcp__plugin_devops_dotclaude__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title, mcp__ccd_session_mgmt__archive_session
 ---
 
 # Ship
 
-Ship completed work via PR using the `dotclaude-ship` MCP server tools. Supports two modes: **direct** (branch → main) and **intermediate** (sub-branch → feature branch).
+Ship completed work via PR using the `dotclaude` MCP server tools. Supports two modes: **direct** (branch → main) and **intermediate** (sub-branch → feature branch).
 
 > **`cwd` is required on every MCP tool call.** The ship MCP server runs in the
 > plugin directory, not the target repo. Every `ship_*` tool call MUST include `cwd`
@@ -155,11 +155,11 @@ Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — the 
 
 Ship tools are often **deferred** (named in the deferred-tools list, schema not loaded); a call before the schema is loaded fails with `InputValidationError` (`{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`). **Before Step 1**, load all ship tool schemas in ONE `ToolSearch` call:
 
-`ToolSearch({ query: "select:mcp__plugin_devops_dotclaude-ship__ship_preflight,mcp__plugin_devops_dotclaude-ship__ship_build,mcp__plugin_devops_dotclaude-ship__ship_version_bump,mcp__plugin_devops_dotclaude-ship__ship_release,mcp__plugin_devops_dotclaude-ship__ship_cleanup,mcp__plugin_devops_dotclaude-ship__ship_hygiene", max_results: 6 })`
+`ToolSearch({ query: "select:mcp__plugin_devops_dotclaude__ship_preflight,mcp__plugin_devops_dotclaude__ship_build,mcp__plugin_devops_dotclaude__ship_version_bump,mcp__plugin_devops_dotclaude__ship_release,mcp__plugin_devops_dotclaude__ship_cleanup,mcp__plugin_devops_dotclaude__ship_hygiene", max_results: 6 })`
 
 If the `ToolSearch` result contains all six `<function>` entries, proceed. If ANY are missing from the returned block, the server is genuinely not registered — do NOT improvise a ship with `gh pr create` (the guard hook blocks it) or the tool at hand. The reminder shows the server **failed to connect** (`Connection closed`) → read `deep-knowledge/offline-cli.md` § Server failed to connect and run its cache diagnosis first. It says `Skipping connection (recent failure cached …)` or `CONNECT_TIMEOUT` and `{PLUGIN_ROOT}/mcp-server/ship/cli.js` exists → read `deep-knowledge/offline-cli.md` § Offline ship CLI and run the same pipeline through `mcp-server/ship/cli.js` — the pipeline, not a manual ship.
 
-**Tools absent and not repairable → the manual checklist (#567).** This check runs here, before Step 1 and before any git or GitHub action — fail closed, never on a failed `ship_preflight` halfway through. The ship tools are absent when `mcp__plugin_devops_dotclaude-ship__*` is in neither the loaded nor the deferred tool list, `ToolSearch` finds none of them and the offline CLI above is not on disk either (a claude.ai cloud session without the plugin's MCP servers is the typical case). Announce the switch in one line with the reason, then read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/manual-ship.md` and follow it instead of Steps 1–5; its tag step points at `release-flow.md` § owner hand-off. Deferred tools are never absent — load them and run the pipeline.
+**Tools absent and not repairable → the manual checklist (#567).** This check runs here, before Step 1 and before any git or GitHub action — fail closed, never on a failed `ship_preflight` halfway through. The ship tools are absent when `mcp__plugin_devops_dotclaude__*` is in neither the loaded nor the deferred tool list, `ToolSearch` finds none of them and the offline CLI above is not on disk either (a claude.ai cloud session without the plugin's MCP servers is the typical case). Announce the switch in one line with the reason, then read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/manual-ship.md` and follow it instead of Steps 1–5; its tag step points at `release-flow.md` § owner hand-off. Deferred tools are never absent — load them and run the pipeline.
 
 Do NOT skip this step even if you "think" the tools are available. `analysis` / `ready` / `test` cards have no ship-tool dependency and won't hit this — only the full pipeline does.
 
@@ -169,7 +169,7 @@ Run preflight, resolve any merge-safety issues autonomously, and re-check — re
 
 ### 1a. Run preflight
 
-Call `ship_preflight` MCP tool (dotclaude-ship server) with `cwd`. Omit `base` to let the tool auto-detect it:
+Call `ship_preflight` MCP tool (dotclaude server) with `cwd`. Omit `base` to let the tool auto-detect it:
 `ship_preflight({ cwd: "<current working directory>" })`
 With an extension `outOfBandDeploy:` list, pass `outOfBandGlobs`. Base override: `ship_preflight({ base: "feat/42", cwd: "<cwd>" })`; how the base is found: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/preflight-rebase.md` § Base auto-detection. **Carry forward** `outOfBandDeploys` (to Step 4d, never a gate) and `components` (to Step 6): read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/preflight-rebase.md` § Carried-forward fields (when either is non-empty).
 
@@ -407,7 +407,7 @@ Silent memory consolidation after shipping. Runs **before** the completion card 
 
 ## Step 6 — Completion Card
 
-Call `render_completion_card` MCP tool (dotclaude-completion server) with data from previous steps.
+Call `render_completion_card` MCP tool (dotclaude server) with data from previous steps.
 
 - **One card per run.** When Step 5d promoted, the run ends with ONE `released` card — never a `ship-successful` card first. It carries the ship's fields exactly as below (`changes`, `tests`, `validation`, `userFinalTest`, `state`, `cta`, `delivery.pr` + `delivery.ship`) plus `delivery.promote: { channels, current: "<channel>", fastTrack }` and `promotion` (see `modes/promote.md` Step 4); skip the promotion-gap nudge — the ladder already shows the new state. Its `[SESSION TITLE]` block sets `🟩 🎊 Released <Channel> – `. Without a promotion the variants below apply unchanged.
 - **`cwd` is required for clickable links** — without it the card renders PR/commit/branch as plain text. Pass the same `cwd` as the ship tools.

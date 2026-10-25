@@ -69,7 +69,7 @@ function syncQuietStyle({ home, pluginDir }) {
     } catch { /* no manifest → every divergent copy counts as customized */ }
     if (!shipped.includes(installedHash)) return { status: 'customized', target };
 
-    const tmp = `${target}.${process.pid}.tmp`;
+    const tmp = `${target}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
     fs.writeFileSync(tmp, template);
     fs.renameSync(tmp, target);
     return { status: 'updated', target };

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.17.0
+ * @version 0.17.1
  * @event PreToolUse
  * @plugin devops
  * @description Block Read/Bash/Glob/Grep operations that would consume a
@@ -188,11 +188,13 @@ const SCOUT_CALL = 'Agent({ subagent_type: "devops:scout", model: "haiku", run_i
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..');
 
 /**
- * True for a file under the plugin's own `skills/`, `deep-knowledge/` or
- * `agents/`. The running hook sits at `<plugin root>/hooks/pre-tool-use`, so
- * its root is the installed root (cache dir, any name) or the source repo's
- * `plugins/devops`. The path pattern covers another version's cache dir and a
- * repo checkout the hook is not running from.
+ * True for a Markdown doc under the plugin's own `skills/`, `deep-knowledge/`
+ * or `agents/`. The running hook sits at `<plugin root>/hooks/pre-tool-use`,
+ * so its root is the installed root (cache dir, any name) or the source repo's
+ * `plugins/devops`. The path pattern covers another version's cache dir
+ * (`devops/<semver>/`) and a repo checkout or marketplace clone the hook is
+ * not running from (`plugins/devops/`) — never any folder that merely happens
+ * to be called `devops`. Scripts and data files there stay size-checked.
  */
 function isPluginOwnDoc(absPath) {
   const norm = (p) => {
@@ -200,9 +202,10 @@ function isPluginOwnDoc(absPath) {
     return process.platform === 'win32' ? r.toLowerCase() : r;
   };
   const file = norm(absPath);
+  if (!/\.md$/.test(file)) return false;
   const root = norm(PLUGIN_ROOT).replace(/\/+$/, '') + '/';
   if (file.startsWith(root) && /^(?:skills|deep-knowledge|agents)\//.test(file.slice(root.length))) return true;
-  return /\/devops\/(?:[^/]+\/)?(?:skills\/[^/]+\/(?:deep-knowledge|modes)|deep-knowledge|agents)\/.+\.md$/.test(file);
+  return /\/(?:plugins\/devops|devops\/\d+\.\d+\.\d+[^/]*)\/(?:skills\/[^/]+\/(?:deep-knowledge|modes)|deep-knowledge|agents)\/.+\.md$/.test(file);
 }
 
 function flagPath(key) {

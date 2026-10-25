@@ -1,6 +1,6 @@
 # Ship — manual checklist (no ship MCP server)
 
-Referenced by `/do-ship` Step 0.5. Runs **only** when the `dotclaude-ship`
+Referenced by `/do-ship` Step 0.5. Runs **only** when the `dotclaude`
 tools are absent from the session — not merely deferred (#567). Typical case:
 a claude.ai cloud session whose container never loaded the plugin's MCP
 servers, or a local session whose server could not be restored by the cache

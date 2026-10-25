@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.git.check
- * @version 0.9.0
+ * @version 0.10.0
  * @event SessionStart
  * @plugin devops
  * @description Check for stale changes AND workspace setup issues at session
@@ -29,6 +29,16 @@
  *     - Not in worktree on feature branch → mild note: continuing that
  *       branch is fine, new work moves into its own worktree.
  *     - In worktree on main → silent (prompt.worktree.branch-guard handles).
+ *
+ *   Two phases (lib/deferred-results, DEVOPS_DEFERRED_PHASE):
+ *     - hook path (sync): everything local — workspace rule, uncommitted files,
+ *       stashes, README staleness. No network, so the deterministic worktree
+ *       rule is never delayed. It then starts a detached worker of itself.
+ *     - 'bg' worker: `git fetch`, then the unpushed count against fresh refs.
+ *       Only a finding is printed (stored, shown with the next user prompt); on
+ *       a main/detached checkout the workspace block is repeated with it, so
+ *       the "unpushed work there -> ask" branch still applies.
+ *     - 'inline': both, as before (tests).
  *
  *   Bypass for workspace check (stale check still runs):
  *     - DEVOPS_ALLOW_MAIN=1 silences only the main-branch case (its
@@ -120,7 +130,9 @@ function readmeStaleness(dir) {
   return '📝 README.md is older than the skills/hooks/agents roster — run `node plugins/devops/scripts/gen-readme-sections.mjs` to refresh counts & lists (prose: deep-knowledge/readme-standards.md).';
 }
 
-function checkRepo(dir) {
+function checkRepo(dir, phase = 'inline') {
+  const doSync = phase !== 'bg';
+  const doNet = phase !== 'sync';
   const issues = [];
   // Not a repo at all → nothing here is meaningful. Without this the git
   // calls below merely return '' and the function is accidentally silent;
@@ -133,10 +145,10 @@ function checkRepo(dir) {
   // Fetch remote refs so unpushed detection is accurate.
   // Without this, commits already merged via GitHub PRs appear "unpushed"
   // because local refs/remotes/* are stale.
-  if (remote) run('git fetch --quiet', dir);
+  if (remote && doNet) run('git fetch --quiet', dir);
 
   // Uncommitted files (scoped to this worktree automatically by git)
-  const status = run('git status --porcelain', dir);
+  const status = doSync ? run('git status --porcelain', dir) : '';
   if (status) {
     const lines = status.split('\n').filter(Boolean);
     issues.push({
@@ -155,7 +167,7 @@ function checkRepo(dir) {
   // to push to a remote that does not exist.
   // Guarded as a BLOCK, not an early return — the stash check below is still
   // meaningful in a repo without a remote.
-  if (remote) {
+  if (remote && doNet) {
     // Current branch (HEAD) only, in the main checkout as in a linked worktree.
     // `--branches` counted every undecorated commit of every abandoned local
     // branch (157 "unpushed" on an in-sync main) and sent /do-ship after work
@@ -169,7 +181,7 @@ function checkRepo(dir) {
   }
 
   // Stashes — repo-wide, skip in worktree context (not actionable there)
-  if (!inWorktree) {
+  if (!inWorktree && doSync) {
     const stashes = run('git stash list', dir);
     if (stashes) {
       const lines = stashes.split('\n').filter(Boolean);
@@ -239,7 +251,10 @@ try {
 // The session's directory, not the hook process's: Desktop starts hooks of a
 // worktree session in the repo root (see hook-input sessionCwd).
 // Only as the hook entry point: imported by a test, a sync stdin read blocks forever.
-const cwd = require.main === module ? require('../lib/hook-input').sessionCwd().cwd : process.cwd();
+const sessionInput = require.main === module ? require('../lib/hook-input').sessionCwd() : { cwd: process.cwd(), hook: null };
+const cwd = sessionInput.cwd;
+// 'bg' = detached worker (fetch + unpushed), 'inline' = both phases in one run, else the hook path.
+const PHASE = process.env.DEVOPS_DEFERRED_PHASE === 'bg' ? 'bg' : process.env.DEVOPS_DEFERRED_PHASE === 'inline' ? 'inline' : 'sync';
 const repos = [{ label: 'current repo', dir: cwd }];
 
 // Optional additional repos from reference.md
@@ -264,26 +279,35 @@ if (fs.existsSync(refPath)) {
 // Collect issues
 const dirty = [];
 for (const repo of repos) {
-  const issues = checkRepo(repo.dir);
+  const issues = checkRepo(repo.dir, PHASE);
   if (issues.length > 0) {
     dirty.push({ label: repo.label, dir: repo.dir, issues });
   }
 }
 
-const workspace = checkWorkspace(cwd);
-const staleNote = readmeStaleness(cwd);
+let workspace = checkWorkspace(cwd);
+// The worker only reports the network-dependent finding; the workspace block is
+// repeated with it solely so a main checkout holding unpushed work gets the ask.
+if (PHASE === 'bg' && dirty.length === 0) workspace = null;
+const staleNote = PHASE === 'bg' ? null : readmeStaleness(cwd);
 
-if (dirty.length === 0 && !workspace && !staleNote) {
-  process.exit(0);
+// Output. Composition lives in hooks/lib/git-check-output.js so it is
+// unit-testable and so the "findings are never coupled to the ask" invariant
+// (#268) has one home.
+if (dirty.length > 0 || workspace || staleNote) {
+  let ownWorktree = false;
+  try { ownWorktree = require('../lib/devops-config').load(cwd).values.workspace.ownWorktree === true; } catch { /* undecided */ }
+  const out = compose({ dirty, workspace, staleNote, cwd, ownWorktree });
+  if (out.length > 0) process.stdout.write(out.join('\n'));
 }
 
-// Build structured output with CTAs.
-// Composition lives in hooks/lib/git-check-output.js so it is unit-testable and
-// so the "findings are never coupled to the ask" invariant (#268) has one home.
-let ownWorktree = false;
-try { ownWorktree = require('../lib/devops-config').load(cwd).values.workspace.ownWorktree === true; } catch { /* undecided */ }
-const out = compose({ dirty, workspace, staleNote, cwd, ownWorktree });
-
-if (out.length === 0) process.exit(0);
-
-process.stdout.write(out.join('\n'));
+// Hook path: the fetch-dependent half (unpushed count) runs detached, its
+// finding arrives with the next user prompt. Every repo in `repos` is covered.
+if (PHASE === 'sync' && require.main === module) {
+  try {
+    require('../lib/deferred-results').deferOrRun({
+      name: 'git-check', script: __filename,
+      input: sessionInput.hook ? JSON.stringify(sessionInput.hook) : '',
+    });
+  } catch { /* fail open: the finding is advisory */ }
+}

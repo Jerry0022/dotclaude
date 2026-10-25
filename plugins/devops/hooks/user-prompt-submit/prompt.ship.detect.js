@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.ship.detect
- * @version 0.9.0
+ * @version 0.9.1
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect ship intent in user prompts and inject Skill('devops:do-ship') instruction.
@@ -275,11 +275,7 @@ process.stdin.on('end', () => {
     `[prompt.ship.detect] ${reason}`,
     '',
     ...mandate,
-    'Do NOT manually run git commit, git push, or create/merge PRs outside the skill.',
-    'The /do-ship skill handles: pre-flight checks, build, version bump, commit,',
-    'push, PR, merge, sync, cleanup, and the completion card.',
-    '',
-    'If the user seems to want only a commit (not shipping), commit inline per deep-knowledge/commit-conventions.md — there is no commit skill.',
+    'No manual git commit/push or PR create/merge outside the skill. A bare commit request (no ship): commit inline per deep-knowledge/commit-conventions.md — there is no commit skill.',
   ].join('\n');
 
   process.stdout.write(instruction + '\n');

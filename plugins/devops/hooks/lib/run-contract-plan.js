@@ -45,7 +45,7 @@ function readPlan(cwd) {
 function writePlan(cwd, rec) {
   const file = planPath(cwd);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(rec, null, 2));
   fs.renameSync(tmp, file);
 }

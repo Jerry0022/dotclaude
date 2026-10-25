@@ -197,6 +197,15 @@
     fitDockFields(ta);
   }
   window.focusDockField = focusPrimary;
+  // A click outside the dock on something that takes no focus (the design,
+  // empty page) leaves the caret in the field, so its focus glow stayed lit
+  // while the user was clearly elsewhere. Such a click releases the field.
+  document.addEventListener('pointerdown', e => {
+    const a = document.activeElement;
+    if (!a || !dock.contains(a) || dock.contains(e.target)) return;
+    if (e.target.closest && e.target.closest('button, a[href], input, select, textarea, [contenteditable], [tabindex]')) return;
+    a.blur();
+  }, true);
   // Taken back only while the field still holds exactly what we left in it.
   dock.addEventListener('focusout', e => {
     const ta = e.target;
@@ -454,7 +463,7 @@ html .feedback-dock .feedback-section textarea {
    rgba that vanished on the light theme. */
 .feedback-dock .feedback-section { padding: 10px; border-radius: 14px; background: color-mix(in srgb, var(--text-color, #c9d1d9) 4%, transparent); }
 .feedback-dock .feedback-section:focus-within {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-color, #58a6ff) 12%, transparent), rgba(137,87,229,0.07));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-color, #58a6ff) 12%, transparent), color-mix(in srgb, var(--accent-color, #58a6ff) 4%, transparent));
 }
 .feedback-dock .feedback-section textarea:focus {
   box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent-color, #58a6ff) 45%, transparent), 0 0 18px color-mix(in srgb, var(--accent-color, #58a6ff) 25%, transparent);

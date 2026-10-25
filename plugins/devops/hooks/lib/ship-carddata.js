@@ -61,7 +61,7 @@ function writeCardData(cwd, sessionId, payload) {
       exitWorktree: payload.exitWorktree === true,
       writtenAt: Date.now(),
     };
-    const tmp = `${p}.${process.pid}.tmp`;
+    const tmp = `${p}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(body, null, 2), 'utf8');
     fs.renameSync(tmp, p);
     return true;

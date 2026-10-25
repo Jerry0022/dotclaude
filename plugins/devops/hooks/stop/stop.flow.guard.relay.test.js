@@ -31,7 +31,7 @@ function transcript(dir, ...texts) {
   const file = path.join(dir, "t.jsonl");
   const lines = [
     { type: "user", message: { role: "user", content: [{ type: "text", text: "ship it" }] } },
-    { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "mcp__plugin_devops_dotclaude-completion__render_completion_card", input: {} }] } },
+    { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "mcp__plugin_devops_dotclaude__render_completion_card", input: {} }] } },
     ...texts.map((text) => ({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] } })),
   ];
   fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
@@ -47,7 +47,7 @@ function widgetTranscript(dir, ...textsAfter) {
   };
   const lines = [
     { type: "user", message: { role: "user", content: [{ type: "text", text: "ship it" }] } },
-    { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "mcp__plugin_devops_dotclaude-completion__render_completion_card", input: {} }] } },
+    { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "mcp__plugin_devops_dotclaude__render_completion_card", input: {} }] } },
     { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "w1", name: "mcp__visualize__show_widget", input: widget }] } },
     { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "w1", content: "ok" }] } },
     ...textsAfter.map((text) => ({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] } })),

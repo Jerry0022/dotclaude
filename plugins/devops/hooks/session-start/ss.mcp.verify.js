@@ -8,9 +8,9 @@
  *   its entry file present in the active install root, and surface a per-server
  *   diagnostic when one is missing.
  *
- *   Closes the visibility gap from issue #198: the dotclaude-ship server was
+ *   Closes the visibility gap from issue #198: the then-separate ship server was
  *   silently absent (an incomplete cache sync dropped mcp-server/ship/index.js)
- *   while its sibling dotclaude-completion was fine, so /do-ship deadlocked
+ *   while its sibling card server was fine, so /do-ship deadlocked
  *   with no signal that the server never registered.
  *
  *   Signal choice — file presence, not live PID:
@@ -68,7 +68,7 @@ out.push('Declared in the plugin but the entry file is absent from the active in
 out.push('— these servers will NOT register, so their tools are unavailable:');
 out.push('');
 for (const r of broken) {
-  const note = r.name === 'dotclaude-ship' ? '  (/do-ship pipeline unavailable)' : '';
+  const note = r.name === 'dotclaude' ? '  (card, /do-ship pipeline and issue matching unavailable)' : '';
   out.push(`- **${r.name}** → missing \`${r.rel}\`${note}`);
 }
 out.push('');

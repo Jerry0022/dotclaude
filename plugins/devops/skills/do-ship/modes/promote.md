@@ -19,7 +19,7 @@ do-ship runs these steps in two situations (`../SKILL.md` § Target channel):
 `ship_promote` and `ship_hygiene` may be deferred. Load them first:
 
 ```
-ToolSearch({ query: "select:mcp__plugin_devops_dotclaude-ship__ship_promote,mcp__plugin_devops_dotclaude-ship__ship_hygiene", max_results: 5 })
+ToolSearch({ query: "select:mcp__plugin_devops_dotclaude__ship_promote,mcp__plugin_devops_dotclaude__ship_hygiene", max_results: 5 })
 ```
 
 If the server is installed but this session skipped its connect, call the same

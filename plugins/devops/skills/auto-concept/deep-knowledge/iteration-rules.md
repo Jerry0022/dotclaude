@@ -236,7 +236,9 @@ section. A `decision` / `free` round carries just the general note; a
 
 `favorite` / `userPins` (rounds with ≥2 designs, § Variant overview) are
 optional keys: `wireDesignOverview()` reads them on a frozen tab to mark the
-favourite card and render the pins read-only.
+favourite card and render the pins read-only. A decision / free round writes
+`userPins` too (entries with an `anchor`, templates-free.md § Document pins);
+`wireDocumentPins()` renders them read-only in that round's tab.
 
 Write `general` exactly as the payload delivered it (`comments.general`, the
 `{ text, attachments }` object); a bare string is still accepted for pages

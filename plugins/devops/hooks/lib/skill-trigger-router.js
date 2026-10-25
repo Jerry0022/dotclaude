@@ -51,8 +51,10 @@
  *      so "concept A passt" or "der concept skill …" stay silent.
  *      The frontmatter itself stays complete (trigger-preservation test);
  *      the allowlist/denylist only narrow what the ROUTER acts on.
- *   3. **Error patterns** — language-independent bug-report signals route to
- *      `auto-fix`. A stack frame or `Traceback` counts anywhere, including inside
+ *   3. **Error patterns** — DISABLED since 2026-10-25 (auto-fix is on request
+ *      only; A/B evals showed no gain, `evals/trims/auto-fix.md`). The
+ *      detector `looksLikeBugReport` stays exported. It detected
+ *      language-independent bug-report signals. A stack frame or `Traceback` counts anywhere, including inside
  *      a fenced code block (that is where a pasted trace lives). A bare
  *      `…Error:` / `…Exception:` only counts in the prose OUTSIDE fences
  *      (pasted code like `except ValueError:` is not a report). An HTTP
@@ -532,11 +534,8 @@ function routeMessage(message, skills, opts = {}) {
     entries.push(e);
   }
 
-  // Before the phrases: when both hit `auto-fix`, the dedupe keeps the error
-  // pattern, which the caller never softens.
-  if (known['auto-fix'] && looksLikeBugReport(message)) {
-    entries.push({ skill: 'auto-fix', reason: 'error pattern (stack trace / Traceback / Error class / HTTP status)' });
-  }
+  // Error patterns no longer route to `auto-fix` (on request only — A/B evals
+  // 2026-10-25: no gain over an inline fix); `looksLikeBugReport` stays exported.
 
   const corpus = buildWordTriggerCorpus(known);
   for (const { skill, phrase, nearMeta, mode } of matchWordTriggers(message, corpus)) {

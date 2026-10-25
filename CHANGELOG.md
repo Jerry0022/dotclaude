@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.313.0] — 2026-10-25
+
+Hooks start one process per event instead of one per hook, and the plugin runs one MCP server instead of three. Session start no longer waits for the plugin update. Wave 2 of the hooks audit.
+
+### Changed
+- **One MCP server.** `dotclaude` replaces `dotclaude-completion`, `dotclaude-ship` and `dotclaude-issues`, so tools are now `mcp__plugin_devops_dotclaude__<tool>`. Each session saves about 170 MB of memory (270 → 103 MB). Ship steps run in their own child process with a timeout and a tree kill, so a long build no longer blocks card rendering. After a crash the server restarts cleanly. Hooks and skills accept the old tool names for one more release.
+- **Hook dispatcher.** Each hook event starts one Node process. The process runs its hooks in worker threads, in parallel unless two hooks share a temp-file writer. `DEVOPS_HOOK_DISPATCH=0` switches back to one process per hook. `hooks.json` is generated from `hooks/dispatch/manifest.json`.
+- **Session start.** Plugin update, tokens scan, team changelog and `git fetch` run detached. Their results arrive with the next prompt.
+- **Delegation policy.** The always-on core is 41 % shorter; the full text lives in `agent-proactivity-details.md`. The title-work fallback and the ship-detect mandate are shorter too.
+- **auto-fix.** Runs only when you ask for it. An A/B over 6 bug cases showed no gain over fixing inline, so errors are no longer routed to it.
+- **Concept document rounds.** Ctrl+click (long press on touch) on a paragraph, list item or table row sets your own note pin, with attachments. `?` shows the hotkey badges there too, and `H` hides the notes.
+
+### Fixed
+- `claude-api-safe` no longer reports an empty reply as a clean review. A reply without text exits with rc 65. Defaults are now 16 000 output tokens and a 300 s timeout, with a new `--effort` option.
+- `pre.mcp.health` matched no tool; it now covers every devops MCP tool.
+- `tokens.guard` exempts only real plugin docs (`.md` under skills, deep-knowledge and agents), not every file in a `devops` folder.
+- Autosave and hygiene skip a `graphify-out/` folder that older checkouts still have.
+- Temp files carry a random part, so two hooks in one dispatcher process never write the same file.
+- The team changelog at session start reaches the right session again when the dispatcher is off: the hook no longer reads stdin twice.
+- Hook telemetry counts a killed hook once, not twice.
+
+## [0.312.0] — 2026-10-25
+
+Concept pages use the notes blue for the eye counter and let go of the notes field when you click elsewhere.
+
+### Changed
+- **Eye counter.** The attention badge on the eye wears the notes button's blue instead of purple; the focused notes section's gradient lost its purple tail too.
+
+### Fixed
+- **Notes dock.** A click outside the notes on the design or the empty page releases the focused field, so its focus glow no longer stays lit while you are elsewhere.
+
 ## [0.311.0] — 2026-10-25
 
 Concept pages show every hotkey on `?` instead of a held Alt, and every chrome control names its key.

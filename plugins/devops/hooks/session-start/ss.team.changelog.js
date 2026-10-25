@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.team.changelog
- * @version 0.3.1
+ * @version 0.4.1
  * @event SessionStart
  * @plugin devops
  * @description Show a summary of changes made by other contributors on remote main
@@ -50,7 +50,16 @@ function runOk(cmd, cwd, timeout = 15000) {
 // The session's directory, not the hook process's: Desktop starts hooks of a
 // worktree session in the repo root (see hook-input sessionCwd).
 // Only as the hook entry point: imported by a test, a sync stdin read blocks forever.
-const cwd = require.main === module ? require('../lib/hook-input').sessionCwd().cwd : process.cwd();
+const sessionInput = require.main === module ? require('../lib/hook-input').sessionCwd() : { cwd: process.cwd(), hook: null };
+const cwd = sessionInput.cwd;
+
+// Off the critical path (fetch + gh api = seconds of network at SessionStart).
+// Only as the hook entry point: a test importing this file must not spawn.
+// stdin is already drained by sessionCwd — hand the payload on, never re-read it.
+if (require.main === module && require('../lib/deferred-results').deferOrRun({
+  name: 'team-changelog', script: __filename,
+  input: sessionInput.hook ? JSON.stringify(sessionInput.hook) : '',
+})) process.exit(0);
 
 // --- Persistent "last shown" timestamp (worktree-independent) ---
 const remoteUrl = run('git remote get-url origin', cwd);

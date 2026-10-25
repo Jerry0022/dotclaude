@@ -139,6 +139,47 @@ describe("API call", () => {
     expect(r.rc).toBe(api.RC.TIMEOUT);
   });
 
+  test("reply without text (thinking used the whole budget) → rc 65, never an empty rc 0", async () => {
+    const body = {
+      content: [{ type: "thinking", thinking: "", signature: "sig" }],
+      stop_reason: "max_tokens",
+      usage: { input_tokens: 79677, output_tokens: 8000 },
+    };
+    const r = await runCli(["review this diff"], { fetchImpl: fakeFetch(200, body) });
+    expect(r.rc).toBe(api.RC.NO_TEXT);
+    expect(r.out).toBe("");
+    expect(r.err).toMatch(/no text in the reply \(stop_reason max_tokens, 8000 output tokens\)/);
+    expect(r.err).toMatch(/raise --max-tokens or lower --effort/);
+    const log = fs.readFileSync(path.join(home, ".claude", api.USAGE_FILE), "utf8").trim().split("\n");
+    expect(JSON.parse(log.at(-1)).rc).toBe(api.RC.NO_TEXT);
+  });
+
+  test("text cut at max_tokens → rc 0 with the text and a stderr warning", async () => {
+    const body = {
+      content: [{ type: "thinking", thinking: "" }, { type: "text", text: "file.js:12 — high — partial" }],
+      stop_reason: "max_tokens",
+      usage: { input_tokens: 10, output_tokens: 16000 },
+    };
+    const r = await runCli(["x"], { fetchImpl: fakeFetch(200, body) });
+    expect(r.rc).toBe(0);
+    expect(r.out).toBe("file.js:12 — high — partial\n");
+    expect(r.err).toMatch(/WARNING reply cut at max_tokens/);
+  });
+
+  test("default max_tokens leaves room for thinking; --effort lands in output_config", async () => {
+    const calls = [];
+    await runCli(["x"], { fetchImpl: fakeFetch(200, { content: [{ type: "text", text: "CLEAN" }] }, calls) });
+    let sent = JSON.parse(calls[0].init.body);
+    expect(sent.max_tokens).toBe(16000);
+    expect(sent.output_config).toBeUndefined();
+    await runCli(["--effort", "low", "x"], { fetchImpl: fakeFetch(200, { content: [{ type: "text", text: "CLEAN" }] }, calls) });
+    sent = JSON.parse(calls[1].init.body);
+    expect(sent.output_config).toEqual({ effort: "low" });
+    const bad = await runCli(["--effort", "huge", "x"], { fetchImpl: fakeFetch(200, {}, calls) });
+    expect(bad.rc).toBe(api.RC.ERROR);
+    expect(calls).toHaveLength(2);
+  });
+
   test("prompt from stdin with -", async () => {
     const calls = [];
     const r = await runCli(["-"], {

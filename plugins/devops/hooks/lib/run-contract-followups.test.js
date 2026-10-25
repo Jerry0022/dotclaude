@@ -102,7 +102,7 @@ describe("AUD-012: an `analysis` card closes an AUDIT run without being gated", 
     RC.record(dir, { k: "edit" }); // work, but harden/polish never ran
     const hook = {
       cwd: dir, session_id: "s1", hook_event_name: "PreToolUse",
-      tool_name: "mcp__plugin_devops_dotclaude-completion__render_completion_card",
+      tool_name: "mcp__plugin_devops_dotclaude__render_completion_card",
       tool_input: { variant: "analysis" },
     };
     const res = require("node:child_process").spawnSync(process.execPath, [require.resolve("../pre-tool-use/pre.run.contract.js")], {
@@ -131,7 +131,7 @@ describe("AUD-012: an `analysis` card closes an AUDIT run without being gated", 
     RC.record(dir, { k: "edit" });
     const hook = {
       cwd: dir, session_id: "s1", hook_event_name: "PreToolUse",
-      tool_name: "mcp__plugin_devops_dotclaude-completion__render_completion_card",
+      tool_name: "mcp__plugin_devops_dotclaude__render_completion_card",
       tool_input: { variant: "paused" },
     };
     const res = require("node:child_process").spawnSync(process.execPath, [require.resolve("../pre-tool-use/pre.run.contract.js")], {

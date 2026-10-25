@@ -16,7 +16,10 @@
 const fs = require("fs");
 const path = require("path");
 
-const COMPLETION_TOOL_PREFIX = "mcp__plugin_devops_dotclaude-completion__";
+const COMPLETION_TOOL_PREFIX = "mcp__plugin_devops_dotclaude__";
+// One devops server since v0.309 carries every tool, so the prefix alone no
+// longer means "card". Older refs (A/B --a-ref) still use dotclaude-completion.
+const CARD_TOOL_RE = /^mcp__plugin_devops_dotclaude(?:-completion)?__render_/;
 
 function toRegex(p) {
   return p instanceof RegExp ? p : new RegExp(p);
@@ -69,7 +72,7 @@ const toolUsed = (name, opts = {}) => (ctx) => {
 
 const textMatches = (re) => (ctx) => toRegex(re).test(ctx.parsed.assistantText.join("\n"));
 const finalTextMatches = (re) => (ctx) => toRegex(re).test(ctx.parsed.finalText || "");
-const cardRendered = () => (ctx) => ctx.parsed.toolCalls.some((c) => !c.subagent && c.name.startsWith(COMPLETION_TOOL_PREFIX));
+const cardRendered = () => (ctx) => ctx.parsed.toolCalls.some((c) => !c.subagent && CARD_TOOL_RE.test(c.name));
 const fileExists = (rel) => (ctx) => fs.existsSync(path.join(ctx.workdir, rel));
 const fileMatches = (rel, re) => (ctx) => {
   try { return toRegex(re).test(fs.readFileSync(path.join(ctx.workdir, rel), "utf8")); } catch { return false; }

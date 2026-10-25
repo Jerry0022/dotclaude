@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK = path.join(__dirname, "pre.mcp.health.js");
-const TOOL = "mcp__plugin_devops_dotclaude-completion__render_completion_card";
+const TOOL = "mcp__plugin_devops_dotclaude__render_completion_card";
 
 // Temp project with the plugin enabled (plugin-guard) and a private tmpdir, so
 // no real server on this machine answers for the test. HOME points at the
@@ -20,11 +20,11 @@ function project() {
   return dir;
 }
 
-function run(dir) {
+function run(dir, toolName = TOOL) {
   const tmp = path.join(dir, ".tmp");
   return spawnSync(process.execPath, [HOOK], {
     cwd: dir,
-    input: JSON.stringify({ tool_name: TOOL, session_id: "s", cwd: dir }),
+    input: JSON.stringify({ tool_name: toolName, session_id: "s", cwd: dir }),
     encoding: "utf8",
     env: { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp, HOME: dir, USERPROFILE: dir },
   });
@@ -36,8 +36,8 @@ describe("pre.mcp.health — per-process heartbeats", () => {
   test("a live server of any session passes, even when the legacy file names a dead one", () => {
     const dir = project();
     const tmp = path.join(dir, ".tmp");
-    fs.writeFileSync(path.join(tmp, `dotclaude-mcp-dotclaude-completion-${process.pid}.pid`), String(process.pid));
-    fs.writeFileSync(path.join(tmp, "dotclaude-mcp-dotclaude-completion.pid"), String(deadPid()));
+    fs.writeFileSync(path.join(tmp, `dotclaude-mcp-dotclaude-${process.pid}.pid`), String(process.pid));
+    fs.writeFileSync(path.join(tmp, "dotclaude-mcp-dotclaude.pid"), String(deadPid()));
     expect(run(dir).status).toBe(0);
     fs.rmSync(dir, { recursive: true, force: true });
   });
@@ -52,8 +52,8 @@ describe("pre.mcp.health — per-process heartbeats", () => {
     const dir = project();
     const tmp = path.join(dir, ".tmp");
     const pid = deadPid();
-    const own = path.join(tmp, `dotclaude-mcp-dotclaude-completion-${pid}.pid`);
-    const legacy = path.join(tmp, "dotclaude-mcp-dotclaude-completion.pid");
+    const own = path.join(tmp, `dotclaude-mcp-dotclaude-${pid}.pid`);
+    const legacy = path.join(tmp, "dotclaude-mcp-dotclaude.pid");
     fs.writeFileSync(own, String(pid));
     fs.writeFileSync(legacy, String(pid));
     const res = run(dir);
@@ -68,7 +68,7 @@ describe("pre.mcp.health — per-process heartbeats", () => {
     const dir = project();
     const tmp = path.join(dir, ".tmp");
     const pid = deadPid();
-    const leftover = path.join(tmp, `dotclaude-mcp-dotclaude-completion-${pid}.pid`);
+    const leftover = path.join(tmp, `dotclaude-mcp-dotclaude-${pid}.pid`);
     fs.writeFileSync(leftover, String(pid));
     // No legacy file at all — this is exactly the shape a hard-killed
     // NEWER-version server from a different session leaves behind while an
@@ -86,11 +86,37 @@ describe("pre.mcp.health — per-process heartbeats", () => {
     const dir = project();
     const tmp = path.join(dir, ".tmp");
     const pid = deadPid();
-    const legacy = path.join(tmp, "dotclaude-mcp-dotclaude-completion.pid");
+    const legacy = path.join(tmp, "dotclaude-mcp-dotclaude.pid");
     fs.writeFileSync(legacy, String(pid));
     const res = run(dir);
     expect(res.status).toBe(2);
     expect(res.stderr).toMatch(/MCP SERVER DOWN/);
+    // The exact recovery step for this tool: the offline card renderer.
+    expect(res.stderr).toMatch(/mcp-server\/index\.js" --render-card <payload\.json>/);
+    expect(res.stderr).toMatch(/new Claude Code session/);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("a ship tool of the single server names the offline ship CLI as recovery", () => {
+    const dir = project();
+    const tmp = path.join(dir, ".tmp");
+    fs.writeFileSync(path.join(tmp, "dotclaude-mcp-dotclaude.pid"), String(deadPid()));
+    const res = run(dir, "mcp__plugin_devops_dotclaude__ship_build");
+    expect(res.status).toBe(2);
+    expect(res.stderr).toMatch(/MCP SERVER DOWN — dotclaude\b/);
+    expect(res.stderr).toMatch(/mcp-server\/ship\/cli\.js" ship_build <params\.json>/);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("a pre-merge tool prefix (still-running old session) maps to its own legacy server", () => {
+    const dir = project();
+    const tmp = path.join(dir, ".tmp");
+    // The new server is dead, the old ship server is alive — the old tool must pass.
+    fs.writeFileSync(path.join(tmp, "dotclaude-mcp-dotclaude.pid"), String(deadPid()));
+    fs.mkdirSync(path.join(tmp, "dotclaude-mcp-heartbeats"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, "dotclaude-mcp-heartbeats", `dotclaude-ship-${process.pid}.pid`), String(process.pid));
+    const res = run(dir, "mcp__plugin_devops_dotclaude-ship__ship_build");
+    expect(res.status).toBe(0);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
@@ -117,7 +143,7 @@ describe("pre.mcp.health — stale-after-update sentinel", () => {
     const before = new Date(Date.now() - 60_000);
     const after = new Date(Date.now() + 60_000);
     const sentinel = writeSentinel(dir, before);
-    const own = path.join(tmp, `dotclaude-mcp-dotclaude-completion-${process.pid}.pid`);
+    const own = path.join(tmp, `dotclaude-mcp-dotclaude-${process.pid}.pid`);
     fs.writeFileSync(own, String(process.pid));
     fs.utimesSync(own, after, after);
 

@@ -10,7 +10,7 @@ import { processPidFile, flatPidFile, heartbeatDir, unregister } from "./lib/hea
 // "heartbeat dead — render offline first" while the server answered all
 // session. Import the real server module with a private TEMP and VITEST unset
 // (the guard that keeps the other card tests from registering the worker).
-const NAME = "dotclaude-completion";
+const NAME = "dotclaude";
 
 // Same SDK/zod mock preamble as index.meter.test.js; connect() records whether
 // the heartbeat already existed (it must be written AFTER connect).
