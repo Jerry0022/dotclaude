@@ -89,7 +89,7 @@ const TOPIC_MAP = [
   {
     file: 'api-batch.md',
     specificity: 3,
-    patterns: [/batch.?(?:api|mode|modus)/i, /message.?batch/i, /batch.?(?:audit|policy)/i],
+    patterns: [/\bbatch.?(?:api|mode|modus)\b/i, /\bmessage.?batch/i, /\bbatch.?(?:audit|policy)\b/i],
   },
   {
     file: 'home-backup.md',

@@ -35,10 +35,25 @@ function extractMeta(filePath) {
   return { title, desc: capped };
 }
 
+// Docs of a channel-gated feature (features.json) never go into INDEX.md:
+// every channel reads it, and the SessionStart index adds them itself where
+// the channel allows them.
+function gatedDocNames(dkDir) {
+  try {
+    const reg = JSON.parse(readFileSync(join(dkDir, "..", "features.json"), "utf8"));
+    return new Set(Object.values(reg.features || {})
+      .flatMap((f) => f.docs || [])
+      .map((p) => p.replace(/^deep-knowledge\//, "")));
+  } catch {
+    return new Set();
+  }
+}
+
 function generate(dir) {
   const dkDir = resolve(dir);
+  const gated = gatedDocNames(dkDir);
   const files = readdirSync(dkDir)
-    .filter((f) => f.endsWith(".md") && f !== "INDEX.md")
+    .filter((f) => f.endsWith(".md") && f !== "INDEX.md" && !gated.has(f))
     .sort();
 
   if (!files.length) {
