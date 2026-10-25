@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.303.1] — 2026-10-25
+
+A session that waits on a question now says so in the sidebar. `AskUserQuestion` mid-turn used to block with the hourglass still on the title, because only the completion card ever set `👉 ➜ ❓ Question ┃`.
+
+### Fixed
+- **Question title while a question waits.** `pre.ask.title` refuses the question once per turn until a `set_session_title` to the Question head goes out in the same message; `prompt.flow.title-work` announces it up front so the refusal is rarely needed. `post.ask.title` puts the ⏳ head back after the answer (a running ship keeps `🚀 Shipping`). Silent without the Desktop app, in a batch and in subagents. Rules: `hooks/lib/ask-title.js`.
+- **INSTALL test.** `hidden-skill-mentions` now matches the folded Claude → CLI → manual update step (#847) instead of the removed code block.
+
 ## [0.303.0] — 2026-10-25
 
 The auto-concept page chrome got a rework. The decision panel shows one journey row (round toggle, lock, Umsetzung, Abschluss) with a status line and a status toast. The header, quick nav and FABs are islands, and the notes dock has breadcrumbs and tips. New hotkeys: Space opens the notes dock, the arrow keys move between levels and Alt shows the overlay. Page numbers are roman numerals, and the wording is neutral ("Runde", "Notiz").
