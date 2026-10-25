@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.305.0] — 2026-10-25
+
+A concept tab now shows its state in the browser tab, and exclusive decisions get one recommended choice instead of all of them.
+
+### Added
+- **Status glyph in the tab title.** `renderTabTitle()` puts 👉 (your turn), ⏳ (submitted), 🛠️ (implementing), 🏁 (final report open) or ✅ (closed) in front of the page title. The poll and the heartbeat drive it, so a background tab updates without being focused. The "Concept —" prefix is gone; `concept-build.js` strips it (and an old glyph) when it imports a page.
+
+### Changed
+- **Exclusive decisions pre-select one option.** Mutually exclusive alternatives default to exactly one Miteinbeziehen (Claude's recommendation) and Verwerfen for the rest. Independent topics stay on Miteinbeziehen. The user can still change every choice (`templates-decision.md`, `step2-generate.md`, `templates-design-views.md`).
+
 ## [0.304.0] — 2026-10-25
 
 The API credit route now picks the model per task, shows where the money goes and trims long agent runs. Alpha features can now ship to alpha pins only: the first one is batch mode for large unattended jobs.
