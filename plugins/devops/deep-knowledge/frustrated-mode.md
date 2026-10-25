@@ -66,3 +66,23 @@ Rules:
 - **Never ships.** A step of type `ship`/`release`/`merge`/`push`/`deploy` (or `ship: true`) is rejected by `record`, and by `approve` for a hand-edited record, unless `--from-concept-closeout` was given. The plan path never arms a contract or a ship step itself.
 
 Developer notes: `docs/dev/feature-flags.md`.
+
+## Hand-off
+
+Entered as `/do-run --from=frustrated --plan=<id>@<short> [--step=<n>] <payload>` after `plan approve`. do-run finds it through `scripts/run-extras.js from frustrated` (`{known:true, doc, section}` only where the feature is allowed; the ungated router names no feature, it just reads the doc the helper returns). Read this section before anything else; it replaces the router's presets and questions.
+
+1. **Verify first.** Run `node "{PLUGIN_ROOT}/scripts/run-extras.js" handoff --plan <id>@<short>` (add `--cwd` from scripts). It checks through `plan status` that the record exists, is `approved`, is not expired (2 h) and matches id and hash. Exit 1 / `ok:false` -> stop, print its `error`, execute nothing, arm nothing.
+2. **Presets (answers in advance, nothing asked):** Q1 = Prompt umsetzen with the step payload as the task, verbatim; Q2 = **Interaktiv · Ship manuell**; Q3 = Strikt, scope = the approved plan's steps (`objects` are the closed scope, `out_of_scope` is off limits); Q4 dropped (no Rethink, no burn, no analysis option); passes as the plan's `checks` say, Harden/Polish as always. Q2 is not asked either: plan approval is not ship approval, and the hand-off never asks about shipping.
+3. **Never ships.** No ship question, no `ship: auto`, no `do-ship` call, no `ship_*` tool. A ship wish in the payload is ignored and reported as out of scope. Only a concept close-out sheet can add ship.
+4. **Run.** Implementation goes through `auto-agents` (`--from=do-run --mode=interactive --ship=manual`); the plan approval was its confirmation, the plan card is still shown. Several `implement` steps run in plan order; `concept`, `learn` and `webguide` steps go to `auto-concept`, `do-learn` and `auto-guide` with the same `--from=frustrated --plan=… --step=n` args.
+5. **Single-bug plans** stay in do-run -> `auto-agents`. `auto-fix` is not an entry for the hand-off (it is mandated for failures and only ever gets a log-only hint); it takes no `--from=frustrated`.
+6. Anything unclear about the plan -> stop and say so; never fall back to the router's default questions.
+
+## do-run option
+
+do-run's Q4 (the "Durchgänge?" multi-select) gets one extra option, **"Erst analysieren"** ("Ursachen klären, Plan vorschlagen, nichts umsetzen"), decided in code: `node "{PLUGIN_ROOT}/scripts/run-extras.js" q4` prints `{"extra":null}` or `{"extra":{id:"analyze-first",label,description,wins:true,…}}`. It is non-null only when `featureAllowed('frustrated-mode')` **and** `isSessionFlagged(<this session>)` (session id: `--session`, else `$CLAUDE_CODE_SESSION_ID` / `$CLAUDE_SESSION_ID`; none -> not shown). Stable/beta: the script exits 126, nothing is added.
+
+- Position: last option before "Nichts davon"; never `(Recommended)`, never first.
+- **It wins.** Ticked together with other passes (Rethink vorher, Budget verbrennen), the others are dropped and named in one line ("Rethink und Budget entfallen: erst Analyse"). Q2/Q3 answers are discarded; no `prompt` contract is armed (or one just armed is aborted with `--reason "handed to frustrated"`).
+- Effect: `Read {PLUGIN_ROOT}/skills/auto-frustrated/SKILL.md` and follow it with the prompt. It counts as an explicit invocation.
+- Not shown for machine prompts, backlog, audit or burn runs.
