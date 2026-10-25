@@ -355,8 +355,8 @@ body.anno-hidden .panel-fab, body.anno-hidden .feedback-fab {
 }
 .anno-eye-count {
   position: absolute; top: -6px; right: -7px; min-width: 15px; height: 15px; padding: 0 4px; box-sizing: border-box;
-  border-radius: 8px; background: #8957e5; color: #fff; font: 700 10px/15px system-ui, sans-serif; text-align: center;
-  box-shadow: 0 0 10px rgba(137, 87, 229, 0.6); pointer-events: none;
+  border-radius: 8px; background: var(--accent-color, #58a6ff); color: #fff; font: 700 10px/15px system-ui, sans-serif; text-align: center;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent-color, #58a6ff) 60%, transparent); pointer-events: none; /* the notes FAB's blue */
 }
 .anno-eye-count[hidden] { display: none; }
 /* Auto-hides while the ☰ panel is open, same treatment as the design
