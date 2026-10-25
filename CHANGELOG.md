@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.312.0] — 2026-10-25
+## [0.313.0] — 2026-10-25
 
 Hooks start one process per event instead of one per hook, and the plugin runs one MCP server instead of three. Session start no longer waits for the plugin update. Wave 2 of the hooks audit.
 
@@ -20,6 +20,16 @@ Hooks start one process per event instead of one per hook, and the plugin runs o
 - Temp files carry a random part, so two hooks in one dispatcher process never write the same file.
 - The team changelog at session start reaches the right session again when the dispatcher is off: the hook no longer reads stdin twice.
 - Hook telemetry counts a killed hook once, not twice.
+
+## [0.312.0] — 2026-10-25
+
+Concept pages use the notes blue for the eye counter and let go of the notes field when you click elsewhere.
+
+### Changed
+- **Eye counter.** The attention badge on the eye wears the notes button's blue instead of purple; the focused notes section's gradient lost its purple tail too.
+
+### Fixed
+- **Notes dock.** A click outside the notes on the design or the empty page releases the focused field, so its focus glow no longer stays lit while you are elsewhere.
 
 ## [0.311.0] — 2026-10-25
 
