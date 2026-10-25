@@ -122,9 +122,32 @@ Entered as `/do-run --from=frustrated --plan=<id>@<short> [--step=<n>] <payload>
 1. **Verify first.** Run `node "{PLUGIN_ROOT}/scripts/run-extras.js" handoff --plan <id>@<short>` (add `--cwd` from scripts). It checks through `plan status` that the record exists, is `approved`, is not expired (2 h) and matches id and hash. Exit 1 / `ok:false` -> stop, print its `error`, execute nothing, arm nothing.
 2. **Presets (answers in advance, nothing asked):** Q1 = Prompt umsetzen with the step payload as the task, verbatim; Q2 = **Interaktiv · Ship manuell**; Q3 = Strikt, scope = the approved plan's steps (`objects` are the closed scope, `out_of_scope` is off limits); Q4 dropped (no Rethink, no burn, no analysis option); passes as the plan's `checks` say, Harden/Polish as always. Q2 is not asked either: plan approval is not ship approval, and the hand-off never asks about shipping.
 3. **Never ships.** No ship question, no `ship: auto`, no `do-ship` call, no `ship_*` tool. A ship wish in the payload is ignored and reported as out of scope. Only a concept close-out sheet can add ship.
-4. **Run.** Implementation goes through `auto-agents` (`--from=do-run --mode=interactive --ship=manual`); the plan approval was its confirmation, the plan card is still shown. Several `implement` steps run in plan order; `concept`, `learn` and `webguide` steps go to `auto-concept`, `do-learn` and `auto-guide` with the same `--from=frustrated --plan=… --step=n` args.
+4. **Run.** Implementation goes through `auto-agents` (`--from=do-run --via=frustrated --mode=interactive --ship=manual --plan=<id>@<short> --step=<n>`: pass `--via`, `--plan` and `--step` through verbatim, § Hand-off in auto-agents); the plan approval was its confirmation, the plan card is still shown. Several `implement` steps run in plan order; `concept`, `learn` and `webguide` steps go to `auto-concept`, `do-learn` and `auto-guide` with the same `--from=frustrated --plan=… --step=n` args.
 5. **Single-bug plans** stay in do-run -> `auto-agents`. `auto-fix` is not an entry for the hand-off (it is mandated for failures and only ever gets a log-only hint); it takes no `--from=frustrated`.
 6. Anything unclear about the plan -> stop and say so; never fall back to the router's default questions.
+
+## Hand-off in auto-agents
+
+auto-agents names no feature: its Step 3 treats any `--via` as an approved plan and skips the second confirmation (spec G5); the plan card is still shown, once. Everything else rides in the **task text** the caller hands over, because auto-agents passes it verbatim into every agent prompt. So the caller (do-run's hand-off above, or auto-concept under § Hand-off in auto-concept) first verifies with `run-extras.js handoff --plan <id>@<short>` (`ok:false` -> stop, spawn nothing) and then writes this block into the task, filled from the approved step:
+
+1. **Scope is the step.** Build only step `<n>` (`--step`, else every `implement` step in order). Its `objects` are the closed file scope of every agent prompt, `out_of_scope` goes into each prompt as off limits, its `checks` run first in the QA wave. A needed file outside `objects` is a material deviation: stop that agent and return it as `needs-decision` ("Plan-Abweichung: <file> — neue Version freigeben?"); never widen silently.
+2. `ship` in the result stays `manual`; the hand-off never ships.
+
+## Hand-off in auto-concept
+
+Reached when auto-concept runs with `--from=frustrated --plan=<id>@<short> --step=<n>` (a `concept` step); found via `run-extras.js from frustrated --skill auto-concept`.
+
+- The page is built and iterated as always; iterate clicks change nothing outside the page.
+- **The implement click is a re-approval of a new plan version** (spec § 4.2, G7). Before § 5b's implement path: fold the submitted decisions into the plan (the implement step's `objects` and `decisions` from the concept), then record it as v+1 under the **same id** — `node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" plan record --id <id> --file <plan.json>` — and approve it at once with the hash that call printed (`plan approve --id <id> --hash <hash>`); the click is the user's explicit yes. Only then run § 5b with `--via=frustrated --plan=<id>@<new short> --step=<n+1>` added to its auto-agents args.
+- A plan with **no implement step after this concept step**: the click adds a step (material). Do not run § 5b; show "Neue Umsetzung — Plan v<n+1> freigeben?" in chat and wait for an interpretable yes, then record + approve as above.
+- Close-out: ship stays a separate choice on the sheet (the only place the hand-off may ship).
+
+## Hand-off in do-learn
+
+Reached when do-learn runs with `--from=frustrated --plan=<id>@<short> --step=<n>` (a `learn` step, payload = the rule text); found via `run-extras.js from frustrated --skill do-learn`.
+
+- **No "richtig?" line** (spec G8) when the payload carries the rule text unchanged from the approved plan: the plan approval already confirmed it. Any edit to the rule text -> confirm as usual.
+- Routing (Step 2), the target-container grep and the report run unchanged.
 
 ## do-run option
 
