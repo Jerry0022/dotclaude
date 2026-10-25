@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.312.0] — 2026-10-25
+
+Concept pages use the notes blue for the eye counter and let go of the notes field when you click elsewhere.
+
+### Changed
+- **Eye counter.** The attention badge on the eye wears the notes button's blue instead of purple; the focused notes section's gradient lost its purple tail too.
+
+### Fixed
+- **Notes dock.** A click outside the notes on the design or the empty page releases the focused field, so its focus glow no longer stays lit while you are elsewhere.
+
 ## [0.311.0] — 2026-10-25
 
 Concept pages show every hotkey on `?` instead of a held Alt, and every chrome control names its key.
