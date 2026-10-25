@@ -118,16 +118,16 @@ describe("prompt.skill.enforce — e2e process (mentions + router)", () => {
     expect(runHook({ prompt: 'die Hook-Meldung „/concept first“ ist veraltet' }).stdout).toBe("");
   });
 
-  test("a real bug report (stack trace + 'geht nicht') routes to fix", () => {
+  test("a real bug report (stack trace + 'geht nicht') is not routed (auto-fix is on request only)", () => {
     const r = runHook({
       prompt: "geht nicht:\nTypeError: Cannot read properties of undefined (reading 'map')\n  at Foo (bar.js:12:5)",
     });
-    expect(r.stdout).toContain('Skill("devops:auto-fix")');
+    expect(r.stdout).toBe("");
   });
 
-  test("Traceback + crash routes to fix", () => {
+  test("Traceback + crash is not routed", () => {
     const r = runHook({ prompt: 'crash beim Start\nTraceback (most recent call last):\n  File "app.py", line 3' });
-    expect(r.stdout).toContain('Skill("devops:auto-fix")');
+    expect(r.stdout).toBe("");
   });
 
   test.each([
@@ -326,9 +326,9 @@ describe("prompt.skill.enforce — concept phrases and soft hints (R1, R2)", () 
       expect(runHook({ prompt: "/auto-concept bitte" }).stdout).toContain('Skill("devops:auto-concept")');
     });
 
-    test("an error pattern stays mandatory", () => {
+    test("an error pattern does not route (auto-fix is on request only)", () => {
       const r = runHook({ prompt: "geht nicht:\nTypeError: x\n  at f (a.js:1:2)" });
-      expect(r.stdout).toContain('Skill("devops:auto-fix")');
+      expect(r.stdout).toBe("");
     });
   });
 });

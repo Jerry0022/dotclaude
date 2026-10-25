@@ -50,7 +50,7 @@ you work (or in both).
 
 Requires **git** and **Node.js 18.18+** (the plugin's MCP server runs on Node).
 
-Start a new session for hooks to take effect. Skills are available immediately: type `/do-ship` (or just "ship it"), or say what you need — "funktioniert nicht" / "this is broken" reaches the debugging skill, "concept page" / "ein concept für …" the interactive concept page.
+Start a new session for hooks to take effect. Skills are available immediately: type `/do-ship` (or just "ship it"), or say what you need — a bug is fixed root-cause first, "concept page" / "ein concept für …" the interactive concept page.
 
 ## Update
 

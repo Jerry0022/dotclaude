@@ -4,6 +4,24 @@ Filled from `TRIM-TEMPLATE.md`. Variant A = the skill's text before the trim,
 variant B = the trimmed text. Two attempts, both reverted: the retry (#720)
 first, the first attempt (#651) below it.
 
+## 2026-10-25 - on request only (no auto-trigger)
+
+Question: does auto-loading the skill pay off? Since 1 Oct, 133 prompts sounded like bugs; the skill auto-loaded 0 times and real runs took 50-63 tool calls.
+
+A/B: A = plugin copy without `skills/auto-fix` (the model fixes inline), B = the skill present. Six natural bug reports (no skill named): `skills/auto-fix/natural-{stacktrace,missing-await,regression-boundary,missing-file,slug-de}` plus `off-by-one-root-cause`, 1 run each, same `-p` harness.
+
+| Metric | A (no skill) | B (skill) |
+|---|---|---|
+| bug fixed (file regex) | 6/6 | 6/6 |
+| location reported | 5/6 | 6/6 |
+| root cause named before the first edit (1 case) | 1/1 | 0/1 |
+| skill loaded | n/a | 2/6 (stacktrace, off-by-one) |
+| tool calls (sum) | 60 | 57 |
+| mean duration | 156.5 s | 157.0 s |
+| cost | $6.92 | $6.86 |
+
+Same fixes, same cost, same speed: the skill is no win. Decision: on request only. The description lost its trigger promises, `triggers:` is empty, the router no longer routes error patterns (`looksLikeBugReport` stays exported) and the `auto-fix-*` trigger cases are gone. A typed `/auto-fix` and `/fix` still load it. Caveat: n=1 per case; the 50-63-call sessions were larger than these fixtures.
+
 ## Follow-up — card wins over the Step 8 report (fixed)
 
 Not a trim: a fix for the failure mode both #720 and #651 hit. Runs loaded

@@ -79,7 +79,7 @@ picked from what you say.
 |---|---|
 | "ship it" · `/do-ship` | Build, test, version bump, PR, merge, tag `alpha`, cleanup — then the card |
 | "promote to stable" | Re-tag the shipped commit on `beta` / `stable` (no rebuild) |
-| "this is broken" · "debug" | Root-cause analysis first, then the fix |
+| `/auto-fix` (on request) | Root-cause analysis first, then the fix |
 | "concept page for …" | Interactive HTML page with options to pick; your choices flow back |
 | `/do-run` | Bigger work: implement a prompt with agents, work off the backlog, run AFK, burn leftover budget, rethink a stuck area, full audit |
 | "harden" · "polish" | Stabilize (tests, bugs, consistency) · refine the UI |
@@ -108,7 +108,7 @@ new skill, and project extensions under an old name keep loading.
 | `/do-learn` | Explicit | Capture long-term learnings and route them to project-specific instructions |
 | `/do-batch` | Explicit + Hook | Collect prompts into `.claude/batch.md`, then merge them into one feasibility-checked plan |
 | `/auto-agents` | Hidden · Skills | Execution path for everything that implements: delegation tiers, one agent card, waves; full ceremony only on a yes |
-| `/auto-fix` (trigger: "debug") | Hidden · Router + Hook | Root-cause analysis, diagnostics, fix cycle |
+| `/auto-fix` (on request only) | Hidden · Hook | Root-cause analysis, diagnostics, fix cycle |
 | `/auto-concept` | Hidden · Router | Interactive HTML page for analysis, plans, concepts, prototypes |
 | `/auto-harden` | Hidden · Router | Full test suite, autonomous bug fixes, regression + consistency |
 | `/auto-polish` | Hidden · Router + `/do-ship` | UI refinement and the standing UI rules (`deep-knowledge/ui-defaults.md`) |
