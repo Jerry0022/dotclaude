@@ -823,8 +823,14 @@ describe("render_completion_card — § 3 per-variant table (de + en)", () => {
     },
     {
       name: "ship-successful kept",
-      params: { variant: "ship-successful", state: { pushed: true, merged: "main", kept: true, branch: "feat/x" }, delivery: { ship: { version: "0.1.0" } } },
+      params: { variant: "ship-successful", nextStep: "Bau Phase 2.", state: { pushed: true, merged: "main", kept: true, branch: "feat/x" }, delivery: { ship: { version: "0.1.0" } } },
       de: /^## 🟩 🚀 Released Alpha — v0\.1\.0 — weiter in `feat\/x`\?$/m, en: /^## 🟩 🚀 Released Alpha — v0\.1\.0 — continue on `feat\/x`\?$/m,
+    },
+    {
+      // Kept without a named follow-up (the user is done): a finished ship.
+      name: "ship-successful kept without nextStep",
+      params: { variant: "ship-successful", state: { pushed: true, merged: "main", kept: true, branch: "feat/x" }, delivery: { ship: { version: "0.1.0", base: "main" } } },
+      de: /^## 🟩 🚀 Released Alpha — v0\.1\.0 → main\.$/m, en: /^## 🟩 🚀 Released Alpha — v0\.1\.0 → main\.$/m,
     },
     {
       name: "ship-successful deployPending",
@@ -1227,7 +1233,7 @@ describe("render_completion_card — concept close-out after the implement ship 
     writeFileSync(join(cwd, "docs", "concepts", "x.html"), "<!doctype html><html><body>" + body + "</body></html>");
     return cwd;
   }
-  const kept = { variant: "ship-successful", state: { mode: "git", pushed: true, merged: "main", kept: true, branch: "feat/x" }, delivery: { ship: { version: "0.1.0" }, promote: { channels: { alpha: "0.1.0" }, current: "alpha" } } };
+  const kept = { variant: "ship-successful", nextStep: "Bau Phase 2.", state: { mode: "git", pushed: true, merged: "main", kept: true, branch: "feat/x" }, delivery: { ship: { version: "0.1.0" }, promote: { channels: { alpha: "0.1.0" }, current: "alpha" } } };
 
   test("kept ship with only the close-out left: close-out CTA + page URL, no 'weiter in <branch>', shipped title", async () => {
     const cwd = conceptRepo('<section data-iteration="2"></section>' + FINAL);

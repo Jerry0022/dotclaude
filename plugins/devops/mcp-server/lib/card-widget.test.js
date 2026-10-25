@@ -230,11 +230,14 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     expect(buttonsFor("ship-blocked", "de").map((a) => a.label)).toEqual(["Fix", "Skip"]);
   });
 
-  test("ship-successful-kept offers a single Weiter button", () => {
-    const btns = buttonsFor("ship-successful-kept", "de");
+  // Weiter sends the announced follow-up; a generic "what's next?" is gone.
+  test("ship-successful-kept: Weiter sends the named follow-up, no button without one", () => {
+    const btns = buttonsFor("ship-successful-kept", "de", { nextStep: "Bau Phase 2: Export als CSV." });
     expect(btns).toHaveLength(1);
     expect(btns[0].label).toBe("Weiter");
     expect(btns[0].primary).toBe(true);
+    expect(btns[0].prompt).toBe("Bau Phase 2: Export als CSV.");
+    expect(buttonsFor("ship-successful-kept", "de")).toEqual([]);
   });
 
   test("vv-unverified offers Tests laufen lassen and Trotzdem shippen", () => {

@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.314.0] — 2026-10-25
+## [0.315.0] — 2026-10-25
 
 Frustrated Mode for the alpha channel: after several frustrated rounds Claude offers a read-only analysis once, with an approved plan handed on to `/do-run`. Stable and beta see nothing of it.
 
@@ -16,6 +16,14 @@ Frustrated Mode for the alpha channel: after several frustrated rounds Claude of
 ### Known gaps
 - `--plan` / `--step` pass-through to auto-agents, auto-concept and do-learn is not built yet; the hand-off works via do-run / auto-fix.
 - The name `auto-frustrated` shows in the slash menu on every channel (it stops at once off alpha).
+
+## [0.314.0] — 2026-10-25
+
+A finished ship no longer asks whether you want to continue.
+
+### Fixed
+- **Completion card after a kept ship.** A finished ship no longer asks "weiter in `<branch>`?" with a Continue button that only sent a generic "what's next?". The question and the button now need the announced follow-up (`nextStep`), and the button sends exactly that step. A kept ship without one renders like any finished ship.
+- **Keep-mode rules.** do-ship, its cleanup rules and the delegated-ship brief use `--keep` only for announced follow-up work and name it as `nextStep`. "fertig", "final" and a concept close-out after the merge are no keep signal, but they never cancel an explicit "ship und weiter".
 
 ## [0.313.0] — 2026-10-25
 
