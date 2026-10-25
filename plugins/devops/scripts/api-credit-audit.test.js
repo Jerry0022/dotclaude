@@ -107,6 +107,64 @@ test("--batch with all rules true: packs go through the batch, no agent loop", a
   expect(fs.readFileSync(path.join(home, ".claude", "devops-audits", "bigrepo-2026-11-02.md"), "utf8")).toContain("batch finding");
 });
 
+test("--max-usd reaches the batch policy as its per-run cap (default 5)", async () => {
+  enable();
+  const policy = require("./batch-policy.js");
+  const orig = policy.decide;
+  const jobs = [];
+  policy.decide = (job) => { jobs.push(job); return { useBatch: false, reason: "R2 test", estUsd: 0, estSavingUsd: 0 }; };
+  const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ content: [{ type: "text", text: "- low · a.js:1 · x" }], stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 } }) });
+  try {
+    const o = { env: {}, home, cwd: proj, fetchImpl, featureOpts: { channel: "alpha" }, err: () => {}, out: () => {} };
+    await audit.run(["--batch", "--max-usd", "2"], { ...o, now: Date.parse("2026-11-06T12:00:00Z") });
+    await audit.run(["--batch"], { ...o, now: Date.parse("2026-11-07T12:00:00Z") });
+  } finally { policy.decide = orig; }
+  expect(jobs.map((j) => j.maxUsd)).toEqual([2, 5]);
+});
+
+test("unfinished packs: ≤200 files are named one by one; more → whole repo, nothing dropped, the report says so", async () => {
+  enable();
+  const policy = require("./batch-policy.js");
+  const orig = policy.decide;
+  policy.decide = () => ({ useBatch: true, reason: "test", estUsd: 1, estSavingUsd: 1 });
+  try {
+    for (const [name, count, day] of [["fewfiles", 3, "2026-11-08"], ["manyfiles", audit.MAX_FOCUS_FILES + 1, "2026-11-09"]]) {
+      const r = path.join(tmp, name);
+      fs.mkdirSync(path.join(r, "src"), { recursive: true });
+      for (let i = 0; i < count; i++) fs.writeFileSync(path.join(r, "src", `f${i}.js`), `x${i}`);
+      const agentBodies = [];
+      const fetchImpl = async (url, init) => {
+        const j = (b) => ({ ok: true, status: 200, json: async () => b, text: async () => b });
+        if (url.endsWith("/v1/messages")) {
+          agentBodies.push(init.body);
+          return j({ content: [{ type: "text", text: "- low · src/f0.js:1 · normal path" }], stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 } });
+        }
+        if (init.method === "POST") return j({ id: "b1" });
+        if (url.endsWith("/results")) return j(""); // the pack did not finish
+        return j({ processing_status: "ended", results_url: "https://api.anthropic.com/v1/messages/batches/b1/results" });
+      };
+      const rc = await audit.run(["--batch", "--root", r], {
+        env: {}, home, cwd: proj, now: Date.parse(`${day}T12:00:00Z`), fetchImpl, featureOpts: { channel: "alpha" }, err: () => {}, out: () => {},
+        batchOpts: { sleep: async () => {}, firstPollMs: 1 },
+      });
+      expect(rc, name).toBe(0);
+      const prompt = agentBodies[0];
+      const report = fs.readFileSync(path.join(home, ".claude", "devops-audits", `${name}-${day}.md`), "utf8");
+      expect(report, name).toContain("normal path");
+      if (count <= audit.MAX_FOCUS_FILES) {
+        expect(prompt).toContain("ONLY these files");
+        expect(prompt).toContain("src/f2.js");
+        expect(report).toContain("audited file by file");
+      } else {
+        expect(prompt).not.toContain("ONLY these files");
+        expect(prompt).toContain("Start with these top-level areas: src");
+        expect(report).toContain(`${count} files`);
+        expect(report).toContain("whole repository");
+      }
+    }
+  } finally { policy.decide = orig; }
+});
+
 test("parseArgs keeps the defaults", () => {
   expect(audit.parseArgs([])).toEqual({ root: null, maxUsd: 5, model: null, focus: null, batch: null });
   expect(audit.parseArgs(["--no-batch"]).batch).toBe(false);

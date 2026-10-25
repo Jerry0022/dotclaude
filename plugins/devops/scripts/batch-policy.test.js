@@ -45,6 +45,23 @@ test("R2 each credit precondition rejects", () => {
   expect(policy.decide({ ...good, monthBudgetUsd: 2 }, ctx(mkHome("r2d"))).reason).toMatch(/^R2 month budget/);
 });
 
+test("R2 per-run cap: an estimate above maxUsd takes the normal path", () => {
+  const d = policy.decide({ ...good, maxUsd: 1 }, ctx(mkHome("r2e")));
+  expect(d.useBatch).toBe(false);
+  expect(d.reason).toMatch(/^R2 estimated .* per-run cap/);
+  expect(policy.decide({ ...good, maxUsd: 100 }, ctx(mkHome("r2f"))).useBatch).toBe(true);
+  expect(policy.parseArgs(["--max-usd", "3"]).maxUsd).toBe(3);
+});
+
+test("estimate is priced per request: Haiku's >100k tier never hits a job of small prompts", () => {
+  // 10 requests × 50k input = 500k total; per prompt < 100k → base Haiku price.
+  const job = { ...good, model: "claude-haiku-5-5", requests: 10, estInputTokens: 5e5, estOutputTokens: 1e4 };
+  const d = policy.decide(job, ctx(mkHome("tier")));
+  const perReq = safe.costOf("claude-haiku-5-5", { input_tokens: 5e4, output_tokens: 1e3 });
+  expect(d.estUsd).toBeCloseTo(Math.round(perReq * 10 / 2 * 100) / 100, 6);
+  expect(d.estUsd).toBeLessThan(Math.round(safe.costOf("claude-haiku-5-5", { input_tokens: 5e5, output_tokens: 1e4 }) / 2 * 100) / 100);
+});
+
 test("R3 interactive caller", () => {
   expect(policy.decide({ ...good, unattended: false }, ctx(mkHome("r3"))).reason).toMatch(/^R3/);
 });

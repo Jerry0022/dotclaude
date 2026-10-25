@@ -156,6 +156,26 @@ describe("features — the real registry", () => {
     }
   });
 
+  test("gen-dk-index keeps gated docs out of INDEX.md — and fails CLOSED on a corrupt registry", () => {
+    const GEN = path.join(PLUGIN_ROOT, "scripts", "gen-dk-index.mjs");
+    for (const [label, registry] of [
+      ["valid", JSON.stringify({ features: { batch: { minChannel: "alpha", summary: "s", docs: ["deep-knowledge/gated.md"] } } })],
+      ["corrupt", '{ "features": { "batch": { "docs": ["deep-knowledge/gated.md"] ,,, }'],
+    ]) {
+      const root = fs.mkdtempSync(path.join(TMP_ROOT, `gen-${label}-`));
+      const dk = path.join(root, "deep-knowledge");
+      fs.mkdirSync(dk);
+      fs.writeFileSync(path.join(dk, "open.md"), "# Open\n\nopen doc\n");
+      fs.writeFileSync(path.join(dk, "gated.md"), "# Gated\n\ngated doc\n");
+      fs.writeFileSync(path.join(root, "features.json"), registry);
+      const r = spawnSync(process.execPath, [GEN, dk], { encoding: "utf8" });
+      expect(r.status, `${label}: ${r.stderr}`).toBe(0);
+      const index = fs.readFileSync(path.join(dk, "INDEX.md"), "utf8");
+      expect(index, label).toContain("open.md");
+      expect(index, label).not.toContain("gated.md");
+    }
+  });
+
   test("every existing gated script checks its flag before doing anything", () => {
     for (const [name, f] of Object.entries(reg.features)) {
       for (const s of f.scripts) {

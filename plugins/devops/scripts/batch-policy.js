@@ -10,7 +10,7 @@
  *   Alpha channel only (feature flag "batch"). Docs: deep-knowledge/api-batch.md
  *
  * Usage: batch-policy.js --requests N --est-input-tokens T --est-output-tokens O
- *          [--model M] [--unattended] [--deadline-min 120]
+ *          [--model M] [--unattended] [--deadline-min 120] [--max-usd X]
  * Exit codes: 0 = use batch, 3 = use the normal path, 126 = feature off.
  */
 
@@ -42,7 +42,7 @@ function remainingBudget(job, env, { home, now }) {
 
 /**
  * @param {{requests:number, estInputTokens:number, estOutputTokens:number, model?:string,
- *          unattended?:boolean, deadlineMs?:number, monthBudgetUsd?:number, cwd?:string}} job
+ *          unattended?:boolean, deadlineMs?:number, monthBudgetUsd?:number, maxUsd?:number, cwd?:string}} job
  * @param {{env?:object, home?:string, now?:number, featureOpts?:object}} ctx
  * @returns {{useBatch:boolean, reason:string, estUsd:number, estSavingUsd:number}}
  *   estUsd = expected cost on the batch path, estSavingUsd = saving vs the normal path.
@@ -54,7 +54,9 @@ function decide(job = {}, ctx = {}) {
     const home = ctx.home;
     const now = ctx.now || Date.now();
     const model = job.model || safe.DEFAULT_MODEL;
-    const normal = safe.costOf(model, { input_tokens: job.estInputTokens || 0, output_tokens: job.estOutputTokens || 0 });
+    // Priced per request: size tiers (Haiku >100k) apply to one prompt, never to the job's total.
+    const n = job.requests > 0 ? job.requests : 1;
+    const normal = n * safe.costOf(model, { input_tokens: (job.estInputTokens || 0) / n, output_tokens: (job.estOutputTokens || 0) / n });
     const est = { estUsd: Math.round(normal / 2 * 100) / 100, estSavingUsd: Math.round(normal / 2 * 100) / 100 };
 
     const cwd = job.cwd || process.cwd();
@@ -64,6 +66,7 @@ function decide(job = {}, ctx = {}) {
     if (until) return no(`R2 API credit limit active until ${until}`, est);
     const remaining = remainingBudget(job, penv, { home, now });
     if (remaining !== null && remaining < est.estUsd) return no(`R2 month budget left $${remaining.toFixed(2)} < estimated $${est.estUsd.toFixed(2)}`, est);
+    if (job.maxUsd > 0 && est.estUsd > job.maxUsd) return no(`R2 estimated $${est.estUsd.toFixed(2)} > per-run cap $${job.maxUsd.toFixed(2)}`, est);
 
     if (job.unattended !== true) return no('R3 interactive caller - batches are for unattended jobs only', est);
 
@@ -89,6 +92,7 @@ function parseArgs(argv) {
     else if (a === '--model') o.model = argv[++i];
     else if (a === '--unattended') o.unattended = true;
     else if (a === '--deadline-min') o.deadlineMs = Number(argv[++i]) * 60000;
+    else if (a === '--max-usd') o.maxUsd = Number(argv[++i]);
   }
   return o;
 }

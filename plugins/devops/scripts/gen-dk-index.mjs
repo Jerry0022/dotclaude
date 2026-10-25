@@ -13,7 +13,9 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
+const require = createRequire(import.meta.url);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_DIR = resolve(__dirname, "..", "deep-knowledge");
 
@@ -37,16 +39,19 @@ function extractMeta(filePath) {
 
 // Docs of a channel-gated feature (features.json) never go into INDEX.md:
 // every channel reads it, and the SessionStart index adds them itself where
-// the channel allows them.
+// the channel allows them. Same parser as the runtime gate (hooks/lib/features.js),
+// so a corrupt registry fails CLOSED here too: every deep-knowledge path its
+// raw text mentions stays out of the index.
 function gatedDocNames(dkDir) {
-  try {
-    const reg = JSON.parse(readFileSync(join(dkDir, "..", "features.json"), "utf8"));
-    return new Set(Object.values(reg.features || {})
-      .flatMap((f) => f.docs || [])
-      .map((p) => p.replace(/^deep-knowledge\//, "")));
-  } catch {
-    return new Set();
-  }
+  const features = require("../hooks/lib/features.js");
+  features._resetCache();
+  const reg = features.readRegistry({ pluginRoot: resolve(dkDir, "..") });
+  const paths = reg.ok
+    ? Object.values(reg.features).flatMap((f) => f.docs)
+    : reg.rawPaths;
+  return new Set(paths
+    .filter((p) => p.startsWith("deep-knowledge/"))
+    .map((p) => p.replace(/^deep-knowledge\//, "")));
 }
 
 function generate(dir) {

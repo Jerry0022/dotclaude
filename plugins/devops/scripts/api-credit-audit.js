@@ -30,6 +30,7 @@ const batch = require('./claude-api-batch');
 const features = require('../hooks/lib/features');
 
 const DEFAULT_MAX_USD = 5;
+const MAX_FOCUS_FILES = 200; // more unfinished files than this are not named one by one in the prompt
 
 function parseArgs(argv) {
   const o = { root: null, maxUsd: DEFAULT_MAX_USD, model: null, focus: null, batch: null };
@@ -136,6 +137,7 @@ async function run(argv, opts = {}) {
   const root = path.resolve(cwd, o.root || '.');
   const err = opts.err || ((s) => process.stderr.write(s));
   let batchText = '';
+  let remainingNote = '';
   let focus = o.focus;
 
   // No flag: try the batch path wherever the channel allows the feature — the
@@ -146,7 +148,10 @@ async function run(argv, opts = {}) {
     const packs = buildPacks(root);
     const bytes = packs.reduce((s, p) => s + p.bytes, 0);
     const d = policy.decide(
-      { requests: packs.length, estInputTokens: Math.round(bytes / 4), estOutputTokens: packs.length * 2500, model, unattended: true, cwd, monthBudgetUsd: opts.monthBudgetUsd },
+      {
+        requests: packs.length, estInputTokens: Math.round(bytes / 4), estOutputTokens: packs.length * 2500, model, unattended: true, cwd,
+        monthBudgetUsd: opts.monthBudgetUsd, maxUsd: o.maxUsd > 0 ? o.maxUsd : DEFAULT_MAX_USD, // --max-usd caps the batch path too
+      },
       { env: opts.env, home: opts.home, now: opts.now, featureOpts: opts.featureOpts },
     );
     if (!d.useBatch) {
@@ -158,18 +163,28 @@ async function run(argv, opts = {}) {
       const byId = new Map(packs.map((p) => [p.id, p]));
       batchText = res.done.map((r) => `## Pack: ${byId.get(r.custom_id).name} (${byId.get(r.custom_id).files.length} files)\n\n${r.text}\n`).join('\n');
       if (!res.unfinished.length) return writeReport(root, batchText, opts);
-      const paths = [...new Set(res.unfinished.map((id) => byId.get(id)).filter(Boolean).flatMap((p) => p.files))];
+      const left = res.unfinished.map((id) => byId.get(id)).filter(Boolean);
+      const paths = [...new Set(left.flatMap((p) => p.files))];
       err(`api-credit-audit: ${res.unfinished.length} pack(s) unfinished (${res.reason || 'batch'}) - auditing them via the normal path\n`);
-      focus = `${o.focus ? o.focus + '. ' : ''}ONLY these files and their direct callees: ${paths.slice(0, 200).join(', ')}`;
+      if (paths.length <= MAX_FOCUS_FILES) {
+        focus = `${o.focus ? o.focus + '. ' : ''}ONLY these files and their direct callees: ${paths.join(', ')}`;
+        remainingNote = `${paths.length} files of ${left.length} unfinished pack(s), audited file by file.`;
+      } else {
+        // Too many files to name: no file restriction (nothing is dropped), the unfinished areas lead.
+        const areas = [...new Set(left.map((p) => p.name))];
+        focus = `${o.focus ? o.focus + '. ' : ''}Start with these top-level areas: ${areas.join(', ')}`;
+        remainingNote = `${paths.length} files of ${left.length} unfinished pack(s) (more than ${MAX_FOCUS_FILES}): the normal audit ran over the whole repository, starting with ${areas.join(', ')}.`;
+      }
     }
   }
 
   const r = await runAgentAudit(o, root, cwd, opts, focus);
-  if (r.rc !== 0) return batchText ? writeReport(root, batchText + '\n(normal-path audit of the remaining packs failed)\n', opts) : r.rc;
-  return writeReport(root, batchText ? `${batchText}\n## Remaining packs (normal path)\n\n${r.text}` : r.text, opts);
+  if (r.rc !== 0) return batchText ? writeReport(root, `${batchText}\n(normal-path audit of the remaining packs failed — ${remainingNote})\n`, opts) : r.rc;
+  if (!remainingNote) return writeReport(root, r.text, opts);
+  return writeReport(root, `${batchText ? batchText + '\n' : ''}## Remaining packs (normal path)\n\n_${remainingNote}_\n\n${r.text}`, opts);
 }
 
-module.exports = { parseArgs, auditTask, buildPacks, packRequest, run };
+module.exports = { parseArgs, auditTask, buildPacks, packRequest, run, MAX_FOCUS_FILES };
 
 if (require.main === module) {
   run(process.argv.slice(2)).then((rc) => { process.exitCode = rc; });

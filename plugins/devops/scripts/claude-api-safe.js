@@ -96,6 +96,28 @@ function costParts(model, usage = {}) {
   };
 }
 
+/**
+ * costParts for a usage that sums `n` requests (agent turns, batch items) when
+ * the per-request split is unknown: priced as n equal requests, so a size
+ * tier (Haiku >100k) is judged per prompt, never on the sum.
+ */
+function costPartsOfSum(model, usage = {}, n = 1) {
+  const k = n > 1 ? Math.floor(n) : 1;
+  if (k === 1) return costParts(model, usage);
+  const u = usage || {};
+  const per = {
+    input_tokens: (u.input_tokens || 0) / k,
+    output_tokens: (u.output_tokens || 0) / k,
+    cache_read_input_tokens: (u.cache_read_input_tokens || 0) / k,
+    cache_creation_input_tokens: (u.cache_creation_input_tokens || 0) / k,
+    server_tool_use: { web_search_requests: ((u.server_tool_use && u.server_tool_use.web_search_requests) || 0) / k },
+  };
+  const p = costParts(model, per);
+  const out = {};
+  for (const t of COST_TYPES) out[t] = p[t] * k;
+  return out;
+}
+
 function addParts(a = {}, b = {}) {
   const out = {};
   for (const k of COST_TYPES) out[k] = (a[k] || 0) + (b[k] || 0);
@@ -231,7 +253,7 @@ function logUsage({ home, now = Date.now(), tool, tag = null, cwd, model, usage,
       cacheRead: u.cache_read_input_tokens || 0, cacheWrite: u.cache_creation_input_tokens || 0,
       usd: Math.round(usd * 1e6) / 1e6, // micro-dollars: many tiny calls must still add up
       rc, ...(turns ? { turns } : {}),
-      parts: roundParts(batch ? halve(parts || (model ? costParts(model, u) : null)) : (parts || (model ? costParts(model, u) : null))),
+      parts: roundParts(batch ? halve(parts || (model ? costPartsOfSum(model, u, turns || 1) : null)) : (parts || (model ? costPartsOfSum(model, u, turns || 1) : null))),
       ...(batch ? { batch: true, savingUsd: Math.round(usd * 1e6) / 1e6 } : {}),
       ...(extra || {}),
       ...((u.server_tool_use && u.server_tool_use.web_search_requests) ? { searches: u.server_tool_use.web_search_requests } : {}),
@@ -260,14 +282,15 @@ function usageSummary({ home, since }) {
     return m;
   };
   const usd = Math.round(rows.reduce((s, r) => s + (r.usd || 0), 0) * 100) / 100;
-  // $ per cost type, from each line's own model prices (older lines: recomputed from tokens).
+  // $ per cost type, from each line's own model prices (older lines: recomputed
+  // from tokens, spread over the line's turns so a size tier is judged per prompt).
   let byType = {};
   for (const r of rows) {
-    const p = r.parts || costParts(r.model, {
+    const p = r.parts || costPartsOfSum(r.model, {
       input_tokens: r.in, output_tokens: r.out, cache_read_input_tokens: r.cacheRead,
       cache_creation_input_tokens: r.cacheWrite,
       server_tool_use: { web_search_requests: r.searches || 0 },
-    });
+    }, r.turns || 1);
     byType = addParts(byType, p);
   }
   for (const k of COST_TYPES) byType[k] = Math.round((byType[k] || 0) * 100) / 100;
@@ -483,7 +506,7 @@ async function run(argv, {
 module.exports = {
   RC, KEY_VAR, ENV_FILE, LIMIT_FILE, USAGE_FILE, DEFAULT_MODEL, PRICES,
   parseEnvFile, resolveKey, loadSwitches, activeLimit, storeLimit, resetLimit,
-  costOf, costParts, addParts, addUsage, logUsage, usageSummary,
+  costOf, costParts, costPartsOfSum, addParts, addUsage, logUsage, usageSummary,
   parseArgs, postMessages, textOf, callApi, sessionLine, run,
 };
 

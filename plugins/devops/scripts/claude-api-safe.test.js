@@ -242,6 +242,24 @@ describe("prices and cost view", () => {
     expect(p.cacheWrite).toBeCloseTo(20_001 * 0.625 / 1e6, 9);
     expect(api.costParts("claude-haiku-5-5", { ...big, cache_creation_input_tokens: 10_000 }).output).toBeCloseTo(0.5, 6);
   });
+  test("summed usage of several turns is priced per turn: Haiku's tier is judged per prompt, not on the sum", () => {
+    // 4 turns × 50k input = 200k summed; each prompt < 100k → base tier.
+    const sum = { input_tokens: 200_000, output_tokens: 4_000 };
+    const perTurn = api.costOf("claude-haiku-5-5", { input_tokens: 50_000, output_tokens: 1_000 });
+    const parts = api.costPartsOfSum("claude-haiku-5-5", sum, 4);
+    const total = Object.values(parts).reduce((s, v) => s + v, 0);
+    expect(total).toBeCloseTo(4 * perTurn, 9);
+    expect(total).toBeLessThan(api.costOf("claude-haiku-5-5", sum));
+    expect(api.costPartsOfSum("claude-haiku-5-5", sum, 1)).toEqual(api.costParts("claude-haiku-5-5", sum));
+    // An old log line without parts is recomputed the same way by --usage.
+    const h = fs.mkdtempSync(path.join(os.tmpdir(), "safe-sum-"));
+    fs.mkdirSync(path.join(h, ".claude"), { recursive: true });
+    fs.writeFileSync(path.join(h, ".claude", "api-credit-usage.jsonl"),
+      JSON.stringify({ ts: "2026-10-20T00:00:00.000Z", tool: "agent", model: "claude-haiku-5-5", in: 200_000, out: 4_000, cacheRead: 0, cacheWrite: 0, usd: 0, rc: 0, turns: 4 }) + "\n");
+    const s = api.usageSummary({ home: h, since: "2026-10-01" });
+    expect(s.byCostType.input).toBeCloseTo(Math.round(200_000 * 0.1 / 1e6 * 100) / 100, 6);
+    fs.rmSync(h, { recursive: true, force: true });
+  });
   test("--usage adds $ per cost type, top 3 calls, >10M cache-read warning and context-editing totals", async () => {
     const now = Date.parse("2026-10-20T12:00:00Z");
     const log = (o) => api.logUsage({ home, now, tool: "agent", tag: "scout", cwd: "/x/proj", rc: 0, ...o });
