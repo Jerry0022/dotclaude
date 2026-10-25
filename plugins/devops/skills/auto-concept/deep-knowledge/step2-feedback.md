@@ -95,7 +95,7 @@ frozen iteration keeps its annotations browsable and read-only.
 design rounds: **Ctrl + click** (long press on touch) on a paragraph, list
 item or table row sets a pin with a note field and attachments, exactly like
 the design round's own pins. Nothing to author — the engine
-(`wireDocumentPins()`, `deep-knowledge/templates-free.md` § Document pins)
+(`wireDocumentPins()`, `deep-knowledge/templates-free-pins.md` § Document pins)
 does it on every document round of every page built from the current
 engine; existing pages are not migrated. `?` shows the hotkey
 overlay with the "Ctrl + click" example pin, Ctrl held shows a hint pill,

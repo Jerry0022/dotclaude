@@ -8,7 +8,7 @@ import { build } from "../../scripts/build-concept-fixture.js";
 import { readTemplates } from "./templates-source.js";
 
 // Document pins: own Ctrl + click notes in decision / free rounds
-// (templates-free.md § Document pins). Booted from the real assembled
+// (templates-free-pins.md § Document pins). Booted from the real assembled
 // fixture, like chrome-islands-notes.test.js. jsdom has no layout, so
 // positions are not asserted — the store, the anchor, the payload, the
 // frozen render, the eye and the ? overlay are.
