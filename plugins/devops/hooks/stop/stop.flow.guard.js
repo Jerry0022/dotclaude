@@ -179,7 +179,17 @@ process.stdin.on('end', () => {
 
   const workHappened = workResult !== null;
   const flagCardRendered = cardResult !== null;
-  const silent = silentResult !== null;
+  // A turn perm.approval.* woke from idle only renames the session (👉 while a
+  // background agent waits on a permission dialog, ⏳ once it is answered):
+  // silent like a tick — a card here would put the ⏳ head straight back.
+  // Only when the turn did nothing else since the wake: a real turn that
+  // happened to end meanwhile keeps every gate.
+  const approvalWait = require('../lib/approval-wait');
+  const wokenAt = approvalWait.wakeAt(sessionId);
+  const approvalWake = wokenAt !== null &&
+    approvalWait.onlyRenamedSince(require('../lib/agent-card-relay').readTail(hook.transcript_path), wokenAt);
+  if (approvalWake) approvalWait.dropWake(sessionId);
+  const silent = silentResult !== null || approvalWake;
   const validationPending = valPendingResult !== null;
   const validationAttested = valAttestedResult !== null;
   const pendingAttested = pendAttestedResult !== null;

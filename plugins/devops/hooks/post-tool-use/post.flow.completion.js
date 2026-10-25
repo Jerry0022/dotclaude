@@ -477,6 +477,9 @@ function detectBackgroundLaunch(hook) {
  * must not suppress this session's card reminder and light-pending bookkeeping.
  */
 function isSilentTurn(hook) {
+  // The rename of an approval wake turn (lib/approval-wait.js) is no work.
+  const approvalWait = require('../lib/approval-wait');
+  if (approvalWait.RENAME_TOOLS.has(hook.tool_name) && approvalWait.wakePending(hook.session_id)) return true;
   return !!readSessionFile('dotclaude-devops-silent-turn', hook.session_id, { exact: true });
 }
 

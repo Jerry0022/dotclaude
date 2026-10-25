@@ -143,6 +143,9 @@
     "SubagentStop": [
       [
         "substop.agent.wip"
+      ],
+      [
+        "substop.approval.clear"
       ]
     ],
     "SubagentStart": [
@@ -153,6 +156,9 @@
     "PostToolUse": [
       [
         "post.flow.completion"
+      ],
+      [
+        "post.approval.clear"
       ],
       [
         "post.concept.gate"
@@ -203,6 +209,9 @@
       ],
       [
         "post.governor.clear"
+      ],
+      [
+        "post.approval.clear"
       ]
     ],
     "Stop": [
