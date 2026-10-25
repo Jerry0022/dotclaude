@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.307.0] — 2026-10-25
+
+The design overview, the notes dock and the tips were reworked from a full round of feedback on an example concept.
+
+### Changed
+- **Overview.** The eye sits inside the header and the layers button is gone. The focused tile glows on hover instead of showing a "Design öffnen" button. Previews fill the tile but keep clear of the info card. Side tiles are plain and show the variant icon; arrows are tall chevrons that fade in with a glow. Enter opens the focused tile. The current page in the header is a quiet label, not a button. The info card is half-transparent until hovered, shows icon + name only, and replaces the "Verbessert" chip with a short line from the new `data-design-improved` attribute.
+- **Notes dock.** Opening it (Space or click) focuses the most specific field with the caret at the end and a fresh line; switching pages moves the focus along. Fields grow with their text and shrink the others first. The dock no longer overlaps the ☰ button, which now wears the navigation-bar surface.
+- **Tips.** Every tip fits one line, users never see the word "Pin" (it is "Notiz"), a tip shows at most once per session, and a hotkey tip stops once the hotkey was used. Tips get their own calm `--tip-color`, apart from the amber `--question-color` of open questions.
+- **Fields.** One modern look for every input and textarea; the 📎 button no longer covers the text.
+- **Designs of a whole app** render edge to edge (`data-screen-fit="full"`) and carry no round commentary under the mock.
+- **Menu.** The "Fragen offen" hint sits above the submit row.
+
+### Fixed
+- **Implement asked twice.** After the 🔒 unlock (or the caret menu) "Umsetzen" no longer opens a browser confirm.
+- **Second tab's title.** A tab that did not submit itself now follows the server state (⏳/🛠️) without a reload.
+
 ## [0.306.0] — 2026-10-25
 
 In batch mode the "note saved" answer is now easy to see. The red panel no longer shows the hook's plugin path or the whole prompt again.
