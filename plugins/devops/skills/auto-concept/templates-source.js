@@ -45,7 +45,11 @@ function templateParts() {
 function readPart(file) {
   const text = fs.readFileSync(path.join(DK, file), 'utf8');
   if (!PART_HEADER.test(text)) throw new Error(`${file}: missing the "# Concept templates, part …" header`);
-  return { body: text.replace(PART_HEADER, ''), continued: CONTINUED.test(text) };
+  const continued = CONTINUED.test(text);
+  if (!continued && /^[^\n]*\(continued \d+\)\n/.test(text)) {
+    throw new Error(`${file}: a "(continued N)" part must open with a \`\`\`<lang> fence right after its header`);
+  }
+  return { body: text.replace(PART_HEADER, ''), continued };
 }
 
 /** Parts → one text; a "(continued N)" part rejoins the fence the previous part closed. */

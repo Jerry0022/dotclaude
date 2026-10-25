@@ -475,7 +475,7 @@ body:has(.draft-offline-strip:not([hidden])) .submitted-toast { bottom: 4.75rem;
    120px cap, with the back button clipped below it. The same sentence is
    already on screen twice: the status line ("🕘 Runde N · nur lesen") and
    the frozen bar over the content. The markup stays (screen readers, older
-   pages) — the foot is indicator + back button, ≈85px. */
+   pages) — the foot is the back button alone (see below). */
 #panel-frozen .hint { display: none; font-size: 0.78rem; line-height: 1.35; margin: 0; }
 /* The status line already reads "🕘 Runde N · nur lesen" right above, so the
    indicator would be the same state twice (the doubled mark on old rounds).
