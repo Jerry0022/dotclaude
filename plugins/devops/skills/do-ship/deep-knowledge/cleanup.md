@@ -186,6 +186,11 @@ Evaluate all sources; ANY positive hit → keep-mode.
    says something like `"ship das aber wir machen weiter"`, `"ship und weiter"`,
    `"keep worktree"`, `"--keep"`, `"ohne cleanup"` → keep-mode (highest priority).
 
+**Never a signal:** "fertig", "final", "abschließen" in the trigger, and any wrap-up of
+this session after the merge (a concept close-out, stopping a bridge, the card). The
+user who says "ich bin fertig … shippen" gets a finished-ship card, not "weiter in
+<branch>?" with a Weiter button (2026-10-25).
+
 ### When the signal is ambiguous
 
 If you considered keep-mode but the signal is weak (e.g. one borderline phrase, no clear

@@ -286,6 +286,14 @@ export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
     const n = NEXT_STEP[lang] || NEXT_STEP.de;
     buttons[0] = { ...buttons[0], label: n.label, prompt: step, tooltip: step.length > 140 ? step.slice(0, 139) + "…" : step };
   }
+  // A kept branch's Weiter sends the announced follow-up, never a generic
+  // "what's next?"; with nothing named the button goes (the card falls back
+  // to the finished-ship heading anyway, index.js).
+  if (buttonsKey === "ship-successful-kept") {
+    buttons = step
+      ? buttons.map((a, i) => (i === 0 ? { ...a, prompt: step, tooltip: step.length > 140 ? step.slice(0, 139) + "…" : step } : a))
+      : buttons.slice(1);
+  }
   if (opts && opts.appStart) buttons.push(appStartButton(lang));
   const handoff = opts && opts.guideHandoff;
   if (handoff && handoff.service) buttons.push(guideHandoffButton(handoff.service, lang));

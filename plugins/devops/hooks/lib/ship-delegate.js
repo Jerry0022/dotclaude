@@ -206,7 +206,8 @@ function spawnAndDeliver({ args, sessionId, description, brief, cardData = false
   const briefPart = brief ? '\\nBrief:\\n<brief>' : '';
   return [
     '3. Flags only you can set — the subagent never sees this conversation: add --keep when the user announced',
-    '   follow-up work in this branch (do-ship Step 5a signals), --no-watch when the user asked for no deploy watcher.',
+    '   follow-up work in this branch (do-ship Step 5a signals) and name it in the brief as the card\'s nextStep — a concept',
+    '   close-out or other wrap-up after the ship is no follow-up work; --no-watch when the user asked for no deploy watcher.',
     `   Agent({ subagent_type: "general-purpose", model: "<this session's model family: opus|sonnet|fable>", run_in_background: false, description: "${description}",`,
     `     prompt: 'Use Skill("devops:do-ship") with args "${args}". session_id: ${sid}. lang: <the user language>.${briefPart}' })`,
     '4. Relay the agent card of the spawn verbatim first (pre.agent.relay holds the next tool call until it is shown).',
