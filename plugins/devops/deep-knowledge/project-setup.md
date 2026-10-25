@@ -68,9 +68,8 @@ ignored.**
 `.claude/settings.json`, `.claude/skills/`, `.claude/commands/`,
 `.claude/hooks/`, `.claude/agents/`, `.claude/agents.json`,
 `.claude/deep-knowledge/`, `.claude/project-map.md`,
-`.claude/launch.example.json`, `.claude/graphify.json` (the graph opt-out
-record — a project decision; ignoring it silently re-enables the graph for
-everyone who clones the repo), `docs/concepts/`.
+`.claude/launch.example.json`, `.claude/project-map.hints.json`,
+`docs/concepts/`.
 
 **LOCAL (the managed block):** `.claude/settings.local.json`,
 `.claude/launch.json` (per machine — share a `.claude/launch.example.json`),
@@ -167,6 +166,11 @@ one, `readme-standards.md` applies.
 A repo without `.claude/project-map.md`:
 `node {PLUGIN_ROOT}/scripts/gen-project-map.mjs {project-root}` — report file
 and directory counts. It is regenerated on every ship afterwards.
+
+Optional: `.claude/project-map.hints.json` — `{ "<dir path or name>": "<one
+line>" }` — gives the map project-specific one-line directory descriptions
+(deterministic, no LLM). A full path wins over a bare directory name, which wins
+over the generic hints; the generator reads it on every run.
 
 ## Step 7 — Platform audit (Windows only)
 

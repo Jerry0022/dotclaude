@@ -46,7 +46,7 @@ const PROSE_DECLARED = ['.ship-queue'];
  * are tracked on purpose, so their absence from the ignore list is correct.
  */
 const NOT_RUNTIME = new Set([
-  'settings.json', 'settings.local.json', 'graphify.json', 'CLAUDE.md',
+  'settings.json', 'settings.local.json', 'CLAUDE.md',
   'project-map.md', 'agents.json', 'launch.json',
   // Read-only user setting (hooks/lib/delegation.js), never written by the plugin.
   'delegation.json',

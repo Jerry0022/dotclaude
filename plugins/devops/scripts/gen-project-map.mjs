@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script gen-project-map
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description Generates .claude/project-map.md from git-tracked files.
  *   Produces a compact directory tree with file counts and key-file highlights.
@@ -13,6 +13,12 @@
  *   non-npm trees the basename of the given root. Regenerating from inside a
  *   harness worktree (`.claude/worktrees/<random-slug>/`) therefore never
  *   stamps the slug into the committed file.
+ *
+ *   Optional one-line directory hints (deterministic, no LLM): a JSON object
+ *   `{ "<dir path or dir name>": "<one line>" }` in `.claude/project-map.hints.json`
+ *   (project root, else the main checkout). A full path (`plugins/devops/hooks`)
+ *   wins over a bare directory name (`hooks`), which wins over the generic
+ *   DIR_HINTS below.
  *
  *   Usage: node scripts/gen-project-map.mjs [project-root]
  */
@@ -208,11 +214,30 @@ function totalFilesUnder(dirs, prefix) {
   return count;
 }
 
-function hintFor(dirName) {
-  return DIR_HINTS[dirName] || null;
+/** Project-specific hints; unreadable or malformed file = no hints. */
+function loadProjectHints(root) {
+  for (const dir of [root, mainCheckoutDir(root)]) {
+    try {
+      const raw = JSON.parse(readFileSync(join(dir, ".claude", "project-map.hints.json"), "utf8"));
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+      const hints = new Map();
+      for (const [k, v] of Object.entries(raw)) {
+        const text = typeof v === "string" ? v.replace(/\s+/g, " ").trim() : "";
+        if (text) hints.set(k.replace(/^\.?\/+|\/+$/g, ""), text);
+      }
+      return hints;
+    } catch {
+      /* absent or unparsable — next source */
+    }
+  }
+  return new Map();
 }
 
-function renderTree(dirs, maxDepth = 3) {
+function hintFor(dirName, fullPath, projectHints) {
+  return projectHints.get(fullPath) || projectHints.get(dirName) || DIR_HINTS[dirName] || null;
+}
+
+function renderTree(dirs, projectHints, maxDepth = 3) {
   const lines = [];
 
   function walk(prefix, depth, indent) {
@@ -226,7 +251,7 @@ function renderTree(dirs, maxDepth = 3) {
       const count = totalFilesUnder(dirs, fullPath);
       if (count === 0) continue;
 
-      const hint = hintFor(sub);
+      const hint = hintFor(sub, fullPath, projectHints);
       const desc = hint ? ` — ${hint}` : "";
       lines.push(`${indent}${sub}/  (${count})${desc}`);
       walk(fullPath, depth + 1, indent + "  ");
@@ -277,7 +302,7 @@ function generate() {
   }
 
   const dirs = buildTree(files);
-  const tree = renderTree(dirs);
+  const tree = renderTree(dirs, loadProjectHints(projectRoot));
   const keyFiles = detectKeyFiles(files);
   const entryPoints = detectEntryPoints(files);
 

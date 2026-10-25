@@ -260,7 +260,7 @@ function segmentize(command) {
  * pipeline member of the segment that contains it.
  *
  * This is what fixes the false positive where a Bash command such as
- * `ls -la <big file>; git log -1; graphify query "..."; node -e '<code>' file`
+ * `ls -la <big file>; git log -1; echo "..."; node -e '<code>' file`
  * was blocked in full: the old flat-list widening in `matchCostlyFiles`
  * substring-matched the ENTIRE command the moment ANY segment anywhere in it
  * was a `reader` (here, `git log` and `node -e`) — so a path only ever handed

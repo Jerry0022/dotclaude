@@ -48,7 +48,7 @@ describe("check-claude-artifacts — the ignore list stays complete (#292)", () 
   test("home-rooted state is NOT listed — it cannot dirty a repo", () => {
     const covered = readCoveredEntries(LIST);
     for (const homeOnly of [
-      "claude-batch.json", "graphify-metrics.jsonl", "usage-live.json",
+      "claude-batch.json", "usage-live.json",
       "usage-baseline.json", "edge-usage-profile", "concept-bridges",
       "devops-concepts",
     ]) {
@@ -58,7 +58,7 @@ describe("check-claude-artifacts — the ignore list stays complete (#292)", () 
 
   test("configuration stays tracked — never ignored", () => {
     const covered = readCoveredEntries(LIST);
-    for (const cfg of ["graphify.json", "settings.json"]) {
+    for (const cfg of ["settings.json"]) {
       expect(isCovered(cfg, covered), `${cfg} must stay tracked`).toBe(false);
     }
   });
