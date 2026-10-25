@@ -146,10 +146,11 @@ with an overview table carrying a recommendation column and jump links
    about a *part* of a design (this list, that header, the empty state, the
    badge) is pinned onto that element as an annotation — pin, leader line,
    answer field — never lifted out into a view or a `decision` round. Per
-   design pin (round 1) the **top 3 at least, top 7 at most** — from round 2 only
-   the screens that changed get pins, **max 3 each**, never the overview — ranked by how much the
-   answer changes the design; below three the design is not being
-   questioned enough, above seven the mock is wallpapered. See
+   design pin in round 1 the **top 3 at least, top 7 at most**, ranked by how
+   much the answer changes the design; below three the design is not being
+   questioned enough, above seven the mock is wallpapered. From round 2 only
+   the screens that changed get pins, **at most 3 each** (no floor — a small
+   change may need one), never the overview; unchanged screens get none. See
    `step2-feedback.md` § Annotation Layer (optional). Skip the layer only when a design
    genuinely has nothing element-level to ask — a rare case, not the
    default.

@@ -145,7 +145,9 @@ work exactly the same either way:
   when the element already existed in the previous round and was improved —
   never in round 1, never for new elements. Collapsed it stays visible as one
   ellipsised line; open it wraps. An improvement-only pin (no question) omits
-  `.anno-bubble-question` (the summary button keeps only the chevron) but keeps
+  `.anno-bubble-question` (the summary button keeps only the chevron and then
+  MUST carry `aria-label="{{design.change_improved}}: <phrase>"`, so screen
+  readers do not announce an unnamed button) but keeps
   the textarea, so the user can comment on the improvement or develop it
   further. Pin counts from round 2: only screens that changed this round, at
   most 3 per changed screen, never on the overview (round 1: top 3 to top 7).
