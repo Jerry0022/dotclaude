@@ -307,3 +307,25 @@ can start right away.
 - [x] #862's `[P]` facts checked against official docs (§ 7); the #862 file
   is not edited.
 - [x] No code change; this file only.
+
+## Subagent hook boundary (F1)
+
+Time-boxed spike, repo knowledge only (no live `claude -p` run).
+
+- **Verified in repo code:** a hook payload for a tool call made inside a
+  subagent carries an `agent_id` field; the main thread's payload does not.
+  Sources: `hooks/lib/branch-fix.js:41` ("hook payload carries agent_id"),
+  `hooks/lib/run-contract-calls.js:927` ("Not from a subagent (`agent_id`)"),
+  and the fixtures in `ask-title.test.js`, `agent-model-gate.test.js`,
+  `agent-card-relay.test.js` that inject `agent_id` for subagent calls. The
+  payload also carries the shared `session_id` and `transcript_path` (the
+  existing hooks resolve per-session state with them).
+- **Not verified:** that frontmatter `tools:` is a hard boundary (the repo
+  only declares it, e.g. `agents/core.md`, and never tests enforcement), and
+  that PreToolUse fires for tool calls inside a Workflow agent. Both stay
+  open until a throwaway e2e via `evals/ab-run.js` (temp repo, pinned `--cwd`).
+- **F3 may rely on:** PreToolUse reaching it for subagent tool calls with
+  `agent_id` set, so the read-only guard can apply to the main thread and to
+  analyst subagents alike (state keyed on `session_id`). F3 must NOT rely on
+  `tools:` frontmatter as the only fence: keep the guard as the enforcement
+  and treat `tools:` as defence in depth.

@@ -530,3 +530,31 @@ describe("routeMessage — latency", () => {
     expect(perCallMs).toBeLessThan(10);
   });
 });
+
+describe("routeMessage — feature gate (features.json)", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const mkRoot = () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "router-gate-"));
+    fs.writeFileSync(path.join(root, "features.json"), JSON.stringify({
+      features: { "gated-polish": { minChannel: "alpha", summary: "t", docs: [], scripts: [], skills: ["skills/auto-polish"] } },
+    }));
+    return root;
+  };
+  const MSG = "/tune-polish und danach feinschliff";
+
+  test("a gated skill routes exactly like an unknown skill on a lower channel", () => {
+    const root = mkRoot();
+    const gated = routeMessage(MSG, skillSet(), { gate: { pluginRoot: root, channel: "stable" } });
+    const without = skillSet();
+    delete without["auto-polish"];
+    expect(gated).toEqual(routeMessage(MSG, without, { gate: { pluginRoot: root, channel: "stable" } }));
+    expect(gated.map((e) => e.skill)).not.toContain("auto-polish");
+  });
+
+  test("the same skill routes once the channel reaches minChannel", () => {
+    const root = mkRoot();
+    const out = routeMessage(MSG, skillSet(), { gate: { pluginRoot: root, channel: "alpha" } });
+    expect(out.map((e) => e.skill)).toContain("auto-polish");
+  });
+});

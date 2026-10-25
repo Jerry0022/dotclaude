@@ -94,7 +94,7 @@
  */
 
 const { RENAMED, FOLDED, modeForPhrase } = require('./skill-names');
-const { filterSkills } = require('./channel-gate');
+const { gatedSkills } = require('./features');
 
 /** Skills owned by a dedicated UserPromptSubmit hook: `do-ship`
  *  (prompt.ship.detect), `do-batch` (prompt.batch.collect). Strict is no
@@ -490,6 +490,21 @@ function capAndDedupe(entries, cap = 4) {
 }
 
 /**
+ * Copy of the skills map minus the skills `features.json` gates on this
+ * channel (`skills/<dir>`); never throws, returns the input when none is gated.
+ */
+function withoutGated(skills, gateOpts) {
+  let gated;
+  try { gated = gatedSkills(gateOpts); } catch { return skills; }
+  if (!gated || !gated.size) return skills;
+  const out = {};
+  for (const [name, meta] of Object.entries(skills)) {
+    if (!gated.has('skills/' + name)) out[name] = meta;
+  }
+  return out;
+}
+
+/**
  * Full router: alias mentions, trigger phrases, error patterns — ordered,
  * deduped, capped. Each entry carries `explicit: true` when the user typed a
  * name (alias), so the caller's context filters (already running, strict …)
@@ -499,14 +514,14 @@ function capAndDedupe(entries, cap = 4) {
  *
  * @param {string} message raw prompt
  * @param {Record<string, object>} skills — `skill-meta.loadAllSkills` output
- * @param {{cap?:number, gate?:object}} [opts] `gate` = channel-gate opts (tests)
+ * @param {{cap?:number, gate?:object}} [opts] `gate` = features.js opts (tests)
  * @returns {{skill:string, reason:string, mode?:string, explicit?:boolean, phrase?:boolean, nearMeta?:boolean}[]}
  */
 function routeMessage(message, skills, opts = {}) {
   const cap = opts.cap || 4;
   if (typeof message !== 'string' || !message) return [];
-  // Channel gate: a gated skill that is disabled here is an unknown skill.
-  const known = filterSkills(skills && typeof skills === 'object' ? skills : {}, opts.gate);
+  // Feature gate: a gated skill that is disabled here is an unknown skill.
+  const known = withoutGated(skills && typeof skills === 'object' ? skills : {}, opts.gate);
 
   const entries = [];
 

@@ -96,6 +96,14 @@ pin → `stable`. A missing `features.json` means nothing is registered.
      runs `node "{PLUGIN_ROOT}/scripts/feature-flag.js" check <name>`; on rc 126
      it says the feature is not on this channel and stops. List the skill dir
      under `skills` in the registry.
+   - **Trigger router** (`hooks/lib/skill-trigger-router.js` `routeMessage`,
+     used by `prompt.skill.enforce`): drops `gatedSkills()` before matching,
+     so a gated skill is an unknown skill on a lower channel — no hint, no
+     "not available" message. Done centrally; the pin is read per prompt.
+   - **Other suggesters**: any new hook, card hint or nudge that names a gated
+     skill must check `featureAllowed(<name>)` first. `skill-names.js`
+     alias lists and generated README skill tables never list a gated skill;
+     trigger evals for it are alpha-only expectations.
 3. **Never list a gated doc in `deep-knowledge/INDEX.md`** — every channel
    reads that file. The index hook appends allowed gated docs itself, with the
    feature `summary` as topic. Do not mention a gated feature in ungated docs,
@@ -126,6 +134,7 @@ pin → `stable`. A missing `features.json` means nothing is registered.
 | Name | minChannel | Since | Status |
 |---|---|---|---|
 | `batch` | alpha | 0.304.0 | Message Batches API for unattended read-only jobs on the API credit |
+| `frustrated-mode` | alpha | unreleased | Detects a stuck session, offers a read-only analysis and a plan, hands off only after approval (opt-out `frustratedMode.suggest`, never ships) |
 
 Keep this table in sync with `features.json`.
 
