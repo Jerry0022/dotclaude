@@ -377,6 +377,8 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
 
   // ── Anchors ──────────────────────────────────────────────────────────
   const norm = s => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  // A row reads cell by cell ("stop.flow.guard | hoch"), not run together.
+  const textOf = n => (n.tagName === 'TR' ? [...n.children].map(c => c.textContent).join(' | ') : n.textContent);
   const eligible = (n, it) => it.contains(n) && !n.closest('.dpin-layer, [data-device-clone], [data-engine-store], script, template');
   const scopeOf = (n, it) => {
     const s = n.parentElement && n.parentElement.closest('section[id]');
@@ -397,7 +399,7 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
     return {
       section: scope === it ? '' : scope.id, kind,
       index: Math.max(0, blocksOf(scope, it, kind).indexOf(block)),
-      ref: block.id || '', text: norm(block.textContent)
+      ref: block.id || '', text: norm(textOf(block))
     };
   }
   function resolve(it, a) {
@@ -409,12 +411,12 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
     if (!scope) return null;
     const list = blocksOf(scope, it, a.kind);
     let hit = list[a.index];
-    if (hit && norm(hit.textContent) === a.text) return hit;
-    hit = list.find(n => norm(n.textContent) === a.text);
+    if (hit && norm(textOf(hit)) === a.text) return hit;
+    hit = list.find(n => norm(textOf(n)) === a.text);
     return hit || list[a.index] || scope;
   }
   function describe(block) {
-    const text = (block.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    const text = norm(textOf(block)).slice(0, 40);
     const s = block.tagName.toLowerCase();
     return text ? s + ' "' + text + '"' : s;
   }
@@ -580,7 +582,7 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
       const pins = readPins(it);
       const showDraft = live && draft && draft.it === it;
       if (!pins.length && !showDraft) return;
-      total += pins.length;
+      if (it.getClientRects().length) total += pins.length;   // the eye answers for what is on screen
       it.classList.add('dpin-host');
       const layer = el('div', 'dpin-layer');
       pins.forEach((p, i) => {
