@@ -80,8 +80,21 @@ describe("main", () => {
     expect(r.code).toBe(0);
     expect(JSON.parse(fs.readFileSync(out, "utf8")).prompts).toHaveLength(2);
     expect(main(["--transcript", t, "--out", path.resolve("brief.json")], o).code).toBe(2);
-    expect(main([], o).code).toBe(2);
+    expect(main([], { ...o, env: {} }).code).toBe(2);
     expect(main(["--transcript", path.join(dir, "missing.jsonl")], o).code).toBe(1);
+  });
+
+  test("--session finds ~/.claude/projects/<slug>/<id>.jsonl", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbrief-"));
+    const proj = path.join(dir, ".claude", "projects", "C--x");
+    fs.mkdirSync(proj, { recursive: true });
+    fs.writeFileSync(path.join(proj, "abc-1.jsonl"), transcript);
+    const o = { ...alpha(dir), home: dir, env: {} };
+    const r = main(["--session", "abc-1"], o);
+    expect(r.code).toBe(0);
+    expect(JSON.parse(r.json).prompts).toHaveLength(2);
+    expect(main([], { ...o, env: { CLAUDE_CODE_SESSION_ID: "abc-1" } }).code).toBe(0);
+    expect(main(["--session", "nope"], o).code).toBe(2);
   });
 
   test("feature off → 126", () => {

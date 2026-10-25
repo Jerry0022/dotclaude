@@ -19,8 +19,9 @@
  *   script, any `Workflow`, and mutating ship / GitHub MCP tools.
  *   Allowed write areas (decision d6): the temp dir (scratchpad included),
  *   `.claude/` state (not its settings, agents, skills, commands, hooks,
- *   worktrees or plugins), `~/.claude/` state on the same terms, and test
- *   artifacts (snapshots, coverage, caches, test reports).
+ *   worktrees or plugins), `~/.claude/` state on the same terms, test
+ *   artifacts (snapshots, coverage, caches, test reports) and concept pages
+ *   under `docs/concepts/` (the plan's presentation).
  *
  *   Every exported entry point that acts checks
  *   featureAllowed('frustrated-mode') first.
@@ -127,13 +128,18 @@ function isAllowedWritePath(p, opts = {}) {
   if (TMP_VAR_RE.test(raw)) return !/(^|\/)\.\.(\/|$)/.test(slash(raw));
   if (raw.startsWith('~')) raw = path.join(opts.home || os.homedir(), raw.slice(1));
   if (/[$`*?]/.test(raw)) return false; // unexpanded variable / glob: cannot prove where it lands
+  const cwd = lower(path.resolve(fromMsys(slash(opts.cwd || process.cwd()))));
   const abs = lower(path.resolve(opts.cwd || process.cwd(), fromMsys(slash(raw))));
-  for (const t of tmpRoots(opts)) {
+  // a project that itself lives in the temp dir (evals, scratch repos) keeps its source protected
+  const inProject = abs === cwd || abs.startsWith(cwd + '/');
+  for (const t of inProject ? [] : tmpRoots(opts)) {
     const tr = lower(path.resolve(fromMsys(t)));
     if (abs === tr || abs.startsWith(tr + '/')) return true;
   }
   const segs = abs.split('/');
   if (abs.endsWith('.snap') || segs.some((s) => ARTIFACT_SEG.has(s))) return true;
+  // concept pages (auto-concept) present the plan; they are no app source
+  if (abs.includes('/docs/concepts/')) return true;
   const i = abs.lastIndexOf('/.claude/');
   if (i >= 0) return !CLAUDE_DENY.test(abs.slice(i + '/.claude/'.length));
   return false;

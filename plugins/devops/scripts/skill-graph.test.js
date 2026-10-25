@@ -202,7 +202,16 @@ const UNITS = {
   "auto-polish":   { layer: 4, visibility: "hidden",    invokes: ["auto-agents"] },
   "auto-agents":   { layer: 5, visibility: "hidden",    invokes: [] },
   "auto-issue":    { layer: 5, visibility: "hidden",    invokes: [] },
+  // channel-gated (features.json frustrated-mode): user-only per
+  // docs/dev/feature-flags.md rule 2 "Skills"; entry by slash command or the
+  // alpha detector hook, never picked by the model on its own
+  "auto-frustrated": { layer: 0, visibility: "user-only", invokes: ["auto-concept", "do-run", "auto-fix", "do-learn", "auto-guide"] },
 };
+
+// Skills of a gated feature: `disable-model-invocation: true` instead of
+// `user-invocable: false` (the slash command is their explicit entry).
+const GATED_SKILLS = new Set(Object.values(JSON.parse(fs.readFileSync(path.join(PLUGIN_ROOT, "features.json"), "utf8")).features)
+  .flatMap((f) => f.skills || []).map((s) => s.replace(/^skills\//, "")));
 
 const MODE_FILES = {
   "do-run": ["backlog", "autonomous", "burn", "rethink", "audit"],
@@ -239,9 +248,21 @@ describe("spec Units table: layer and visibility", () => {
     expect(visibilityOf(meta), `${name} visibility`).toBe(unit.visibility);
   });
 
-  test("every auto-* unit is hidden from the slash menu", () => {
+  test("every auto-* unit is hidden from the slash menu (a gated one is user-only instead)", () => {
     for (const name of Object.keys(UNITS).filter((n) => n.startsWith("auto-"))) {
+      if (GATED_SKILLS.has(name)) {
+        expect(ALL_SKILLS[name].disableModelInvocation, name).toBe(true);
+        continue;
+      }
       expect(ALL_SKILLS[name].userInvocable, name).toBe(false);
+    }
+  });
+
+  test("every gated skill is user-only and is a unit", () => {
+    expect(GATED_SKILLS.size).toBeGreaterThan(0);
+    for (const name of GATED_SKILLS) {
+      expect(UNITS[name], name).toBeTruthy();
+      expect(ALL_SKILLS[name].disableModelInvocation, name).toBe(true);
     }
   });
 });

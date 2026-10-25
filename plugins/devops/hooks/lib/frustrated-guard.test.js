@@ -72,6 +72,7 @@ describe("decide while armed", () => {
     ["src/__snapshots__/a.test.js.snap", false],
     ["coverage/lcov.info", false],
     ["node_modules/.cache/x", false],
+    ["docs/concepts/20261025-x/rounds/01.html", false],
   ])("Edit %s → block %s", (p, block) => {
     expect(g.decide(hook("Edit", { file_path: p }), opts).block).toBe(block);
   });
@@ -161,7 +162,8 @@ function env(channel) {
   fs.mkdirSync(path.join(home, ".claude", "plugins"), { recursive: true });
   fs.writeFileSync(path.join(home, ".claude", "plugins", ".channels.json"), JSON.stringify({ dotclaude: channel }));
   const e = { ...process.env, HOME: home, USERPROFILE: home, TEMP: tmp, TMP: tmp, TMPDIR: tmp };
-  delete e.CLAUDE_PLUGIN_ROOT;
+  // a source-dir root is an ad-hoc load: plugin-guard lets the hook run
+  e.CLAUDE_PLUGIN_ROOT = PLUGIN_ROOT;
   delete e.CLAUDE_CODE_SESSION_ID;
   delete e.CLAUDE_SESSION_ID;
   return e;

@@ -34,13 +34,16 @@ Registry `plugins/devops/features.json`:
   "minChannel": "alpha" | "beta",
   "summary": "<one line>",
   "docs": ["deep-knowledge/<file>.md"],
-  "scripts": ["scripts/<file>.js"],
+  "scripts": ["scripts/<file>.js", "hooks/<event>/<hook>.js", "hooks/lib/<lib>.js"],
   "skills": ["skills/<dir>"]
 } } }
 ```
 
 `skills` is optional (gates the skill's `triggers.<lang>.txt` aliases in the
-prompt dispatch glossary).
+prompt dispatch glossary). A gated feature's hooks and hook libs are listed
+under `scripts` as well: each checks the flag itself, and
+`scripts/gen-readme-sections.mjs` leaves every registered hook, skill and doc
+out of the README / architecture roster and counts (on any channel).
 
 Library `plugins/devops/hooks/lib/features.js` (CommonJS, no deps, never throws,
 cached per process):

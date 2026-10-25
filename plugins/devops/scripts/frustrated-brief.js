@@ -18,8 +18,12 @@ if (require.main === module && !require('../hooks/lib/features').featureAllowed(
  *   pasted logs collapsed to `[log: N lines]`). `codeFree` additionally drops
  *   paths, inline code and URLs — the cut for the code-blind roles.
  *
- *   Usage: node frustrated-brief.js --transcript <file.jsonl> [--out <file>]
- *          [--max-bytes N] [--max-prompts N]
+ *   Usage: node frustrated-brief.js [--transcript <file.jsonl> | --session <id>]
+ *          [--out <file>] [--max-bytes N] [--max-prompts N]
+ *   Without --transcript the transcript of --session (default: this session,
+ *   $CLAUDE_CODE_SESSION_ID) is looked up as ~/.claude/projects/<slug>/<id>.jsonl.
+ *   A session other than the current one is read only after the user's
+ *   explicit yes (the skill asks; decision d5).
  *   `--out` must point into the temp dir (the brief never lands in the
  *   project). Exit: 0 ok, 1 unreadable transcript, 2 usage / --out outside
  *   the temp dir, 126 not available on this channel.
@@ -154,11 +158,27 @@ function argOf(argv, name) {
   return i >= 0 ? argv[i + 1] : undefined;
 }
 
+/** `~/.claude/projects/<slug>/<session>.jsonl` — one readdir of the projects dir, no deeper walk. */
+function findTranscript(sessionId, home = os.homedir()) {
+  const id = String(sessionId || '').replace(/[^\w.-]/g, '');
+  if (!id) return null;
+  const dir = path.join(home, '.claude', 'projects');
+  let slugs = [];
+  try { slugs = fs.readdirSync(dir); } catch { return null; }
+  for (const slug of slugs) {
+    const f = path.join(dir, slug, `${id}.jsonl`);
+    if (fs.existsSync(f)) return f;
+  }
+  return null;
+}
+
 function main(argv, opts = {}) {
   if (!require('../hooks/lib/features').featureAllowed('frustrated-mode', opts.features)) return { code: 126, err: 'frustrated-mode: not available on this channel' };
-  const transcript = argOf(argv, '--transcript');
+  const env = opts.env || process.env;
+  const session = argOf(argv, '--session') || env.CLAUDE_CODE_SESSION_ID || env.CLAUDE_SESSION_ID;
+  const transcript = argOf(argv, '--transcript') || (session ? findTranscript(session, opts.home) : null);
   const out = argOf(argv, '--out');
-  if (!transcript) return { code: 2, err: 'usage: --transcript <file.jsonl> [--out <file in temp>] [--max-bytes N] [--max-prompts N]' };
+  if (!transcript) return { code: 2, err: 'usage: [--transcript <file.jsonl> | --session <id>] [--out <file in temp>] [--max-bytes N] [--max-prompts N] (no transcript found)' };
   if (out && !inTemp(out)) return { code: 2, err: '--out must point into the temp dir' };
   let text;
   try { text = readTail(transcript, Number(argOf(argv, '--max-bytes')) || DEFAULT_MAX_BYTES); } catch (e) { return { code: 1, err: `cannot read transcript: ${e.message}` }; }
@@ -175,4 +195,4 @@ if (require.main === module) {
   process.exit(r.code);
 }
 
-module.exports = { buildBrief, collapse, codeFree, main };
+module.exports = { buildBrief, collapse, codeFree, findTranscript, main };
