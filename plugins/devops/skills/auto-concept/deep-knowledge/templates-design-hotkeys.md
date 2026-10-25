@@ -95,8 +95,11 @@ the same hotkeys and tips as a design round. Three jobs:
       badge.style.top = Math.round(r.top) + 'px';
       layer.appendChild(badge);
     });
+    // No "Ctrl + click" pin example while the ☰ panel is open: the design
+    // sits behind its backdrop, a click there closes the panel, never pins.
     const onDesign = document.querySelector('section[data-design]')
-      && body.dataset.overviewActive !== 'true' && body.dataset.viewActive !== 'true';
+      && body.dataset.overviewActive !== 'true' && body.dataset.viewActive !== 'true'
+      && !body.classList.contains('panel-open');
     if (onDesign) {
       const ex = mk('div', 'hk-pin-example');
       ex.append(mk('span', 'hk-pin-dot'), mk('span', 'hk-pin-label', T.ctrl + ' + ' + T.click));
@@ -227,6 +230,10 @@ the same hotkeys and tips as a design round. Three jobs:
 ```
 
 ```css
+/* ☰ panel open → no own-note hint of any kind: neither the Ctrl-held
+   "Strg + Klick" bar (#upin-hint, wireDesignOverview) nor the Alt overlay's
+   pin example. The design is behind the backdrop; a click closes the panel. */
+body.panel-open .upin-hint, body.panel-open .hk-pin-example { display: none !important; }
 /* Alt overlay: badges sit at the control's top-right, right-aligned, slightly overlapping. */
 .hk-overlay { position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; }
 .hk-badge {

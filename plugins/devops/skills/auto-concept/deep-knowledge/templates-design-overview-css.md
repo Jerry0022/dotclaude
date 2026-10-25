@@ -48,17 +48,22 @@ html:not([data-template="design"]) .upin-hint { display: none !important; }
 body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-ov-stage {
   position: absolute; left: 0; right: 0; top: var(--dz-ov-top); bottom: var(--dz-ov-bottom);
-  container-type: size; overflow: hidden;
+  /* Clip sideways only (the neighbours run off the edges); vertically the
+     centre tile's hover glow must spread freely. */
+  container-type: size; overflow-x: clip; overflow-y: visible;
 }
 .design-ov-track { position: absolute; inset: 0; }
 .design-ov-slide {
   --dz-color: var(--accent-color);
-  --dz-ov-w: min(78cqw, 160cqh);
+  /* Height-bound: 2 x --dz-ov-glow stays free above and below the tile, so
+     the hover glow (44px blur + 6px spread) is never cut vertically. */
+  --dz-ov-glow: 3rem;
+  --dz-ov-w: min(78cqw, calc((100cqh - 2 * var(--dz-ov-glow)) * 1.6));
   position: absolute; top: 50%; left: 50%; box-sizing: border-box;
   width: var(--dz-ov-w); aspect-ratio: 16 / 10;
   /* Neighbours: 74 %, cut off by the stage edge, plain bordered tiles (no
-     preview, just the icon badge); a hover grows them ~8 % and fades in one
-     tall glowing chevron. */
+     preview, just the variant icon beside the chevron); a hover grows them
+     ~8 % and fades in one tall glowing chevron. */
   transform: translate(-50%, -50%) translateX(calc(var(--dz-off, 0) * (var(--dz-ov-w) * 0.86 + 1.5rem))) scale(var(--dz-s, 0.74));
   opacity: 0.5; filter: saturate(0.7); cursor: pointer;
   transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease, filter 0.25s ease;
@@ -67,7 +72,7 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-ov-slide[data-pos="prev"]:hover, .design-ov-slide[data-pos="next"]:hover { opacity: 0.85; --dz-s: 0.8; }
 /* No ‹ › buttons: the side card itself is the control. On hover one tall,
    thin chevron fades in — no circle, just the glyph and its glow — in the
-   tile's visible strip, below the icon badge. */
+   tile's visible strip, pointing at the variant icon (.design-ov-side). */
 .design-ov-slide[data-pos="prev"]::after, .design-ov-slide[data-pos="next"]::after {
   content: ""; position: absolute; top: 50%; z-index: 3; pointer-events: none;
   width: 2.6rem; height: min(46%, 13rem); transform: translate(0, -50%) scaleY(0.8);
@@ -94,7 +99,7 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
               0 0 44px 6px color-mix(in srgb, var(--dz-color) 55%, transparent);
 }
 /* Neighbours are plain bordered tiles: no cut-off preview, no questions
-   list — the badge names them. */
+   list — the icon beside the chevron names them. */
 .design-ov-slide:is([data-pos="prev"], [data-pos="next"]) .design-ov-preview,
 .design-ov-slide:is([data-pos="prev"], [data-pos="next"]) .design-ov-qcard {
   background: color-mix(in srgb, var(--dz-color) 8%, var(--panel-bg, #0d1117));
@@ -195,104 +200,40 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .dz-icon[data-size="s"] { width: 18px; height: 18px; border-radius: 5px; font-size: 10px; }
 .dz-icon[data-kind="plain"] { background: transparent; color: var(--text-secondary, #8b949e); }
 
-/* ── Header — one compact row, never grows ── */
+/* ── Header — the eye only, no box ──
+   No breadcrumb, no title, no back item: the corner holds the annotation eye
+   and nothing else, bare and quiet until it is pointed at. The way back to
+   the overview is the ☰ menu's "Übersicht" entry. */
 .design-header {
   position: fixed; top: 1rem; left: 1rem; z-index: 99;
-  flex-direction: column; box-sizing: border-box;
-  --dz-head-cap: min(calc(33vw - 1.5rem), 30rem);
-  width: max-content; max-width: var(--dz-head-cap);
-  padding: 0.4rem 0.8rem 0.4rem 0.9rem; border-radius: 14px;
-  /* Island (variant C): filled inside, soft outer glow, accent edge as an
-     inset — no frame, no light-blue border. */
-  background: color-mix(in srgb, var(--panel-bg, #161b22) 94%, #fff);
-  border: 0;
-  box-shadow: inset 3px 0 0 var(--dz-color, var(--accent-color)), 0 0 22px color-mix(in srgb, var(--dz-color, var(--accent-color)) 18%, transparent), 0 4px 14px rgba(0, 0, 0, 0.35);
-  color: var(--text-secondary, #8b949e); font-size: 0.85rem;
-  transition: box-shadow 0.2s ease;
+  flex-direction: column; box-sizing: border-box; width: max-content;
+  padding: 0; border: 0; background: transparent; box-shadow: none;
 }
-.design-header:hover, .design-header:focus-within { box-shadow: inset 3px 0 0 var(--dz-color, var(--accent-color)), 0 0 30px color-mix(in srgb, var(--dz-color, var(--accent-color)) 30%, transparent), 0 4px 14px rgba(0, 0, 0, 0.35); }
-@keyframes chromeGlowIsland {
-  50% { box-shadow: inset 3px 0 0 var(--dz-color, var(--accent-color)), 0 0 42px color-mix(in srgb, var(--dz-color, var(--accent-color)) 45%, transparent), 0 4px 14px rgba(0, 0, 0, 0.35); }
-}
-body.chrome-glow .design-header { animation: chromeGlowIsland 1.4s ease-in-out 2; }
-@media (prefers-reduced-motion: reduce) { body.chrome-glow .design-header { animation: none; } }
-.design-header-main { display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; min-width: 0; min-height: 28px; }
-/* The name carries its OWN cap: 17rem ≈ everything else on the row (back,
-   pill chrome, ★, eye, gaps, padding — the 📍 left the header), so the row
-   never exceeds the header's cap; the full name and motto live in its
-   tooltip. The 4.5rem floor keeps a short name like "Übersicht" whole. */
-.design-header-name {
-  color: var(--text, #e6edf3); font-weight: 600; min-width: 0;
-  max-width: max(4.5rem, min(12rem, calc(var(--dz-head-cap) - 17rem)));
-  overflow: hidden; text-overflow: ellipsis;
-}
-/* The current page — a flat label, not a control: no fill, no pill, only
-   the dz-colour underline the active quick-nav group carries (that one keeps
-   its fill and outline, it holds several items). */
-.design-header-title {
-  display: inline-flex; align-items: center; gap: 0.4rem; min-width: 0;
-  padding: 0.1rem 0.2rem 0.15rem; border-radius: 3px 3px 0 0; cursor: default;
-  background: transparent;
-  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--dz-color, var(--accent-color)) 75%, transparent);
-}
-.design-header-title .dz-icon { width: 22px; height: 22px; }
-.design-header-icon:empty { display: none; }
-.design-header-title:has(.design-header-icon:empty) { padding-left: 0.2rem; }
-.design-header-star {
-  flex: none; border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer;
-  color: var(--warning-color, #d29922); white-space: nowrap;
-}
-.design-header-star[hidden] { display: none; }
-.design-header-star[data-kind="label"]:hover { text-decoration: underline; }
-/* Same round shape as the eye and the pin beside it, in the favourite colour. */
-.design-header-star[data-kind="icon"] {
-  width: 24px; height: 24px; border-radius: 50%; line-height: 1; font-size: 0.85rem;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--warning-color, #d29922);
-  background: var(--anno-bubble-bg, var(--panel-bg, #161b22));
-  transition: transform 0.15s;
-}
-.design-header-star[data-kind="icon"]:hover:not(:disabled) { transform: scale(1.08); }
-.design-header-star[data-kind="icon"][aria-pressed="true"] { background: var(--warning-color, #d29922); color: var(--panel-bg, #0d1117); }
-.design-header-star:disabled { opacity: 0.55; cursor: default; }
-.design-header-back {
-  display: inline-flex; align-items: center; gap: 0.3rem; flex: none;
-  border: 0; background: transparent; color: var(--text-secondary, #8b949e);
-  padding: 0.15rem 0.35rem; border-radius: 6px; font: inherit; font-size: 0.8rem; cursor: pointer;
-}
-.design-header-back:hover { color: var(--text, #e6edf3); background: color-mix(in srgb, var(--accent-color) 12%, transparent); }
-.design-header-back svg { width: 14px; height: 14px; display: block; flex: none; }
-.design-header-sep { width: 1px; height: 18px; background: var(--border-color, #30363d); flex: none; }
-/* The eye moves in here (wireDesignOverview) — same control, inline size. */
-/* inset: auto — the fixed pill's top: 3.75rem / left: 1rem otherwise apply as
+.design-header-main { display: flex; align-items: center; min-height: 28px; }
+/* The eye moves in here (wireDesignOverview) — same control, inline size.
+   inset: auto — the fixed pill's top: 3.75rem / left: 1rem otherwise apply as
    RELATIVE offsets and push the eye 60px below the header. */
 .design-header-eye { display: inline-flex; flex: none; }
 .design-header-eye:empty { display: none; }
-.design-header .anno-toggle-fab { position: relative; inset: auto; z-index: auto; flex: none; width: 24px; height: 24px; border-width: 1px; box-shadow: none; }
-.design-header .anno-toggle-fab svg { width: 13px; height: 13px; }
-.design-header-name[data-tip] { cursor: help; }
-/* Same shape as the header eye (.design-header .anno-toggle-fab). */
-.design-header-pin {
-  flex: none; width: 24px; height: 24px; padding: 0; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--anno-accent, var(--accent-color, #58a6ff));
-  background: var(--anno-bubble-bg, var(--panel-bg, #161b22));
-  color: var(--anno-accent, var(--accent-color, #58a6ff));
-  cursor: pointer; transition: transform 0.15s;
+.design-header .anno-toggle-fab {
+  position: relative; inset: auto; z-index: auto; flex: none; width: 28px; height: 28px;
+  border-width: 1px; border-color: transparent; background: transparent; box-shadow: none;
+  opacity: 0.45; transition: opacity 0.16s ease, border-color 0.16s ease, background 0.16s ease;
 }
-.design-header-pin:hover { transform: scale(1.08); }
-.design-header-pin[hidden] { display: none; }
-.design-header-pin svg { width: 13px; height: 13px; display: block; }
-.design-header-pin[aria-pressed="true"] { border-color: #f78166; background: #f78166; color: #fff; }
+.design-header .anno-toggle-fab:hover, .design-header .anno-toggle-fab:focus-visible {
+  opacity: 1; border-color: var(--border-color, #30363d);
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 85%, transparent);
+}
+.design-header .anno-toggle-fab svg { width: 15px; height: 15px; }
 
 /* ── Quick nav — top centre, one row ── */
 .design-quick {
   position: fixed; top: 0.75rem; left: 50%; transform: translateX(-50%); z-index: 95;
   flex-direction: column; align-items: center;
-  /* The band between the header (left) and the ☰ FAB (right). First-paint
-     value from the header's cap; fitQuickBand() replaces it with the
-     measured band on every render, so the two never overlap. */
-  max-width: calc(100vw - 2 * (1rem + min(33vw - 1.5rem, 30rem) + 0.75rem));
+  /* The band between the eye (left) and the ☰ FAB (right). First-paint
+     value; fitQuickBand() replaces it with the measured band on every
+     render, so the two never overlap. */
+  max-width: calc(100vw - 2 * (1rem + 4rem + 0.75rem));
   opacity: 0.8; transition: opacity 0.16s ease;
 }
 .design-quick:hover, .design-quick:focus-within { opacity: 1; z-index: 98; }
@@ -379,8 +320,10 @@ body.chrome-glow .design-header { animation: chromeGlowIsland 1.4s ease-in-out 2
 }
 .design-quick-q[data-active="true"] .design-quick-badge { background: var(--panel-bg, #0d1117); color: var(--q); }
 .design-quick-qok { font-weight: 900; }
-/* One question menu, no dropdown: the segment hovers like its siblings (no
-   tab shape growing into a list that is not there). */
+/* Several questions: their list hangs off the segment as a dropdown (hover,
+   focus, or the first tap on touch) — like a design's pages. One question:
+   no dropdown, the segment hovers like its siblings. */
+.design-quick-q .design-quick-caret { font-size: 0.62rem; opacity: 0.75; }
 .design-quick-qpop {
   display: none; position: absolute; top: calc(100% - 1px); right: 0; z-index: 3;
   width: max-content; min-width: 260px; max-width: min(360px, 80vw);
@@ -390,7 +333,12 @@ body.chrome-glow .design-header { animation: chromeGlowIsland 1.4s ease-in-out 2
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5), 0 0 0 4px color-mix(in srgb, var(--q) 10%, transparent);
   transform-origin: top right;
 }
+.design-quick-qwrap[data-multi="true"]:hover .design-quick-qpop,
+.design-quick-qwrap[data-multi="true"]:focus-within .design-quick-qpop,
 .design-quick-qwrap[data-open="true"] .design-quick-qpop { display: flex; animation: dz-qpop-in 0.18s ease-out; }
+.design-quick-qwrap[data-multi="true"]:hover .design-quick-q,
+.design-quick-qwrap[data-multi="true"]:focus-within .design-quick-q,
+.design-quick-qwrap[data-open="true"] .design-quick-q { border-radius: 10px 10px 0 0; }
 @keyframes dz-qpop-in { from { opacity: 0; transform: scaleY(0.85); } }
 .design-quick-qhead {
   display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 0 6px 6px;
@@ -421,6 +369,22 @@ body.chrome-glow .design-header { animation: chromeGlowIsland 1.4s ease-in-out 2
   100% { box-shadow: 0 0 0 14px transparent; }
 }
 body.panel-open .design-quick, body.panel-open .design-header { opacity: 0; pointer-events: none; }
+/* Overview: the variant in the centre of the carousel, marked in the quick
+   nav like the active group (fill + dz underline) but without its pages; a
+   small caret hints that it opens onto them. Questions tile -> "Fragen". */
+.design-quick-seg[data-ov-focus="true"] {
+  color: var(--text, #e6edf3); font-weight: 700;
+  background: color-mix(in srgb, var(--dz-color, var(--accent-color)) 16%, var(--panel-bg, #161b22));
+  box-shadow: inset 0 -2px 0 var(--dz-color, var(--accent-color)),
+              inset 0 0 0 1px color-mix(in srgb, var(--dz-color, var(--accent-color)) 40%, transparent);
+}
+.design-quick-subcaret { display: none; margin-left: -0.15rem; font-size: 0.62rem; opacity: 0.6; }
+.design-quick-seg[data-ov-focus="true"] .design-quick-subcaret { display: inline; }
+.design-quick-seg[data-icon-only="true"] .design-quick-subcaret { display: none; }
+.design-quick-q[data-ov-focus="true"]:not([data-active="true"]) {
+  background: color-mix(in srgb, var(--q) 28%, transparent);
+  box-shadow: inset 0 -2px 0 var(--q);
+}
 @media (max-width: 900px) {
   /* Icons only — the tooltip still names each design. */
   .design-quick-seg .design-quick-name { display: none; }

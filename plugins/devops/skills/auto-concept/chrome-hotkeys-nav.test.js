@@ -106,7 +106,7 @@ describe("quick nav acts on pointerdown (two-click bug)", () => {
   test("the engine rebuilds the quick nav with nodes that act on pointerdown", () => {
     expect(md).toContain("function press(node, fn)");
     expect(md).toContain("press(seg,");
-    expect(md).toContain("press(btn, () => { const q = nextQuestion");
+    expect(md).toMatch(/press\(btn, e => \{[\s\S]{0,400}const q = nextQuestion/);
   });
 });
 
@@ -142,10 +142,12 @@ describe("questions segment", () => {
   const qBtn = (d) => d.querySelector("#design-quick .design-quick-q");
   const viewId = (d) => live(d).querySelector(":scope > section[data-view][data-view-active='true']")?.dataset.view;
 
-  test("no ? mark, no submenu; several questions: first open, then the next open", async () => {
+  test("no ? mark; several questions: a dropdown lists them, a click goes to the first open, then the next open", async () => {
     const { window, document, errors } = await boot(page(2, 2));
     expect(errors).toEqual([]);
-    expect(document.querySelector(".design-quick-qmark, .design-quick-qpop")).toBeNull();
+    expect(document.querySelector(".design-quick-qmark")).toBeNull();
+    expect(document.querySelectorAll("#design-quick .design-quick-qpop .design-quick-qitem").length).toBe(2);
+    expect(document.querySelector("#design-quick .design-quick-qwrap").dataset.multi).toBe("true");
     qBtn(document).click();
     expect(viewId(document)).toBe("q1");
     qBtn(document).click();
@@ -164,6 +166,7 @@ describe("questions segment", () => {
     qBtn(document).click();
     expect(viewId(document)).toBe("q1");
     expect(document.querySelectorAll("#design-quick .design-quick-qitem").length).toBe(0);
+    expect(document.querySelector("#design-quick .design-quick-qpop"), "one question: no dropdown").toBeNull();
   }, BOOT_TIMEOUT);
 
   test("a mere visit is not an answer; any interaction or scroll in the question is", async () => {

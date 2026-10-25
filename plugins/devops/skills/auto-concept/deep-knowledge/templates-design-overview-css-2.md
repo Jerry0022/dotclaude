@@ -1,26 +1,29 @@
 # Concept templates, part 18 of 41: Template: design — variant overview CSS (≥2 designs) (continued 2)
 
 ```css
-/* ── Tile badge: the variant's icon top-left on every tile (top-right on the
-   left neighbour, whose right edge is the visible one); the name always on
-   the centre tile, on a neighbour only while it is hovered. ── */
-.design-ov-badge {
-  position: absolute; top: 0.9rem; left: 0.9rem; z-index: 2; pointer-events: none;
-  display: inline-flex; align-items: center; gap: 0.5rem; max-width: calc(100% - 1.8rem);
-  padding: 0.25rem 0.7rem 0.25rem 0.25rem; border-radius: 999px; box-sizing: border-box;
-  background: color-mix(in srgb, var(--panel-bg, #161b22) 82%, transparent); backdrop-filter: blur(6px);
-  color: var(--text, #e6edf3); font-size: 0.85rem; font-weight: 600; white-space: nowrap;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dz-color) 45%, transparent);
+/* ── Side-tile label: neighbours only. The variant icon — exactly the
+   quick-nav icon, no frame of its own — sits vertically centred just
+   outside the hover chevron, so the chevron points at it; on hover the name
+   appears under it, wrapped, never cut. The centre tile carries no badge
+   (the quick nav marks it). The chevron is 2.6rem wide at 7 % from the
+   tile's visible edge (.design-ov-slide::after). ── */
+.design-ov-side {
+  display: none; position: absolute; top: 50%; z-index: 3; pointer-events: none;
+  transform: translateY(-50%) scale(1.35);
 }
-.design-ov-badge-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.design-ov-slide[data-pos="prev"] .design-ov-badge,
-.design-ov-slide[data-pos="cur"][data-anchor="tl"] .design-ov-badge { left: auto; right: 0.9rem; }
-.design-ov-slide:is([data-pos="prev"], [data-pos="next"]) .design-ov-badge { padding-right: 0.25rem; transform: scale(1.35); transform-origin: top left; }
-.design-ov-slide[data-pos="prev"] .design-ov-badge { transform-origin: top right; }
-.design-ov-slide:is([data-pos="prev"], [data-pos="next"]):not(:hover) .design-ov-badge-name { display: none; }
-.design-ov-slide:is([data-pos="prev"], [data-pos="next"]):hover .design-ov-badge { padding-right: 0.7rem; }
-.design-ov-slide[data-pos="far"] .design-ov-badge,
-.design-ov-qslide[data-pos="cur"] .design-ov-badge { display: none; }
+.design-ov-slide:is([data-pos="prev"], [data-pos="next"]) .design-ov-side { display: block; }
+.design-ov-slide[data-pos="prev"] .design-ov-side { right: calc(7% + 3.2rem); transform-origin: right center; }
+.design-ov-slide[data-pos="next"] .design-ov-side { left: calc(7% + 3.2rem); transform-origin: left center; }
+.design-ov-side > .dz-icon { display: grid; }
+.design-ov-side-name {
+  position: absolute; top: calc(100% + 0.4rem); left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: 8rem; text-align: center;
+  white-space: normal; overflow-wrap: anywhere; line-height: 1.2;
+  color: var(--text, #e6edf3); font-size: 0.75rem; font-weight: 600;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+  opacity: 0; transition: opacity 0.2s ease;
+}
+.design-ov-slide:is([data-pos="prev"], [data-pos="next"]):hover .design-ov-side-name { opacity: 1; }
 /* A changed variant: one line under the traits, "Verbessert" + the phrase
    from data-design-improved. */
 .design-ov-improved {

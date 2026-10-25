@@ -1337,22 +1337,34 @@ design round has: the three row builders and the ordering of stash → rebuild
   window.romanNumeral = romanNumeral;
 
   // Keyboard: Arrow Left/Right jump between screens (within the active
-  // design) when no textarea/input is focused and no overlay is open. Space
-  // is NOT a page key any more — it toggles the notes dock (wireDesignOverview
-  // / wireChromeHotkeys); ↑ / ↓ change the level (overview ↔ variant).
+  // design) whenever no TEXT field is focused — regardless of which overlay
+  // (notes dock, ☰ panel) is open or where the mouse is. Space is NOT a page
+  // key any more — it toggles the notes dock (wireDesignOverview /
+  // wireChromeHotkeys); ↑ / ↓ change the level (overview ↔ variant).
+  // Text entry = where a key types: textarea, a typing <input>, select,
+  // contenteditable. Checkboxes, radios and button-type inputs are not.
+  const isTextEntry = el => !!(el && el.closest && el.closest('textarea, select, [contenteditable=""], [contenteditable="true"], '
+    + 'input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="image"]):not([type="file"]):not([type="color"])'));
+  window.isConceptTextEntry = isTextEntry;
   document.addEventListener('keydown', e => {
-    // Both optional: this handler is bound on every design page, and either
-    // overlay can be absent from the markup. Unguarded, a missing one threw
-    // on EVERY keypress — the arrow keys stopped working and the console
-    // filled with errors pointing at the keyboard shortcut rather than at
-    // the markup.
-    if (dock?.dataset.open === 'true' || panel?.classList.contains('open')) return;
-    // Bailing out on textarea/input alone was too narrow: Space activates a
-    // FOCUSED BUTTON, so pressing it on a mock's "Continue" advanced the
-    // screen and swallowed the click at the same time. Device mode doubles
-    // the focusable mock surface, which is what made it worth fixing here.
-    if (e.target && e.target.closest
-        && e.target.closest('textarea, input, select, button, a[href], [contenteditable], [role="button"]')) return;
+    // The overview's hotkey handler (quick nav / header focus) may already
+    // have stepped for this press: never step twice.
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    // The ONE gate: a focused text field owns every key. This used to bail
+    // whenever the dock or the panel was open, so a user who clicked out of
+    // the dock's fields had dead arrow keys until the dock was closed.
+    if (isTextEntry(e.target) || isTextEntry(document.activeElement)) return;
+    const arrow = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
+    // Arrows: a widget that uses them itself (round tabs, radio groups,
+    // listboxes, sliders) keeps them. A focused BUTTON does not — arrows
+    // never activate a button, so they navigate.
+    if (arrow && e.target && e.target.closest
+        && e.target.closest('[role="tablist"], [role="radiogroup"], [role="listbox"], [role="menu"], [role="menubar"], [role="slider"], [role="tree"], [role="grid"]')) return;
+    // Every other key: Space / Enter activate a FOCUSED BUTTON, so pressing
+    // one on a mock's "Continue" must not also act here (device mode doubles
+    // the focusable mock surface).
+    if (!arrow && e.target && e.target.closest
+        && e.target.closest('button, a[href], summary, [role="button"]')) return;
     // A view is scrollable prose/questions, not a screen sequence — Arrow
     // Left/Right must not hijack it into switching designs (§ Views (optional)).
     // It has no device frames either, so `v` below is equally out of scope.

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.309.0] — 2026-10-25
+
+Design concept pages are calmer: no breadcrumb header any more, and the notes dock and the keys behave the same wherever the focus is.
+
+### Changed
+- **Top-left corner.** The breadcrumb header is gone; only a quiet eye stays. Its badge counts the unseen notes of the current page only (0 on the overview). Back to the overview via the ☰ menu or Esc.
+- **Overview.** The centred variant is marked in the quick navigation (with a ▾ hinting at its pages) instead of a badge on the tile. Side tiles show the quick-nav icon beside the arrow, the name below on hover. The hover glow is no longer cut off, and a page-filling app preview stays clear of the info card.
+- **Fragen.** With two or more question pages the quick-nav entry opens its dropdown again.
+- **Notes dock.** Field headers emphasise only their own level (white, bold). Fields resize only while you type, without jumping. The tip lamp uses the tip colour.
+
+### Fixed
+- **Keys.** Arrows and Enter work whenever no text field is focused, also with the dock or the ☰ menu open.
+- **Menu.** No own-note (Strg) hint while the menu is open; one divider instead of two.
+
 ## [0.308.0] — 2026-10-25
 
 Hooks put less text into the context and make you wait less. graphify is gone from the plugin. Wave 1 of the hooks audit covered 28 sessions, ≈1.2 M injected tokens and ≈260 timeouts.
