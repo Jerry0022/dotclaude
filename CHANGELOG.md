@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.316.0] — 2026-10-25
+
+Frustrated Mode (alpha) now carries an approved plan through auto-agents, auto-concept and do-learn, so nothing asks twice for what the plan already approved.
+
+### Added
+- **Plan hand-off to the receiving skills (alpha only).** `scripts/run-extras.js from <name> --skill <skill>` returns the receiving skill's section of the gated `deep-knowledge/frustrated-mode.md`; the ungated skill files name no feature.
+  - **auto-agents:** `--via` together with a `--plan` that `run-extras.js handoff` confirms counts as the go (no second confirmation); the plan card is still shown. A bare `--via`, or any channel but alpha, asks as before.
+  - **auto-concept:** the implement click becomes plan v+1 under the same id, recorded and approved before the implement path runs, with the step's closed scope written into the auto-agents task. A plan with no implement step after the concept first asks "Neue Umsetzung — Plan v… freigeben?".
+  - **do-learn:** the payload is the rule; no "richtig?" line when it matches the approved plan's rule text.
+- Every receiving hand-off verifies the plan first (`handoff --plan`; invalid or expired → stop or confirm as usual). do-run skips implement steps a concept step already built and resumes with the new plan hash.
+
 ## [0.315.1] — 2026-10-25
 
 The agent card no longer gets stuck when it was written as narrated text.

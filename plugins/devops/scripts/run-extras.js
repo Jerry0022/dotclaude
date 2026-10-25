@@ -15,9 +15,10 @@ if (require.main === module && !require('../hooks/lib/features').featureAllowed(
  *        extra Q4 option. Shown only when the feature is allowed on this
  *        channel AND this session is flagged right now. Session id: --session,
  *        else $CLAUDE_CODE_SESSION_ID / $CLAUDE_SESSION_ID; none -> not shown.
- *   node run-extras.js from <name>
+ *   node run-extras.js from <name> [--skill <skill>]
  *     -> {"known":true,"doc","section"} for a hand-off preset name this channel
  *        knows (the doc to read), else {"known":false}. Unknown -> ignore it.
+ *        --skill picks the receiving skill's own section (default: do-run).
  *   node run-extras.js handoff --plan <id>@<short> [--cwd <dir>]
  *     -> {"ok":true,...} when that plan is approved, unexpired and matches
  *        id + hash; else {"ok":false,"error"} and exit 1 (the run must stop).
@@ -77,14 +78,27 @@ function checkHandoff(ref, cwd, opts = {}) {
   return { ok: true, plan: p, steps: st.steps, doc: DOC };
 }
 
-const PRESETS = Object.freeze({ frustrated: { doc: DOC, section: 'Hand-off' } });
+/** preset name -> receiving skill -> section of DOC that skill reads. */
+const PRESETS = Object.freeze({
+  frustrated: Object.freeze({
+    'do-run': 'Hand-off',
+    'auto-concept': 'Hand-off in auto-concept',
+    'do-learn': 'Hand-off in do-learn',
+  }),
+});
 
-/** Hand-off preset lookup for `--from=<name>`; only where the feature is allowed. */
-function fromPreset(name, opts = {}) {
+const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+
+/**
+ * Hand-off preset lookup for `--from=<name>` in the receiving `skill`
+ * (default do-run); only where the feature is allowed.
+ */
+function fromPreset(name, opts = {}, skill = 'do-run') {
   try {
     if (!require('../hooks/lib/features').featureAllowed(FEATURE, opts)) return { known: false };
-    const p = Object.prototype.hasOwnProperty.call(PRESETS, name) ? PRESETS[name] : null;
-    return p ? { known: true, ...p } : { known: false };
+    const p = own(PRESETS, name) ? PRESETS[name] : null;
+    const section = p && own(p, skill) ? p[skill] : null;
+    return section ? { known: true, doc: DOC, section } : { known: false };
   } catch { return { known: false }; }
 }
 
@@ -101,7 +115,7 @@ function main(argv) {
     return 0;
   }
   if (cmd === 'from') {
-    process.stdout.write(`${JSON.stringify(fromPreset(String(argv[1] || '')))}
+    process.stdout.write(`${JSON.stringify(fromPreset(String(argv[1] || ''), {}, arg(argv, '--skill') || 'do-run'))}
 `);
     return 0;
   }
@@ -112,7 +126,7 @@ function main(argv) {
     process.stdout.write(`${JSON.stringify(out)}\n`);
     return out.ok ? 0 : 1;
   }
-  process.stderr.write('usage: run-extras.js q4 [--session <id>] | from <name> | handoff --plan <id>@<short> [--cwd <dir>]\n');
+  process.stderr.write('usage: run-extras.js q4 [--session <id>] | from <name> [--skill <skill>] | handoff --plan <id>@<short> [--cwd <dir>]\n');
   return 2;
 }
 
