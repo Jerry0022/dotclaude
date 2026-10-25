@@ -439,10 +439,10 @@ four attributes; the engine (templates-design-overview.md § Variant overview JS
 
 | Attribute | Content |
 |---|---|
-| `data-design-motto` | The design's slogan, 2–5 words ("Less is calm."). It heads the card and is the header name's tooltip. |
+| `data-design-motto` | The design's slogan, 2–5 words ("Less is calm."). It heads the card (the overview's info box). |
 | `data-design-traits` | Exactly **three** traits, separated by `\|`. Only genuine differences to the OTHER designs of the round — never something every design has ("responsive", "dark mode"). |
 | `data-design-icon` | A built-in icon name (`leaf`, `rocket`, `gauge`, `grid`, `map`, `cube`, `chart`, `bolt`, `heart`, `compass`, `layers`, `sparkles`, `shield`, `book`, `user`, `home`, `sun`, `moon`, `flame`, `palette`, `game`, `list`) or one inline SVG, entity-escaped inside the attribute (`data-design-icon="&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;&lt;path d=&quot;…&quot;/&gt;&lt;/svg&gt;"` — a raw `<`/`>` in an attribute breaks the build's and the gate's tag scanners); stroke paths in `currentColor`, everything outside svg/g/path/circle/ellipse/line/polyline/polygon/rect and their geometry/stroke attributes is dropped. A short emoji works too. Claude picks it thematically per concept — the icon is how the user tells the designs apart in the quick nav. |
-| `data-design-color` | Optional. A hex colour for the design's slide ring, header line and icon background. Never the accent blue: the icons themselves are drawn in one uniform accent tint, and the background must stay distinguishable. Without it the engine assigns a palette colour by position. |
+| `data-design-color` | Optional. A hex colour for the design's slide ring, quick-nav highlight and icon background. Never the accent blue: the icons themselves are drawn in one uniform accent tint, and the background must stay distinguishable. Without it the engine assigns a palette colour by position. |
 | `data-design-overlay` | Optional. Where the overlay (kicker, motto, traits) sits on the preview: `tl`, `tr`, `bl`, `br`, `tc` or `bc`; default `bl`. Claude picks the corner that covers the least important part of THAT design's first screen (titles and key figures usually sit top → `bl`/`bc`). |
 | `data-design-overlay-tone` | Optional. `warm` switches the overlay from the semi-transparent bluish tint to a warm graphite — set it when the preview itself is bluish and the default tint would sink into it. No auto-detection. |
 | `data-design-improved` | Optional. A short phrase (max ~40 chars, e.g. "Wochenansicht per Tab") naming what got better since the last round. The overview card shows it as "Verbessert: …" under the top-3 points. Absent → nothing is shown. Pure meta lives here and in the card, never as text inside or under the design itself. |
@@ -452,7 +452,7 @@ four attributes; the engine (templates-design-overview.md § Variant overview JS
 alternatives for the same thing — the usual case under "one visual topic per
 round" — or `data-design-set="topics"` when they show different topics
 (start page, settings, …). Only `alternatives` offers the favourite (☆/★,
-`F`, header ★, dimming); unmarked or `topics` → no star anywhere and
+`F`, the quick nav's ★, dimming); unmarked or `topics` → no star anywhere and
 `favorite` stays `null`.
 
 The gate warns (never fails) when a ≥2-design round lacks motto, traits or
@@ -465,8 +465,8 @@ icon, when the traits are not exactly three, when the round has no
 
 - **Overview** — the round's first top-level item ("Übersicht", `Esc`): a
   **carousel** that fills the viewport and never scrolls. One design large
-  in the centre (≈ 78 % of the width, up to the viewport height minus the
-  header row, 16:10), its neighbours peeking in cut off at the left and
+  in the centre (≈ 78 % of the width, up to the stage height minus room for
+  its hover glow above and below, 16:10), its neighbours peeking in cut off at the left and
   right edges (smaller than before, dimmed, desaturated). There are no ‹ ›
   buttons: hovering a side card scales it ~8 % and lays a glowing arrow over
   it; a click on it, `←` / `→` turn the carousel — they never open anything.
@@ -479,9 +479,8 @@ icon, when the traits are not exactly three, when the round has no
   a long hover or while `Alt` is held, never as a tooltip over the centre nav. On it sits the **overlay**: kicker
   `icon · N · name` (+ ☆/★ on an alternatives round), the motto as heading,
   the three traits — at `data-design-overlay`, tinted per
-  `data-design-overlay-tone`. The header's layers button hides /
-  shows the overlay (Space no longer does: Space is the notes dock); default
-  on, remembered per viewer. A variant new or changed this round carries ONE
+  `data-design-overlay-tone`. The eye hides / shows the overlay with every
+  other annotation (Space no longer does: Space is the notes dock). A variant new or changed this round carries ONE
   chip inside this info box — "Neugedacht" or "Verbessert", never two.
   **Why the previews can be wrong:** `fitPreviews()` measures the clone at
   scale 1 with `getBoundingClientRect()`, and that rect includes every
@@ -497,42 +496,47 @@ icon, when the traits are not exactly three, when the round has no
   the overview; a reload returns to where the user was (`_overview` /
   `_overviewDesign` / `_overviewScreen`, § State Persistence).
 - **Favourite** — only on a round marked `data-design-set="alternatives"`;
-  optional, at most one, toggled until submit (☆ in the overlay, the
-  header's ★, or `F`). The favoured slide gets a gold ring, the others dim.
+  optional, at most one, toggled until submit (☆ in the overlay or `F`; the
+  quick nav shows ★ on it). The favoured slide gets a gold ring, the others dim.
   Payload: `favorite: <designId>|null` (§ Decision schema; always `null`
   without `alternatives`). Meaning for the next round: step5-process.md § 5a.
-- **Header** (top left, replaces `#screen-indicator`) — compact: back item
-  "▦ Übersicht" (on a design or view page; overview icon + word, no arrow),
-  icon + name, `★` only when this design IS the favourite (on the overview:
-  `★ <name>` only when one is set), the annotation eye and, on a live design
-  page, the comment-pin icon (touch path for user pins) drawn like the eye.
-  The motto is the name's tooltip. ONE row only, semi-transparent at rest,
-  opaque on hover or keyboard focus — it never grows a second row (pages
-  live in the quick nav, the favourite on ★).
+- **Top-left corner** (replaces `#screen-indicator`) — the annotation eye
+  and nothing else: no breadcrumb, no "Übersicht" / variant / page label, no
+  ★, no box around it. It sits bare and dimmed, full strength on hover or
+  focus; its counter shows the CURRENT page's automatic notes that are
+  neither answered nor opened (0 on the overview and on question views).
+  Back to the overview only through the ☰ menu's "Übersicht" entry (or
+  `Esc`); which variant is on screen shows in the quick nav, the favourite
+  as its ★ there.
 - **Quick nav** (top centre, replaces `#design-switcher`) — one row. On a
   design page the active design fans its pages out inside its own segment
   (fan-out animation) and every other design shrinks to its icon (name in
   the tooltip); on the overview and on a question view every design keeps
-  its name. Too little room between header and ☰ FAB → the pages fold into
+  its name, and the variant centred in the carousel is highlighted (the
+  variant only, its pages stay folded; a small ▾ hints that it has some).
+  Too little room between the eye and the ☰ FAB → the pages fold into
   a "2 / 7 ▾" chip that opens downwards. `★` on the favourite. Detail pages are
   numbered with roman numerals (I, II, III …; the ☰ rows too) so the digits
   stay free for the variant hotkeys. Quick-nav controls act on `pointerdown`
   (the bar is rebuilt on every state change; a rebuild between pointerdown and
   click used to swallow the first click). With `section[data-view]`s, a
   trailing amber "Fragen" segment (no `?` mark) counts the unanswered
-  questions: one question → it opens directly; several → a click opens the
-  first open one, a click while inside the questions the next open one. A
+  questions: one question → it opens directly, no dropdown; several → the
+  segment carries their list as a dropdown (hover / focus, first tap on
+  touch) like a design's pages, and a click opens the first open one, a
+  click while inside the questions the next open one. A
   question counts as answered on any interaction or scroll in it (a note, a
   clicked bi-state, a scroll), not on a mere visit; it pulses on every
   arrival on the overview. The carousel gets a questions
-  slide, and the panel's submit area a non-blocking "N Fragen noch
+  slide (a side tile shows its icon beside the chevron, the name on hover),
+  and the panel's submit area a non-blocking "N Fragen noch
   offen — zur ersten springen" line. The quick nav's band is measured
-  against the header's real right edge and the ☰ FAB on every render, so the
+  against the eye's real right edge and the ☰ FAB on every render, so the
   two never overlap; too little room folds the pages into the chip, then
   shrinks every design to its icon.
-- **Every design round, one design included,** gets the header and the quick
+- **Every design round, one design included,** gets the eye corner and the quick
   nav; only the overview carousel and `Esc`-to-overview need ≥2 designs,
-  the favourite additionally `data-design-set="alternatives"`. The page builds itself up on load: content, header, quick nav
+  the favourite additionally `data-design-set="alternatives"`. The page builds itself up on load: content, eye, quick nav
   (with a bounce), then the FABs (`body.dz-intro`, ~2 s, off under reduced
   motion).
 - **Hotkeys** — `Esc` overview · `1`–`9` design N · `Shift`+`1`–`9` view N ·

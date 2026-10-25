@@ -22,9 +22,9 @@ returns — the single-design page is untouched.
   of collectDecisions types it into `favorite` / `userPins`.
 - **Frozen rounds** read the same two keys from the round's
   `data-frozen-feedback` blob (`favorite`, `userPins`, written by
-  `concept-build.js bake`): the overlay star and the header show the
+  `concept-build.js bake`): the overlay star and the quick nav's ★ show the
   favourite, the pins render read-only, nothing can be changed.
-- **Favourite only for alternatives.** ☆/★, `F`, the header ★ and the
+- **Favourite only for alternatives.** ☆/★, `F`, the quick nav's ★ and the
   favourite dimming exist only while the iteration carries
   `data-design-set="alternatives"` (`favOn()`); unmarked or `topics` → no
   star anywhere and `designOverviewState().favorite` is always `null`.
@@ -32,20 +32,31 @@ returns — the single-design page is untouched.
   questions slide (`section[data-view]`s). The current slide sits large in
   the centre; its neighbours peek in cut off at the edges (`data-pos`
   `prev` / `next`) as plain bordered tiles — no cut-off preview, just the
-  variant's icon badge. A click on a neighbour or
-  `←` / `→` only turns the carousel (no ‹ › buttons; a hover fades in one
-  tall glowing chevron on the neighbour); the centre preview opens its design
-  (click / `Enter` / `↓`) and glows on hover — it never scales. Every tile
-  carries the icon badge top-left (`.design-ov-badge`); the centre tile
-  shows the name next to it, a neighbour on hover. Everything is sized from
-  the viewport (CSS container units on the stage), so the overview never
-  scrolls.
+  variant's icon (`.design-ov-side`: the quick-nav icon, no frame of its
+  own), vertically centred just outside the hover chevron so the chevron
+  points at it; the name shows under it on hover, wrapped, never cut. A
+  click on a neighbour or `←` / `→` only turns the carousel (no ‹ ›
+  buttons); the centre preview opens its design (click / `Enter` / `↓`) and
+  glows on hover — it never scales, and the stage clips sideways only and
+  keeps `--dz-ov-glow` free above and below, so the glow is never cut. The
+  centre tile carries no badge: the quick nav highlights the centred variant
+  (`data-ov-focus`, its pages stay folded, a small ▾ hints at them; the
+  questions tile highlights "Fragen"). Everything is sized from the viewport
+  (CSS container units on the stage), so the overview never scrolls.
+- **Header = the eye only.** `#design-header` holds nothing but the
+  annotation eye (`.design-header-eye`), bare and dimmed until pointed at —
+  no breadcrumb, no back item, no title, no ★, no box. Back to the overview:
+  the ☰ menu's "Übersicht" entry or `Esc`; the favourite shows as the quick
+  nav's ★ and toggles with `F` / the overlay ☆.
+- **Eye counter** (`#anno-eye-count`, § Annotation Layer JS): the automatic
+  notes of the CURRENT page that are neither answered nor opened yet; the
+  overview and question views own none and count 0.
 - **Overlay** on the current preview: kicker `icon name` (+ ☆/★) — the
   same pairing as the quick nav, no number — motto, the three traits.
   Semi-transparent at rest, opaque on hover / focus. Anchor from
   `data-design-overlay` (`tl|tr|bl|br|tc|bc`, default `bl`), tint from
-  `data-design-overlay-tone="warm"`. The eye (`#anno-toggle`, inside the
-  header) hides it with every other annotation; there is no separate
+  `data-design-overlay-tone="warm"`. The eye (`#anno-toggle`, top left)
+  hides it with every other annotation; there is no separate
   overlay toggle. A NEW variant carries the "Neugedacht" chip; a variant
   CHANGED this round shows one line under the traits — "Verbessert" + the
   phrase from the optional `data-design-improved` attribute on its
@@ -60,12 +71,18 @@ returns — the single-design page is untouched.
   `data-tip` stripped, `inert`, inside `[data-device-clone]` so neither
   `saveState()` nor `collectAllFormFields()` sees a cloned control).
 - **Quick-nav band.** The quick nav is centred; its `max-width` is measured
-  against the header's real right edge and the ☰ FAB on every render, so the
+  against the eye's real right edge and the ☰ FAB on every render, so the
   two never overlap. Too little room → pages fold into the "2 / 7 ▾" chip,
   then (overview / view) the designs shrink to their icons.
-- **Hotkeys** never fire while focus is in a text field, the dock, a bubble or
-  a pin editor, nor while the ☰ panel is open (`Esc` aside, which the panel
-  owns then). `Tab` advances the page only while nothing is focused, so the
+- **"Fragen".** One question view: the segment opens it directly, no
+  dropdown. Two or more: the segment carries their list as a dropdown
+  (hover / focus; the first tap on touch), a click still jumps to the next
+  open one.
+- **Hotkeys** never fire while focus is in a real text entry
+  (`isConceptTextEntry()`, § Design JS — a focused dock button does not
+  count); digits, arrows, `Enter` and `Tab` also work while the ☰ panel is
+  open (`Esc` belongs to the panel then). No own-note arming while it is
+  open. `Tab` advances the page only while nothing is focused, so the
   focus order stays reachable; `Shift`+`Tab` is never taken.
 
 ```javascript
@@ -576,7 +593,7 @@ returns — the single-design page is untouched.
       if (e.key === 'Enter' && slide.dataset.pos === 'cur') { e.preventDefault(); open(); }
     });
     slide.appendChild(preview);
-    slide.appendChild(badgeOf(iconEl(m.icon, { color: m.color }), m.label));
+    slide.appendChild(sideLabelOf(iconEl(m.icon, { color: m.color }), m.label));
     // Overlay: kicker (icon name + ☆/★), motto, three traits, and for a
     // changed variant the "Verbessert …" line — at the anchor the author
     // picked, in the tint the author picked.
@@ -613,12 +630,15 @@ returns — the single-design page is untouched.
     wireSlide(slide, open);
     return slide;
   }
-  // Icon badge, top-left on every tile: the centre tile shows the name too,
-  // a neighbour (a plain bordered tile) only on hover.
-  function badgeOf(icon, label) {
-    const b = el('span', 'design-ov-badge');
+  // Side-tile label: only a neighbour (a plain bordered tile) shows it — the
+  // variant's icon, exactly the quick-nav icon (no frame of its own),
+  // vertically centred right where the hover chevron points; the name
+  // appears under it on hover, wrapped, never cut. The centre tile carries
+  // no badge: the quick nav marks which variant it is.
+  function sideLabelOf(icon, label) {
+    const b = el('span', 'design-ov-side');
     b.setAttribute('aria-hidden', 'true');
-    b.append(icon, el('span', 'design-ov-badge-name', label));
+    b.append(icon, el('span', 'design-ov-side-name', label));
     return b;
   }
   function buildQuestionsSlide() {
@@ -626,7 +646,7 @@ returns — the single-design page is untouched.
     slide.dataset.questions = 'true';
     slide.setAttribute('aria-label', L.qLabel);
     slide.appendChild(el('div', 'design-ov-qcard'));
-    slide.appendChild(badgeOf(iconEl('question', { kind: 'plain' }), L.qLabel));
+    slide.appendChild(sideLabelOf(iconEl('question', { kind: 'plain' }), L.qLabel));
     wireSlide(slide, null);
     return slide;
   }
@@ -649,6 +669,24 @@ returns — the single-design page is untouched.
       s.querySelectorAll('button, .design-ov-preview').forEach(b => { b.tabIndex = off === 0 ? 0 : -1; });
     });
     ov.dataset.index = String(ovIndex);
+    markQuickFocus(it || visibleIteration());
+  }
+  // On the overview the quick nav names the tile in the centre: that
+  // variant's segment (or "Fragen" on the questions tile) is highlighted —
+  // the variant only, its pages stay folded; a small caret hints that it
+  // opens onto them. Painted in place, no re-render: turning the carousel
+  // must not rebuild the nav under the pointer.
+  function markQuickFocus(it) {
+    if (!quick) return;
+    const cur = mode() === 'overview'
+      ? overviewOf(it)?.querySelector('.design-ov-slide[data-pos="cur"]') : null;
+    const id = cur ? cur.dataset.designId || '' : '';
+    const onQ = !!(cur && cur.dataset.questions === 'true');
+    quick.querySelectorAll('.design-quick-seg[data-design-id]').forEach(s => {
+      if (s.parentNode && s.parentNode.classList.contains('design-quick-group')) return;
+      s.dataset.ovFocus = String(!!id && s.dataset.designId === id);
+    });
+    quick.querySelectorAll('.design-quick-q').forEach(q => { q.dataset.ovFocus = String(onQ); });
   }
   function goSlide(i) {
     const it = visibleIteration();
@@ -685,49 +723,18 @@ returns — the single-design page is untouched.
     document.querySelectorAll('.design-ov').forEach(o => { o.dataset.overlay = 'on'; });
   }
 
-  // ── Header ─────────────────────────────────────────────────────────────
+  // ── Header: the eye, nothing else ──────────────────────────────────────
+  // No breadcrumb, no back item, no title, no ★: the page stays calm. The
+  // way back to the overview is the ☰ menu's "Übersicht" entry (and Esc),
+  // the current variant shows in the quick nav, the favourite as its ★
+  // there. Only the annotation eye stays top left, as a bare control —
+  // #design-header is its slot (placeEye(), § Panel Chrome JS adopt).
   const H = {};
   function buildHeader() {
     if (!header || H.main) return;
     H.main = el('div', 'design-header-main');
-    H.back = el('button', 'design-header-back');
-    H.back.type = 'button';
-    H.back.appendChild(svgFromPaths(ICONS.grid));
-    H.back.appendChild(el('span', '', L.overview));
-    setTip(H.back, L.back, 'Esc');
-    H.back.addEventListener('click', () => window.showOverview());
-    H.sep = el('span', 'design-header-sep');
-    H.iconSlot = el('span', 'design-header-icon');
-    H.name = el('strong', 'design-header-name');
-    // The star is a control like the eye and the pin next to it: on a design
-    // page it toggles that design's favourite (☆ / ★, same as F); on the
-    // overview "★ <name>" opens the favourite.
-    H.star = el('button', 'design-header-star');
-    H.star.type = 'button';
-    H.star.addEventListener('click', () => {
-      const it = visibleIteration();
-      if (mode() === 'overview') {
-        const fav = validFavorite(it, readState(it));
-        if (fav) window.showDesign(fav);
-        return;
-      }
-      const d = activeDesignOf(it);
-      if (d) toggleFavorite(d.dataset.design);
-    });
     H.eye = el('span', 'design-header-eye');
-    // No 📍 pin-hint in the header any more: Ctrl + click is taught by the Alt
-    // example pin and the dock tips.
-    H.pin = null;
-    // No overlay ("layers") button: the eye — moved INTO this row by
-    // placeEye() — already hides the info box with the other annotations.
-    // Icon + name: the current page, marked by the same dz-colour underline
-    // as the active quick-nav group, but flat — it is a label, not a control.
-    H.pill = el('span', 'design-header-title');
-    H.pill.setAttribute('aria-current', 'page');
-    H.pill.append(H.iconSlot, H.name);
-    H.main.append(H.back, H.sep, H.pill, H.star, H.eye);
-    // One row only: pages live in the quick nav, the favourite on ★ — the
-    // header never grows a second row over the content.
+    H.main.append(H.eye);
     header.append(H.main);
   }
 
@@ -895,10 +902,12 @@ returns — the single-design page is untouched.
     g.appendChild(wrap);
     return g;
   }
-  // "Fragen" is one segment, no "?" mark, no submenu. One question: it opens
-  // directly. Several: a click opens the first open one, a click while inside
-  // the questions opens the next open one (wrapping; all answered -> the
-  // questions in order).
+  // "Fragen" is one segment, no "?" mark. One question: no submenu, it opens
+  // directly and hovers like its siblings. Several: the segment carries
+  // their list as a dropdown (hover / focus, like a design's pages; on touch
+  // the first tap opens it), and a click opens the first open one, a click
+  // while inside the questions the next open one (wrapping; all answered ->
+  // the questions in order).
   function nextQuestion(it) {
     const qs = questionsOf(it);
     if (!qs.length) return null;
@@ -925,8 +934,36 @@ returns — the single-design page is untouched.
     btn.appendChild(el('span', 'design-quick-name', L.qLabel));
     btn.appendChild(open.length ? el('span', 'design-quick-badge', String(open.length)) : el('span', 'design-quick-qok', '✓'));
     setTip(btn, open.length ? (open.length === 1 ? L.qOpen1 : L.qOpen.replace('{n}', String(open.length))) : L.qAllDone);
-    press(btn, () => { const q = nextQuestion(visibleIteration()); if (q) goQuestion(q.id); });
+    const multi = qs.length >= 2;
+    press(btn, e => {
+      if (multi && e && e.pointerType === 'touch' && wrap.dataset.open !== 'true') {
+        wrap.dataset.open = 'true';
+        btn.setAttribute('aria-expanded', 'true');
+        return;
+      }
+      wrap.dataset.open = 'false';
+      const q = nextQuestion(visibleIteration());
+      if (q) goQuestion(q.id);
+    });
     wrap.append(btn);
+    if (!multi) return wrap;
+    wrap.dataset.multi = 'true';
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.appendChild(el('span', 'design-quick-caret', '▾'));
+    const pop = el('div', 'design-quick-qpop');
+    pop.setAttribute('role', 'menu');
+    const head = el('div', 'design-quick-qhead');
+    head.append(el('strong', '', L.qLabel),
+      el('span', '', L.qProgress.replace('{done}', String(qs.length - open.length)).replace('{n}', String(qs.length))));
+    pop.append(head, progressBar(qs.length - open.length, qs.length));
+    qs.forEach(q => {
+      const item = questionItem(q, () => { wrap.dataset.open = 'false'; goQuestion(q.id); });
+      item.setAttribute('role', 'menuitem');
+      item.dataset.active = String(viewOn === q.v);
+      pop.appendChild(item);
+    });
+    wrap.appendChild(pop);
     return wrap;
   }
   function renderQuick(it) {
@@ -942,6 +979,17 @@ returns — the single-design page is untouched.
       if (d && d.dataset.design === m.id) row.appendChild(quickGroup(d, m, u, fav));
       else row.appendChild(quickSeg(m, md !== 'design' && quickLevel < 2, u, fav));
     });
+    // On the overview a variant with several pages carries a small caret:
+    // shown on the highlighted one only (markQuickFocus), it hints that the
+    // variant opens onto its pages.
+    if (md === 'overview') {
+      row.querySelectorAll('.design-quick-seg[data-design-id]').forEach(seg => {
+        const dd = designsOf(it).find(x => x.dataset.design === seg.dataset.designId);
+        if (dd && dd.querySelectorAll('section[data-screen][id]').length >= 2) {
+          seg.appendChild(el('span', 'design-quick-subcaret', '▾'));
+        }
+      });
+    }
     const qs = questionsOf(it);
     if (qs.length) row.appendChild(quickQuestions(it, qs, md));
     quick.appendChild(row);
@@ -954,7 +1002,9 @@ returns — the single-design page is untouched.
     if (quickLevel < 2 && row.scrollWidth > quick.clientWidth + 1) {
       quickLevel = d && quickLevel === 0 ? 1 : 2;
       renderQuick(it);
+      return;
     }
+    markQuickFocus(it);
   }
   function buildQuick(it) { quickLevel = 0; renderQuick(it); }
   window.addEventListener('resize', () => {
@@ -1193,9 +1243,11 @@ returns — the single-design page is untouched.
       // mock fully, a long desktop page only down to 70 % of the width fit
       // (its bottom may crop). Centred on both axes when it fits.
       const h = p.clientHeight;
-      const fitIn = (aw, ah) => {
+      // strict: the region's bottom edge is the info card — a long page may
+      // not crop past it into the card, so it is fitted by height in full.
+      const fitIn = (aw, ah, strict) => {
         let s = Math.min(2.5, aw / content);
-        if (ah > 0 && tall && tall * s > ah) s = Math.max(ah / tall, content < 700 ? 0 : s * 0.7);
+        if (ah > 0 && tall && tall * s > ah) s = Math.max(ah / tall, content < 700 || strict ? 0 : s * 0.7);
         return Math.max(0, s);
       };
       // The info card sits in one corner of the tile; a design blown up to
@@ -1210,11 +1262,11 @@ returns — the single-design page is untouched.
         const o = { l: (cr.left - pr.left) / k, r: (cr.right - pr.left) / k, t: (cr.top - pr.top) / k, b: (cr.bottom - pr.top) / k };
         const left = (o.l + o.r) / 2 < w / 2, bottom = (o.t + o.b) / 2 > h / 2;
         const side = left ? { x: o.r + G, y: 0, w: w - o.r - G, h } : { x: 0, y: 0, w: o.l - G, h };
-        const band = bottom ? { x: 0, y: 0, w, h: o.t - G } : { x: 0, y: o.b + G, w, h: h - o.b - G };
+        const band = bottom ? { x: 0, y: 0, w, h: o.t - G, strict: true } : { x: 0, y: o.b + G, w, h: h - o.b - G };
         const cands = [side, band].filter(c => c.w > 0 && c.h > 0);
-        if (cands.length) region = cands.reduce((a, c) => (fitIn(c.w, c.h) > fitIn(a.w, a.h) ? c : a));
+        if (cands.length) region = cands.reduce((a, c) => (fitIn(c.w, c.h, c.strict) > fitIn(a.w, a.h, a.strict) ? c : a));
       }
-      const scale = fitIn(region.w, region.h);
+      const scale = fitIn(region.w, region.h, region.strict);
       const y = region.h > 0 && tall ? region.y + Math.max(0, (region.h - tall * scale) / 2) - fromY * scale : 0;
       wrap.style.removeProperty('--dz-ov-scale');
       wrap.style.removeProperty('--dz-ov-x');
@@ -1243,49 +1295,6 @@ returns — the single-design page is untouched.
     const live = isLive(it) && !body.classList.contains('viewing-frozen');
     const md = mode();
     if (navOv) navOv.firstElementChild.dataset.active = String(md === 'overview');
-    const d = activeDesignOf(it);
-    const m = d && metas.find(x => x.id === d.dataset.design);
-    const favMeta = fav && metas.find(x => x.id === fav);
-    if (header && H.main) {
-      H.back.hidden = md === 'overview' || !hasOverview;
-      H.sep.hidden = H.back.hidden;
-      H.iconSlot.innerHTML = '';
-      header.style.removeProperty('--dz-color');
-      let motto = '';
-      if (md === 'overview') {
-        H.iconSlot.appendChild(iconEl('grid'));
-        H.name.textContent = L.overview;
-        H.star.textContent = favMeta ? '★ ' + favMeta.label : '';
-        // Only the alternatives round invites a favourite.
-        H.star.dataset.kind = 'label';
-        H.star.disabled = false;
-        H.star.removeAttribute('aria-pressed');
-        if (favMeta) setTip(H.star, L.open + ': ' + favMeta.label);
-        motto = (favOn(it) ? L.count : L.countPlain).replace('{n}', String(metas.length));
-      } else if (md === 'view') {
-        const v = it.querySelector(':scope > section[data-view][data-view-active="true"]');
-        H.iconSlot.appendChild(iconEl('question', { kind: 'plain' }));
-        H.name.textContent = v ? viewTitle(v) : '';
-        H.star.textContent = '';
-      } else if (m) {
-        header.style.setProperty('--dz-color', m.color);
-        H.iconSlot.appendChild(iconEl(m.icon, { color: m.color }));
-        H.name.textContent = m.label;
-        const isFav = fav === m.id;
-        H.star.textContent = isFav ? '★' : '☆';
-        H.star.dataset.kind = 'icon';
-        H.star.disabled = !live;
-        H.star.setAttribute('aria-pressed', String(isFav));
-        H.star.setAttribute('aria-label', isFav ? L.favUnset : L.favSet);
-        setTip(H.star, isFav ? L.favUnset : L.favSet, 'F');
-        if (!hasOverview || !favOn(it)) H.star.textContent = '';
-        motto = m.motto;
-      }
-      H.star.hidden = !H.star.textContent;
-      // The motto is the name's tooltip, not a line of its own.
-      if (motto) setTip(H.name, motto);
-      else { delete H.name.dataset.tip; delete H.name.dataset.tipTier; }
-    }
     renderQuick(it);
     renderQuestionsCard(it);
     renderSubmitHint(it);
@@ -1360,6 +1369,8 @@ returns — the single-design page is untouched.
   let draft = null;   // the pin being placed, until saved or discarded
   function arm(kind) {
     if (!on() || mode() !== 'design') return;
+    // No own-note hint / crosshair while the menu is open.
+    if (body.classList.contains('panel-open')) return;
     const it = visibleIteration();
     if (!isLive(it) || body.classList.contains('viewing-frozen')) return;
     armed = kind;
@@ -1383,6 +1394,7 @@ returns — the single-design page is untouched.
   }
   const fieldFocused = t => !!(t && t.closest && t.closest('textarea, input, select, [contenteditable=""], [contenteditable="true"], #feedback-dock, .anno-bubble, .upin-editor'));
   document.addEventListener('keydown', e => {
+    if (document.body.classList.contains('panel-open')) return;
     if ((e.key === 'Control' || e.key === 'Meta') && !e.repeat && !fieldFocused(e.target)) arm('ctrl');
   });
   document.addEventListener('keyup', e => {
@@ -1674,7 +1686,14 @@ returns — the single-design page is untouched.
   // ── Hotkeys ────────────────────────────────────────────────────────────
   document.addEventListener('keydown', e => {
     if (!on() || e.defaultPrevented) return;
-    if (fieldFocused(e.target)) return;
+    // Navigation keys stop only for real text entry: a focused dock BUTTON
+    // (or one in a bubble / pin editor) must not kill the overview keys.
+    // isConceptTextEntry is the shared check of § Design JS; the wide
+    // fieldFocused() stays the fallback (and the Ctrl-arm check above).
+    const typing = typeof window.isConceptTextEntry === 'function'
+      ? window.isConceptTextEntry(e.target) || window.isConceptTextEntry(document.activeElement)
+      : fieldFocused(e.target);
+    if (typing) return;
     const panelOpen = !!document.getElementById('decision-panel')?.classList.contains('open');
     const dockOpen = document.getElementById('feedback-dock')?.dataset.open === 'true';
     if (e.key === 'Escape') {
@@ -1684,7 +1703,7 @@ returns — the single-design page is untouched.
       if (mode() !== 'overview') { e.preventDefault(); window.showOverview(); }
       return;
     }
-    if (panelOpen) return;
+    // Digits, arrows, Enter and Tab keep working while the ☰ panel is open.
     const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code || '');
     const n = digit ? Number(digit[1]) : 0;
     const it = visibleIteration();

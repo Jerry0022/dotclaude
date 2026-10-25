@@ -344,7 +344,8 @@
       box.id = 'dock-tip';
       box.className = 'dock-tip';
       const title = document.createElement('b');
-      title.textContent = '💡 {{dock.tip_title}}';
+      title.innerHTML = '<svg class="dock-tip-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 1a5 5 0 0 0-3.1 8.9c.6.5 1.1 1.2 1.1 2V12h4v-.1c0-.8.5-1.5 1.1-2A5 5 0 0 0 8 1zM6 13h4v.5A1.5 1.5 0 0 1 8.5 15h-1A1.5 1.5 0 0 1 6 13.5z"/></svg>';
+      title.append('{{dock.tip_title}}');
       const text = document.createElement('span');
       text.className = 'dock-tip-text';
       box.append(title, text);

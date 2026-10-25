@@ -526,9 +526,12 @@ body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
    the per-page row is hidden, so the design row takes the lead. Keyed on
    html[data-template="design"]: a document round shows the general row
    alone, and there it must not look like an afterthought. */
-html[data-template="design"] .feedback-section:has(#screen-textareas) label,
-html[data-template="design"] .feedback-section:has(#view-textareas) label,
-html[data-template="design"] body[data-single-screen="true"] .feedback-section:has(#design-textareas) label {
+/* `:not(.dock-crumb)`: a breadcrumb header styles its levels itself (§ Panel
+   chrome CSS, .dock-crumb) — inheriting this white/bold made the muted
+   ancestor "Concept" look highlighted on the first row only. */
+html[data-template="design"] .feedback-section:has(#screen-textareas) label:not(.dock-crumb),
+html[data-template="design"] .feedback-section:has(#view-textareas) label:not(.dock-crumb),
+html[data-template="design"] body[data-single-screen="true"] .feedback-section:has(#design-textareas) label:not(.dock-crumb) {
   color: var(--text-color); font-size: 0.9rem; font-weight: 600;
 }
 html[data-template="design"] .feedback-section:has(#screen-textareas) textarea,
@@ -546,7 +549,7 @@ html[data-template="design"] .feedback-section:has(#design-general-feedback) {
   border-radius: 12px;
   background: color-mix(in srgb, var(--text-color) 4%, transparent);
 }
-html[data-template="design"] .feedback-section:has(#design-general-feedback) label {
+html[data-template="design"] .feedback-section:has(#design-general-feedback) label:not(.dock-crumb) {
   font-size: 0.76rem; font-weight: 500; opacity: 0.8;
 }
 html[data-template="design"] #design-general-feedback {
