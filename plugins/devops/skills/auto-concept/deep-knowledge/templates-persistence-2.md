@@ -1,6 +1,20 @@
 # Concept templates, part 27 of 41: Shared systems — state persistence (continued 2)
 
 ```javascript
+// `text:iN:` keys with N below the live round = drafts of a submitted
+// round. Removes them from `state` in place; true when anything went.
+function _pruneSpentDrafts(state) {
+  const live = document.querySelector('section[data-iteration][data-active]');
+  const cur = live ? Number(live.dataset.iteration) : NaN;
+  if (!state || !isFinite(cur)) return false;
+  let pruned = false;
+  Object.keys(state).forEach(k => {
+    const m = /^text:i(\d+):/.exec(k);
+    if (m && Number(m[1]) < cur) { delete state[k]; pruned = true; }
+  });
+  return pruned;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // FIRST: the mapping state inputs (§ Information Mapping (engine)) must
   // exist before the restore writes into them — script order is not

@@ -66,7 +66,11 @@ describe("overview feedback — header", () => {
       expect(header.querySelector(".design-header-back, .design-header-title, .design-header-name, .design-header-star, .design-header-sep, .design-header-overlay")).toBeNull();
       const eye = document.getElementById("anno-toggle");
       expect(eye.closest(".design-header-main")).not.toBeNull();
-      expect(header.textContent.trim()).toBe(eye.textContent.trim());
+      // Besides the eye only the device switch rides in the corner
+      // (third feedback round); it carries no visible text of its own there.
+      const rest = [...header.querySelector(".design-header-main").children]
+        .filter((n) => !n.matches(".design-header-eye, #viewport-toggle, #viewport-modes"));
+      expect(rest).toEqual([]);
     }
     expect(css).toMatch(/\.design-header \.anno-toggle-fab \{\s*position: relative; inset: auto;/);
     const box = css.match(/\.design-header \{[^}]*\}/)[0];

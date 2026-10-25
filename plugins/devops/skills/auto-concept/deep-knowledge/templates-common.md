@@ -207,6 +207,8 @@ must see their own language. The locale hint is authoritative.
 | `design.position_page`         | Page                           | Seite |
 | `anno.toggle_show` | Show notes | Notizen einblenden |
 | `anno.toggle_hide` | Hide notes | Notizen ausblenden |
+| `anno.toggle_calm_hide` | Hide notes and navigation | Notizen und Navigation ausblenden |
+| `anno.toggle_calm_show` | Show notes and navigation | Notizen und Navigation einblenden |
 | `anno.answer_placeholder`      | Your answer…                    | Deine Antwort… |
 | `anno.pin_label`                | Question {n}                    | Frage {n} |
 | `design.nav_views_heading`     | Questions                       | Fragen |

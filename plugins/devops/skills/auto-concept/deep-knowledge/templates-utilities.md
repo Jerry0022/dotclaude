@@ -11,7 +11,11 @@ this engine renders it in the page's own tokens with the two delay tiers:
 tip is the element's only name (an icon-only control), shows cut-off text, or
 explains a disabled control. The engine detects those three cases itself;
 `data-tip-tier="label"` / `"info"` overrides the detection (e.g. `info` on a
-universal ✕). Once a tip has closed, the next one opens instantly within
+universal ✕); `data-tip-tier="help"` (0 ms) is reserved for an "i" / "?"
+button that exists only for its tip. A tip never repeats a visible label: an
+item with a visible name gets only its hotkey via `data-tip-key` +
+`data-tip-key-only`, and siblings of one group carry the same kind of tip
+(ui-defaults R1). Once a tip has closed, the next one opens instantly within
 300 ms; keyboard focus opens it instantly; the pointer can move onto it;
 Escape, a click or a scroll closes it; touch opens it on long-press. A stray
 `title` — page content Claude writes, an older script — is moved to
@@ -51,7 +55,7 @@ the element. Pair it with `aria-keyshortcuts` on the element.
 (function wireAppTooltips() {
   if (window.__appTooltips) return;
   window.__appTooltips = true;
-  const DELAY = { info: 1500, label: 500 };  // R1 tiers — Info is the default
+  const DELAY = { info: 1500, label: 500, help: 0 };  // R1 tiers — Info is the default; help = an "i"/"?" button that exists only for its tip
   const SKIP_MS = 300;                        // the next tip opens instantly
   const NO_ADOPT = /^(IFRAME|FRAME|LINK|STYLE|META)$/;
   const SYMBOLIC = /^[\s\p{Extended_Pictographic}\p{S}\p{P}‍️]*$/u;
@@ -75,7 +79,7 @@ the element. Pair it with `aria-keyshortcuts` on the element.
 
   function tierOf(el) {
     const forced = el.getAttribute('data-tip-tier');
-    if (forced === 'label' || forced === 'info') return forced;
+    if (forced === 'label' || forced === 'info' || forced === 'help') return forced;
     if (el.disabled || el.getAttribute('aria-disabled') === 'true') return 'label';
     if (el.matches('button, a[href], input, select, textarea, [role="button"], [role="tab"], [role="menuitem"], [tabindex]')
       && SYMBOLIC.test(el.textContent || '')) return 'label';
@@ -102,11 +106,14 @@ the element. Pair it with `aria-keyshortcuts` on the element.
   }
 
   // Label text plus, for `data-tip-key`, one keycap per key part.
+  // `data-tip-key-only`: the element's label is already visible, so the tip
+  // carries only its keycaps — never an echo of the label (ui-defaults R1).
   function fill(el) {
-    tip.textContent = el.dataset.tip;
+    const keyOnly = el.hasAttribute('data-tip-key-only');
+    tip.textContent = keyOnly ? '' : el.dataset.tip;
     const key = el.dataset.tipKey;
     if (!key) return;
-    tip.appendChild(document.createTextNode(' '));
+    if (!keyOnly) tip.appendChild(document.createTextNode(' '));
     key.split('+').forEach((part, i) => {
       if (i) tip.appendChild(document.createTextNode('+'));
       const cap = document.createElement('kbd');
