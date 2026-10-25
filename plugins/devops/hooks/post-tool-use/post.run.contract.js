@@ -4,7 +4,7 @@
  * @version 0.4.5
  * @event PostToolUse
  * @plugin devops
- * @matcher AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude__ship_release|mcp__plugin_devops_dotclaude__render_completion_card|mcp__.*__merge_pull_request
+ * @matcher AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude__ship_release|mcp__plugin_devops_dotclaude__render_completion_card|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card|mcp__.*__merge_pull_request
  * @description Record what happened for the do-run RUN CONTRACT (spec A
  *   events, B arming, E batch marker, H closing):
  *   - AskUserQuestion: router answers arm a new contract (and clear the arm

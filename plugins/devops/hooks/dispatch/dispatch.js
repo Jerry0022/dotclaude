@@ -2,7 +2,7 @@
 'use strict';
 /**
  * @hook dispatch
- * @version 0.1.0
+ * @version 0.1.1
  * @event SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, Stop, SubagentStart, SubagentStop
  * @plugin devops
  * @description One process per hook event. `node dispatch.js <Event>` is the
@@ -272,8 +272,9 @@ async function runEvent(o) {
   // process-isolated modules (or all, when dispatch is off): parallel, like separate hooks
   const procIdx = o.modules.map((m, i) => (o.processMode || m.isolate === 'process' ? i : -1)).filter((i) => i >= 0);
   const procRuns = procIdx.map((i) => runProcess(o.modules[i], o.raw, budgetFor(o.modules[i])).then((r) => {
+    // No dispatcher end record: the child writes its own start under its own
+    // id, and a start without an end already counts as a killed run.
     results[i] = { name: o.modules[i].name, ...r };
-    note(o.modules[i], r, newId(o.modules[i].name, i));
   }));
 
   const workerIdx = o.modules.map((_, i) => i).filter((i) => !procIdx.includes(i));
@@ -283,8 +284,11 @@ async function runEvent(o) {
     for (let k = 0; k < lane.length; k++) {
       const i = lane[k];
       const mod = o.modules[i];
-      const id = newId(mod.name, i);
-      const prep = next && next.i === i ? next.prep : null;
+      // A worker prepared ahead already carries its run id: the end record
+      // must use the same one, or one kill counts twice.
+      const ahead = next && next.i === i ? next : null;
+      const id = ahead ? ahead.id : newId(mod.name, i);
+      const prep = ahead ? ahead.prep : null;
       next = null;
       if (left() < MIN_START_MS) {
         if (prep) prep.worker.terminate().catch(() => {});
@@ -296,7 +300,8 @@ async function runEvent(o) {
         const p = prep || prepareWorker(mod, o.raw, id);
         const j = lane[k + 1];
         if (j !== undefined) {
-          try { next = { i: j, prep: prepareWorker(o.modules[j], o.raw, newId(o.modules[j].name, j)) }; } catch { next = null; }
+          const jid = newId(o.modules[j].name, j);
+          try { next = { i: j, id: jid, prep: prepareWorker(o.modules[j], o.raw, jid) }; } catch { next = null; }
         }
         results[i] = { name: mod.name, ...(await runPrepared(p, o.raw, budgetFor(mod))) };
       } catch (e) {

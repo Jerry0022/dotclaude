@@ -25,6 +25,8 @@ const FIXTURES = {
   "spin.js": `for(;;){}`,
   // an uncaught throw is a non-blocking error
   "throw.js": `throw new Error('kaboom');`,
+  // records the run id the dispatcher handed in, then spins into its budget
+  "id-spin.js": `require('fs').writeFileSync(require('path').join(__dirname,'seen-id.txt'),require('worker_threads').workerData.telemetryId);for(;;){}`,
 };
 const mod = (name, o = {}) => ({ name: name.replace(/\.js$/, ""), file: path.join(dir, name), timeoutS: 10, isolate: "worker", dispatch: true, ...o });
 const payload = JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "ls" } });
@@ -77,6 +79,22 @@ describe("dispatcher runs modules in worker threads like separate processes", ()
     expect(r.results[0].timedOut).toBe(true);
     expect(r.results[1].skipped).toBe(true);
     expect(r.stdout).toBe("");
+  });
+
+  test("a module prepared ahead in its lane times out under its own run id (one kill, one record)", async () => {
+    const recs = [];
+    const tele = { record: (r) => recs.push(r) };
+    const r = await run([mod("ctx.js"), mod("id-spin.js", { timeoutS: 1 })], { tele, lanes: [["ctx", "id-spin"]] });
+    expect(r.results[1].timedOut).toBe(true);
+    const seen = fs.readFileSync(path.join(dir, "seen-id.txt"), "utf8");
+    expect(recs).toEqual([expect.objectContaining({ hook: "id-spin", outcome: "timeout", id: seen })]);
+  });
+
+  test("the opt-out writes no dispatcher end record for a killed child (its own start already counts)", async () => {
+    const recs = [];
+    const r = await run([mod("spin.js", { timeoutS: 1 })], { tele: { record: (x) => recs.push(x) }, processMode: true });
+    expect(r.results[0].timedOut).toBe(true);
+    expect(recs).toEqual([]);
   });
 
   test("an uncaught throw fails open (exit 1 of that module only)", async () => {

@@ -82,3 +82,19 @@ describe("deferred-worker", () => {
     expect(dr.collect(sid)).toEqual([]);
   });
 });
+
+describe("SessionStart hooks that defer", () => {
+  // sessionCwd drains stdin; a deferOrRun that reads it again gets '' outside
+  // the dispatcher (no session id, wrong cwd, result never delivered).
+  test("a hook that reads stdin via sessionCwd hands the payload to deferOrRun", () => {
+    const ssDir = path.join(path.dirname(require.resolve("./deferred-results.js")), "..", "session-start");
+    const files = fs.readdirSync(ssDir).filter((f) => /^ss\..+\.js$/.test(f) && !f.endsWith(".test.js"));
+    const offenders = files.filter((f) => {
+      const src = fs.readFileSync(path.join(ssDir, f), "utf8");
+      if (!/sessionCwd\(/.test(src)) return false;
+      const calls = src.split("deferOrRun({").slice(1).map((s) => s.slice(0, s.indexOf("})")));
+      return calls.some((c) => !/\binput:/.test(c));
+    });
+    expect(offenders).toEqual([]);
+  });
+});
