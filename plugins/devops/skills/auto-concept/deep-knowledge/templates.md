@@ -25,7 +25,7 @@ Index of the concept engine reference: the three templates (decision, design, fr
 | 17 | [templates-design-overview-css.md](templates-design-overview-css.md) | 537 | Variant overview CSS (≥2 designs) |
 | 18 | [templates-design-overview-css-2.md](templates-design-overview-css-2.md) | 69 | Variant overview CSS (≥2 designs) (continued) |
 | 19 | [templates-design-hotkeys.md](templates-design-hotkeys.md) | 235 | Hotkey overlay, Space and nudges — `wireChromeHotkeys()` |
-| 20 | [templates-free.md](templates-free.md) | 233 | Template: free · Layout — Document, freeform body · Mapping block (optional) · Optional bi-state auto-detection · Decision schema · collectDecisions (free branch) |
+| 20 | [templates-free.md](templates-free.md) | 233 | Template: free · Layout — Document, freeform body · Mapping block (optional) · Optional bi-state auto-detection · Decision schema · collectDecisions (free branch) · Document pins (`wireDocumentPins()`) |
 | 21 | [templates-section-nav.md](templates-section-nav.md) | 428 | Shared Systems (all templates) · Section Navigation (Decision Panel as TOC) |
 | 22 | [templates-section-nav-2.md](templates-section-nav-2.md) | 500 | Shared Systems (all templates) · Section Navigation (Decision Panel as TOC) (continued) |
 | 23 | [templates-panel-state.md](templates-panel-state.md) | 560 | Decision Panel State CSS |

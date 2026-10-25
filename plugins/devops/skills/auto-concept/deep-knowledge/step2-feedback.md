@@ -89,6 +89,22 @@ See `deep-knowledge/templates-design.md` § Annotation Layer (optional) for the
 full HTML/CSS/JS reference, the payload shape (`annotations[]`), and how a
 frozen iteration keeps its annotations browsable and read-only.
 
+### Own note pins in document rounds
+
+`decision` and `free` rounds carry the user's **own** pins too, not only
+design rounds: **Ctrl + click** (long press on touch) on a paragraph, list
+item or table row sets a pin with a note field and attachments, exactly like
+the design round's own pins. Nothing to author — the engine
+(`wireDocumentPins()`, `deep-knowledge/templates-free.md` § Document pins)
+does it on every document round of every page built from the current
+engine; existing pages are not migrated. Holding Alt shows the hotkey
+overlay with the "Ctrl + click" example pin, Ctrl held shows a hint pill,
+and the eye (`#dpin-eye`, left of ☰, visible once a pin exists) hides and
+shows the pins together with the other notes (`body.anno-hidden`).
+Give a paragraph or row you expect remarks on a stable `id` — the pin's
+anchor prefers it over position and text when the round is rebuilt. Pins
+are not draggable in a document (the block is the anchor).
+
 ### Views (optional)
 
 A third, independent thing a `design` iteration may hold: fullscreen,

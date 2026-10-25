@@ -98,9 +98,9 @@ the same hotkeys and tips as a design round. Three jobs:
     // No "Ctrl + click" pin example while the ☰ panel is open: the design
     // sits behind its backdrop, a click there closes the panel, never pins.
     const onDesign = document.querySelector('section[data-design]')
-      && body.dataset.overviewActive !== 'true' && body.dataset.viewActive !== 'true'
-      && !body.classList.contains('panel-open');
-    if (onDesign) {
+      && body.dataset.overviewActive !== 'true' && body.dataset.viewActive !== 'true';
+    const onDoc = typeof window.documentPinsActive === 'function' && window.documentPinsActive();
+    if ((onDesign || onDoc) && !body.classList.contains('panel-open')) {
       const ex = mk('div', 'hk-pin-example');
       ex.append(mk('span', 'hk-pin-dot'), mk('span', 'hk-pin-label', T.ctrl + ' + ' + T.click));
       layer.appendChild(ex);
@@ -196,7 +196,7 @@ the same hotkeys and tips as a design round. Three jobs:
     else if (k === 'Escape') markUsed('esc');
   }, true);
   document.addEventListener('click', e => {
-    if ((e.ctrlKey || e.metaKey) && e.target && e.target.closest && e.target.closest('section[data-design]')) markUsed('upin');
+    if ((e.ctrlKey || e.metaKey) && e.target && e.target.closest && e.target.closest('section[data-design], section[data-iteration][data-active]')) markUsed('upin');
   }, true);
 
   // Mouse moments. detail > 0 = a real pointer click (a keyboard "click"

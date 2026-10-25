@@ -74,6 +74,17 @@ instead, there is no starting point to pick.
   pin exactly like a screen note about that element; when the next round
   changes the element, the pin is answered.
 
+- **Document rounds (`decision` / `free`)** carry `userPins[]` as well
+  (`[]` when none): same fields plus `anchor` — `{ section, kind, index,
+  ref, text }`, the paragraph / list item / table row (`p` / `li` / `tr`) the
+  note sits on, in the section with that id (`''` = the round itself).
+  `screen` repeats the section id, `design` is `''`, `x` / `y` are percent of
+  the block's box, `target` names it. Treat a pin as a note on exactly that
+  passage — quote `anchor.text` when answering — and answer it in the next
+  round like an inline note; `attachments` apply as for every other note.
+  A baked frozen round keeps them in `data-frozen-feedback.userPins`
+  (read-only).
+
 **Coverage check:** before processing decisions, verify every named form
 field that exists in the just-frozen iteration HTML appears in the
 `decisions` payload (specifically the `allFields` catch-all). If a field

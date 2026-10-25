@@ -593,6 +593,8 @@ function restoreState() {
   // Same for the variant overview's engine store (favourite + user pins,
   // § Variant overview JS): its textarea was just set by value.
   if (typeof window.refreshDesignOverview === 'function') window.refreshDesignOverview();
+  // Same for the document pins' store (§ Document pins).
+  if (typeof window.refreshDocumentPins === 'function') window.refreshDocumentPins();
   if (typeof refreshMappings === 'function') refreshMappings();
 }
 ```
