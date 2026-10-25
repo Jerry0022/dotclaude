@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.knowledge.dispatch
- * @version 0.10.0
+ * @version 0.11.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description On-demand deep-knowledge injection based on prompt keywords.
@@ -10,10 +10,15 @@
  *   at most once per session (tracked via session-scoped temp files).
  *   Always-on docs (ss.knowledge.index ALWAYS_ON, e.g. agent-proactivity.md)
  *   are already in context from SessionStart — never list them in TOPIC_MAP.
- *   The docs of the retired skills (readme-standards, graphify, usage,
+ *   The docs of the retired skills (readme-standards, usage,
  *   strict, project-setup) and plain topic docs such as devops-config —
  *   lib/knowledge-pointers.js — get a one-line pointer instead of their
  *   body, also once per session.
+ *   Only a real user prompt dispatches docs, pointers, the glossary and the
+ *   delegation nudge (lib/non-user-prompt.js): a task-notification or tick
+ *   mentioning "Codex" must not inject codex-integration.md, and its English
+ *   text must not flip the locale — such a turn keeps the cached locale (no
+ *   line when there is none). Budget lines still go out.
  */
 
 require('../lib/plugin-guard');
@@ -21,7 +26,8 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const path = require('path');
 const { sessionFile, writeSessionFile } = require('../lib/session-id');
-const { ensureLocale } = require('../lib/locale');
+const { ensureLocale, peekLocale } = require('../lib/locale');
+const { isNonUserPrompt } = require('../lib/non-user-prompt');
 const { readBudget, maybeRefreshUsage, nudgeSuffix, budgetLine } = require('../lib/budget');
 const { readDelegation } = require('../lib/delegation');
 const { matchPointers, legacyOverrides, pointerLine } = require('../lib/knowledge-pointers');
@@ -259,14 +265,17 @@ process.stdin.on('end', () => {
   // Detect + cache UI locale. First prompt sets it; a later prompt with a
   // clear language signal switches it, so all hooks/skills follow the
   // language the user writes in now (short "ok"/"ja" prompts keep the cache).
-  const { lang, isFresh } = ensureLocale(sessionId, rawMessage);
+  const nonUser = isNonUserPrompt(rawMessage);
+  const { lang, isFresh } = nonUser
+    ? { lang: peekLocale(sessionId), isFresh: false }
+    : ensureLocale(sessionId, rawMessage);
 
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT
     || path.resolve(__dirname, '..', '..');
   const dkDir = path.join(pluginRoot, 'deep-knowledge');
 
   // Find matching topics, sort by specificity (higher = more relevant)
-  const matched = TOPIC_MAP
+  const matched = nonUser ? [] : TOPIC_MAP
     .filter(t => t.patterns.some(re => re.test(userMessage)))
     .sort((a, b) => b.specificity - a.specificity);
 
@@ -297,7 +306,7 @@ process.stdin.on('end', () => {
   const pointers = [];
   try {
     const home = process.env.HOME || process.env.USERPROFILE || '';
-    for (const hit of matchPointers(rawMessage)) {
+    for (const hit of nonUser ? [] : matchPointers(rawMessage)) {
       if (injected.has(hit.file)) continue;
       const overrides = hit.extension ? legacyOverrides(hit.legacy, { cwd: hook.cwd, home }) : [];
       pointers.push(pointerLine(hit, dkDir, overrides));
@@ -364,9 +373,9 @@ process.stdin.on('end', () => {
     if (first) nudge = [nudgeText + budgetSuffix];
     else if (budgetSuffix.trim()) nudge = [`[delegation-policy]${budgetSuffix.startsWith(' ') ? '' : ' '}${budgetSuffix}`];
   }
-  const blocks = [`[ui-locale: ${lang}]`, ...announce, ...nudge];
+  const blocks = [...(lang ? [`[ui-locale: ${lang}]`] : []), ...announce, ...nudge];
 
-  if (isFresh) {
+  if (isFresh && lang) {
     const glossary = loadTriggerGlossary(pluginRoot, lang);
     if (glossary) {
       blocks.push(
@@ -430,6 +439,8 @@ process.stdin.on('end', () => {
       ...sections,
     );
   }
+
+  if (blocks.length === 0) process.exit(0);
 
   const output = {
     hookSpecificOutput: {

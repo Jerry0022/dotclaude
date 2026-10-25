@@ -1,6 +1,6 @@
 /**
  * @module locale
- * @version 0.1.0
+ * @version 0.2.0
  * @description Session-scoped UI locale detection and lookup.
  *
  *   The plugin renders user-facing strings (completion-card CTAs, hook prompts,
@@ -188,6 +188,16 @@ function ensureLocale(sessionId, prompt) {
 }
 
 /**
+ * The cached session locale, or null when none was set yet. Never detects —
+ * for turns that are not the user's own words (task notifications, ticks).
+ */
+function peekLocale(sessionId) {
+  const cached = readSessionFile(SESSION_PREFIX, sessionId);
+  const lang = cached && cached.content.trim();
+  return SUPPORTED.includes(lang) ? lang : null;
+}
+
+/**
  * Lookup a translation key in a dict shaped { en: { key: '...' }, de: { ... } }.
  * Falls back to English, then to the key itself, so a missing translation
  * never crashes a caller.
@@ -205,6 +215,7 @@ module.exports = {
   getLocale,
   setLocale,
   ensureLocale,
+  peekLocale,
   isInjectedPrompt,
   t,
 };
