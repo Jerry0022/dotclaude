@@ -192,7 +192,7 @@ function ensureLocale(sessionId, prompt) {
  * for turns that are not the user's own words (task notifications, ticks).
  */
 function peekLocale(sessionId) {
-  const cached = readSessionFile(SESSION_PREFIX, sessionId);
+  const cached = readSessionFile(SESSION_PREFIX, sessionId, { exact: true });
   const lang = cached && cached.content.trim();
   return SUPPORTED.includes(lang) ? lang : null;
 }

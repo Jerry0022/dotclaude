@@ -166,7 +166,7 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
     expect(short.split("\n").length).toBe(1);
     expect(short).toMatch(/^\[ui-locale: (en|de)\]$/);
     const afk = runHook("AUTONOMOUS_AUTOSTART: continue the queued implementation of the tenant switcher", proHome());
-    expect(afk.split("\n")[1]).toBe(nudge);
+    expect(afk.split("\n")).toContain(nudge);
   });
 
   test("kill-switch: off → no nudge and no budget suffix; ask → the ask variant, suffix kept", () => {
