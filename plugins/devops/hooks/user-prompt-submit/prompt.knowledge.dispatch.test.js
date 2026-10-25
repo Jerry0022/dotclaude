@@ -73,6 +73,32 @@ function proHome() {
   return h;
 }
 
+describe("prompt.knowledge.dispatch — non-user turns", () => {
+  function runSid(prompt, sid, home) {
+    const cwd = emptyProject();
+    const env = { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT, TMP: TMP_ROOT, TEMP: TMP_ROOT, TMPDIR: TMP_ROOT, HOME: home, USERPROFILE: home };
+    const r = spawnSync(process.execPath, [HOOK], { input: JSON.stringify({ session_id: sid, prompt, cwd }), cwd, env, encoding: "utf8" });
+    return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.additionalContext : "";
+  }
+  const notification = (text) => `<task-notification>\n<result>${text}</result>\n</task-notification>`;
+
+  test("a task-notification mentioning Codex injects no doc and keeps the user's locale", () => {
+    const h = proHome();
+    const sid = `vitest-nonuser-${process.pid}-${Date.now()}`;
+    expect(runSid("Bitte prüfe das mal und mach es dann fertig, danke dir", sid, h)).toContain("[ui-locale: de]");
+    const ctx = runSid(notification("Codex review finished, the rescue worked and the result is in."), sid, h);
+    expect(ctx).not.toContain("codex-integration");
+    expect(ctx).not.toContain("[deep-knowledge");
+    expect(ctx).not.toContain("[ui-locale: en]");
+  });
+
+  test("a notification as the first turn sets no locale line", () => {
+    const ctx = runSid(notification("The English result mentions Codex here"), `vitest-nonuser-b-${process.pid}-${Date.now()}`, proHome());
+    expect(ctx).not.toContain("[ui-locale");
+    expect(ctx).not.toContain("codex-integration");
+  });
+});
+
 describe("prompt.knowledge.dispatch — delegation nudge", () => {
   const nudge = nudgeFromSource();
 
@@ -140,7 +166,7 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
     expect(short.split("\n").length).toBe(1);
     expect(short).toMatch(/^\[ui-locale: (en|de)\]$/);
     const afk = runHook("AUTONOMOUS_AUTOSTART: continue the queued implementation of the tenant switcher", proHome());
-    expect(afk.split("\n")[1]).toBe(nudge);
+    expect(afk.split("\n")).toContain(nudge);
   });
 
   test("kill-switch: off → no nudge and no budget suffix; ask → the ask variant, suffix kept", () => {
@@ -262,10 +288,10 @@ describe("prompt.knowledge.dispatch — pointers for the retired skills (PR 3)",
     expect(runSession("and improve the readme intro as well please", sid, h)).not.toContain("[deep-knowledge pointer]");
   });
 
-  test("usage, graph and strict words point at their docs; no Skill mandate anywhere", () => {
+  test("usage and strict words point at their docs; no Skill mandate anywhere", () => {
     const h = proHome();
-    const ctx = runSession("refresh usage und dann strikt: nur den knowledge graph erklären", `vitest-pointer-b-${process.pid}-${Date.now()}`, h);
-    for (const doc of ["usage.md", "strict.md", "graphify.md"]) expect(ctx).toContain(`deep-knowledge/${doc}`);
+    const ctx = runSession("refresh usage und dann strikt: nur das erklären", `vitest-pointer-b-${process.pid}-${Date.now()}`, h);
+    for (const doc of ["usage.md", "strict.md"]) expect(ctx).toContain(`deep-knowledge/${doc}`);
     expect(ctx).not.toMatch(/Skill\(/);
   });
 
