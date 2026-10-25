@@ -37,8 +37,8 @@ function registerAs(pid, dir) {
 }
 
 // The completion server lost its register call in #93 ("unused import"), so
-// every hook read it as dead and put the offline card path first. Each of the
-// three servers must register under its .mcp.json name after connecting.
+// every hook read it as dead and put the offline card path first.
+// The one devops server must register under its .mcp.json name after connecting.
 describe("heartbeat — every devops server registers itself", () => {
   for (const [file, name] of [["../index.js", "dotclaude"]]) {
     test(`${name} registers after server.connect`, () => {
