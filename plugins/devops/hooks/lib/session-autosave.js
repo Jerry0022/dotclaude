@@ -62,7 +62,7 @@ function updateState(file, mutate) {
   try {
     const state = readState(file);
     mutate(state);
-    const tmp = `${file}.tmp.${process.pid}`;
+    const tmp = `${file}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 8)}`;
     fs.writeFileSync(tmp, JSON.stringify(state), 'utf8');
     fs.renameSync(tmp, file);
   } catch { /* best effort */ } finally {

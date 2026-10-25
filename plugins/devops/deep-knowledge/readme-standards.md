@@ -115,7 +115,7 @@ Write with `Write` (new) or `Edit` (update).
 ## Step 9 — Completion Card
 
 After writing the README, call
-`mcp__plugin_devops_dotclaude-completion__render_completion_card`:
+`mcp__plugin_devops_dotclaude__render_completion_card`:
 
 | Situation | Variant |
 |-----------|---------|

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.14.0
+ * @version 0.15.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
@@ -165,6 +165,17 @@ function clearSentinel() {
 if (!fs.existsSync(marketplacesDir)) {
   clearSentinel();
   process.exit(0);
+}
+
+// Off the critical path: fetch + tag resolution + cache rebuild are network- and
+// disk-bound. SessionStart only drops a stale MCP sentinel (cheap, must be gone
+// before the first MCP call) and hands the rest to a detached worker; its report
+// is shown with the next user prompt. Explicit runs (`--force`, the post-ship
+// finalizer, /auto-update) stay synchronous.
+if (require.main === module) {
+  const inline = process.argv.includes('--force') || process.env.DEVOPS_PLUGIN_UPDATE_FORCE === '1';
+  if (!process.env.DEVOPS_DEFERRED_PHASE && !inline) clearSentinel();
+  if (require('../lib/deferred-results').deferOrRun({ name: 'plugin-update', script: __filename, inline })) process.exit(0);
 }
 
 // ---------------------------------------------------------------------------

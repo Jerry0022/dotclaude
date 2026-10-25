@@ -23,7 +23,8 @@ const composite = read("skills", "do-run", "modes", "burn", "deep-knowledge", "c
 const autonomous = read("skills", "do-run", "modes", "autonomous.md");
 const backlog = read("skills", "do-run", "modes", "backlog.md");
 const agents = read("skills", "auto-agents", "SKILL.md");
-const hooks = JSON.parse(read("hooks", "hooks.json"));
+// the per-hook roster (hooks.json registers one dispatcher per event)
+const hooks = JSON.parse(read("hooks", "dispatch", "manifest.json"));
 
 describe("the chain router → burn → autonomous → auto-agents carries the burn", () => {
   test("the implementation exists", () => {

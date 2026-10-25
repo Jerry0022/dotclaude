@@ -22,5 +22,5 @@ module.exports = (g) => ({
   "click-through-defaults": g.toolUsed("Skill", { inputMatch: /auto-agents(?=[\s\S]*--mode=interactive)(?=[\s\S]*--ship=manual)/ }),
   "harden-pass": g.toolUsed("Skill", { inputMatch: /auto-harden[\s\S]*--invoked-by=do-run/ }),
   "readme-untouched": g.toolUsed(/^(Edit|Write)$/, { inputMatch: /README\.md"/, min: 0, max: 0 }),
-  "no-direct-ship-tools": g.toolUsed(/dotclaude-ship__ship_/, { min: 0, max: 0 }),
+  "no-direct-ship-tools": g.toolUsed(/dotclaude(?:-ship)?__ship_/, { min: 0, max: 0 }),
 });

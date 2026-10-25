@@ -20,7 +20,7 @@ triggers:
   en: ["/do-learn", "devops learn", "devos learn", "/devops-learn", "remember this for the project", "capture learning"]
   de: ["lerne das", "merk dir das fürs Projekt"]
 argument-hint: "[learning text — omitted: mines the last prompts for the surprise]"
-allowed-tools: Bash(git *), AskUserQuestion, Read, Write, Edit, Glob, Grep, Skill, mcp__plugin_devops_dotclaude-completion__render_completion_card
+allowed-tools: Bash(git *), AskUserQuestion, Read, Write, Edit, Glob, Grep, Skill, mcp__plugin_devops_dotclaude__render_completion_card
 ---
 
 # Learn — Capture a Project-Persistent Learning
@@ -221,7 +221,7 @@ prompt: `deep-knowledge/feedback-cleanup.md` (sibling of this file).
 
 ## Step 6 — Completion card
 
-Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` with
+Call `mcp__plugin_devops_dotclaude__render_completion_card` with
 `variant`, `summary`, `lang`, `session_id`, and `changes` (file/issue → short
 delta). Output the markdown VERBATIM as the LAST thing in the response.
 

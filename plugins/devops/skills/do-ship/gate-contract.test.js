@@ -125,7 +125,7 @@ describe("do-ship gate contract — cwd on every ship call", () => {
 describe("do-ship gate contract — schemas, tools absent, no improvised ship", () => {
   test("Step 0.5 loads all six ship tool schemas in one ToolSearch select", () => {
     const s = section("## Step 0.5", "## Step 1 —");
-    expect(s).toContain("select:mcp__plugin_devops_dotclaude-ship__ship_preflight,mcp__plugin_devops_dotclaude-ship__ship_build,mcp__plugin_devops_dotclaude-ship__ship_version_bump,mcp__plugin_devops_dotclaude-ship__ship_release,mcp__plugin_devops_dotclaude-ship__ship_cleanup,mcp__plugin_devops_dotclaude-ship__ship_hygiene");
+    expect(s).toContain("select:mcp__plugin_devops_dotclaude__ship_preflight,mcp__plugin_devops_dotclaude__ship_build,mcp__plugin_devops_dotclaude__ship_version_bump,mcp__plugin_devops_dotclaude__ship_release,mcp__plugin_devops_dotclaude__ship_cleanup,mcp__plugin_devops_dotclaude__ship_hygiene");
     expect(s).toMatch(/do NOT improvise a ship with `gh pr create`/i);
     expect(s).toContain("mcp-server/ship/cli.js");
     expect(s).toContain("deep-knowledge/manual-ship.md");

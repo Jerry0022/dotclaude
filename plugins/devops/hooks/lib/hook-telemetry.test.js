@@ -80,4 +80,18 @@ describe("hook-telemetry", () => {
     const [r] = killRates(file, { now });
     expect(r).toMatchObject({ hook: "h", runs: 20, killed: 4, rate: 0.2 });
   });
+
+  test("killRates: the dispatcher's timeout/skipped end records count as killed, without grace", () => {
+    const now = 1_000_000_000_000;
+    const lines = [
+      { ts: now - 10, id: "w1", hook: "g", phase: "start" },
+      { ts: now - 5, id: "w1", hook: "g", phase: "end", outcome: "timeout", dispatched: true },
+      { ts: now - 4, id: "w2", hook: "g", phase: "end", outcome: "skipped", dispatched: true },
+      { ts: now - 3, id: "w3", hook: "g", phase: "start" },
+      { ts: now - 2, id: "w3", hook: "g", phase: "end", outcome: "ok" },
+    ];
+    fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join("\n"));
+    const [r] = killRates(file, { now });
+    expect(r).toMatchObject({ hook: "g", runs: 3, killed: 2 });
+  });
 });

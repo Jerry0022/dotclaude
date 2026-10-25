@@ -45,7 +45,7 @@ function runHook(file, payload) {
     input: JSON.stringify({ cwd: sub, ...payload }),
     cwd: sub,
     encoding: "utf8",
-    env: { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PLUGIN_ROOT: "" },
+    env: { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PLUGIN_ROOT: "", DEVOPS_DEFERRED_PHASE: "inline" },
   });
   fs.rmSync(home, { recursive: true, force: true });
   return res;

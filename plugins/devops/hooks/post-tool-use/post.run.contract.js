@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * @hook post.run.contract
- * @version 0.4.4
+ * @version 0.4.5
  * @event PostToolUse
  * @plugin devops
- * @matcher AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card|mcp__.*__merge_pull_request
+ * @matcher AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude__ship_release|mcp__plugin_devops_dotclaude__render_completion_card|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card|mcp__.*__merge_pull_request
  * @description Record what happened for the do-run RUN CONTRACT (spec A
  *   events, B arming, E batch marker, H closing):
  *   - AskUserQuestion: router answers arm a new contract (and clear the arm
@@ -340,7 +340,7 @@ function main(hook) {
   // H-B1: the same root choice as pre (session root, then tool_input.cwd's
   // root for the MCP tools).
   const { root, roots } = C.contractRoots(hook, projectRoot);
-  const tool = hook.tool_name || '';
+  const tool = C.canonicalToolName(hook.tool_name || '');
   // Fast path: only AskUserQuestion (arming) and Skill (arm / batch markers)
   // can matter without a contract on disk. R5: the corrupt-quarantine
   // marker (run-contract.json.corrupt.pending) can be the ONLY file left in

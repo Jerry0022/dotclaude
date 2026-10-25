@@ -2,7 +2,7 @@
 'use strict';
 /**
  * @script claude-api-safe
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description Opt-in, hard-timeout wrapper that runs ONE advisory prompt on
  *   the Claude API (Messages API) with the API key of the user's linked Claude
@@ -22,19 +22,24 @@
  *   claude-api-safe.js "<prompt>"
  *   echo "$PROMPT" | claude-api-safe.js -
  *   claude-api-safe.js --model claude-sonnet-5-5 --max-tokens 4000 "<prompt>"
+ *   claude-api-safe.js --effort low "<prompt>"   output_config.effort (low…max)
  *   claude-api-safe.js --status        effective switches + key presence (never the key)
  *   claude-api-safe.js --reset-limit   forget a stored "credit exhausted" marker
  *   claude-api-safe.js --usage [--since YYYY-MM-DD]
  *                                      what the credit was spent on (default: this month)
  *
  * Environment:
- *   CLAUDE_API_SAFE_TIMEOUT   seconds (default 180)
+ *   CLAUDE_API_SAFE_TIMEOUT   seconds (default 300)
  *   CLAUDE_API_SAFE_MODEL     model id (default claude-opus-5-5)
+ *   CLAUDE_API_SAFE_EFFORT    output_config.effort (default: the model's own)
  *   DEVOPS_DISABLE_CLAUDE_API "1" → skip (exit 126) whatever the config says
  *   DEVOPS_ANTHROPIC_API_KEY  the key (else read from ~/.claude/devops-api.env)
  *
  * Exit codes:
- *   0    result text on stdout
+ *   0    result text on stdout (cut at max_tokens → a stderr warning, still 0)
+ *   65   the reply held no text — on the current models thinking cannot be
+ *        switched off and can use up the whole output budget (stop_reason
+ *        max_tokens); stderr names why. Never a silent "clean" review.
  *   75   credit exhausted / workspace spend limit reached — stored, later
  *        calls skip at once until the marker expires; continue on the plan
  *   124  timeout — continue without the result
@@ -56,14 +61,18 @@ const USAGE_FILE = 'api-credit-usage.jsonl';
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const API_VERSION = '2023-06-01';
 const DEFAULT_MODEL = 'claude-opus-5-5';
-const DEFAULT_TIMEOUT_S = 180;
-const DEFAULT_MAX_TOKENS = 8000;
+const DEFAULT_TIMEOUT_S = 300;
+// Thinking always runs on the current models and counts against max_tokens:
+// at 8000 a review of an ~80k-token diff spent all of it thinking and returned
+// no text (2026-10-25). 16000 is the non-streaming default the API docs give.
+const DEFAULT_MAX_TOKENS = 16000;
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 // Credits refresh per billing cycle, whose date we do not know — retry after
 // half a day instead of hammering an empty balance on every call.
 const CACHE_READ_WARN_TOKENS = 10e6; // one call reading more than this is flagged by --usage
 const LIMIT_TTL_MS = 12 * 60 * 60 * 1000;
 
-const RC = Object.freeze({ OK: 0, ERROR: 1, LIMIT: 75, TIMEOUT: 124, DISABLED: 126, NO_KEY: 127 });
+const RC = Object.freeze({ OK: 0, ERROR: 1, NO_TEXT: 65, LIMIT: 75, TIMEOUT: 124, DISABLED: 126, NO_KEY: 127 });
 
 // $/MTok: input, output, 5-min cache write, cache read (platform pricing 2026-10-25).
 const PRICES = {
@@ -313,7 +322,7 @@ function usageSummary({ home, since }) {
 }
 
 function parseArgs(argv) {
-  const opts = { model: null, maxTokens: null, prompt: null, mode: 'run', since: null, tag: null };
+  const opts = { model: null, maxTokens: null, effort: null, prompt: null, mode: 'run', since: null, tag: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--status') opts.mode = 'status';
@@ -323,6 +332,7 @@ function parseArgs(argv) {
     else if (a === '--tag') opts.tag = argv[++i];
     else if (a === '--model') opts.model = argv[++i];
     else if (a === '--max-tokens') opts.maxTokens = Number(argv[++i]);
+    else if (a === '--effort') opts.effort = argv[++i];
     else if (opts.prompt === null) opts.prompt = a;
   }
   return opts;
@@ -378,13 +388,12 @@ function textOf(body) {
  * One Messages API call.
  * @returns {Promise<{rc:number, text?:string, message?:string, usage?:object}>}
  */
-async function callApi({ key, prompt, model, maxTokens, timeoutMs, fetchImpl = globalThis.fetch }) {
-  const r = await postMessages({
-    key, timeoutMs, fetchImpl,
-    body: { model, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] },
-  });
+async function callApi({ key, prompt, model, maxTokens, effort, timeoutMs, fetchImpl = globalThis.fetch }) {
+  const body = { model, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] };
+  if (effort) body.output_config = { effort };
+  const r = await postMessages({ key, timeoutMs, fetchImpl, body });
   if (r.rc !== RC.OK) return r;
-  return { rc: RC.OK, text: textOf(r.body), usage: r.body.usage };
+  return { rc: RC.OK, text: textOf(r.body), stopReason: r.body.stop_reason || null, usage: r.body.usage };
 }
 
 /**
@@ -478,21 +487,41 @@ async function run(argv, {
 
   const timeoutS = Number(env.CLAUDE_API_SAFE_TIMEOUT) > 0 ? Number(env.CLAUDE_API_SAFE_TIMEOUT) : DEFAULT_TIMEOUT_S;
   const model = opts.model || env.CLAUDE_API_SAFE_MODEL || DEFAULT_MODEL;
+  const effort = opts.effort || env.CLAUDE_API_SAFE_EFFORT || null;
+  if (effort && !EFFORTS.includes(effort)) {
+    err(`claude-api-safe: --effort needs one of ${EFFORTS.join(', ')}, got "${effort}"\n`);
+    return RC.ERROR;
+  }
   const result = await callApi({
     key: keyInfo.key,
     prompt,
     model,
     maxTokens: Number.isInteger(opts.maxTokens) && opts.maxTokens > 0 ? opts.maxTokens : DEFAULT_MAX_TOKENS,
+    effort,
     timeoutMs: timeoutS * 1000,
     fetchImpl,
   });
 
+  // An OK reply without a single text block is not a result: printing nothing
+  // with rc 0 read as a clean review to every caller.
+  if (result.rc === RC.OK && !result.text.trim()) {
+    result.rc = RC.NO_TEXT;
+    result.message = `no text in the reply (stop_reason ${result.stopReason || 'unknown'}, ${(result.usage && result.usage.output_tokens) || 0} output tokens)`
+      + (result.stopReason === 'max_tokens' ? ' — thinking used up the output budget; raise --max-tokens or lower --effort' : '');
+  }
+
   const usd = result.usage ? costOf(model, result.usage) : 0;
+  const tokens = result.usage ? ` · ${result.usage.input_tokens || 0} in / ${result.usage.output_tokens || 0} out tokens · ~$${usd.toFixed(3)} on API credit` : '';
   logUsage({ home, now, tool: 'safe', tag: opts.tag || 'review', cwd, model, usage: result.usage, usd, rc: result.rc });
   if (result.rc === RC.OK) {
     out(result.text.endsWith('\n') ? result.text : result.text + '\n');
-    if (result.usage) err(`claude-api-safe: ${result.usage.input_tokens || 0} in / ${result.usage.output_tokens || 0} out tokens · ~$${usd.toFixed(3)} on API credit\n`);
+    if (result.stopReason === 'max_tokens') err('claude-api-safe: WARNING reply cut at max_tokens — the text above may be incomplete\n');
+    if (result.usage) err(`claude-api-safe: ${tokens.slice(3)}\n`);
     return RC.OK;
+  }
+  if (result.rc === RC.NO_TEXT) {
+    err(`claude-api-safe: ${result.message}${tokens}\n`);
+    return RC.NO_TEXT;
   }
   if (result.rc === RC.LIMIT) {
     const stored = storeLimit({ home, now, reason: result.message });

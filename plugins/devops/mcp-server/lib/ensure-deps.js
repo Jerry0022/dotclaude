@@ -84,7 +84,7 @@ export function acquireInstallLock(pluginData) {
   return () => { try { rmdirSync(lock); } catch { /* ignore */ } };
 }
 
-/** Last resort: npm install into PLUGIN_DATA, once across the three servers. */
+/** Last resort: npm install into PLUGIN_DATA, once (one devops server per session since v0.309). */
 function tryInstall(pluginData, mcpRoot) {
   const release = acquireInstallLock(pluginData);
   if (!release) return;

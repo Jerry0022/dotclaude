@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.knowledge.dispatch
- * @version 0.11.0
+ * @version 0.12.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description On-demand deep-knowledge injection based on prompt keywords.
@@ -24,6 +24,8 @@
  *   mentioning "Codex" must not inject codex-integration.md, and its English
  *   text must not flip the locale — such a turn keeps the cached locale (no
  *   line when there is none). Budget lines still go out.
+ *   0.12.0: also delivers the deferred SessionStart results (lib/deferred-results)
+ *   once, on a real user prompt.
  */
 
 require('../lib/plugin-guard');
@@ -461,6 +463,16 @@ process.stdin.on('end', () => {
       '',
       ...sections,
     );
+  }
+
+  // SessionStart results that were produced off the critical path (plugin
+  // update, team changelog, git fetch findings — lib/deferred-results). Each is
+  // delivered once, on the first real user prompt after it is ready.
+  if (!nonUser) {
+    try {
+      const deferred = require('../lib/deferred-results').collect(sessionId);
+      if (deferred.length > 0) blocks.push('[session-start results, ready since the session began]', ...deferred);
+    } catch { /* a deferred result is never worth a failed prompt */ }
   }
 
   if (blocks.length === 0) process.exit(0);

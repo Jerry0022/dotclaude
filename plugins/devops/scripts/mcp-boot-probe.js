@@ -43,9 +43,7 @@ const DEFAULT_BUDGET_MS = 5000;
 const HARD_TIMEOUT_MS = 30_000;
 
 const SERVERS = [
-  { name: 'dotclaude-completion', entry: path.join('mcp-server', 'index.js') },
-  { name: 'dotclaude-ship', entry: path.join('mcp-server', 'ship', 'index.js') },
-  { name: 'dotclaude-issues', entry: path.join('mcp-server', 'issues', 'index.js') },
+  { name: 'dotclaude', entry: path.join('mcp-server', 'index.js') },
 ];
 
 const REQUIRED_PKGS = ['@modelcontextprotocol/sdk', 'zod'];

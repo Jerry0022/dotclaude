@@ -107,10 +107,12 @@ const REGENERABLE_FILE = /\.pyc$/i;
  * Root-level files of do-run's autonomous, backlog and burn modes: journals,
  * flags, resume state and reports — the run's own bookkeeping, not work. A
  * burn's `BURN-SALVAGE-*.patch` is work and is deliberately not listed.
+ * `graphify-out/` is the output of the graphify integration dropped in 0.308.0;
+ * checkouts from before still carry it.
  */
 const TOOLING_ROOT_ENTRY = new RegExp("^(?:AUTONOMOUS-(?:LOG\\.md|REPORT\\.html|DONE\\.flag|RECOVERY\\.flag|LOCKOUT\\.flag"
   + "|RESUME\\.json|STALLED\\.txt|INTERRUPTED\\.txt)|BACKLOG-(?:LOG\\.md|REPORT\\.html|DONE\\.flag|RESUME\\.json)"
-  + "|BURN-STATE(?:\\.prev)?\\.json(?:\\.lock)?)$");
+  + "|BURN-STATE(?:\\.prev)?\\.json(?:\\.lock)?|graphify-out/)$");
 /**
  * `.claude/` paths that are pure plugin/Claude runtime state: locks, flags,
  * watcher and port state, caches, generated maps. Anything else under

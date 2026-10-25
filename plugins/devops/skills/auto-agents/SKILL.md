@@ -19,7 +19,7 @@ user-invocable: false
 triggers:
   en: ["run agents", "use agents", "orchestrate", "parallel agents", "multi-agent", "delegate to agents", "agent workflow"]
 argument-hint: "[--from=<caller>] [--mode=interactive|background] [--ship=auto|manual] [--burn=<BURN-STATE.json>] <task or plan>"
-allowed-tools: Agent, SendMessage, CronCreate, Read, Glob, Grep, Bash, Write, Edit, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__Claude_Browser__preview_start, mcp__Claude_Browser__preview_list, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_list
+allowed-tools: Agent, SendMessage, CronCreate, Read, Glob, Grep, Bash, Write, Edit, AskUserQuestion, mcp__plugin_devops_dotclaude__health_check, mcp__plugin_devops_dotclaude__get_usage, mcp__plugin_devops_dotclaude__render_completion_card, mcp__Claude_Browser__preview_start, mcp__Claude_Browser__preview_list, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_list
 ---
 
 # auto-agents — the execution path
@@ -75,7 +75,7 @@ asks: Step 4, and only for the full-ceremony tier — the lower tiers run
 
 ### Plan and usage — `get_usage`, once per run
 
-Call `mcp__plugin_devops_dotclaude-completion__get_usage` once at the start.
+Call `mcp__plugin_devops_dotclaude__get_usage` once at the start.
 It returns the plan (Pro / Max 5x / Max 20x), the 5-hour and weekly usage
 with their resets, and `budget.cls` — the budget class the tier table and
 the model/ceiling override (§ Budget in `agent-proactivity.md`) run on.

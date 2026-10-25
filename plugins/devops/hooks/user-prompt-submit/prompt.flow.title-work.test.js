@@ -52,7 +52,8 @@ describe("prompt.flow.title-work", () => {
     expect(text).toContain(`starts with "${BATCH_PREFIX}" (or the legacy "📥 Batch – " / "👉 📥 Batch – "): do nothing — batch mode owns it`);
     for (const s of ["⏳", "👉", "🟩", "🟥", "🟦"]) expect(text).toContain(s);
     expect(text).toMatch(/strip every leading/);
-    for (const p of LEGACY_PREFIXES) expect(text).toContain(`"${p}"`);
+    // every legacy word is named; the exact list lives in title-scheme.js
+    for (const p of LEGACY_PREFIXES) expect(text).toContain(p.replace(/^\S+\s+/, "").replace(/ – $/, ""));
     expect(text).toContain(`already starts with "${WORK_PREFIX}" (or a bare "⏳ <title>") and NOT "${LEGACY_PENDING_PREFIX}": do nothing`);
     // F6: free text is never stripped.
     expect(text).toMatch(/never free text such as "Fix Login – "/);

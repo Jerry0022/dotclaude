@@ -334,7 +334,7 @@ function load(cwd, opts = {}) {
 
 function writeJson(file, data) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n');
   fs.renameSync(tmp, file);
 }

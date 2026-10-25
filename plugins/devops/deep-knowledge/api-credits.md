@@ -132,10 +132,17 @@ node "{PLUGIN_ROOT}/scripts/claude-api-safe.js" "<prompt>"
 echo "$PROMPT" | node "{PLUGIN_ROOT}/scripts/claude-api-safe.js" -
 ```
 
-Text in, text out, same rc table. `--status` prints the switches and whether a
+Text in, text out, same rc table plus **rc 65**: the reply held no text. That
+happens when thinking used up the output budget (`stop_reason` `max_tokens`).
+Thinking cannot be switched off on the current models and counts against
+`max_tokens`. The caller treats rc 65 like rc 1: "übersprungen — <reason from
+stderr>", never a clean review. A reply cut at `max_tokens` that still has text
+stays rc 0, with a stderr warning. `--status` prints the switches and whether a
 key exists (never the key); `--reset-limit` clears a stored rc-75 marker early.
-Model `claude-opus-5-5` (`--model` / `CLAUDE_API_SAFE_MODEL`), timeout
-`CLAUDE_API_SAFE_TIMEOUT` (default 180 s).
+Model `claude-opus-5-5` (`--model` / `CLAUDE_API_SAFE_MODEL`), `--max-tokens`
+(default 16000; at 8000 an ~80k-token diff review returned no text), `--effort`
+/ `CLAUDE_API_SAFE_EFFORT` (`low` … `max`, default: the model's own), timeout
+`CLAUDE_API_SAFE_TIMEOUT` (default 300 s).
 
 ## Evals — only from the user's own terminal
 

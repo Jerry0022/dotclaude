@@ -11,7 +11,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const server = readFileSync(join(here, "server.js"), "utf8");
 const cli = readFileSync(join(here, "cli.js"), "utf8");
 
-const registered = [...server.matchAll(/registerTool\(\s*"([a-z_]+)"/g)].map((m) => m[1]).filter((n) => n !== "health_check");
+const registered = [...server.matchAll(/^\s+\["(ship_[a-z_]+)",/gm)].map((m) => m[1]);
 const offered = [...cli.matchAll(/^\s+(ship_[a-z_]+):\s*\[/gm)].map((m) => m[1]);
 
 describe("offline ship CLI", () => {

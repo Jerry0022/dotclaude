@@ -47,7 +47,7 @@ function markerFile() {
 // Atomic write: write to a pid-suffixed temp file, then rename. Prevents a
 // concurrent Stop hook from observing a half-written marker.
 function atomicWrite(filePath, content) {
-  const tmp = `${filePath}.tmp.${process.pid}`;
+  const tmp = `${filePath}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 8)}`;
   try {
     fs.writeFileSync(tmp, content, 'utf8');
     fs.renameSync(tmp, filePath);

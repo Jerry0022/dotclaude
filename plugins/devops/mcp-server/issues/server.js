@@ -1,14 +1,14 @@
-#!/usr/bin/env node
 /**
- * @module dotclaude-issues-mcp
- * @version 0.2.0
+ * @module dotclaude-issues-tools
+ * @version 0.3.0
  * @plugin devops
- * @description MCP server for heuristic issue matching.
+ * @description Issue-matching tool group of the single devops MCP server
+ *   (`dotclaude`, mcp-server/index.js) — until 0.2.0 its own server
+ *   (`dotclaude-issues`). registerIssueTools() adds `match_issues`; the
+ *   server calls startIssueWarmup() after connect.
  *   - Caches open GitHub issues lazily (on demand, 5 min staleness window)
  *   - Exposes `match_issues` tool for fuzzy matching user prompts
- *   - Exposes `health_check` for boot diagnostics
  *
- *   Registered in plugin.json → started automatically by Claude Code.
  *   Stdout is the JSON-RPC wire — all logging goes to stderr.
  *
  *   BOOT DISCIPLINE (#324): nothing runs before `server.connect(transport)`.
@@ -19,20 +19,13 @@
  *   based so it never blocks the event loop that carries the JSON-RPC wire.
  */
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
 import { execFile } from "node:child_process";
-import { register as registerHeartbeat } from "../lib/heartbeat.js";
 import { tokenize, scoreIssue, resolveCwd, normalizeCwd, lruGet, matchIssuesShape, ISSUE_LIST_LIMIT } from "./matching.js";
 import { createRequire } from "node:module";
 
 // The hook side reads this copy (prompt.issue.detect scores the first prompt
 // itself and asks Claude only on a real hit — hooks/lib/issue-match.js).
 const { writeCache } = createRequire(import.meta.url)("../../hooks/lib/issue-match.js");
-
-const SERVER_NAME = "dotclaude-issues";
-const SERVER_VERSION = "0.2.0";
 
 // ---------------------------------------------------------------------------
 // Issue cache
@@ -141,100 +134,57 @@ async function matchIssues(query, maxResults = 3, threshold = 0.25, cwd) {
 }
 
 // ---------------------------------------------------------------------------
-// MCP Server
+// Registration (called by mcp-server/index.js)
 // ---------------------------------------------------------------------------
 
-const server = new McpServer({
-  name: SERVER_NAME,
-  version: SERVER_VERSION,
-});
-
-let bootMs = null;
-
-server.registerTool(
-  "health_check",
-  {
-    title: "Health Check",
-    description:
-      "Boot diagnostics for this MCP server: which build answered, from which " +
-      "working directory, and how long it took from process start to a live " +
-      "stdio transport. Use when diagnosing MCP CONNECT_TIMEOUT at session start.",
-    inputSchema: z.object({}),
-  },
-  async () => ({
-    content: [{
-      type: "text",
-      text: JSON.stringify({
-        server: SERVER_NAME,
-        version: SERVER_VERSION,
-        cwd: process.cwd(),
-        bootMs,
-        node: process.version,
-        depsResolved: true,
-      }, null, 2),
-    }],
-  }),
-);
-
-server.registerTool(
-  "match_issues",
-  {
-    title: "Match Issues",
-    description:
-      "Fuzzy-match a user prompt against open GitHub issues. " +
-      "Returns top matching issues with confidence scores. " +
-      "Use this when no explicit issue number (#N) was found in the user's message " +
-      "to heuristically detect which issue the user might be working on.",
-    inputSchema: z.object(matchIssuesShape),
-  },
-  async ({ query, max_results, threshold, cwd }) => {
-    try {
-      const raw = resolveCwd(cwd);
-      const dir = raw === undefined ? undefined : normalizeCwd(raw);
-      if (dir === null) throw new Error(`cwd is not an existing directory: ${raw}`);
-      const matches = await matchIssues(query, max_results, threshold, dir);
-      const c = cacheFor(dir);
-      const result = {
-        matches,
-        cached_issues: c.issues.length,
-        // true: the open-issue list hit the fetch limit, older issues are unmatched
-        truncated: c.truncated,
-        cache_age_s: c.lastRefresh ? Math.round((Date.now() - c.lastRefresh) / 1000) : null,
-      };
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
-    } catch (e) {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ error: true, message: e.message }) }],
-        isError: true,
-      };
-    }
-  },
-);
-
-// ---------------------------------------------------------------------------
-// Start — connect FIRST, then everything else
-// ---------------------------------------------------------------------------
-
-const transport = new StdioServerTransport();
-try {
-  await server.connect(transport);
-} catch (e) {
-  // A hung server is worse than an absent one: Claude Code waits out the full
-  // connect window before it gives up. Fail loud and fast instead.
-  process.stderr.write(`[${SERVER_NAME}-mcp] connect failed: ${e && e.message}\n`);
-  process.exit(1);
+/** Add `match_issues` to the shared server. `z` is the server's zod instance. */
+export function registerIssueTools(server, z) {
+  server.registerTool(
+    "match_issues",
+    {
+      title: "Match Issues",
+      description:
+        "Fuzzy-match a user prompt against open GitHub issues. " +
+        "Returns top matching issues with confidence scores. " +
+        "Use this when no explicit issue number (#N) was found in the user's message " +
+        "to heuristically detect which issue the user might be working on.",
+      inputSchema: z.object(matchIssuesShape),
+    },
+    async ({ query, max_results, threshold, cwd }) => {
+      try {
+        const raw = resolveCwd(cwd);
+        const dir = raw === undefined ? undefined : normalizeCwd(raw);
+        if (dir === null) throw new Error(`cwd is not an existing directory: ${raw}`);
+        const matches = await matchIssues(query, max_results, threshold, dir);
+        const c = cacheFor(dir);
+        const result = {
+          matches,
+          cached_issues: c.issues.length,
+          // true: the open-issue list hit the fetch limit, older issues are unmatched
+          truncated: c.truncated,
+          cache_age_s: c.lastRefresh ? Math.round((Date.now() - c.lastRefresh) / 1000) : null,
+        };
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ error: true, message: e.message }) }],
+          isError: true,
+        };
+      }
+    },
+  );
 }
-bootMs = Math.round(process.uptime() * 1000);
-registerHeartbeat(SERVER_NAME);
-console.error(`[${SERVER_NAME}-mcp] Server started on stdio (boot ${bootMs}ms)`);
 
-// Warm the cache once — fire-and-forget, errors already swallowed to stderr
-// inside fetchIssues(). Later refreshes are on demand (ensureCache). The timer
-// is unref'd so it never keeps the process alive on its own.
-// The server runs in the plugin folder, so only projects we know a directory
-// for are fetched: CLAUDE_PROJECT_DIR at warm-up, every cwd seen by
-// match_issues on demand.
-const warmCwd = normalizeCwd(resolveCwd(undefined));
-if (warmCwd) setTimeout(() => { fetchIssues(warmCwd); }, WARMUP_DELAY_MS).unref();
+/**
+ * Warm the cache once after connect — fire-and-forget, errors already
+ * swallowed to stderr inside fetchIssues(). Later refreshes are on demand
+ * (ensureCache). The timer is unref'd so it never keeps the process alive.
+ * Only projects we know a directory for are fetched: CLAUDE_PROJECT_DIR at
+ * warm-up, every cwd seen by match_issues on demand.
+ */
+export function startIssueWarmup() {
+  const warmCwd = normalizeCwd(resolveCwd(undefined));
+  if (warmCwd) setTimeout(() => { fetchIssues(warmCwd); }, WARMUP_DELAY_MS).unref();
+}

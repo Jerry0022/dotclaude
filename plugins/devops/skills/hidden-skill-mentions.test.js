@@ -71,10 +71,9 @@ describe("user-facing texts never tell the user to type a hidden skill's slash c
   test("the trigger words INSTALL.md names really route to their hidden skills", () => {
     const { routeMessage } = require("../hooks/lib/skill-trigger-router.js");
     const skills = {};
-    for (const name of ["auto-fix", "auto-concept", "auto-extend"]) skills[name] = { name, triggers: triggersOf(name) };
+    for (const name of ["auto-concept", "auto-extend"]) skills[name] = { name, triggers: triggersOf(name) };
     const install = read(path.join(repoRoot, "INSTALL.md"));
-    for (const [phrase, skill] of [["funktioniert nicht", "auto-fix"], ["this is broken", "auto-fix"],
-      ["concept page", "auto-concept"], ["extend skill", "auto-extend"], ["customize skill", "auto-extend"]]) {
+    for (const [phrase, skill] of [["concept page", "auto-concept"], ["extend skill", "auto-extend"], ["customize skill", "auto-extend"]]) {
       expect(install, phrase).toContain(phrase);
       expect(routeMessage(phrase, skills).map((e) => e.skill), phrase).toContain(skill);
     }
