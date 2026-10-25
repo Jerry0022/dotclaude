@@ -108,11 +108,11 @@ describe("orphan-scan", () => {
     expect(left).toEqual(["feat/unlanded", "main"]);
   });
 
-  test("--clean-landed spares long-lived, parked, salvage and upstream-backed branches at main", async () => {
+  test("--clean-landed spares long-lived and upstream-backed branches at main", async () => {
     const root = mkRoot();
     const r = repoIn(root, "app");
     advanceMain(r);
-    for (const n of ["develop", "staging", "production", "stable", "release/1.0", "parked/idea", "parked/autosave/s1", "wip/x", "backup/y", "salvage/z", "has-upstream"]) {
+    for (const n of ["develop", "staging", "production", "stable", "release/1.0", "has-upstream"]) {
       git(r, "branch", n, "main");
     }
     git(r, "branch", "plain-landed", "main~1");
@@ -120,7 +120,20 @@ describe("orphan-scan", () => {
     const done = await cleanLanded(r, { apply: true, ...opts });
     expect(done.removed.map((x) => x.name)).toEqual(["plain-landed"]);
     const left = git(r, "for-each-ref", "refs/heads", "--format=%(refname:short)").split("\n");
-    expect(left).toEqual(expect.arrayContaining(["develop", "staging", "production", "stable", "release/1.0", "parked/idea", "parked/autosave/s1", "wip/x", "backup/y", "salvage/z", "has-upstream"]));
+    expect(left).toEqual(expect.arrayContaining(["develop", "staging", "production", "stable", "release/1.0", "has-upstream"]));
+  });
+
+  test("--clean-landed removes LANDED parked, autosave, wip, backup and salvage refs", async () => {
+    const root = mkRoot();
+    const r = repoIn(root, "app");
+    advanceMain(r);
+    const safety = ["parked/idea", "parked/autosave/s1", "wip/x", "backup/y", "salvage/z"];
+    for (const n of safety) git(r, "branch", n, "main~1");
+    commitOn(r, "parked/unlanded", "u.txt", "u\n", "real parked work");
+    const done = await cleanLanded(r, { apply: true, ...opts });
+    expect(done.removed.map((x) => x.name).sort()).toEqual([...safety].sort());
+    const left = git(r, "for-each-ref", "refs/heads", "--format=%(refname:short)").split("\n");
+    expect(left).toContain("parked/unlanded");
   });
 
   test("--clean-landed keeps a fresh clean worktree at main and removes one idle for days", async () => {
@@ -231,7 +244,7 @@ describe("orphan-scan", () => {
       expect(entry.atRisk).toEqual([expect.objectContaining({ kind: "worktree", dirty: 1 })]);
     });
 
-    test("--clean-landed keeps a landed branch pinned by an identical salvage ref", async () => {
+    test("--clean-landed removes a landed branch even when a salvage ref holds the same commit", async () => {
       const root = mkRoot();
       const r = withSalvage(root);
       advanceMain(r);
@@ -239,7 +252,7 @@ describe("orphan-scan", () => {
       git(r, "push", "-q", "origin", "landed-pin:refs/heads/salvage/pin");
       git(r, "branch", "landed-free", "main~1");
       const done = await cleanLanded(r, { apply: true, ...opts });
-      expect(done.removed.map((x) => x.name)).toEqual(["landed-free"]);
+      expect(done.removed.map((x) => x.name).sort()).toEqual(["landed-free", "landed-pin"]);
     });
   });
 

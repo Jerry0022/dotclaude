@@ -83,6 +83,7 @@ const require = createRequire(import.meta.url);
 const { contentInBase } = require("../../../scripts/lib/content-landed.js");
 const { chainLanded: chainLandedShared, filesInBase: filesInBaseShared } = require("../../../scripts/lib/chain-landed.js");
 const { isParked, coveringRef } = require("../../../hooks/lib/park-register.js");
+const { clearStaleLocks } = require("../../../scripts/lib/stale-git-locks.js");
 
 const DAY_MS = 86_400_000;
 const GB = 1024 ** 3;
@@ -944,16 +945,18 @@ export function planAutoClean(scan, settings, io) {
   };
 }
 
-/** Landed `backup/*` and `rescue/*` refs on origin are deleted after this many days. */
+/** Landed safety refs on origin (backup, rescue, salvage, parked, wip) are deleted after this many days. */
 export const BACKUP_EXPIRY_DAYS = 14;
-const BACKUP_PATTERNS = ["refs/remotes/origin/backup", "refs/remotes/origin/rescue"];
+// every safety net that pushes copies to origin — a landed copy holds nothing
+// the default branch lacks, and without an expiry they only ever pile up
+export const BACKUP_PATTERNS = ["backup", "rescue", "salvage", "salvage-land", "parked", "wip"].map((p) => `refs/remotes/origin/${p}`);
 
 function hasBackupRefs(cwd) {
   return Boolean(gitOut(["for-each-ref", "--count=1", "--format=%(refname)", ...BACKUP_PATTERNS], cwd));
 }
 
 /**
- * Remote `backup/*` / `rescue/*` refs older than `days` whose content is
+ * Remote safety refs (BACKUP_PATTERNS) older than `days` whose content is
  * landed — in the default branch itself, or covered by a landed leftover
  * (the tip is an ancestor of a removable unit's head). Read-only.
  * @returns {{name:string, sha:string}[]}
@@ -1048,6 +1051,8 @@ export function executeAutoClean(plan, scan, {
   const skipped = [];
   let damaged = holdPrune;
   const deadline = now() + budgetMs;
+  // a crashed git's leftover ref lock makes every branch -D / push --delete below fail
+  clearStaleLocks(cwd);
   const branchGone = (name, sha) => {
     removed.push({ kind: "branch", name, sha });
     if (!remotes) return;

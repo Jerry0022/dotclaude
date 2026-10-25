@@ -5,7 +5,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   scanRepo, planAutoClean, executeAutoClean, runHygiene, cardLines, landedVia, landingState,
-  reachableFromMerged, findStalePrs, startOrphanScan, BACKUP_EXPIRY_DAYS,
+  reachableFromMerged, findStalePrs, startOrphanScan, BACKUP_EXPIRY_DAYS, BACKUP_PATTERNS,
 } from "./hygiene.js";
 
 const DAY = 86_400_000;
@@ -139,6 +139,19 @@ describe("backup expiry on origin", () => {
     expect(done.removed.filter((r) => r.trigger === "backup-expiry").map((r) => r.name).sort()).toEqual(["backup/old", "rescue/fresh"]);
     expect(git(origin, "for-each-ref", "refs/heads", "--format=%(refname:short)")).toBe("main");
     expect(c1).toBeTruthy();
+  });
+
+  test("salvage, salvage-land, parked and wip copies on origin expire like backup refs", () => {
+    const { dir, origin, c1 } = withOrigin();
+    const names = ["salvage/x", "salvage-land/y", "parked/autosave/s1", "wip/z"];
+    for (const n of names) git(dir, "push", "-q", "origin", `${c1}:refs/heads/${n}`);
+    git(dir, "fetch", "-q", "origin");
+    expect(BACKUP_PATTERNS).toEqual(expect.arrayContaining(["refs/remotes/origin/salvage", "refs/remotes/origin/parked"]));
+    const scan = scanRepo(dir, NOW);
+    const plan = planAutoClean(scan, SETTINGS, { cwd: dir, fetchMerged: stub, projectsDir: null, now: NOW });
+    expect(plan.remoteExpire.map((r) => r.name).sort()).toEqual(["backup/old", "parked/autosave/s1", "rescue/fresh", "salvage-land/y", "salvage/x", "wip/z"]);
+    executeAutoClean(plan, scan, { cwd: dir, remotes: true, projectsDir: null });
+    expect(git(origin, "for-each-ref", "refs/heads", "--format=%(refname:short)")).toBe("main");
   });
 
   test("offline: nothing expires", () => {

@@ -36,6 +36,7 @@ const { execFileSync } = require('child_process');
 const { pathToFileURL } = require('url');
 
 const parkRegister = require('../hooks/lib/park-register');
+const { clearStaleLocks } = require('./lib/stale-git-locks');
 
 const FETCH_TIMEOUT = 60_000;
 const GIT_TIMEOUT = 15_000;
@@ -84,6 +85,8 @@ function findRepos(root) {
 }
 
 function fetchPrune(repo) {
+  // a crashed git's leftover ref lock fails the whole prune, silently
+  clearStaleLocks(repo);
   try {
     execFileSync('git', ['fetch', '--prune', '--quiet'], {
       cwd: repo, timeout: FETCH_TIMEOUT, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
@@ -159,16 +162,14 @@ const CLEAN_MIN_IDLE_MS = 24 * 3_600_000;
 const LONG_LIVED = /^(?:develop|development|dev|staging|stage|production|prod|stable|trunk|main|master|release\/.+|hotfix\/.+)$/;
 
 /**
- * A branch --clean-landed must never delete: long-lived names, parked or
- * legacy-parked refs (incl. parked/autosave/*), and any branch whose upstream
- * still exists on origin (somebody else may build on it).
+ * A branch --clean-landed must never delete: long-lived names and any branch
+ * whose upstream still exists on origin (somebody else may build on it).
+ * Parked, autosave and salvage refs are NOT spared: --clean-landed only sees
+ * landed units, and a landed safety copy holds nothing the default branch
+ * lacks — sparing them is how they piled up by the hundred.
  */
-function isProtectedBranch(repo, name, head) {
-  if (LONG_LIVED.test(name) || /^salvage\//.test(name)) return true;
-  const subject = gitOut(['log', '-1', '--format=%s', head], repo) || '';
-  if (parkRegister.isParked(name, subject)) return true;
-  // the very same commit is kept on a parked ref, local or origin/ (a salvage copy)
-  if (parkRegister.coveringRef(repo, head, { exact: true })) return true;
+function isProtectedBranch(repo, name) {
+  if (LONG_LIVED.test(name)) return true;
   return gitOut(['rev-parse', '--verify', '-q', `refs/remotes/origin/${name}`], repo) !== null;
 }
 
@@ -202,7 +203,7 @@ async function cleanLanded(repo, { apply, now = Date.now(), projectsDir, fetch: 
     // sessions are already excluded from `removable` (hygiene keepReason)
     if (u.kind === 'worktree' && (now - u.activityMs < CLEAN_MIN_IDLE_MS
       || now - worktreeTreeActivityMs(u.path, now) < CLEAN_MIN_IDLE_MS)) continue;
-    const keepBranch = u.branch ? isProtectedBranch(repo, u.branch, u.head) : false;
+    const keepBranch = u.branch ? isProtectedBranch(repo, u.branch) : false;
     if (u.kind === 'branch' && keepBranch) continue;
     remove.push({ ...u, trigger: 'orphan-scan', ...(keepBranch ? { keepBranch: true } : {}) });
   }

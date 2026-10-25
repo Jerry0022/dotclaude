@@ -74,8 +74,8 @@ Also part of every automatic cleanup (not separate settings):
   sub-agent branches) and that head still holds all of the branch's changes.
   Commits made on the integration branch after its PR merged keep it unlanded.
   Needs `gh`; offline the old proof applies.
-- **Backup expiry.** `backup/*` and `rescue/*` branches on origin older than
-  14 days whose content is landed (or covered by a landed leftover) are
+- **Backup expiry.** Safety copies on origin (`backup/*`, `rescue/*`,
+  `salvage/*`, `salvage-land/*`, `parked/*`, `wip/*`) older than 14 days whose content is landed (or covered by a landed leftover) are
   deleted from origin (`trigger: "backup-expiry"` in the removal log).
 - **Temp worktrees.** Registered worktrees below the OS temp dir (eval
   variants, deploy-parity builds), idle over 1 h and not locked by a live
