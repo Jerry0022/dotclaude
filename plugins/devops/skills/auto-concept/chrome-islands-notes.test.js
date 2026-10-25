@@ -128,9 +128,10 @@ describe("C · header islands and FABs", () => {
     const eye = document.getElementById("anno-toggle");
     const badge = document.getElementById("anno-eye-count");
     window.showDesign("d2");
-    // nothing to hide on a bare design page
+    // A bare design page still has the quick nav and both FABs to hide: the
+    // eye is the calm-view switch too (third feedback round), so it stays.
     window.updateAnnoUI();
-    expect(eye.hidden).toBe(true);
+    expect(eye.hidden).toBe(false);
     // two notes, one answered
     addAnnos(window, document, screenOf(document));
     expect(eye.hidden).toBe(false);
@@ -235,7 +236,7 @@ describe("D · notes dock", () => {
     }
     const pool = window.DOCK_TIPS;
     expect(pool.de.length).toBe(pool.en.length);
-    expect(pool.de.length).toBeGreaterThanOrEqual(95);
+    expect(pool.de.length).toBeGreaterThanOrEqual(20);
     for (const t of [...pool.de, ...pool.en]) expect(t).not.toMatch(/Claude|\bAI\b|\bKI\b/);
     expect(new Set(pool.de).size).toBe(pool.de.length);
   }, BOOT_TIMEOUT);

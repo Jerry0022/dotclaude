@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.311.0] — 2026-10-25
+
+Concept pages show every hotkey on `?` instead of a held Alt, and every chrome control names its key.
+
+### Changed
+- **Hotkeys.** `?` opens the shortcut sheet and the key badges on the page together; Alt no longer does (a bare Alt hands the focus to the browser menu). New keys: `M` menu, `H` hide notes and navigation, `T` light / dark. Menu, eye, theme, device view, ✕ and submit name their key in the tooltip.
+- **Quick navigation.** Every page shows its key (`↑` the one on screen, `Tab` next, `←` previous), every question entry `⇧+n`.
+- **Overview.** Side tiles show only the variant icon, no name.
+- **Browser tab.** ⏳ while Claude works, also while implementing (no more 🛠️).
+
+### Fixed
+- The ☰ menu stays open after a click on a question, also when the page switch closes it late.
+
+## [0.310.0] — 2026-10-25
+
+Design concept pages hide all chrome with one click, move between pages without flicker, and keep old notes out of fresh pages.
+
+### Changed
+- **Eye.** Hides the notes, the quick navigation and both buttons at once; the device switcher sits right next to it.
+- **Navigation.** Clicking the page or variant you are on steps one level up to the overview. Moves between overview, designs and pages slide in their direction instead of flashing.
+- **Notes dock.** Field heights stay right, also expanded; no dividers; scrollbars show inside fields; toasts close by themselves; tips rewritten.
+- **☰ menu.** Marks the current page, stays open on a click, dims the page less, and its journey bar matches the one at the bottom centre. Light theme and the clipped "g" are fixed.
+- **Tooltips.** Never repeat a visible label; info/"?" buttons open theirs instantly; one kind of tooltip per group (also a standing UI rule).
+
+### Fixed
+- Notes from an earlier concept no longer reappear in a freshly built page.
+- A session is no longer marked "Interrupted" while a concept round's background work still runs.
+
 ## [0.309.0] — 2026-10-25
 
 Design concept pages are calmer: no breadcrumb header any more, and the notes dock and the keys behave the same wherever the focus is.

@@ -207,6 +207,8 @@ must see their own language. The locale hint is authoritative.
 | `design.position_page`         | Page                           | Seite |
 | `anno.toggle_show` | Show notes | Notizen einblenden |
 | `anno.toggle_hide` | Hide notes | Notizen ausblenden |
+| `anno.toggle_calm_hide` | Hide notes and navigation | Notizen und Navigation ausblenden |
+| `anno.toggle_calm_show` | Show notes and navigation | Notizen und Navigation einblenden |
 | `anno.answer_placeholder`      | Your answer…                    | Deine Antwort… |
 | `anno.pin_label`                | Question {n}                    | Frage {n} |
 | `design.nav_views_heading`     | Questions                       | Fragen |
@@ -239,7 +241,7 @@ must see their own language. The locale hint is authoritative.
 | `design.change_improved` | Improved | Verbessert |
 | `design.keys_dock` | Notes dock open / closed | Notiz-Dock auf / zu |
 | `design.keys_level` | Level up / down (overview, variant) | Ebene hoch / runter (Übersicht, Variante) |
-| `nudge.alt` | Hold Alt to see all hotkeys | Alt halten zeigt alle Hotkeys |
+| `nudge.keys` | Press ? to see all hotkeys | ? zeigt alle Hotkeys |
 | `nudge.variants` | Keys 1–{n} switch the variant | Tasten 1–{n} wechseln die Variante |
 | `nudge.pages` | Keys ←/→ flip between pages | Tasten ←/→ blättern zwischen Seiten |
 | `nudge.dock` | Space opens your notes | Leertaste öffnet deine Notizen |
@@ -260,6 +262,10 @@ must see their own language. The locale hint is authoritative.
 | `design.keys_next`             | Next page of this design        | Nächste Seite dieses Designs |
 | `design.keys_round` | Round tab 1–9 | Runden-Tab 1–9 |
 | `design.keys_notes`            | Open or close the notes         | Notizen öffnen oder schließen |
+| `design.keys_viewport` | Switch the device view | Geräteansicht wechseln |
+| `design.keys_menu` | Open or close the menu | Menü öffnen oder schließen |
+| `design.keys_hide` | Hide or show notes and navigation | Notizen und Navigation aus- / einblenden |
+| `design.keys_theme` | Light or dark | Hell oder dunkel |
 | `design.keys_pin` | Place a note on the design | Notiz auf dem Design platzieren |
 | `design.keys_click`            | click                           | Klick |
 | `design.keys_close`            | Close                           | Schließen |

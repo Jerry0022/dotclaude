@@ -762,6 +762,51 @@ design round has: the three row builders and the ordering of stash → rebuild
     btn.dataset.tip = label;
     const text = btn.querySelector('.viewport-toggle-label');
     if (text) text.textContent = current;
+    renderViewportModes(btn, spec);
+  }
+
+  // Next to the eye (the overview header, § Variant overview) the switch is
+  // one bare icon button per DECLARED mode — the same quiet look as the eye,
+  // the current one marked — instead of the cycling pill. Built once per
+  // declaration, repainted in place on every switch. CSS shows it only
+  // inside .design-header; elsewhere the pill above stays the control.
+  function renderViewportModes(btn, spec) {
+    let group = document.getElementById('viewport-modes');
+    const sig = spec.modes.join(',');
+    if (!group) {
+      group = document.createElement('span');
+      group.id = 'viewport-modes';
+      group.className = 'viewport-modes';
+      group.setAttribute('role', 'group');
+      if (btn.dataset.labelPrefix) group.setAttribute('aria-label', btn.dataset.labelPrefix);
+      btn.after(group);
+    }
+    if (group.dataset.modes !== sig) {
+      group.dataset.modes = sig;
+      group.textContent = '';
+      spec.modes.forEach(mode => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'viewport-mode';
+        b.dataset.mode = mode;
+        const glyph = btn.querySelector('svg[data-glyph="' + mode + '"]');
+        if (glyph) b.appendChild(glyph.cloneNode(true));
+        const label = VIEWPORT_LABELS[mode] || mode;
+        b.setAttribute('aria-label', label);
+        // Icon only: the tooltip is its one visible name.
+        b.dataset.tip = label;
+        b.addEventListener('click', () => {
+          if (viewportMode === mode) return;
+          viewportPref = mode;
+          applyViewport();
+          if (typeof saveState === 'function') saveState();
+        });
+        group.appendChild(b);
+      });
+    }
+    group.querySelectorAll('.viewport-mode').forEach(b => {
+      b.setAttribute('aria-pressed', String(b.dataset.mode === viewportMode));
+    });
   }
 
   // The one entry point. Idempotent, so every caller can just invoke it.

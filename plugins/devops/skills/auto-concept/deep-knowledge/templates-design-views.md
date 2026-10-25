@@ -501,10 +501,16 @@ icon, when the traits are not exactly three, when the round has no
   Payload: `favorite: <designId>|null` (§ Decision schema; always `null`
   without `alternatives`). Meaning for the next round: step5-process.md § 5a.
 - **Top-left corner** (replaces `#screen-indicator`) — the annotation eye
-  and nothing else: no breadcrumb, no "Übersicht" / variant / page label, no
-  ★, no box around it. It sits bare and dimmed, full strength on hover or
+  and, when the design declares several devices (`data-viewports`), the
+  device switch beside it: one bare icon per device, the current one in the
+  accent colour (`#viewport-modes`; the bottom-left pill is only the fallback
+  without this corner). No breadcrumb, no "Übersicht" / variant / page label,
+  no ★, no box around it. It sits bare and dimmed, full strength on hover or
   focus; its counter shows the CURRENT page's automatic notes that are
   neither answered nor opened (0 on the overview and on question views).
+  The eye is also the **calm view**: off, it hides the notes AND the quick
+  nav and both FABs (☰, 💬) — only the dimmed eye (and the device switch)
+  stays, so the concept can be looked at undisturbed; hotkeys keep working.
   Back to the overview only through the ☰ menu's "Übersicht" entry (or
   `Esc`); which variant is on screen shows in the quick nav, the favourite
   as its ★ there.
@@ -517,9 +523,18 @@ icon, when the traits are not exactly three, when the round has no
   Too little room between the eye and the ☰ FAB → the pages fold into
   a "2 / 7 ▾" chip that opens downwards. `★` on the favourite. Detail pages are
   numbered with roman numerals (I, II, III …; the ☰ rows too) so the digits
-  stay free for the variant hotkeys. Quick-nav controls act on `pointerdown`
-  (the bar is rebuilt on every state change; a rebuild between pointerdown and
-  click used to swallow the first click). With `section[data-view]`s, a
+  stay free for the variant hotkeys. Quick-nav controls act on `pointerdown`.
+  The bar is rebuilt only when its shape changes (mode, fanned variant, fold
+  level, favourite, questions); a page step, a dot or a question switch
+  repaints the existing buttons in place (`data-active`, `aria-current`).
+  A click on the page or the variant already on screen goes one level up:
+  back to the overview, that variant centred. Tooltips never repeat a
+  visible name: a named segment / page shows only its keycap (`1`–`9`, `Tab`
+  on the next page) or nothing; an icon-only segment names itself. Every
+  switch moves in its direction (~0.2 s, none under reduced motion):
+  overview → variant zooms in, variant → overview zooms out, a step to the
+  next / previous page, variant or question slides; without a change
+  nothing animates. With `section[data-view]`s, a
   trailing amber "Fragen" segment (no `?` mark) counts the unanswered
   questions: one question → it opens directly, no dropdown; several → the
   segment carries their list as a dropdown (hover / focus, first tap on
@@ -548,8 +563,9 @@ icon, when the traits are not exactly three, when the round has no
   `Ctrl`+`Enter` submit · `N` notes dock. A digit or quick-nav switch keeps
   the page: design A page 2 → design B page 2 (B's first page when it has
   none); a view tied to a design maps to the target design's view at the
-  same position. Holding `Alt` shows every hotkey badge
-  (`body.hk-alt`, `#hk-overlay`) plus an example own pin "Strg + Klick".
+  same position. `?` shows the shortcut sheet together with every hotkey
+  badge (`body.hk-keys`, `#hk-overlay`) plus an example own pin "Strg + Klick"
+  — never a held Alt, which hands the focus to the browser menu.
   Situational **nudges** (`wireChromeHotkeys()`, templates-design-overview.md):
   a quiet tip tab on top of the status toast appears when the user does by
   mouse what a hotkey does faster; ✕ silences that tip for 30 days

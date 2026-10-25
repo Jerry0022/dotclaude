@@ -257,6 +257,31 @@ body[data-view-active="true"] .viewport-toggle { display: none; }
    below the backdrop anyway, and a half-dimmed control invites dead clicks. */
 body.panel-open .viewport-toggle { opacity: 0; pointer-events: none; }
 
+/* ── Device switch beside the eye ──
+   Inside the header the cycling pill gives way to one bare icon button per
+   declared device (renderViewportModes), styled exactly like the eye: no
+   box, dimmed until pointed at, the current device in the accent colour. */
+.viewport-modes { display: none; }
+.design-header .viewport-toggle { display: none; }
+.design-header .viewport-modes { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; }
+.viewport-mode {
+  display: inline-grid; place-items: center; box-sizing: border-box;
+  width: 28px; height: 28px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: 1px solid transparent; background: transparent;
+  color: var(--text-secondary, #8b949e); opacity: 0.45;
+  transition: opacity 0.16s ease, border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+.viewport-mode svg { width: 16px; height: 16px; display: block; }
+.viewport-mode[aria-pressed="true"] { color: var(--accent-color, #58a6ff); opacity: 0.7; }
+.viewport-mode:hover, .viewport-mode:focus-visible {
+  opacity: 1; border-color: var(--border-color, #30363d);
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 85%, transparent);
+}
+.viewport-mode:focus-visible { outline: 2px solid var(--accent-color, #58a6ff); outline-offset: 2px; }
+body[data-single-viewport="true"] .viewport-modes,
+body[data-view-active="true"] .viewport-modes,
+body[data-overview-active="true"] .viewport-modes { display: none !important; }
+
 /* ── Device stage — the portrait/landscape frame pair ──
    Only ever built for the ACTIVE screen, and only outside desktop mode.
    Desktop mode has no stage at all, which IS the visual distinction: bezels

@@ -205,7 +205,7 @@ const PROCESSED_SAFETY_MS = 5 * 60 * 1000;
 async function pollProcessedState() {
   if (!_submittedAt) {
     // Not submitted from this tab — still follow the server so the tab-title
-    // glyph of a second open tab flips to ⏳ / 🛠️ without a reload.
+    // glyph of a second open tab flips to ⏳ without a reload.
     if (typeof noteServerRound !== 'function') return;
     try {
       const r = await fetch('/decisions', { cache: 'no-store' });
@@ -441,15 +441,21 @@ function refreshStatusToast() {
   }
   if (fl) fl.hidden = !(away && _toastMode === 'status');
   toast.hidden = false;
-  // Green "done" auto-hide: count only time the toast is actually seen.
-  const done = running && phase === 'implementing' && typeof _journeyDone !== 'undefined' && _journeyDone;
+  // Success toasts (green "done", plain "👉 Du bist dran") hide themselves
+  // after ~2.5 s visible; only progress and "verbinde…" persist. Not gated on
+  // hasFocus(): beside another window that never turned true.
+  const done = (running && phase === 'implementing' && typeof _journeyDone !== 'undefined' && _journeyDone)
+    || (!running && !away);
   if (done && !_toastDoneTimer) {
     _toastDoneMs = 0;
     _toastDoneTimer = setInterval(() => {
-      if (document.visibilityState === 'visible' && document.hasFocus()
+      if (document.visibilityState !== 'hidden'
           && !document.body.classList.contains('panel-open')) _toastDoneMs += 250;
       if (_toastDoneMs >= 2500) {
         clearInterval(_toastDoneTimer); _toastDoneTimer = null;
+        // An error that showed up meanwhile (bridge away) keeps the toast.
+        const fl2 = toast.querySelector('.jr-float');
+        if (fl2 && !fl2.hidden) return;
         _toastMode = null; toast.hidden = true;
       }
     }, 250);
@@ -472,7 +478,7 @@ function maybeShowNewRoundToast() {
   refreshStatusToast();
   let seen = 0;
   const t = setInterval(() => {
-    if (document.visibilityState === 'visible' && document.hasFocus()) seen += 250;
+    if (document.visibilityState !== 'hidden') seen += 250;
     if (seen >= 4000 || _toastMode !== 'new-round') {
       clearInterval(t);
       if (_toastMode === 'new-round') { _toastMode = null; refreshStatusToast(); }

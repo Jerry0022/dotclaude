@@ -208,6 +208,8 @@ body.chrome-glow .feedback-fab { animation: chromeGlow 1.4s ease-in-out 2; }
   cursor: pointer;
   padding: 0.25rem;
 }
+/* ☰ head buttons + "what is open now" highlight: § Decision Panel State
+   CSS (continued), part 25 — next to the round label they share a row with. */
 
 /* ── Panel head row: round label · back link · 🕘 chip · theme toggle · ✕ ──
    The aside's first child. Right-aligned so the ✕ keeps its top-right
@@ -262,7 +264,10 @@ html:not([data-theme="dark"]) .theme-toggle-btn [data-glyph="moon"] { display: i
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.5);
+  /* Light dim only: the ☰ menu is navigation the user clicks through while
+     watching the page change behind it (the user's call) — the page must
+     stay readable, the dim only says "a click here closes the menu". */
+  background: rgba(0,0,0,0.16);
   z-index: 150;
 }
 .panel-backdrop.visible { display: block; }
@@ -397,9 +402,10 @@ body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
   width: min(1100px, calc(100vw - 4rem));
   max-height: min(var(--dock-ceiling), 860px);
 }
-.feedback-dock[data-size][data-user-maximized="true"] .feedback-section textarea {
-  min-height: 220px;
-}
+/* No min-height of its own for maximised fields: the floor is 3 lines in
+   every size (allocDockHeights, § Panel Chrome JS). The old 220px floor is
+   what blew an EMPTY focused field up to a third of the screen while the
+   filled ones scrolled. */
 .feedback-dock[data-open="true"] {
   display: flex;
   animation: feedback-dock-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.15);
@@ -506,7 +512,11 @@ body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
 .feedback-section textarea:focus { outline: none; border-color: var(--accent-color); }
 /* The notes dock's field look (R4 breadcrumb, glow, 📎 slot, auto-grow,
    "Wusstest du schon?"): § Panel chrome page-level part, CSS fence. */
-.feedback-divider { height: 1px; background: var(--border-color); margin: 0.2rem 0; }
+/* No divider lines between the dock's boxes: each section is its own soft
+   card already, and the rules only added noise + ~1.2rem of dead space.
+   The element stays in the markup (the layout's :has() collapse rules key
+   on it) but never renders. */
+.feedback-divider { display: none; }
 /* The attach bar's own margin-top (§ Attachments CSS) is meant for contexts
    with no flex-gap parent (decision notes, annotation bubbles). Inside the
    dock, .feedback-section already applies that same gap between its
@@ -537,7 +547,7 @@ html[data-template="design"] body[data-single-screen="true"] .feedback-section:h
 html[data-template="design"] .feedback-section:has(#screen-textareas) textarea,
 html[data-template="design"] .feedback-section:has(#view-textareas) textarea,
 html[data-template="design"] body[data-single-screen="true"] .feedback-section:has(#design-textareas) textarea {
-  min-height: 104px;
+  /* no min-height above the shared 3-line floor (allocDockHeights) */
   border-color: color-mix(in srgb, var(--accent-color) 55%, var(--border-color));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 12%, transparent);
 }

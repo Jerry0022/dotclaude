@@ -111,6 +111,8 @@ returns — the single-design page is untouched.
     keysTitle: '{{design.keys_title}}', keysDesign: '{{design.keys_design}}',
     keysView: '{{design.keys_view}}', keysNext: '{{design.keys_next}}',
     keysRound: '{{design.keys_round}}', keysNotes: '{{design.keys_notes}}',
+    keysViewport: '{{design.keys_viewport}}', keysMenu: '{{design.keys_menu}}',
+    keysHide: '{{design.keys_hide}}', keysTheme: '{{design.keys_theme}}',
     keysPin: '{{design.keys_pin}}', keysClick: '{{design.keys_click}}',
     keysClose: '{{design.keys_close}}', ctrl: '{{design.key_ctrl}}',
     upinHint: '{{design.upin_hint}}', upinArm: '{{design.upin_arm}}',
@@ -304,6 +306,23 @@ returns — the single-design page is untouched.
       node.setAttribute('aria-keyshortcuts', key.replace('⇧', 'Shift').replace(L.ctrl, 'Control'));
     }
   }
+  // A control whose name is on screen gets no tooltip that repeats it
+  // (ui-defaults: no tooltip that merely restates visible text): only its
+  // hotkey as a keycap, or no tooltip at all. Uniform per kind — every named
+  // segment / page with a hotkey shows the keycap, every one without none.
+  // The tooltip component needs a non-empty data-tip, so the label is an
+  // invisible word joiner and data-tip-key-only marks the case.
+  const KEY_ONLY = String.fromCharCode(0x2060);
+  function keyTip(node, key) {
+    delete node.dataset.tipKey;
+    node.removeAttribute('aria-keyshortcuts');
+    if (!key) { delete node.dataset.tip; delete node.dataset.tipKeyOnly; return; }
+    setTip(node, KEY_ONLY, key);
+    node.dataset.tipKeyOnly = 'true';
+  }
+  // Under 900px the quick nav shows icons only (CSS), so the name is no
+  // longer on screen and goes back into the tooltip.
+  const quickNarrow = () => !!(window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
 
   // Quick-nav controls act on pointerdown, not on click. A click needs the
   // SAME node under pointerdown and pointerup, and the quick nav is rebuilt
@@ -593,7 +612,7 @@ returns — the single-design page is untouched.
       if (e.key === 'Enter' && slide.dataset.pos === 'cur') { e.preventDefault(); open(); }
     });
     slide.appendChild(preview);
-    slide.appendChild(sideLabelOf(iconEl(m.icon, { color: m.color }), m.label));
+    slide.appendChild(sideLabelOf(iconEl(m.icon, { color: m.color })));
     // Overlay: kicker (icon name + ☆/★), motto, three traits, and for a
     // changed variant the "Verbessert …" line — at the anchor the author
     // picked, in the tint the author picked.
@@ -631,14 +650,13 @@ returns — the single-design page is untouched.
     return slide;
   }
   // Side-tile label: only a neighbour (a plain bordered tile) shows it — the
-  // variant's icon, exactly the quick-nav icon (no frame of its own),
-  // vertically centred right where the hover chevron points; the name
-  // appears under it on hover, wrapped, never cut. The centre tile carries
-  // no badge: the quick nav marks which variant it is.
-  function sideLabelOf(icon, label) {
+  // variant's icon alone, exactly the quick-nav icon (no frame, no name: the
+  // quick nav names it), vertically centred right where the hover chevron
+  // points. The centre tile carries no badge: the quick nav marks it.
+  function sideLabelOf(icon) {
     const b = el('span', 'design-ov-side');
     b.setAttribute('aria-hidden', 'true');
-    b.append(icon, el('span', 'design-ov-side-name', label));
+    b.append(icon);
     return b;
   }
   function buildQuestionsSlide() {
@@ -646,7 +664,7 @@ returns — the single-design page is untouched.
     slide.dataset.questions = 'true';
     slide.setAttribute('aria-label', L.qLabel);
     slide.appendChild(el('div', 'design-ov-qcard'));
-    slide.appendChild(sideLabelOf(iconEl('question', { kind: 'plain' }), L.qLabel));
+    slide.appendChild(sideLabelOf(iconEl('question', { kind: 'plain' })));
     wireSlide(slide, null);
     return slide;
   }
@@ -707,7 +725,9 @@ returns — the single-design page is untouched.
     if (i >= 0) ovIndex = i;
     layoutCarousel(it);
     const ov = overviewOf(it);
-    if (ov) {
+    // The staged entrance is the first arrival only (boot / restore); a
+    // way back from a variant is the zoom-out of § Page transitions.
+    if (ov && body.dataset.dzNav !== 'out') {
       ov.dataset.enter = 'true';
       clearTimeout(ov._enterTimer);
       ov._enterTimer = setTimeout(() => { ov.dataset.enter = 'false'; }, 1600);
@@ -800,11 +820,14 @@ returns — the single-design page is untouched.
     bar.appendChild(fill);
     return bar;
   }
-  function questionItem(q, onPick) {
+  // Every question entry carries its hotkey (⇧ + its number) as a keycap
+  // only — the title is on screen — like the designs' digits.
+  function questionItem(q, onPick, n) {
     const item = el('button', 'design-quick-qitem');
     item.type = 'button';
     item.dataset.done = String(q.done);
     item.append(el('span', 'design-quick-qstate', q.done ? '✓' : ''), el('span', 'design-quick-qtitle', q.title));
+    if (n >= 1 && n <= 9) keyTip(item, '⇧+' + n);
     item.addEventListener('click', onPick);
     return item;
   }
@@ -844,8 +867,17 @@ returns — the single-design page is untouched.
     seg.appendChild(iconEl(m.icon, { color: m.color }));
     seg.appendChild(el('span', 'design-quick-name', m.label));
     if (fav === m.id) seg.appendChild(el('span', 'design-quick-star', '★'));
-    setTip(seg, m.label, m.n <= 9 ? String(m.n) : '');
-    press(seg, () => { if (typeof closePanel === 'function') closePanel(); showDesignAligned(m.id); });
+    const key = m.n <= 9 ? String(m.n) : '';
+    if (named && !quickNarrow()) keyTip(seg, key); else setTip(seg, m.label, key);
+    // The variant already on screen is one level up: back to the overview,
+    // that variant centred — a click on it never re-renders anything.
+    press(seg, () => {
+      if (typeof closePanel === 'function') closePanel();
+      const it = visibleIteration();
+      const cur = mode() === 'design' ? activeDesignOf(it) : null;
+      if (cur && cur.dataset.design === m.id) { if (overviewOf(it)) window.showOverview(); return; }
+      showDesignAligned(m.id);
+    });
     if (u) setDot(seg, u.design(m.id));
     return seg;
   }
@@ -861,16 +893,20 @@ returns — the single-design page is untouched.
     const idx = screens.indexOf(cur);
     const fresh = u.screens(m.id);
     g.appendChild(el('span', 'design-quick-sep'));
+    // Active state, dot and the Tab keycap are painted by paintQuick(), in
+    // place, on every page switch — the buttons themselves stay.
     const pageBtn = (sec, i, cls) => {
       const b = el('button', cls);
       b.type = 'button';
       b.dataset.screenId = sec.id;
-      b.dataset.active = String(sec === cur);
       b.append(el('span', 'design-quick-num', roman(i + 1)), el('span', 'design-quick-name', sec.dataset.navLabel || sec.id));
-      setDot(b, fresh.includes(sec.id));
-      setTip(b, sec.dataset.navLabel || sec.id, sec !== cur && i === (idx + 1) % screens.length ? 'Tab' : '');
+      // The page already on screen is one level up: back to the overview.
       press(b, () => {
         if (typeof closePanel === 'function') closePanel();
+        if (sec.dataset.screenActive === 'true' && mode() === 'design') {
+          if (overviewOf(visibleIteration())) window.showOverview();
+          return;
+        }
         window.showScreen(sec.id);
       });
       return b;
@@ -933,7 +969,9 @@ returns — the single-design page is untouched.
     btn.dataset.active = String(!!viewOn);
     btn.appendChild(el('span', 'design-quick-name', L.qLabel));
     btn.appendChild(open.length ? el('span', 'design-quick-badge', String(open.length)) : el('span', 'design-quick-qok', '✓'));
-    setTip(btn, open.length ? (open.length === 1 ? L.qOpen1 : L.qOpen.replace('{n}', String(open.length))) : L.qAllDone);
+    // "Fragen" and the open count are on screen: no tooltip repeating them,
+    // the full sentence goes to assistive tech only.
+    btn.setAttribute('aria-label', L.qLabel + ': ' + (open.length ? (open.length === 1 ? L.qOpen1 : L.qOpen.replace('{n}', String(open.length))) : L.qAllDone));
     const multi = qs.length >= 2;
     press(btn, e => {
       if (multi && e && e.pointerType === 'touch' && wrap.dataset.open !== 'true') {
@@ -957,27 +995,84 @@ returns — the single-design page is untouched.
     head.append(el('strong', '', L.qLabel),
       el('span', '', L.qProgress.replace('{done}', String(qs.length - open.length)).replace('{n}', String(qs.length))));
     pop.append(head, progressBar(qs.length - open.length, qs.length));
-    qs.forEach(q => {
-      const item = questionItem(q, () => { wrap.dataset.open = 'false'; goQuestion(q.id); });
+    qs.forEach((q, i) => {
+      const item = questionItem(q, () => { wrap.dataset.open = 'false'; goQuestion(q.id); }, i + 1);
       item.setAttribute('role', 'menuitem');
+      item.dataset.viewId = q.id;
       item.dataset.active = String(viewOn === q.v);
       pop.appendChild(item);
     });
     wrap.appendChild(pop);
     return wrap;
   }
-  function renderQuick(it) {
-    if (!quick) return;
-    quick.innerHTML = '';
-    if (!it || !metas.length) return;
+  // The quick nav is rebuilt only when its SHAPE changes (mode, which
+  // variant fans out, fold level, favourite, the questions and their done
+  // state, narrow layout). A page switch, a dot that goes, a question view
+  // that changes only repaint the existing buttons (paintQuick) — a rebuild
+  // under the pointer was the flicker on every quick-nav click.
+  let quickKey = '';
+  let quickMd = '';
+  function quickShape(it, md, d, fav, qs) {
+    return [it.id || '', md, d ? d.dataset.design : '', quickLevel, fav || '', quickNarrow(),
+      metas.map(m => m.id).join(','), d ? [...d.querySelectorAll('section[data-screen][id]')].map(s => s.id).join(',') : '',
+      qs.map(q => q.id + ':' + q.done).join(',')].join('|');
+  }
+  function paintQuick(it) {
+    if (!quick || !it) return;
     const md = mode();
     const d = md === 'design' ? activeDesignOf(it) : null;
     const u = unseenOf(it);
+    quick.querySelectorAll('.design-quick-designs > .design-quick-seg[data-design-id]').forEach(s => setDot(s, u.design(s.dataset.designId)));
+    if (d) {
+      const screens = [...d.querySelectorAll('section[data-screen][id]')];
+      const cur = activeScreenOf(d);
+      const idx = screens.indexOf(cur);
+      const fresh = u.screens(d.dataset.design);
+      quick.querySelectorAll('.design-quick-page, .design-quick-vitem').forEach(b => {
+        const i = screens.findIndex(s => s.id === b.dataset.screenId);
+        const isCur = i >= 0 && screens[i] === cur;
+        b.dataset.active = String(isCur);
+        if (isCur) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+        setDot(b, fresh.includes(b.dataset.screenId));
+        // Every page names its key, one kind for all: the page on screen ↑
+        // (a click on it goes one level up), the next Tab, the previous ←.
+        // A page further away has no key and so no tooltip.
+        keyTip(b, i < 0 ? '' : isCur ? '↑'
+          : i === (idx + 1) % screens.length ? 'Tab' : i === idx - 1 ? '←' : '');
+      });
+      const chip = quick.querySelector('.design-quick-more');
+      if (chip && chip.firstElementChild) {
+        chip.firstElementChild.textContent = (idx + 1) + ' / ' + screens.length;
+        setDot(chip, fresh.length > 0);
+      }
+    }
+    const viewOn = md === 'view' ? it.querySelector(':scope > section[data-view][data-view-active="true"]') : null;
+    const qb = quick.querySelector('.design-quick-q');
+    if (qb) qb.dataset.active = String(!!viewOn);
+    quick.querySelectorAll('.design-quick-qitem[data-view-id]').forEach(item => {
+      item.dataset.active = String(!!viewOn && viewOn.dataset.view === item.dataset.viewId);
+    });
+    markQuickFocus(it);
+  }
+  function renderQuick(it) {
+    if (!quick) return;
+    if (!it || !metas.length) { quick.innerHTML = ''; quickKey = ''; return; }
+    const md = mode();
+    const d = md === 'design' ? activeDesignOf(it) : null;
     const fav = validFavorite(it, readState(it));
+    const qs = questionsOf(it);
+    const shape = quickShape(it, md, d, fav, qs);
+    if (shape === quickKey && quick.firstChild) { quickMd = md; paintQuick(it); return; }
+    const u = unseenOf(it);
     const row = el('div', 'design-quick-row design-quick-designs');
     metas.forEach(m => {
-      if (d && d.dataset.design === m.id) row.appendChild(quickGroup(d, m, u, fav));
-      else row.appendChild(quickSeg(m, md !== 'design' && quickLevel < 2, u, fav));
+      if (d && d.dataset.design === m.id) {
+        const g = quickGroup(d, m, u, fav);
+        // The pages fan out only when a variant is ENTERED (from the overview
+        // or a question) — a sideways switch just swaps the group in place.
+        if (quickMd && quickMd !== 'design') g.dataset.fan = 'true';
+        row.appendChild(g);
+      } else row.appendChild(quickSeg(m, md !== 'design' && quickLevel < 2, u, fav));
     });
     // On the overview a variant with several pages carries a small caret:
     // shown on the highlighted one only (markQuickFocus), it hints that the
@@ -990,9 +1085,10 @@ returns — the single-design page is untouched.
         }
       });
     }
-    const qs = questionsOf(it);
     if (qs.length) row.appendChild(quickQuestions(it, qs, md));
-    quick.appendChild(row);
+    // One swap, no empty frame in between.
+    quick.replaceChildren(row);
+    quickKey = shape;
     quick.dataset.compact = String(quickCompact());
     quick.dataset.level = String(quickLevel);
     fitQuickBand();
@@ -1004,12 +1100,65 @@ returns — the single-design page is untouched.
       renderQuick(it);
       return;
     }
-    markQuickFocus(it);
+    quickMd = md;
+    paintQuick(it);
   }
-  function buildQuick(it) { quickLevel = 0; renderQuick(it); }
+  function buildQuick(it) { quickLevel = 0; quickKey = ''; renderQuick(it); }
+
+  // ── Page transitions: the motion names the direction ───────────────────
+  // Every show*() ends in updateChrome(); comparing where the user was with
+  // where they are now picks one short motion (CSS § Page transitions):
+  // overview -> variant zooms in from the tile, variant -> overview zooms
+  // out, a sideways step (next / previous page, variant or question) slides.
+  // No change, no motion — and without a direction nothing animates at all.
+  let navPos = null;
+  function navPosOf(it, md) {
+    const d = md === 'design' ? activeDesignOf(it) : null;
+    const v = md === 'view' ? it.querySelector(':scope > section[data-view][data-view-active="true"]') : null;
+    return {
+      it, md, d: d ? designsOf(it).indexOf(d) : -1,
+      s: d ? [...d.querySelectorAll('section[data-screen][id]')].indexOf(activeScreenOf(d)) : -1,
+      v: v ? viewsOf(it).indexOf(v) : -1
+    };
+  }
+  function navDirection(a, b) {
+    if (!a || a.it !== b.it) return '';
+    if (a.md === b.md && a.d === b.d && a.s === b.s && a.v === b.v) return '';
+    if (b.md === 'overview') return 'out';
+    if (a.md === 'overview') return 'in';
+    if (a.md === 'design' && b.md === 'design') return (a.d !== b.d ? b.d > a.d : b.s > a.s) ? 'next' : 'prev';
+    if (a.md === 'view' && b.md === 'view') return b.v > a.v ? 'next' : 'prev';
+    // The quick nav lists the variants first, the questions after them.
+    return b.md === 'view' ? 'next' : 'prev';
+  }
+  let navTimer = 0;
+  function playNav(it, md) {
+    const pos = navPosOf(it, md);
+    const dir = navDirection(navPos, pos);
+    navPos = pos;
+    window.designNavDirection = dir;
+    if (!dir) return;
+    if (dir === 'out') {
+      // Land on the variant the user came from without the carousel sliding
+      // there first: positions are set with transitions off for one beat.
+      const ov = overviewOf(it);
+      const cameFrom = activeDesignOf(it);
+      const i = cameFrom ? slidesOf(it).findIndex(s => s.dataset.designId === cameFrom.dataset.design) : -1;
+      if (i >= 0) ovIndex = i;
+      if (ov) {
+        ov.dataset.instant = 'true';
+        clearTimeout(ov._instantTimer);
+        ov._instantTimer = setTimeout(() => { ov.dataset.instant = 'false'; }, 60);
+      }
+    }
+    body.dataset.dzNav = dir;
+    clearTimeout(navTimer);
+    navTimer = setTimeout(() => { delete body.dataset.dzNav; }, 320);
+  }
   window.addEventListener('resize', () => {
     if (!on()) return;
     quickLevel = 0;
+    quickKey = '';
     renderQuick(visibleIteration());
   });
   document.addEventListener('pointerdown', e => {
@@ -1042,7 +1191,7 @@ returns — the single-design page is untouched.
     card.append(head, el('p', 'design-ov-qprogress', open.length
       ? L.qProgress.replace('{done}', String(qs.length - open.length)).replace('{n}', String(qs.length))
       : L.qAllDone), progressBar(qs.length - open.length, qs.length));
-    qs.forEach(q => card.appendChild(questionItem(q, () => goQuestion(q.id))));
+    qs.forEach((q, i) => card.appendChild(questionItem(q, () => goQuestion(q.id), i + 1)));
   }
   function renderSubmitHint(it) {
     const ready = document.getElementById('panel-ready');
@@ -1125,9 +1274,12 @@ returns — the single-design page is untouched.
     if (!sheet || sheet.firstChild) return;
     sheet.appendChild(el('h2', '', L.keysTitle));
     const dl = el('dl');
-    [['Esc', L.overview], ['1–9', L.keysDesign], ['⇧+1–9', L.keysView], ['Tab', L.keysNext],
+    const rows = [['Esc', L.overview], ['1–9', L.keysDesign], ['⇧+1–9', L.keysView], ['Tab', L.keysNext],
      ['←/→', L.keysCarousel], ['↑/↓', L.keysLevel], ['Enter', L.open], [L.space, L.keysDock], ['F', L.fav], ['Alt+1–9', L.keysRound], ['N', L.keysNotes], [L.ctrl + '+Enter', L.submit],
-     [L.ctrl + '+' + L.keysClick, L.keysPin], ['?', L.keysTitle]].forEach(([k, label]) => {
+     [L.ctrl + '+' + L.keysClick, L.keysPin], ['M', L.keysMenu], ['H', L.keysHide], ['T', L.keysTheme], ['?', L.keysTitle]];
+    // V only where there is a device view to switch to.
+    if (document.getElementById('viewport-toggle') && body.dataset.singleViewport !== 'true') rows.splice(9, 0, ['V', L.keysViewport]);
+    rows.forEach(([k, label]) => {
       const dt = el('dt');
       dt.appendChild(kbdNode(k));
       dl.append(dt, el('dd', '', label));
@@ -1138,16 +1290,38 @@ returns — the single-design page is untouched.
     close.addEventListener('click', () => toggleSheet(false));
     sheet.appendChild(close);
   }
+  // `?` shows the sheet AND the hotkey badges on the page (wireChromeHotkeys):
+  // one key for "every hotkey", never a held Alt (it focuses the browser menu).
   function toggleSheet(force) {
     if (!sheet) return;
     const open = typeof force === 'boolean' ? force : sheet.hidden;
     sheet.hidden = !open;
+    if (typeof window.conceptKeyBadges === 'function') window.conceptKeyBadges(open);
     if (open) sheet.querySelector('.design-keys-close')?.focus();
   }
+  if (sheet) window.conceptKeySheet = toggleSheet;
 
   // ── Build / teardown ───────────────────────────────────────────────────
   let metas = [];
+  // The device switch (#viewport-toggle and its per-mode icons,
+  // § Responsive device views) rides next to the eye in the same quiet
+  // corner; without the header it goes back to its own bottom-left spot.
+  function placeDevices(inHeader) {
+    const vt = document.getElementById('viewport-toggle');
+    if (!vt) return;
+    if (!vpHome) vpHome = { parent: vt.parentNode, next: vt.nextSibling };
+    const modes = document.getElementById('viewport-modes');
+    if (inHeader && H.main) {
+      if (vt.parentNode !== H.main) H.main.appendChild(vt);
+      if (modes && modes.previousSibling !== vt) vt.after(modes);
+    } else if (vt.parentNode !== vpHome.parent) {
+      vpHome.parent.insertBefore(vt, vpHome.next);
+      if (modes) vt.after(modes);
+    }
+  }
+  let vpHome = null;
   function placeEye(inHeader) {
+    placeDevices(inHeader);
     if (!annoToggle || !annoHome) return;
     if (inHeader && H.eye) { if (annoToggle.parentNode !== H.eye) H.eye.appendChild(annoToggle); }
     else if (annoToggle.parentNode !== annoHome.parent) annoHome.parent.insertBefore(annoToggle, annoHome.next);
@@ -1295,6 +1469,7 @@ returns — the single-design page is untouched.
     const live = isLive(it) && !body.classList.contains('viewing-frozen');
     const md = mode();
     if (navOv) navOv.firstElementChild.dataset.active = String(md === 'overview');
+    playNav(it, md);
     renderQuick(it);
     renderQuestionsCard(it);
     renderSubmitHint(it);

@@ -66,7 +66,11 @@ describe("overview feedback — header", () => {
       expect(header.querySelector(".design-header-back, .design-header-title, .design-header-name, .design-header-star, .design-header-sep, .design-header-overlay")).toBeNull();
       const eye = document.getElementById("anno-toggle");
       expect(eye.closest(".design-header-main")).not.toBeNull();
-      expect(header.textContent.trim()).toBe(eye.textContent.trim());
+      // Besides the eye only the device switch rides in the corner
+      // (third feedback round); it carries no visible text of its own there.
+      const rest = [...header.querySelector(".design-header-main").children]
+        .filter((n) => !n.matches(".design-header-eye, #viewport-toggle, #viewport-modes"));
+      expect(rest).toEqual([]);
     }
     expect(css).toMatch(/\.design-header \.anno-toggle-fab \{\s*position: relative; inset: auto;/);
     const box = css.match(/\.design-header \{[^}]*\}/)[0];
@@ -101,14 +105,15 @@ describe("overview feedback — quick nav names the centre tile", () => {
 });
 
 describe("overview feedback — tiles", () => {
-  test("side label is the quick-nav icon + a name; kicker is icon + name; no open button", async () => {
+  test("side label is the quick-nav icon alone; kicker is icon + name; no open button", async () => {
     const { document } = await boot(page(3));
     const slides = [...document.querySelectorAll("[data-design-overview] .design-ov-slide[data-design-id]")];
     expect(slides.length).toBe(3);
     slides.forEach((s) => {
       expect(s.querySelector(".design-ov-badge")).toBeNull();
       expect(s.querySelector(":scope > .design-ov-side > .dz-icon")).not.toBeNull();
-      expect(s.querySelector(".design-ov-side-name").textContent).not.toBe("");
+      expect(s.querySelector(".design-ov-side-name")).toBeNull();
+      expect(s.querySelector(":scope > .design-ov-side").textContent.trim()).toBe("");
       expect(s.querySelector(".design-ov-open")).toBeNull();
       const kick = s.querySelector(".design-ov-kicker");
       expect(kick.querySelector(".design-ov-num")).toBeNull();
@@ -119,14 +124,12 @@ describe("overview feedback — tiles", () => {
       if (s.dataset.change === "changed") expect(line.textContent).toBe("Verbessert Größere Tageskacheln");
       else expect(line).toBeNull();
     });
-    // Side label: shown on neighbours only, centred vertically, name never cut.
+    // Side label: shown on neighbours only, centred vertically, no name.
     expect(css).toMatch(/\.design-ov-slide:is\(\[data-pos="prev"\], \[data-pos="next"\]\) \.design-ov-side \{ display: block; \}/);
     const side = css.match(/\.design-ov-side \{[^}]*\}/)[0];
     expect(side).toContain("top: 50%");
     expect(side).not.toMatch(/border|box-shadow|background/);
-    const name = css.match(/\.design-ov-side-name \{[^}]*\}/)[0];
-    expect(name).toContain("white-space: normal");
-    expect(name).not.toMatch(/ellipsis|overflow: hidden/);
+    expect(css).not.toContain(".design-ov-side-name");
     // The centre tile's hover glow has vertical room: the stage clips only sideways.
     const stage = css.match(/\.design-ov-stage \{[^}]*\}/)[0];
     expect(stage).toContain("overflow-x: clip; overflow-y: visible");

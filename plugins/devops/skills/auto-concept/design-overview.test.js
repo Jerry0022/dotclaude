@@ -197,9 +197,11 @@ describe("variant overview — generated only for ≥2 designs", () => {
     expect(document.querySelector("#design-header .design-header-name"), "no breadcrumb: the eye only").toBeNull();
     expect(document.querySelectorAll("#design-quick .design-quick-seg").length).toBe(3);
     expect(document.getElementById("anno-toggle").parentElement.classList.contains("design-header-eye")).toBe(true);
-    // One tooltip per element: label + key in data-tip / data-tip-key.
+    // One tooltip per element. The name is on screen, so the tooltip holds
+    // the keycap only (third feedback round: never repeat visible text).
     const seg = document.querySelector("#design-quick .design-quick-seg");
-    expect(seg.dataset.tip).toBe("Design 2");
+    expect(seg.dataset.tip).not.toContain("Design 2");
+    expect(seg.dataset.tipKeyOnly).toBe("true");
     expect(seg.dataset.tipKey).toBe("1");
     expect(seg.querySelector("kbd")).toBeNull();
     // A neighbour click turns the carousel; the centre preview opens its design; Esc goes back.
@@ -218,7 +220,7 @@ describe("variant overview — generated only for ≥2 designs", () => {
   test("a reload returns to the design the user was on, not to the overview", async () => {
     // One build for both lives: the fixture stamps a fresh pageVersion per
     // build, and a version change is a regenerated page (navigation keys
-    // dropped, notes carried over) — not a reload.
+    // archived, drafts dropped) — not a reload.
     const html = page(2);
     const a = await boot(html);
     a.window.showDesign("d2b", "d2b-s2");
@@ -267,9 +269,12 @@ describe("favourite — at most one, toggled until submit, in the payload", () =
   }, BOOT_TIMEOUT);
 
   test("the favourite survives a reload (localStorage, like a note)", async () => {
-    const a = await boot(page(2));
+    // One build for both lives — a new pageVersion is a different page,
+    // which never inherits drafts (templates-persistence restoreState).
+    const html = page(2);
+    const a = await boot(html);
     starOf(a.window, a.document, "d2b").click();
-    const b = await boot(page(2), stateOf(a.window));
+    const b = await boot(html, stateOf(a.window));
     expect(b.window.collectDecisions("iterate").favorite).toBe("d2b");
     expect(b.document.querySelector('.design-ov-slide[data-design-id="d2b"]').dataset.favorite).toBe("true");
   }, BOOT_TIMEOUT);
@@ -378,8 +383,9 @@ describe("header — one row, never expands", () => {
     expect(header.closest("main")).toBeNull();
     expect([...header.children].map((c) => c.className)).toEqual(["design-header-main"]);
     expect(header.querySelector(".design-header-tabs, .design-fav-btn, .design-header-note")).toBeNull();
-    // The row holds the eye slot and nothing else.
-    expect([...header.querySelector(".design-header-main").children].map((c) => c.className)).toEqual(["design-header-eye"]);
+    // The row holds the eye slot and nothing else — besides the device
+    // switch (third feedback round), which rides next to the eye.
+    expect([...header.querySelector(".design-header-main").children].filter((n) => !/^viewport-/.test(n.id)).map((c) => c.className)).toEqual(["design-header-eye"]);
     const css = md.match(/```css\n([\s\S]*?)```/g).join("\n");
     expect(css).toMatch(/\.design-header \{\s*position: fixed;/);
     expect(css).not.toMatch(/\.design-header-more|\.design-header\[data-open/);

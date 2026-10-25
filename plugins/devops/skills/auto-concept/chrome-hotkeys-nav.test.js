@@ -7,7 +7,7 @@ import { readTemplates } from "./templates-source.js";
 // numerals, the quick nav that acts on pointerdown (two-click bug), the
 // questions segment without "?" (direct / next-open jump, answered = any
 // interaction), the overview preview fit that ignores ancestor transforms,
-// the Space / arrow keys, the Alt overlay and the 30-day nudge dismissal.
+// the Space / arrow keys, the ? badge overlay and the 30-day nudge dismissal.
 // Booted from the real assembled fixture like design-overview.test.js.
 
 const md = readTemplates();
@@ -225,16 +225,38 @@ describe("hotkeys: Space = notes dock, arrows = levels", () => {
     expect(dock.dataset.open).toBe("true");
   }, BOOT_TIMEOUT);
 
-  test("Alt held shows the badge overlay and the Ctrl + click example pin; Alt up removes it", async () => {
+  // A question entry in the ☰ menu leaves the menu open like every other
+  // entry — also when the page switch calls closePanel() after its slide.
+  test("a question entry in the ☰ menu leaves it open, even with a late closePanel()", async () => {
+    const { window, document } = await boot(page(2, 2));
+    window.showDesign("d2");
+    window.openPanel();
+    const item = document.querySelector("#screen-nav .screen-nav-view-item");
+    mouseClick(window, item);
+    expect(document.body.dataset.viewActive).toBe("true");
+    await wait(100);
+    window.closePanel();
+    expect(document.body.classList.contains("panel-open")).toBe(true);
+    await wait(450);
+    window.closePanel();
+    expect(document.body.classList.contains("panel-open")).toBe(false);
+  }, BOOT_TIMEOUT);
+
+  // A bare Alt press hands the focus to the browser menu (Edge, Chrome), so
+  // the badges ride on `?` — together with the shortcut sheet where it exists.
+  test("? shows the sheet, the badge overlay and the Ctrl + click example pin; ? again removes them; Alt does nothing", async () => {
     const { window, document } = await boot(page(2));
     window.showDesign("d2");
     key(window, document.body, { key: "Alt", code: "AltLeft", altKey: true });
-    expect(document.body.classList.contains("hk-alt")).toBe(true);
-    expect(document.getElementById("hk-overlay")).not.toBeNull();
-    expect(document.querySelector("#hk-overlay .hk-pin-example").textContent).toMatch(/Strg/);
-    key(window, document.body, { key: "Alt", code: "AltLeft" }, "keyup");
     expect(document.getElementById("hk-overlay")).toBeNull();
-    expect(document.body.classList.contains("hk-alt")).toBe(false);
+    key(window, document.body, { key: "?", code: "Minus", shiftKey: true });
+    expect(document.body.classList.contains("hk-keys")).toBe(true);
+    expect(document.getElementById("design-keys").hidden).toBe(false);
+    expect(document.querySelector("#hk-overlay .hk-pin-example").textContent).toMatch(/Strg/);
+    key(window, document.body, { key: "?", code: "Minus", shiftKey: true });
+    expect(document.getElementById("hk-overlay")).toBeNull();
+    expect(document.getElementById("design-keys").hidden).toBe(true);
+    expect(document.body.classList.contains("hk-keys")).toBe(false);
   }, BOOT_TIMEOUT);
 });
 
@@ -306,15 +328,15 @@ describe("nudges", () => {
   test("plain mode: the same tips exist (decision template)", async () => {
     const { window, document } = await boot(page(1, 0, "decision"));
     expect(typeof window.conceptNudge).toBe("function");
-    expect(window.conceptNudge("alt", ["Alt"], "Halte Alt für alle Hotkeys")).toBe(true);
-    expect(document.getElementById("hk-nudge").textContent).toContain("Alt");
+    expect(window.conceptNudge("keys", ["?"], "? zeigt alle Hotkeys")).toBe(true);
+    expect(document.getElementById("hk-nudge").textContent).toContain("?");
   }, BOOT_TIMEOUT);
 });
 
 describe("locale", () => {
   test("every new key exists in both locales, the wording is clean", () => {
     for (const k of ["design.change_rethought", "design.change_improved", "design.keys_dock", "design.keys_level",
-      "nudge.alt", "nudge.variants", "nudge.pages", "nudge.dock", "nudge.submit", "nudge.dismiss"]) {
+      "nudge.keys", "nudge.variants", "nudge.pages", "nudge.dock", "nudge.submit", "nudge.dismiss"]) {
       const row = md.split("\n").find((l) => l.startsWith("| `" + k + "`"));
       expect(row, k).toBeTruthy();
       const cells = row.split("|").map((c) => c.trim()).filter(Boolean);

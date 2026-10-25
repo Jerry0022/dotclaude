@@ -335,12 +335,15 @@ process.stdin.on('end', () => {
     const asked = readSessionFile(INTERRUPT_FLAG, sessionId, EXACT);
     if (asked) {
       try { fs.unlinkSync(asked.filePath); } catch { /* marker already gone — nothing to clear */ }
-    } else if (!cardRendered) {
+    } else if (!cardRendered && openTasks.length === 0) {
+      // Background work of this session still runs → the work is not
+      // interrupted, whatever the title says (a concept round answering one
+      // agent's notification while another one still builds).
       // #833: a card-less NOTIFICATION turn with no background work left must
       // not keep ANY ⏳ (Team, Shipping, Testing too): it takes the last
       // delegated ship result's terminal prefix, else Interrupted.
       const current = readCurrentTitle(hook.transcript_path);
-      const next = (notificationTurn && transcript && openTasks.length === 0)
+      const next = (notificationTurn && transcript)
         ? staleWorkTitle(current, lastTitlePrefix(transcript))
         : interruptedTitle(current);
       let marked = false;

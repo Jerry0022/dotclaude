@@ -251,6 +251,10 @@ async function hydrateDraftFromBridge() {
     data = await res.json();
   } catch (e) { return; }
   if (!data || !data.found) return;
+  // The bridge's copy of ANOTHER build (same slug, new concept) is never
+  // mirrored back — same rule as restoreState()'s version check.
+  const myVersion = document.documentElement.dataset.pageVersion || '';
+  if (data.page_version && myVersion && data.page_version !== myVersion) return;
   const local = _readStoredState();
   let changed = false;
   Object.entries(data.recovered || {}).forEach(([k, v]) => {
@@ -263,6 +267,7 @@ async function hydrateDraftFromBridge() {
     // otherwise be pulled onto whatever the user is reading.
     if (typeof k !== 'string' || !k.startsWith('text:')) return;
     if (typeof v !== 'string' || !v) return;
+    if (_pruneSpentDrafts({ [k]: v })) return;   // a submitted round's draft
     if (typeof local[k] === 'string' && local[k] !== '') return;
     local[k] = v;
     changed = true;
@@ -488,16 +493,31 @@ function _carryOverTypedWork(state) {
   return carried;
 }
 
+// _pruneSpentDrafts(): § State Persistence (continued 2).
 function restoreState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return;
   try {
     let state = JSON.parse(raw);
     const currentVersion = document.documentElement.dataset.pageVersion || '';
-    if ((state._savedAt && (Date.now() - state._savedAt) > STATE_TTL_MS) ||
-        (state._pageVersion && state._pageVersion !== currentVersion)) {
+    if (state._pageVersion && state._pageVersion !== currentVersion) {
+      // A DIFFERENT build (a fresh concept on the same slug, a re-init) never
+      // inherits drafts: the same `text:i1:general` key belongs to another
+      // concept there, and carrying it over is what put the previous
+      // concept's notes into a brand-new round 1. pageVersion stays fixed
+      // across rebuilds of ONE concept (concept-build.js), so a mid-round
+      // regeneration is not affected. The old blob is archived, not dropped.
+      _guardedSetItem(STORAGE_KEY + '-archive', JSON.stringify(state));
+      state = { _savedAt: Date.now(), _pageVersion: currentVersion };
+      _guardedSetItem(STORAGE_KEY, JSON.stringify(state));
+    } else if (state._savedAt && (Date.now() - state._savedAt) > STATE_TTL_MS) {
       state = _carryOverTypedWork(state);
     }
+    // Drafts of rounds BEFORE the live one were submitted (that round is
+    // frozen and its HTML carries the sent values): once the next round is
+    // on screen they are spent and are cleared, so no later round — nor a
+    // rebuilt round of the same number — can ever be pre-filled with them.
+    if (_pruneSpentDrafts(state)) _guardedSetItem(STORAGE_KEY, JSON.stringify(state));
     // Restore targets the LIVE round only. Frozen rounds carry their submitted
     // values in the HTML, and their form-element names/ids repeat across
     // rounds — a page-wide `querySelector` returns the OLDEST match (document

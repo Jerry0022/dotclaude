@@ -158,7 +158,7 @@ describe("3 · dock field headers: only the own level is emphasised", () => {
   }, BOOT_TIMEOUT);
 });
 
-describe("4 · auto-grow is stable", () => {
+describe("4 · auto-grow is deterministic", () => {
   const alloc = allocFn();
   const floor = [70, 70, 60];
   const sum = (a) => a.reduce((x, y) => x + y, 0);
@@ -166,7 +166,7 @@ describe("4 · auto-grow is stable", () => {
   test("typing longer in the active field: others only shrink, never below their floor", () => {
     let cur = alloc([100, 150, 120], floor, 400, 0);
     for (let n = 100; n <= 600; n += 20) {
-      const next = alloc([n, 150, 120], floor, 400, 0, cur);
+      const next = alloc([n, 150, 120], floor, 400, 0);
       expect(sum(next)).toBeLessThanOrEqual(400);
       expect(next[0]).toBeGreaterThanOrEqual(cur[0]);
       expect(next[1]).toBeLessThanOrEqual(cur[1]);
@@ -176,37 +176,26 @@ describe("4 · auto-grow is stable", () => {
     }
   });
 
-  test("deleting text: others only grow back, never past their natural height", () => {
-    let cur = alloc([600, 150, 120], floor, 400, 0);
-    for (let n = 600; n >= 100; n -= 20) {
-      const next = alloc([n, 150, 120], floor, 400, 0, cur);
-      expect(next[0]).toBeLessThanOrEqual(cur[0]);
-      expect(next[1]).toBeGreaterThanOrEqual(cur[1]);
-      expect(next[2]).toBeGreaterThanOrEqual(cur[2]);
-      expect(next[1]).toBeLessThanOrEqual(150);
-      expect(next[2]).toBeLessThanOrEqual(120);
-      cur = next;
-    }
-    expect(cur).toEqual([100, 150, 120]);
+  test("deleting text gives the others their height back, exactly to their natural height", () => {
+    expect(alloc([100, 150, 120], floor, 400, 0)).toEqual([100, 150, 120]);
   });
 
-  test("no change in the active field = no movement at all (incremental is idempotent)", () => {
-    const cur = alloc([380, 150, 120], floor, 400, 0);
-    expect(alloc([380, 150, 120], floor, 400, 0, cur)).toEqual(cur);
-    // A focus change alone does not run the allocation, and even if it did
-    // with the current heights the squeezed fields would not jump.
-    const other = alloc([380, 150, 120], floor, 400, 1, cur);
-    expect(other[2]).toBe(cur[2]);
+  test("no incremental state: the result depends only on the inputs", () => {
+    const a = alloc([380, 150, 120], floor, 400, 0);
+    expect(alloc([380, 150, 120], floor, 400, 0)).toEqual(a);
+    expect(alloc.length).toBe(4);
   });
 
-  test("no focusin refit, no height transition, a stable scrollbar gutter", () => {
+  test("refit on input AND focus, no height transition, a stable scrollbar gutter, no 220px maximise floor", () => {
     const b = jsBlockContaining("window.allocDockHeights = function");
-    expect(b).not.toMatch(/addEventListener\('focusin'/);
-    expect(b).toMatch(/fitDockFields\(e\.target, true\)/);
+    expect(b).toMatch(/addEventListener\('focusin'/);
+    expect(b).toMatch(/attributeFilter: \['data-user-maximized', 'data-size'\]/);
     const c = css();
     const rule = c.match(/html \.feedback-dock \.feedback-section textarea \{([^}]*)\}/)[1];
     expect(rule).not.toMatch(/transition:[^;]*height/);
     expect(rule).toMatch(/scrollbar-gutter: stable/);
+    expect(c).not.toMatch(/data-user-maximized="true"\] \.feedback-section textarea \{[^}]*min-height/);
+    expect(c).toMatch(/\.feedback-divider \{ display: none; \}/);
   });
 });
 
@@ -215,16 +204,16 @@ describe("5 · no Ctrl-pin hint while the ☰ panel is open", () => {
     expect(css()).toMatch(/body\.panel-open \.upin-hint, body\.panel-open \.hk-pin-example \{ display: none !important; \}/);
   });
 
-  test("Alt with the panel open shows the key badges but no pin example", async () => {
+  test("the key badges with the panel open show no pin example", async () => {
     const { window, document } = await boot();
     window.showDesign("d2");
     window.openPanel();
-    key(window, document.body, { key: "Alt", code: "AltLeft", altKey: true });
+    window.conceptKeyBadges(true);
     expect(document.getElementById("hk-overlay")).not.toBeNull();
     expect(document.querySelector(".hk-pin-example")).toBeNull();
-    key(window, document.body, { key: "Alt", code: "AltLeft" }, "keyup");
+    window.conceptKeyBadges(false);
     window.closePanel();
-    key(window, document.body, { key: "Alt", code: "AltLeft", altKey: true });
+    window.conceptKeyBadges(true);
     expect(document.querySelector(".hk-pin-example")).not.toBeNull();
   }, BOOT_TIMEOUT);
 });
