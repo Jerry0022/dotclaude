@@ -58,6 +58,7 @@ function build() {
       "const VIEW_NAV_TITLE_MAX = 28;",
       slice("  function viewNavTitle("),
       slice("  function navRowLabel("),
+      slice("  function romanNumeral("),
       slice("  function navRowMarker("),
       slice("  function buildDesignUI("),
       "buildDesignUI();",
@@ -80,8 +81,8 @@ describe("screen-nav labels stay text (AUD-018)", () => {
     expect(view.dataset.tip).toBe(EVIL_TEXT);
     expect(view.querySelector(".screen-idx").textContent).toBe("?");
     expect(view.firstElementChild.textContent).toBe("?" + w.viewNavTitle({ dataset: { navLabel: EVIL_TEXT } }));
-    expect(screen.firstElementChild.textContent).toBe("1." + EVIL_TEXT);
-    expect(screen.querySelector(".screen-idx").textContent).toBe("1.");
+    expect(screen.firstElementChild.textContent).toBe("I" + EVIL_TEXT);
+    expect(screen.querySelector(".screen-idx").textContent).toBe("I");
   });
 
   test("the note markers keep their data-* hooks", () => {

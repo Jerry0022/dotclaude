@@ -300,13 +300,13 @@ describe("carousel — turns, overlay, no scrolling", () => {
     const ov = document.querySelector("[data-design-overview]");
     const cur = () => ov.querySelector('.design-ov-slide[data-pos="cur"]').dataset.designId;
     expect(cur()).toBe("d2");
-    ov.querySelector('.design-ov-arrow[data-dir="next"]').click();
+    ov.querySelector('.design-ov-slide[data-pos="next"]').click();
     expect(cur()).toBe("d2b");
     key(window, document.body, { key: "ArrowRight", code: "ArrowRight" });
     expect(cur()).toBe("d2c");
     key(window, document.body, { key: "ArrowRight", code: "ArrowRight" });
     expect(cur(), "wraps around").toBe("d2");
-    ov.querySelector('.design-ov-arrow[data-dir="prev"]').click();
+    ov.querySelector('.design-ov-slide[data-pos="prev"]').click();
     expect(cur()).toBe("d2c");
     const ta = document.querySelector('#feedback-dock textarea[data-comment="general"]');
     ta.focus();
@@ -342,17 +342,11 @@ describe("carousel — turns, overlay, no scrolling", () => {
     expect(css).toContain('.design-ov-overlay[data-tone="warm"]');
   }, BOOT_TIMEOUT);
 
-  test("Space toggles the overlay (default on), remembered per viewer, never while typing", async () => {
+  test("the header button toggles the overlay (default on), remembered per viewer; Space is the notes dock", async () => {
     const a = await boot(page(2));
     const ov = () => a.document.querySelector("[data-design-overview]");
     expect(ov().dataset.overlay).toBe("on");
-    const ta = a.document.querySelector('#feedback-dock textarea[data-comment="general"]');
-    ta.focus();
-    key(a.window, ta, { key: " ", code: "Space" });
-    expect(ov().dataset.overlay).toBe("on");
-    ta.blur();
-    const ev = key(a.window, a.document.body, { key: " ", code: "Space" });
-    expect(ev.defaultPrevented).toBe(true);
+    a.document.querySelector("#design-header .design-header-overlay").click();
     expect(ov().dataset.overlay).toBe("off");
     const btn = a.document.querySelector("#design-header .design-header-overlay");
     expect(btn.hidden).toBe(false);

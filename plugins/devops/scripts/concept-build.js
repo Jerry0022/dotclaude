@@ -468,7 +468,7 @@ function tabLabel(attrs, n) {
   if (own) return esc(own);
   if (hasAttr(attrs, 'data-final-report')) return '{{iteration.final_tab}}';
   if (hasAttr(attrs, 'data-reality-check')) return '{{iteration.reality_tab}}';
-  return `Iteration ${n}`;
+  return `{{iteration.tab}} ${n}`;
 }
 
 function tabsHtml(rounds, liveN) {

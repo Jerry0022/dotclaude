@@ -176,8 +176,14 @@ function collectDecisionDecisions() {
 
 ## Two-Button Submit (iterate vs. implement)
 
+> **Since the journey row (§ Journey row below)** the two buttons below are
+> adopted at boot as the halves of the round toggle and the implement
+> toggle; the split/caret/menu wrapper is retired (hidden). Their ids,
+> `wireSubmit` handlers, confirms and payloads are unchanged. The markup and
+> menu CSS below remain as the no-JS source both skeletons share.
+
 Every decision panel carries **two** submit actions, not one, in a
-**split button**. The primary button ("Zur nächsten Iteration") fills the
+**split button**. The primary button ("Zur nächsten Runde") fills the
 row and fires `action: "iterate"` — a Claude turn that never touches code.
 The ▾ caret next to it opens a small menu (`#submit-menu`, `role="menu"`)
 holding the secondary action ("Mit Feedback implementieren"), which fires
@@ -713,7 +719,7 @@ document.addEventListener('change', e => {
 
 // --- Final-report close-out sheet (action: "finalize") ---
 // The final report used to hand the user four independent controls at once —
-// Shippen, Issues erstellen, Concept beenden, Iterationen ansehen — each with
+// Shippen, Issues erstellen, Concept beenden, Runden ansehen — each with
 // its own submit and an execution order nobody could see. A four-step wizard
 // fixed the ordering but bought a new confusion: every "Weiter" looked like it
 // might already have done something, and the consequence list — the thing
@@ -1561,7 +1567,7 @@ function markCloseoutStalled() {
   setCloseoutButtonState('stalled');
 }
 
-// No "Iterationen ansehen" link under the sheet: earlier rounds are one click
+// No "Runden ansehen" link under the sheet: earlier rounds are one click
 // away through the panel head's rounds chip (🕘 N, `#panel-here-rounds-btn`)
 // and the tab bar, so a third way only cost the sheet a row of height.
 
@@ -1700,6 +1706,280 @@ Claude-side: on receiving the payload, branch on `action`:
   the matching part of the finalize branch (see SKILL.md § Legacy final-report
   actions); never emit them from newly generated pages
 
+## Journey row
+
+The bottom of every live panel is ONE row plus ONE status line (CSS in
+`templates-panel-state.md` § Journey row):
+
+```
+[ 👉 Zur nächsten Runde | 🤖 ] — 🔒 — 🤖 — 🏁        👉 Du bist dran · gespeichert
+```
+
+- **Round toggle** (`.jr-round`): left half = `#submit-iterate-btn` (the
+  iterate submit, unchanged semantics), right half 🤖 (tooltip "Rethinking").
+  After an iterate submit it mirrors: ✓ left, the right half fills as the
+  **run bar** "Rethinking x/y" — `x/y` = done / visible steps of
+  `#status-steps`, tooltip = the active step's label.
+- **Lock** (`#jr-lock`, yellow circle, tooltip "Genug Runden? Jetzt
+  umsetzen"): click = unlock (`data-phase="unlock"`, local UI state, never
+  persisted). The round toggle shrinks into the mini toggle (`.jr-mini`,
+  ↩ | 🤖) while the implement toggle (`.jr-impl`) grows out of the lock
+  position; its left half is `#submit-implement-btn` ("🔓 Jetzt umsetzen /
+  keine weitere Runde", implement semantics unchanged), right half 🤖
+  "Umsetzung". ↩ (or Escape inside the row) reverts.
+- **Implementing** (after an implement submit): the mini toggle shows two
+  bold ✓ (SVG `.jr-chk`), the implement toggle shows ✓ + run bar
+  "Umsetzung n/m" from the bridge's optional `_progress` (`/status`
+  `progress: {done, total}`, step5-process.md); absent → indeterminate bar.
+- **Build-up**: the first time the panel opens in a round the row assembles
+  left → right (`.journey.jr-build`, 120 ms stagger); remembered per round in
+  sessionStorage.
+- The phase is mirrored on `body[data-journey]` (round chip colour) and
+  `#panel-status[data-turn]` (you | rethinking | implementing | frozen).
+
+The split-button markup (`.submit-split`, `#submit-menu`) stays in both
+skeletons as the no-JS source; mountJourney() moves the two buttons into the
+row and retires the rest (`.submit-split[hidden]` remains as the anchor the
+design overview's open-questions hint inserts before).
+
+```javascript
+const _JR_CHK = '<svg class="jr-chk" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7"/></svg>';
+let _journeyUnlocked = false;
+let _journeyProgress = null;   // {done, total} from /decisions `_progress`
+let _journeyDone = false;      // implement finished (`_phase === "implemented"`)
+
+function _jrEl(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+
+// The run bar — ONE builder for the panel halves and the toast, so both
+// always look identical.
+function buildRunBar(label) {
+  const run = _jrEl('span', 'jr-run');
+  const done = _jrEl('i', 'jr-run-done');
+  done.appendChild(_jrEl('i', 'jr-shine'));
+  run.append(done, _jrEl('span', 'jr-bot', '🤖'), _jrEl('b', 'jr-run-label', label), _jrEl('em', 'jr-count'));
+  return run;
+}
+
+// {done, total, tip} for the current phase, or null (indeterminate).
+function journeyCounter(phase) {
+  if (phase === 'implementing') {
+    const p = _journeyProgress;
+    if (p && p.total > 0) {
+      const n = _journeyDone ? p.total : p.done;
+      return { done: n, total: p.total,
+        tip: '{{panel.journey_req}}'.replace('{n}', String(Math.max(1, Math.min(p.total, n + (n < p.total ? 1 : 0))))).replace('{m}', String(p.total)) };
+    }
+    return _journeyDone ? { done: 1, total: 1, tip: '{{panel.step_implemented}}' } : null;
+  }
+  const list = document.getElementById('status-steps');
+  if (!list) return null;
+  const vis = [...list.querySelectorAll('li[data-step]')].filter(li => !li.hidden);
+  if (!vis.length) return null;
+  const done = vis.filter(li => li.dataset.state === 'done').length;
+  const act = vis.find(li => li.dataset.state === 'active') || vis[vis.length - 1];
+  const lab = act.querySelector('.step-label[data-state-label="active"]') || act.querySelector('.step-label');
+  const idx = vis.indexOf(act) + 1;
+  return { done, total: vis.length,
+    tip: '{{panel.journey_step}}'.replace('{n}', String(idx)).replace('{m}', String(vis.length))
+      .replace('{label}', lab ? lab.textContent.trim() : '') };
+}
+
+function paintRunBar(run, phase, paused) {
+  if (!run) return;
+  const c = journeyCounter(phase);
+  const fill = run.querySelector('.jr-run-done');
+  const em = run.querySelector('.jr-count');
+  if (c) {
+    run.removeAttribute('data-indeterminate');
+    if (fill) fill.style.width = Math.round(100 * c.done / c.total) + '%';
+    if (em) { em.textContent = c.done + '/' + c.total; em.dataset.tip = c.tip; }
+  } else {
+    run.setAttribute('data-indeterminate', '');
+    if (fill) fill.style.width = '';
+    if (em) { em.textContent = ''; delete em.dataset.tip; }
+  }
+  if (paused) run.setAttribute('data-paused', ''); else run.removeAttribute('data-paused');
+}
+
+function journeyPhase() {
+  const submitted = (typeof _submittedAt === 'number' && _submittedAt > 0)
+    || document.body.classList.contains('concept-submitted');
+  const action = (typeof _submittedAction === 'string') ? _submittedAction : null;
+  if (submitted) return action === 'implement' ? 'implementing' : 'rethinking';
+  return _journeyUnlocked ? 'unlock' : 'you';
+}
+
+function mountJourney() {
+  if (document.getElementById('journey')) return document.getElementById('journey');
+  const host = document.getElementById('panel-status');
+  const iterate = document.getElementById('submit-iterate-btn');
+  const implement = document.getElementById('submit-implement-btn');
+  if (!host || !iterate || !implement) return null;
+  const row = _jrEl('div', 'journey');
+  row.id = 'journey';
+  row.dataset.phase = 'you';
+  row.setAttribute('role', 'group');
+  row.setAttribute('aria-label', '{{panel.journey_label}}');
+
+  // Round toggle: full face (iterate | 🤖  ·  ✓ | Rethinking bar) + mini face.
+  const round = _jrEl('span', 'jr-toggle jr-round');
+  const full = _jrEl('span', 'jr-face jr-face-full');
+  const rOther = _jrEl('span', 'jr-other jr-round-other', '🤖');
+  rOther.dataset.tip = '{{panel.journey_rethinking}}';
+  const rDone = _jrEl('span', 'jr-other jr-round-done');
+  rDone.dataset.ok = '';
+  rDone.innerHTML = _JR_CHK;
+  const rRun = buildRunBar('{{panel.journey_rethinking}}');
+  rRun.classList.add('jr-round-run');
+  iterate.classList.add('jr-fill');
+  full.append(rDone, iterate, rRun, rOther);
+  const miniFace = _jrEl('span', 'jr-face jr-face-mini');
+  const mini = _jrEl('button', 'jr-mini');
+  mini.type = 'button';
+  mini.id = 'jr-back';
+  mini.dataset.tip = '{{panel.journey_back}}';
+  mini.setAttribute('aria-label', '{{panel.journey_back}}');
+  const d1 = _jrEl('span', 'jr-dot');
+  d1.dataset.on = '';
+  d1.innerHTML = '<span>↩</span>' + _JR_CHK;
+  const d2 = _jrEl('span', 'jr-dot');
+  d2.innerHTML = '<span>🤖</span>' + _JR_CHK;
+  mini.append(d1, d2);
+  miniFace.appendChild(mini);
+  round.append(full, miniFace);
+
+  // Implement toggle: lock face + implement face + implementing face.
+  const impl = _jrEl('span', 'jr-toggle jr-impl');
+  const lockFace = _jrEl('span', 'jr-face jr-face-lock');
+  const lock = _jrEl('button', 'jr-lock', '🔒');
+  lock.type = 'button';
+  lock.id = 'jr-lock';
+  lock.dataset.tip = '{{panel.journey_lock}}';
+  lock.setAttribute('aria-label', '{{panel.journey_lock}}');
+  lockFace.appendChild(lock);
+  const implFace = _jrEl('span', 'jr-face jr-face-impl');
+  implement.classList.add('jr-fill');
+  implement.removeAttribute('role');
+  implement.replaceChildren();
+  const ico = _jrEl('span', 'jr-ul-ico', '🔓');
+  ico.setAttribute('aria-hidden', 'true');
+  const txt = _jrEl('span', 'jr-ul-txt');
+  txt.append(_jrEl('b', '', '{{panel.submit_implement}}'), _jrEl('small', '', '{{panel.submit_implement_sub}}'));
+  implement.append(ico, txt);
+  const iOther = _jrEl('span', 'jr-other', '🤖');
+  iOther.dataset.tip = '{{panel.journey_implement}}';
+  implFace.append(implement, iOther);
+  const runFace = _jrEl('span', 'jr-face jr-face-run');
+  const iDone = _jrEl('span', 'jr-other');
+  iDone.dataset.ok = '';
+  iDone.dataset.tip = '{{panel.journey_done}}';
+  iDone.innerHTML = _JR_CHK;
+  const iRun = buildRunBar('{{panel.journey_implement}}');
+  iRun.classList.add('jr-impl-run');
+  runFace.append(iDone, iRun);
+  impl.append(lockFace, implFace, runFace);
+
+  const wire = (cls) => _jrEl('i', 'jr-wire' + (cls ? ' ' + cls : ''));
+  const node = (glyph, tip, cls) => {
+    const n = _jrEl('span', 'jr-node' + (cls ? ' ' + cls : ''), glyph);
+    n.dataset.tip = tip;
+    return n;
+  };
+  row.append(round, wire('jr-wire-a'), impl, wire('jr-fold'),
+    node('🤖', '{{panel.journey_implement}}', 'jr-fold'), wire(), node('🏁', '{{panel.journey_finish}}'));
+  host.insertBefore(row, host.firstChild);
+
+  // Retire the split button + menu; keep the (empty, hidden) split as anchor.
+  const split = document.querySelector('.submit-split');
+  if (split) split.hidden = true;
+  const menu = document.getElementById('submit-menu');
+  if (menu) { menu.hidden = true; menu.classList.add('jr-retired'); }
+
+  lock.addEventListener('click', () => setJourneyUnlocked(true));
+  mini.addEventListener('click', () => setJourneyUnlocked(false));
+  row.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && row.dataset.phase === 'unlock') { e.stopPropagation(); setJourneyUnlocked(false); }
+  });
+  renderJourney();
+  return row;
+}
+
+function setJourneyUnlocked(on) {
+  if (journeyPhase() !== 'you' && journeyPhase() !== 'unlock') return;
+  _journeyUnlocked = !!on;
+  renderJourney();
+  const target = document.getElementById(on ? 'submit-implement-btn' : 'submit-iterate-btn');
+  // Focus after the cross-fade so the ring never lands on an invisible face.
+  if (target) setTimeout(() => { try { target.focus({ preventScroll: true }); } catch (e) {} }, 420);
+}
+
+function renderJourney() {
+  const row = document.getElementById('journey');
+  const phase = journeyPhase();
+  document.body.dataset.journey = phase;
+  if (!row) return phase;
+  row.dataset.phase = phase;
+  const on = (sel, yes) => { const n = row.querySelector(sel); if (n) { if (yes) n.dataset.on = ''; else delete n.dataset.on; } };
+  const mini = (phase === 'unlock' || phase === 'implementing');
+  on('.jr-face-full', !mini);
+  on('.jr-face-mini', mini);
+  on('.jr-face-lock', !mini);
+  on('.jr-face-impl', phase === 'unlock');
+  on('.jr-face-run', phase === 'implementing');
+  const show = (sel, yes) => { const n = row.querySelector(sel); if (n) n.hidden = !yes; };
+  show('#submit-iterate-btn', phase !== 'rethinking');
+  show('.jr-round-other', phase !== 'rethinking');
+  show('.jr-round-done', phase === 'rethinking');
+  show('.jr-round-run', phase === 'rethinking');
+  const lock = row.querySelector('#jr-lock');
+  if (lock) lock.disabled = (phase === 'rethinking');
+  const back = row.querySelector('#jr-back');
+  if (back) {
+    back.disabled = (phase === 'implementing');
+    back.tabIndex = (phase === 'unlock') ? 0 : -1;
+  }
+  const wa = row.querySelector('.jr-wire-a');
+  if (wa) { if (phase === 'implementing') wa.dataset.ok = ''; else delete wa.dataset.ok; }
+  const conn = (document.getElementById('connection-status') || {}).dataset;
+  const paused = !!(conn && conn.state === 'disconnected');
+  if (phase === 'rethinking') paintRunBar(row.querySelector('.jr-round-run'), phase, paused);
+  if (phase === 'implementing') paintRunBar(row.querySelector('.jr-impl-run'), phase, paused);
+  return phase;
+}
+
+// Build-up: once per round, on the first panel open (sessionStorage).
+function _journeyBuildKey() {
+  const live = document.querySelector('section[data-iteration][data-active]');
+  const base = (typeof STORAGE_KEY === 'string') ? STORAGE_KEY : 'concept';
+  return base + '-jr-built-' + (live ? live.dataset.iteration : '0');
+}
+function maybeBuildJourney() {
+  const row = document.getElementById('journey');
+  if (!row || !document.body.classList.contains('panel-open')) return;
+  const key = _journeyBuildKey();
+  try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch (e) { return; }
+  row.classList.remove('jr-build');
+  void row.offsetWidth;
+  row.classList.add('jr-build');
+  setTimeout(() => row.classList.remove('jr-build'), 1400);
+}
+
+function _bootJourney() {
+  mountJourney();
+  maybeBuildJourney();
+  new MutationObserver(maybeBuildJourney).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  if (typeof renderPanelStatus === 'function') renderPanelStatus();
+  if (typeof maybeShowNewRoundToast === 'function') maybeShowNewRoundToast();
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _bootJourney);
+else _bootJourney();
+```
+
 ## Panel State Reset
 
 The primary reset is the page reload itself: Claude POSTs `/reload` after
@@ -1746,6 +2026,9 @@ function restorePanelToReady() {
   _submittedReloadCounter = null;
   _submitInFlight = false;
   _submittedAction = null;
+  if (typeof _journeyUnlocked !== 'undefined') {
+    _journeyUnlocked = false; _journeyProgress = null; _journeyDone = false;
+  }
   // Status line back from "Übermittelt · Claude arbeitet" to the draft state.
   if (typeof renderPanelStatus === 'function') renderPanelStatus();
   // PANEL state only. This used to end in
@@ -1768,11 +2051,12 @@ function restorePanelToReady() {
 
 ## Submit Progress Steps
 
-After a submit the pinned status line reads "⏳ Übermittelt · Claude
-arbeitet" and shows one progress dot per step; the four-step `#status-steps`
-list itself sits in a `<details class="status-detail">` under the line
-(hidden until submit), so the user can see exactly where the submission is
-in Claude's pipeline. The states the list tracks:
+After a submit the journey row's run bar ("Rethinking x/y" / "Umsetzung
+n/m", § Journey row) and the status toast show where the submission is. The
+four-step `#status-steps` list stays in the DOM (inside the visually retired
+`<details class="status-detail">`) as the data model: `x/y` = done / visible
+steps, the bar's tooltip = the active step's label. The `#status-dots` mirror
+is still rendered (renderStatusDots) but no longer drawn. The states the list tracks:
 
 | Step | Trigger | Visible? |
 |---|---|---|
@@ -1823,6 +2107,9 @@ function renderStatusDots() {
     dot.dataset.state = li.dataset.state || 'pending';
     dots.appendChild(dot);
   });
+  // The journey bar and the toast read the same <ol> (x/y + tooltip).
+  if (typeof renderJourney === 'function') renderJourney();
+  if (typeof refreshStatusToast === 'function') refreshStatusToast();
 }
 
 // Baseline shown immediately after a submit click. Step 1 done, step 2
@@ -1854,6 +2141,14 @@ function resetStatusSteps(action) {
 // the same server state is a no-op.
 function updateStatusSteps(data) {
   if (!_submittedAt) return;
+  // Journey counter inputs (§ Journey row): the optional implement progress
+  // and the implemented phase. Read before the step updates so the bar the
+  // _setStep re-render paints is already current.
+  if (data && typeof _journeyProgress !== 'undefined') {
+    const p = data._progress;
+    _journeyProgress = (p && typeof p.total === 'number' && p.total > 0) ? p : _journeyProgress;
+    if (data._phase === 'implemented') _journeyDone = true;
+  }
   if (data && data._picked_up_at) {
     const recv = _stepEl('received');
     if (recv && recv.dataset.state !== 'done') {

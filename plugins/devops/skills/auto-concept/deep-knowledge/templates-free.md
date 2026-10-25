@@ -27,7 +27,7 @@ content.
       <main>
         <section data-iteration="1" data-iteration-template="free" data-active>
           <header class="iteration-intro">
-            <h2>Iteration 1 · {subject}</h2>
+            <h2>{{iteration.tab}} 1 · {subject}</h2>
             <p>Short intro paragraph.</p>
           </header>
 
@@ -53,7 +53,7 @@ content.
                 <span class="tri-state-label">Miteinbeziehen</span>
               </label>
             </div>
-            <textarea data-comment="finding-1" placeholder="Anmerkung…"></textarea>
+            <textarea data-comment="finding-1" placeholder="Notiz…"></textarea>
           </section>
 
           <section id="recommendation" data-nav-label="Recommendation">
@@ -87,7 +87,7 @@ content.
        aria-label="{{panel.dim_dismiss}}"
        data-tip="{{panel.dim_dismiss}}" hidden></div>
   <div class="frozen-bar" id="frozen-bar" role="status" hidden>
-    <span class="frozen-bar-text">🕘 <strong data-frozen-bar-title>Iteration 1</strong> {{frozen.bar_hint}}</span>
+    <span class="frozen-bar-text">🕘 <strong data-frozen-bar-title>{{iteration.tab}} 1</strong> {{frozen.bar_hint}}</span>
     <button type="button" id="frozen-bar-back">{{frozen.bar_back}}</button>
   </div>
 </body>

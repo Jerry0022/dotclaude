@@ -81,7 +81,7 @@ What `build` does, every time:
    - A `design` round keeps its navigation exemptions
      (`iteration-rules.md` § Freezing Design Iterations), and its textareas
      stay readonly, not disabled.
-5. **Tabs.** One chip per round, generated: `Iteration N`,
+5. **Tabs.** One chip per round, generated: `{{iteration.tab}} N`,
    `{{iteration.reality_tab}}` with `data-reality-check`, or
    `{{iteration.final_tab}}` with `data-final-report`. `data-tab-label` on the
    section overrides the label. `<html data-template>` becomes the live

@@ -115,7 +115,7 @@ column of four parts; only part 2 scrolls, parts 1, 3 and 4 are pinned):**
 1. **"You are here"** (`.panel-here`) — pinned head: the selected round's
    label — no "· aktiv" suffix on the live round, an "archiviert" marker on
    a frozen one, and, ONLY when the reading line sits in a variant section,
-   "(Variante)" appended ("Iteration 8 (Orbital Ring)") — the TOC entry
+   "(Variante)" appended ("{{iteration.tab}} 8 (Orbital Ring)") — the TOC entry
    under the reading line (dropped entirely on the final report), on a
    frozen tab a compact "↩ zur Runde N" link, and a 🕘 rounds chip (count of
    PREVIOUS rounds, hidden when none) whose click unfolds a dimmed list of
@@ -204,7 +204,7 @@ action from the menu and confirms.
 
 | Button | Label (de / en) | Action | Style |
 |---|---|---|---|
-| Primary (`#submit-iterate-btn`) | "Zur nächsten Iteration" / "Next iteration" | `action: "iterate"` — Claude processes the feedback and appends a new iteration section (no code changes) | Fills the row, accent color; its hint is the `title` tooltip |
+| Primary (`#submit-iterate-btn`) | "Zur nächsten Runde" / "Next round" | `action: "iterate"` — Claude processes the feedback and appends a new iteration section (no code changes) | Fills the row, accent color; its hint is the `title` tooltip |
 | Caret (`#submit-menu-btn`) | ▾ | Opens `#submit-menu` (`role="menu"`, `aria-expanded`); Escape / outside click closes it | Same accent pill, right end |
 | Secondary (`#submit-implement-btn`, inside the menu) | "Mit Feedback implementieren" / "Implement with feedback" | `action: "implement"` — Claude applies the selections as actual code/file changes, after the `panel.submit_implement_confirm` dialog | Warning-colored border + ⚠ icon, one level deeper behind the caret |
 

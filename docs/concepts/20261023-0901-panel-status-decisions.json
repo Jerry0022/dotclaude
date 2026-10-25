@@ -1,0 +1,56 @@
+[
+  {
+    "iteration": 1,
+    "favorite": null,
+    "wording": {
+      "w-turn": "include — neutral statt 'Claude'",
+      "w-process": "discard",
+      "w-steps": "include — Zähler an die Tätigkeit der AI koppeln",
+      "w-round": "include — 'Runde' statt 'Iteration' generell im deutschen devops-Concept",
+      "w-nohint": "include"
+    },
+    "liked": ["Button als Fortschrittsbalken (Button ist Status)", "Toasts aus Variante 1 (polieren)", "Rückweg-Button auf alter Runde"],
+    "issues": ["Schiene zeigt die Schleife Runde → AI nicht klar; Umsetzung/Abschluss gehören hinter die Schleife", "'Claude' durch AI/Roboter ersetzen", "Speicherzeile nach ganz unten", "doppelter Haken auf alter Runde"]
+  },
+  {
+    "iteration": 2,
+    "favorite": "loop",
+    "rejected": ["head — Reise im Kopf: auf gar keinen Fall"],
+    "naming": { "Rethinking": "include (Etappe)", "überdenkt": "include (Tätigkeit)", "nur 🤖": "discard", "Schritt-Texte": "include — Umsetzung als Anforderung x/y" },
+    "notes": ["Abfolge Schleife › Umsetzung › Abschluss mit Pfeilen andeuten", "Fortschritts-Button schöner darstellen, Menü-Knopf mit überarbeiten", "Getrennt-Text: einfach weiterarbeiten, wird lokal gespeichert", "grüne Toasts: nach Sichtkontakt ausblenden, kein Öffnen", "Engine: einzelne Frage in der Schnellnavigation ohne Untermenü direkt anspringen"]
+  },
+  {
+    "iteration": 3,
+    "favorite": "pill",
+    "notes": ["Pfeil-Abfolge richtig, aber Zeile modern polishen", "Schimmer noch lebendiger", "zweizeiliger Text im laufenden Balken intuitiv", "Button und Reise-Zeile wirken unabhängig — müssen eine Einheit sein (auch bei Umsetzung)", "Toasts wirken wie von einem Junior-Designer, grau/old school", "Engine: Seitennummern in der Schnellnavigation kollidieren mit Hotkeys 1-3"]
+  },
+  {
+    "iteration": 4,
+    "favorite": null,
+    "direction": "Mischung aus Karte mit Track und Segment-Morph",
+    "notes": ["Knoten-Track gut, man sieht was kommt; Etappen-Labels reichen als Tooltip", "Symbole statt Labels gehen in die richtige Richtung"],
+    "pageNumbers": { "p-active": "discard — zu viel Info", "p-dots": "discard", "p-keycap": "discard — zu gleichförmig" }
+  },
+  {
+    "iteration": 5,
+    "favorite": "knot",
+    "notes": ["↻-Bogen für die Schleife reicht nicht", "Menü (direkt umsetzen) zwischen AI und Umsetzung, mit Freischalt-/Vollgas-Gefühl", "zwei Zeilen nur ok, wenn sichtbar verbunden"],
+    "pageNumbers": { "q-hold": "include — Nummern nur beim Halten, für alle Hotkeys", "q-digits-pages": "discard", "q-tab": "discard", "decision": "römische Ziffern für Detailseiten" }
+  },
+  {
+    "iteration": 6,
+    "favorite": "race",
+    "notes": [
+      "Rennbahn mit Hin-und-her gut; Runde 3 braucht kein ↻-Icon",
+      "Runde/🤖 visuell wie ein Gesamt-Toggle: aktiver Teil füllt die Bahn links oben/unten bis zum Rahmen, rechts nicht; bei Rethinking spiegelverkehrt — weniger filigran, moderner",
+      "Info 'Runde 3' behalten, Ort offen",
+      "Schloss: Aufklappen per Klick richtig, aber Optik unschön, Lock-Icon gequetscht",
+      "Rethinking-Zustand: richtig cool, gut abgespaced",
+      "Zähler 2/4 nur rechts, nicht in der Titelzeile; Icons/Kreise nicht quetschen; nur zweizeilig, zweite Info kleiner/unscheinbarer",
+      "Toast Umsetzung: Text 'Anforderung 3 von 7 · …' weg, Zahl rechts mit Tooltip reicht",
+      "Aufrufe an den Nutzer immer mit 'Du' beginnen, sonst liest es sich wie Claude",
+      "Engine-Bug (devops learn): Übersicht zeigt bei 'Rücklauf-Pfeil' und 'Runden-Stapel' nicht die eigentlichen Inhalte in der Kachel-Vorschau, nur bei 'Rennbahn' korrekt"
+    ],
+    "status": "geparkt — Umsetzung erst nach dem Folge-Concept, konsolidiert"
+  }
+]

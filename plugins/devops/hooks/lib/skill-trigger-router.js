@@ -94,6 +94,7 @@
  */
 
 const { RENAMED, FOLDED, modeForPhrase } = require('./skill-names');
+const { filterSkills } = require('./channel-gate');
 
 /** Skills owned by a dedicated UserPromptSubmit hook: `do-ship`
  *  (prompt.ship.detect), `do-batch` (prompt.batch.collect). Strict is no
@@ -498,13 +499,14 @@ function capAndDedupe(entries, cap = 4) {
  *
  * @param {string} message raw prompt
  * @param {Record<string, object>} skills — `skill-meta.loadAllSkills` output
- * @param {{cap?:number}} [opts]
+ * @param {{cap?:number, gate?:object}} [opts] `gate` = channel-gate opts (tests)
  * @returns {{skill:string, reason:string, mode?:string, explicit?:boolean, phrase?:boolean, nearMeta?:boolean}[]}
  */
 function routeMessage(message, skills, opts = {}) {
   const cap = opts.cap || 4;
   if (typeof message !== 'string' || !message) return [];
-  const known = skills && typeof skills === 'object' ? skills : {};
+  // Channel gate: a gated skill that is disabled here is an unknown skill.
+  const known = filterSkills(skills && typeof skills === 'object' ? skills : {}, opts.gate);
 
   const entries = [];
 

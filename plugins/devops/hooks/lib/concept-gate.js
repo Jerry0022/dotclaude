@@ -136,7 +136,7 @@ const ENGINE_CLASSES = [
   'frozen-bar-text', 'closeout-sheet', 'device-frame', 'panel-here',
   'concept-layout', 'concept-content', 'iteration-intro',
   'design-header', 'design-quick', 'design-ov', 'design-ov-stage', 'design-ov-slide',
-  'design-ov-preview', 'design-ov-overlay', 'design-ov-arrow', 'design-ov-star',
+  'design-ov-preview', 'design-ov-overlay', 'design-ov-star',
   'upin', 'upin-layer', 'upin-hint', 'design-keys', 'app-kbd',
 ];
 // A mock class is namespaced when it carries a per-design prefix.

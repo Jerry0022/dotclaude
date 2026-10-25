@@ -329,6 +329,22 @@ body.anno-hidden .anno-toggle-fab { border-style: dashed; color: var(--text-seco
 body.anno-hidden .anno-toggle-fab .anno-eye-on { display: none; }
 body.anno-hidden .anno-toggle-fab .anno-eye-off { display: block; }
 body.anno-hidden .anno-layer { display: none !important; }
+/* The eye hides EVERYTHING except the header and the FABs: pins, connectors,
+   summaries, own pins, the overview's top-3 info box and its change chip. */
+body.anno-hidden .upin-layer, body.anno-hidden .design-ov-overlay, body.anno-hidden .design-ov-change { display: none !important; }
+/* Eye = island control: filled, glow, no ring. The counter is the number of
+   OPEN (unanswered) notes of the page; it hides at 0, the eye itself stays. */
+.anno-toggle-fab {
+  border: 0;
+  background: color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 20%, var(--panel-bg, #161b22));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 32%, transparent);
+}
+.anno-eye-count {
+  position: absolute; top: -6px; right: -7px; min-width: 15px; height: 15px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 8px; background: #8957e5; color: #fff; font: 700 10px/15px system-ui, sans-serif; text-align: center;
+  box-shadow: 0 0 10px rgba(137, 87, 229, 0.6); pointer-events: none;
+}
+.anno-eye-count[hidden] { display: none; }
 /* Auto-hides while the ☰ panel is open, same treatment as the design
    switcher — both are secondary chrome the overlay panel supersedes. */
 body.panel-open .anno-toggle-fab { opacity: 0; pointer-events: none; }
@@ -348,17 +364,24 @@ body.panel-open .anno-toggle-fab { opacity: 0; pointer-events: none; }
   pointer-events: auto;
 }
 .anno-pin {
+  position: relative;
   width: var(--anno-pin-size, 28px); height: var(--anno-pin-size, 28px);
   border-radius: 50%;
-  border: 2px solid var(--anno-accent, var(--accent-color, #58a6ff));
-  background: var(--anno-bubble-bg, var(--panel-bg, #161b22));
-  color: var(--anno-accent, var(--accent-color, #58a6ff));
-  font-size: 0.8rem; font-weight: 700;
+  border: 0;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 70%, #fff), var(--anno-accent, var(--accent-color, #58a6ff)));
+  color: #fff;
+  /* No number: the pin is a glowing bubble (the authored digit stays in the
+     markup as its accessible name only). */
+  font-size: 0; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
-  transition: transform 0.15s;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 18%, transparent), 0 0 18px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 55%, transparent), 0 4px 10px rgba(0,0,0,0.4);
+  transition: transform 0.15s, opacity 0.2s;
+  animation: annoGlow 2.8s ease-in-out infinite;
 }
+.anno-pin::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #fff; opacity: 0.92; }
+@keyframes annoGlow { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 10%, transparent), 0 0 26px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 70%, transparent), 0 4px 10px rgba(0,0,0,0.4); } }
+@media (prefers-reduced-motion: reduce) { .anno-pin { animation: none; } }
 .anno-pin:hover { transform: scale(1.08); }
 /* A pin can be dragged aside (wireAnnotationLayer() § moving a pin):
    touch-action keeps a touch drag from scrolling the canvas instead, and
@@ -369,10 +392,13 @@ body.panel-open .anno-toggle-fab { opacity: 0; pointer-events: none; }
 /* Answered pins invert to a filled state — visibly different at a glance
    from the still-open questions. Recomputed on every input, never only at
    generation time (see wireAnnotationLayer()). */
-.anno-pin[data-answered="true"] {
-  background: var(--anno-accent, var(--accent-color, #58a6ff));
-  color: #fff;
-}
+.anno-pin[data-answered="true"] { animation: none; }
+.anno-pin[data-answered="true"]::after { content: '✓'; width: auto; height: auto; background: none; font-size: 1rem; font-weight: 900; line-height: 1; }
+/* While ANY note's input is open (anno bubble or own pin) the connectors and
+   summaries of all the others go away; their pins stay, faded. */
+body[data-note-editing="true"] .anno:not([data-editing="true"]) .anno-bubble { display: none; }
+body[data-note-editing="true"] .anno:not([data-editing="true"]) .anno-pin,
+body[data-note-editing="true"] .upin:not([data-editing="true"]) .upin-pin { opacity: 0.35; box-shadow: none; animation: none; }
 .anno-bubble {
   position: absolute;
   z-index: 1;
