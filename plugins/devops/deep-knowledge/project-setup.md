@@ -172,6 +172,10 @@ line>" }` — gives the map project-specific one-line directory descriptions
 (deterministic, no LLM). A full path wins over a bare directory name, which wins
 over the generic hints; the generator reads it on every run.
 
+Typed language (TypeScript, Go, Rust, Java, typed Python): recommend the
+official LSP plugin next to the map and the `scout` agent — references and
+symbols without an index. One line in the report.
+
 ## Step 7 — Platform audit (Windows only)
 
 Skip on other platforms.

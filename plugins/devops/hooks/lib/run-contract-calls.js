@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-calls
- * @version 0.5.8
+ * @version 0.5.9
  * @plugin devops
  * @description What a tool call MEANS for the run contract — shared by
  *   pre.run.contract (gates) and post.run.contract (recording) so both read a
@@ -60,8 +60,15 @@ const { isColourRef } = require('./issue-refs');
 // instead of letting each re-arm its own 5 s ceiling.
 const POST_BASE_BRANCH_BUDGET_MS = 6000;
 
-const SHIP_RELEASE = 'mcp__plugin_devops_dotclaude-ship__ship_release';
-const RENDER_CARD = 'mcp__plugin_devops_dotclaude-completion__render_completion_card';
+const SHIP_RELEASE = 'mcp__plugin_devops_dotclaude__ship_release';
+const RENDER_CARD = 'mcp__plugin_devops_dotclaude__render_completion_card';
+// Until v0.308 the devops tools came from three servers (dotclaude-completion,
+// -ship, -issues). A session still running those servers reports the old
+// names — fold them onto the new ones for one release so the gates still bite.
+const LEGACY_TOOL_PREFIX_RE = /^mcp__plugin_devops_dotclaude-(?:completion|ship|issues)__/;
+function canonicalToolName(name) {
+  return typeof name === 'string' ? name.replace(LEGACY_TOOL_PREFIX_RE, 'mcp__plugin_devops_dotclaude__') : '';
+}
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
 // AUD-025: named once, shared by pre.run.contract's release gate and
@@ -1247,7 +1254,7 @@ function routerFromTranscript(transcriptPath, sinceIso, RC, budget, info) {
 }
 
 module.exports = {
-  SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS, MCP_MERGE_RE,
+  SHIP_RELEASE, RENDER_CARD, canonicalToolName, EDIT_TOOLS, SHELL_TOOLS, MCP_MERGE_RE,
   MACHINE_ARM_RE, MACHINE_TURN_RE, BACKLOG_AUTOSTART_RE,
   commandFacts, splitSegments, commandAt, shellCallFacts, contractRoots,
   toolInput, toolFilePath, isGatedPath, isGatedEdit, closesOf, cardFacts, readCardPayload,

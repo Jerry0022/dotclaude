@@ -25,7 +25,7 @@ const { pidFileFor, isProcessAlive, isMcpServerAlive } = require('./mcp-heartbea
 /**
  * Is the named MCP server reporting alive via a heartbeat PID file?
  * False when no heartbeat file names a live process.
- * @param {string} serverName  e.g. "dotclaude-ship"
+ * @param {string} serverName  e.g. "dotclaude"
  * @returns {boolean}
  */
 function isServerAlive(serverName) {

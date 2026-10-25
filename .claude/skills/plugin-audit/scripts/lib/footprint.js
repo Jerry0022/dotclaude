@@ -166,7 +166,9 @@ function unexecutedHooks(root) {
   const out = { SessionStart: [], UserPromptSubmit: [] };
   const executed = new Set(SAFE_HOOKS.map((h) => path.basename(h.rel)));
   for (const plugin of pluginDirs(root)) {
-    const cfg = readJson(path.join(root, 'plugins', plugin, 'hooks', 'hooks.json'), null);
+    // the per-hook roster: the dispatcher manifest when the plugin has one
+    const cfg = readJson(path.join(root, 'plugins', plugin, 'hooks', 'dispatch', 'manifest.json'), null)
+      || readJson(path.join(root, 'plugins', plugin, 'hooks', 'hooks.json'), null);
     if (!cfg || !cfg.hooks) continue;
     for (const ev of Object.keys(out)) {
       for (const g of cfg.hooks[ev] || []) {

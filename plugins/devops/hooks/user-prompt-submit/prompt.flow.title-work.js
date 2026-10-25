@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.flow.title-work
- * @version 0.7.0
+ * @version 0.7.1
  * @event UserPromptSubmit
  * @plugin devops
  * @description Marks a session as "being worked on" in the sidebar: on the
@@ -136,7 +136,10 @@ function titleWorkOutput(hook, prompt, cwd) {
 function instruction(prefix = WORK_PREFIX, { machine = false } = {}) {
   const shipping = prefix === SHIPPING_PREFIX;
   const statuses = Object.values(STATUS).join(' ');
-  const known = `a known "<status> ➜ <activity> <Word> ┃ " prefix (status icon one of ${statuses}; also the older "<status> ┃ <activity> <Word> " form), the older "<status> <activity> <Word> – " two-icon form (also with ⏸️), the bare "${BARE_WORK}", or a legacy one (${LEGACY_PREFIXES.map(p => `"${p}"`).join(', ')})`;
+  // Legacy single-icon forms: one "<icon> <Word> – " shape plus the words (the
+  // exact list stays in title-scheme.js LEGACY_PREFIXES, which the card shares).
+  const legacyWords = [...new Set(LEGACY_PREFIXES.map(p => p.replace(/^\S+\s+/, '').replace(/ – $/, '')))];
+  const known = `a known "<status> ➜ <activity> <Word> ┃ " prefix (status icon one of ${statuses}; also the older "<status> ┃ <activity> <Word> " and "<status> <activity> <Word> – " forms, with ⏸️ too), the bare "${BARE_WORK}", or a legacy "<icon> <Word> – " (Word: ${legacyWords.join(', ')})`;
   // A machine turn (a task notification — the concept's own watchers exit
   // that way) is no proof of work: it may end without a card, so it keeps its
   // hands off every known prefix (#618). Only a plain title (or the legacy
@@ -154,8 +157,7 @@ function instruction(prefix = WORK_PREFIX, { machine = false } = {}) {
           `  Else if it already starts with "${SHIPPING_PREFIX}" (or the legacy "🚀 Shipping – "): do nothing — a ship is running and the`,
           '  hourglass is only the fallback for work that is no named process.',
           '  Else if it starts with any other "⏳ ➜ <activity> <Word> ┃ " prefix (a running named process): do nothing.',
-          `  Else if it already starts with "${WORK_PREFIX}" (or a bare "${BARE_WORK}<title>") and NOT "${LEGACY_PENDING_PREFIX}": do nothing`,
-          '  (that worded form is a legacy of older versions — only the Solo prefix or the bare icon counts as already-marked).',
+          `  Else if it already starts with "${WORK_PREFIX}" (or a bare "${BARE_WORK}<title>") and NOT "${LEGACY_PENDING_PREFIX}": do nothing.`,
         ]),
     ];
   const tail = shipping

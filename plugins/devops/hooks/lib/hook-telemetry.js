@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module hook-telemetry
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Fail-safe hook telemetry. Silent hooks never show up in a
  *   transcript, so an audit of hook cost and timeouts was blind for them.
@@ -16,6 +16,14 @@
  *   outcome: ok (no output) | output (stdout written) | block (exit 2) |
  *   error (other non-zero exit). A start without an end = the process was
  *   killed (hook timeout). event/tool come from parseHookInput via note().
+ *
+ *   Dispatcher (hooks/dispatch/dispatch.js): every module runs in a worker
+ *   thread of one process; its run id comes from the dispatcher
+ *   (workerData.telemetryId) so pid-based ids cannot collide. The dispatcher
+ *   writes a module's end record itself when it kills or skips the module:
+ *     end    {…, phase:'end', outcome:'timeout'|'skipped', dispatched:true}
+ *   killRates() counts both as killed runs. The dispatcher's own run is
+ *   named `dispatch:<Event>` (setHook).
  *
  *   Never throws, never writes to stdout/stderr, never changes an exit code.
  *   Skipped under vitest unless the env path is set explicitly (tests of other
@@ -41,6 +49,15 @@ function filePath() {
   return path.join(os.homedir(), '.claude', 'devops-hook-telemetry.jsonl');
 }
 
+/** Run id handed in by the dispatcher when this hook runs in its worker. */
+function workerId() {
+  try {
+    const wt = require('worker_threads');
+    if (!wt.isMainThread && wt.workerData && typeof wt.workerData.telemetryId === 'string') return wt.workerData.telemetryId;
+  } catch { /* no worker_threads */ }
+  return null;
+}
+
 function append(file, rec) {
   fs.appendFileSync(file, `${JSON.stringify(rec)}\n`);
 }
@@ -58,6 +75,23 @@ function note(hook) {
   if (typeof hook.tool_name === 'string') state.tool = hook.tool_name;
 }
 
+/** Rename this run's hook (the dispatcher: `dispatch:<Event>`). */
+function setHook(name) {
+  if (typeof name === 'string' && name) state.hook = name;
+}
+
+/**
+ * Append one record on behalf of another run (the dispatcher's end record of
+ * a module it killed or skipped). Fail-safe like everything here.
+ */
+function record(rec) {
+  try {
+    const file = filePath();
+    if (!file || !rec || typeof rec !== 'object') return;
+    append(file, { ts: Date.now(), ...rec });
+  } catch { /* fail-safe */ }
+}
+
 function start() {
   if (state.on) return;
   try {
@@ -67,7 +101,7 @@ function start() {
     const dir = path.basename(path.dirname(process.argv[1] || ''));
     state.event = DIR_EVENT[dir] || '';
     state.t0 = Date.now();
-    state.id = `${process.pid}-${state.t0.toString(36)}`;
+    state.id = workerId() || `${process.pid}-${state.t0.toString(36)}`;
     try { fs.mkdirSync(path.dirname(file), { recursive: true }); } catch { /* exists */ }
     rotateIfBig(file);
     append(file, { ts: state.t0, id: state.id, hook: state.hook, phase: 'start' });
@@ -113,11 +147,14 @@ function killRates(file, { window = 200, graceMs = 120000, now = Date.now(), tai
     try { r = JSON.parse(line); } catch { continue; }
     if (!r || !r.id || !r.hook) continue;
     if (r.phase === 'start') runs.set(r.id, { hook: r.hook, ts: r.ts, ended: runs.has(r.id) && runs.get(r.id).ended });
-    else if (r.phase === 'end') runs.set(r.id, { hook: r.hook, ts: (runs.get(r.id) || r).ts, ended: true });
+    else if (r.phase === 'end') {
+      const killed = r.outcome === 'timeout' || r.outcome === 'skipped';
+      runs.set(r.id, { hook: r.hook, ts: (runs.get(r.id) || r).ts, ended: !killed, final: killed });
+    }
   }
   const byHook = new Map();
   for (const run of [...runs.values()].sort((a, b) => a.ts - b.ts)) {
-    if (!run.ended && now - run.ts < graceMs) continue; // maybe still running
+    if (!run.ended && !run.final && now - run.ts < graceMs) continue; // maybe still running
     if (!byHook.has(run.hook)) byHook.set(run.hook, []);
     byHook.get(run.hook).push(run);
   }
@@ -130,4 +167,4 @@ function killRates(file, { window = 200, graceMs = 120000, now = Date.now(), tai
   return out;
 }
 
-module.exports = { start, note, killRates, filePath, MAX_BYTES };
+module.exports = { start, note, setHook, record, killRates, filePath, MAX_BYTES };

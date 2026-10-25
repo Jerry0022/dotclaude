@@ -44,13 +44,13 @@ process.stdin.on('end', () => {
   const cmd = (hook.tool_input || {}).command || '';
   if (!isManualShipCommand(cmd)) process.exit(0);
 
-  const shipAlive = isServerAlive('dotclaude-ship');
+  const shipAlive = isServerAlive('dotclaude');
 
   // Escape hatch — only when the pipeline server is confirmed absent. Never when
   // it is up: then there is no deadlock to escape, the tools are simply deferred.
   if (!shipAlive && process.env.DOTCLAUDE_ALLOW_MANUAL_SHIP === '1') {
     process.stderr.write(
-      'NOTE: dotclaude-ship MCP server is not reporting alive and ' +
+      'NOTE: dotclaude MCP server is not reporting alive and ' +
       'DOTCLAUDE_ALLOW_MANUAL_SHIP=1 is set — allowing this manual PR command ' +
       'as an explicit, user-authorized recovery escape.\n'
     );
@@ -68,23 +68,23 @@ process.stdin.on('end', () => {
 
   if (shipAlive) {
     lines.push(
-      'The dotclaude-ship MCP server IS running — its tools are just DEFERRED, not unregistered.',
+      'The dotclaude MCP server IS running — its tools are just DEFERRED, not unregistered.',
       'Load their schemas via ToolSearch before calling:',
     );
   } else {
     lines.push(
-      'The dotclaude-ship MCP server is NOT reporting alive (no heartbeat PID).',
+      'The dotclaude MCP server is NOT reporting alive (no heartbeat PID).',
       'First try loading the tools via ToolSearch — if it returns matches, they were only deferred:',
     );
   }
 
   lines.push(
-    '  ToolSearch({ query: "select:mcp__plugin_devops_dotclaude-ship__ship_preflight,' +
-    'mcp__plugin_devops_dotclaude-ship__ship_build,' +
-    'mcp__plugin_devops_dotclaude-ship__ship_version_bump,' +
-    'mcp__plugin_devops_dotclaude-ship__ship_release,' +
-    'mcp__plugin_devops_dotclaude-ship__ship_cleanup,' +
-    'mcp__plugin_devops_dotclaude-ship__ship_hygiene", max_results: 6 })',
+    '  ToolSearch({ query: "select:mcp__plugin_devops_dotclaude__ship_preflight,' +
+    'mcp__plugin_devops_dotclaude__ship_build,' +
+    'mcp__plugin_devops_dotclaude__ship_version_bump,' +
+    'mcp__plugin_devops_dotclaude__ship_release,' +
+    'mcp__plugin_devops_dotclaude__ship_cleanup,' +
+    'mcp__plugin_devops_dotclaude__ship_hygiene", max_results: 6 })',
   );
 
   if (!shipAlive) {

@@ -72,8 +72,53 @@ A hook version bumps when:
 
 Hooks are organized by event under `hooks/{event}/` (e.g. `session-start/`,
 `pre-tool-use/`, `post-tool-use/`, `user-prompt-submit/`, `stop/`).
-The authoritative list of registered hooks and their matchers is
-`hooks/hooks.json` — read that file for the current roster.
+The authoritative list of hooks, their matchers and timeouts is
+`hooks/dispatch/manifest.json` — read that file for the current roster.
+
+### Dispatcher (one process per event)
+
+`hooks/hooks.json` is **generated** and registers one command per event:
+`node hooks/dispatch/dispatch.js <Event>`. The dispatcher reads the manifest,
+applies each hook's own matcher (Claude Code's matcher rules, ported in
+`dispatch/matcher.js`), runs every matching hook in its own worker thread and
+merges their replies the way Claude Code merges separate hooks
+(`dispatch/merge.js` has the table: any exit 2 blocks, deny > defer > ask >
+allow, every additionalContext / systemMessage is kept). A Bash call starts
+2 node processes instead of ~17. Full rationale: the header of
+`dispatch/dispatch.js`.
+
+Add or change a hook:
+
+1. Write the hook file as before (`hooks/{event}/…`, header, stdin
+   tolerance) — it must still work when run as `node <file>`.
+2. Register it in `hooks/dispatch/manifest.json` (same shape hooks.json had:
+   event → groups with `matcher` → hooks with `command`, `timeout`).
+3. Run `node plugins/devops/hooks/dispatch/build-hooks-json.js` — it rewrites
+   `hooks/hooks.json` (dispatcher entry: union matcher, largest module
+   timeout + 5 s headroom) and `dispatch/lanes.json`.
+   `dispatch/manifest.test.js` fails when either is stale.
+
+Rules inside the dispatcher:
+
+- **Isolation.** A worker gives the hook a fresh module registry, its own
+  `process.exit` / `process.exitCode`, env copy and captured stdout/stderr;
+  stdin, `fs.readFileSync(0)` and `fs.writeSync(1|2)` are shimmed. A hook
+  that cannot run in a worker gets `"isolate": "process"` (child process) or
+  `"dispatch": false` (its own hooks.json entry) in the manifest.
+- **Lanes.** Worker threads share one pid. A lib that names a temp file by
+  the pid alone (`` `${file}.${process.pid}.tmp` ``) forces every hook that
+  reaches it into one sequential lane (`dispatch/lanes.js`). Add a random
+  part to new temp names (`${process.pid}.${Math.random()…}`) and the hooks
+  keep running in parallel.
+- **Budgets.** A hook's `timeout` is its budget from its own start; the
+  event's budget is the largest timeout. A hook over budget is terminated, one
+  without budget left is skipped — both fail open, exactly like a timed-out
+  hook process (Claude Code ignores `onFailure`; it is plugin metadata).
+- **Telemetry.** Each hook keeps its start/end records in
+  `devops-hook-telemetry.jsonl`; the dispatcher adds `dispatch:<Event>` and
+  `outcome: "timeout" | "skipped"` end records.
+- **Opt-out.** `DEVOPS_HOOK_DISPATCH=0` runs every hook as its own child
+  process again (all in parallel), merged by the same rules — for debugging.
 
 ### Exit Codes
 
@@ -153,12 +198,12 @@ own hooks can starve its own servers: on 2026-09-03 all three plugin servers
 although each boots in < 2.5 s standalone — a `git fetch` storm, `npm install`,
 a 10k-file `cpSync` of `node_modules` into the servers' own `cwd` under
 `plugins/cache/`, a recursive repo scan and a process sweep all ran in that
-window (#324). A session that loses `dotclaude-ship` cannot ship at all.
+window (#324). A session that loses `dotclaude` cannot ship at all.
 
 - **SessionStart hooks do no heavy work in the connect window.** Network
   (`git fetch`, `gh`, `npm install`), bulk file copies, recursive scans and
   process sweeps run behind a cooldown gate or are deferred to a later event —
-  never unconditionally at every start. Every `hooks.json` entry and every
+  never unconditionally at every start. Every manifest entry and every
   subprocess carries an explicit timeout.
 - **The cache rebuild never rewrites a running server's `cwd` wholesale**:
   exclude `node_modules` from the copy and link it instead.
@@ -462,7 +507,7 @@ canonical source — **never hand-edit the text between markers:**
 <!--devops:block:hook-lifecycle--> … <!--/devops:block:hook-lifecycle-->   ← block
 ```
 
-- **Generator:** `scripts/gen-readme-sections.mjs` reads `hooks/hooks.json`,
+- **Generator:** `scripts/gen-readme-sections.mjs` reads `hooks/dispatch/manifest.json`,
   `skills/*/SKILL.md`, `agents/*.md`, `deep-knowledge/*.md` and rewrites every
   marker. Counts, the lifecycle roster and the category roster
   (`hook-categories`, domain = middle segment of the hook id, `CATEGORIES` in

@@ -76,7 +76,7 @@ describe("decideAction — scheduled-task idle exemption (#371)", () => {
 describe("block reason — offline-first when the completion MCP is down (#371)", () => {
   const root = "/opt/devops";
   const offlineLine = 'node "/opt/devops/mcp-server/index.js" --render-card';
-  const toolLine = "mcp__plugin_devops_dotclaude-completion__render_completion_card";
+  const toolLine = "mcp__plugin_devops_dotclaude__render_completion_card";
 
   test("default order: tool → ToolSearch → offline renderer", () => {
     const r = buildBlockReason(root);
@@ -103,7 +103,7 @@ describe("block reason — offline-first when the completion MCP is down (#371)"
   });
 
   test("renderLadderLines is the single source for both orders", () => {
-    expect(renderLadderLines(root)[0]).toMatch(/^Call `mcp__plugin_devops_dotclaude-completion/);
+    expect(renderLadderLines(root)[0]).toMatch(/^Call `mcp__plugin_devops_dotclaude/);
     expect(renderLadderLines(root, { completionMcpDown: true })[0]).toMatch(/NOT running/);
   });
 });
@@ -136,21 +136,21 @@ describe("isMcpServerAlive — heartbeat PID probe", () => {
   }
 
   test("no PID file → dead", () => {
-    withTmp(() => { expect(isMcpServerAlive("dotclaude-completion")).toBe(false); });
+    withTmp(() => { expect(isMcpServerAlive("dotclaude")).toBe(false); });
   });
 
   test("PID file naming a live process → alive; a dead PID → dead", () => {
     withTmp((dir) => {
-      const file = pidFileFor("dotclaude-completion");
+      const file = pidFileFor("dotclaude");
       expect(path.dirname(file)).toBe(dir);
       fs.writeFileSync(file, String(process.pid));
-      expect(isMcpServerAlive("dotclaude-completion")).toBe(true);
+      expect(isMcpServerAlive("dotclaude")).toBe(true);
       // A child that has already exited leaves a PID nobody answers for.
       const gone = spawnSync(process.execPath, ["-e", "0"]).pid;
       fs.writeFileSync(file, String(gone));
-      expect(isMcpServerAlive("dotclaude-completion")).toBe(false);
+      expect(isMcpServerAlive("dotclaude")).toBe(false);
       fs.writeFileSync(file, "not-a-pid");
-      expect(isMcpServerAlive("dotclaude-completion")).toBe(false);
+      expect(isMcpServerAlive("dotclaude")).toBe(false);
     });
   });
 });
@@ -221,7 +221,7 @@ describe("hooks end-to-end — an idle tick passes, an edited tick blocks", () =
     try {
       run(dir, PROMPT_HOOK, { prompt: '<scheduled-task name="deploy" file="x">ship</scheduled-task>' });
       run(dir, POST_HOOK, {
-        tool_name: "mcp__plugin_devops_dotclaude-ship__ship_release",
+        tool_name: "mcp__plugin_devops_dotclaude__ship_release",
         tool_input: { cwd: dir },
         tool_response: { content: [{ type: "text", text: JSON.stringify({ success: true, merged: "main", pr: { number: 1 } }) }] },
       });

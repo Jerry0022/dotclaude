@@ -23,7 +23,7 @@ triggers:
   en: ["repo health", "branch cleanup", "branch hygiene"]
   de: ["branches aufräumen", "worktrees aufräumen", "offene PRs landen", "open PRs shippen", "WIP-Report aufräumen"]
 argument-hint: "[optional: focus area — branches, sessions, PRs]"
-allowed-tools: Bash(git *), Bash(gh *), Bash(node *), Bash(start *), Bash(cmd *), Read, Write, Glob, Grep, AskUserQuestion, Skill, mcp__Claude_Browser__*, mcp__claude-in-chrome__*, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card, mcp__plugin_devops_dotclaude-ship__*, mcp__ccd_session_mgmt__list_sessions, mcp__ccd_session_mgmt__get_session
+allowed-tools: Bash(git *), Bash(gh *), Bash(node *), Bash(start *), Bash(cmd *), Read, Write, Glob, Grep, AskUserQuestion, Skill, mcp__Claude_Browser__*, mcp__claude-in-chrome__*, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude__render_completion_card, mcp__plugin_devops_dotclaude__health_check, mcp__plugin_devops_dotclaude__ship_preflight, mcp__plugin_devops_dotclaude__ship_build, mcp__plugin_devops_dotclaude__ship_version_bump, mcp__plugin_devops_dotclaude__ship_release, mcp__plugin_devops_dotclaude__ship_promote, mcp__plugin_devops_dotclaude__ship_cleanup, mcp__plugin_devops_dotclaude__ship_hygiene, mcp__ccd_session_mgmt__list_sessions, mcp__ccd_session_mgmt__get_session
 ---
 
 # Auto-Cleanup — Repo Health
@@ -468,7 +468,7 @@ delete and no worktree removal before it is in context:
 Trigger this step only when the run is **done** — i.e. the user closed the
 monitor or the most recent submit was processed.
 
-When triggered, call `mcp__plugin_devops_dotclaude-completion__render_completion_card`:
+When triggered, call `mcp__plugin_devops_dotclaude__render_completion_card`:
 
 | Situation | Variant |
 |-----------|---------|

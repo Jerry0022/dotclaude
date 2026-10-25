@@ -2,7 +2,9 @@
 
 Cross-cutting rule: in sessions with a large tool inventory (Computer Use, Chrome MCP, many third-party MCPs), Claude Code **defers** most MCP tool schemas. The tools appear in the SessionStart `<system-reminder>` deferred-tools list, but their JSONSchema is NOT loaded — calling them directly fails with `InputValidationError`.
 
-Relevant for devops: all `dotclaude-ship` and `dotclaude-issues` tools land deferred. Only `dotclaude-completion` tools are usually auto-loaded because the completion card hook fires on every Stop.
+Relevant for devops: all tools come from ONE server, `dotclaude` (prefix `mcp__plugin_devops_dotclaude__`; until v0.308 three servers: `dotclaude`, `dotclaude`, `dotclaude`). The `ship_*` and `match_issues` tools usually land deferred; `render_completion_card` / `get_usage` are usually auto-loaded because the completion card hook fires on every Stop.
+
+The one server stays responsive and alive by design: every `ship_*` call runs out of process (`mcp-server/ship/cli.js` via `lib/run-child.js` — async, per-step timeout, process tree killed on timeout and on server exit), so a card or usage call during a long `ship_build` answers at once. A throwing tool returns an error result, and uncaught errors land in `<TEMP>/dotclaude-mcp-crash.log` while the server keeps serving. `health_check` reports `toolGroups` (a group whose module failed to load is named there; the others still work), `crashesSinceStart` and `runningChildren`. Claude Code never restarts a dead stdio server within a session — if it is down anyway, `pre.mcp.health` names the offline path for the blocked tool (`index.js --render-card`, `ship/cli.js <tool>`), and a ship resumes from `.claude/.ship-checkpoint.json` in the next session.
 
 ## The trap
 
@@ -20,13 +22,13 @@ The server was not broken. The tools were one `ToolSearch` call away.
 The SessionStart `<system-reminder>` lists deferred tool names verbatim. Example for this plugin:
 
 ```
-mcp__plugin_devops_dotclaude-ship__ship_preflight
-mcp__plugin_devops_dotclaude-ship__ship_build
-mcp__plugin_devops_dotclaude-ship__ship_version_bump
-mcp__plugin_devops_dotclaude-ship__ship_release
-mcp__plugin_devops_dotclaude-ship__ship_cleanup
-mcp__plugin_devops_dotclaude-ship__ship_hygiene
-mcp__plugin_devops_dotclaude-issues__match_issues
+mcp__plugin_devops_dotclaude__ship_preflight
+mcp__plugin_devops_dotclaude__ship_build
+mcp__plugin_devops_dotclaude__ship_version_bump
+mcp__plugin_devops_dotclaude__ship_release
+mcp__plugin_devops_dotclaude__ship_cleanup
+mcp__plugin_devops_dotclaude__ship_hygiene
+mcp__plugin_devops_dotclaude__match_issues
 ```
 
 Presence in that list = registered + available. Absence = the MCP server genuinely failed to start (check `/mcp` status or server stderr).
@@ -37,7 +39,7 @@ Use `ToolSearch` with the `select:` prefix. Load ALL tools needed for the curren
 
 ```
 ToolSearch({
-  query: "select:mcp__plugin_devops_dotclaude-ship__ship_preflight,mcp__plugin_devops_dotclaude-ship__ship_build,mcp__plugin_devops_dotclaude-ship__ship_version_bump,mcp__plugin_devops_dotclaude-ship__ship_release,mcp__plugin_devops_dotclaude-ship__ship_cleanup,mcp__plugin_devops_dotclaude-ship__ship_hygiene",
+  query: "select:mcp__plugin_devops_dotclaude__ship_preflight,mcp__plugin_devops_dotclaude__ship_build,mcp__plugin_devops_dotclaude__ship_version_bump,mcp__plugin_devops_dotclaude__ship_release,mcp__plugin_devops_dotclaude__ship_cleanup,mcp__plugin_devops_dotclaude__ship_hygiene",
   max_results: 6
 })
 ```
@@ -101,10 +103,10 @@ its first stderr lines:
 ```bash
 cd ~/.claude/plugins/cache/dotclaude/devops/<version> && \
   echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}' \
-  | node mcp-server/ship/index.js
+  | node mcp-server/index.js
 ```
 
-`Cannot find module …/mcp-server/ship/index.js` means the cache lost its
+`Cannot find module …/mcp-server/index.js` (or …/ship/server.js) means the cache lost its
 source files (2026-09-17: every `*.js` outside `node_modules` vanished from
 the cache dirs; `.md`/`.json` survived). The self-heal in `ss.plugin.update` →
 `cacheBroken()` cannot fire in that state — the healer is one of the missing
@@ -136,7 +138,7 @@ away.
 `Skipping connection (recent failure cached retries automatically in 15 min …)`
 means this session **never tried**. Claude Code keeps one failure cache for
 the whole machine, `~/.claude/mcp-needs-auth-cache.json`, keyed by server name
-(`"plugin:devops:dotclaude-ship": { timestamp, id }`), with a 15-min window.
+(`"plugin:devops:dotclaude": { timestamp, id }`), with a 15-min window.
 One session's `CONNECT_TIMEOUT` therefore skips the server in **every** session
 that starts inside the window, and each new failure elsewhere renews it.
 Observed 2026-10-01: many sessions started at once after an app restart, the
@@ -194,7 +196,7 @@ hand-made tag): the CLI is the only substitute for the tools.
 
 ## Self-healing dependencies at server start (#824)
 
-After a plugin update Claude Code switches to the new cache path and may start the three MCP servers before `node_modules` exists there. Each entry point (`mcp-server/index.js`, `ship/index.js`, `issues/index.js`) therefore runs `ensureDeps()` from `mcp-server/lib/ensure-deps.js` before the SDK is imported. Happy path: one `existsSync`. Otherwise it relinks `CLAUDE_PLUGIN_DATA/node_modules` into the plugin copy (same logic as the `ss.mcp.deps` hook), falls back to a locked `npm install` after ~8 s, and waits up to ~25 s (`DEVOPS_MCP_DEPS_WAIT_MS`). If nothing appears it writes one stderr line naming the missing packages and exits 1; stdout is never touched. `ship/` and `issues/` are thin bootstraps that dynamically import `server.js`, because static imports would hoist above the check.
+After a plugin update Claude Code switches to the new cache path and may start the devops MCP server before `node_modules` exists there. Each entry point (`mcp-server/index.js`, `ship/index.js`, `issues/index.js`) therefore runs `ensureDeps()` from `mcp-server/lib/ensure-deps.js` before the SDK is imported. Happy path: one `existsSync`. Otherwise it relinks `CLAUDE_PLUGIN_DATA/node_modules` into the plugin copy (same logic as the `ss.mcp.deps` hook), falls back to a locked `npm install` after ~8 s, and waits up to ~25 s (`DEVOPS_MCP_DEPS_WAIT_MS`). If nothing appears it writes one stderr line naming the missing packages and exits 1; stdout is never touched. `ship/` and `issues/` are thin bootstraps that dynamically import `server.js`, because static imports would hoist above the check.
 
 ## Related
 

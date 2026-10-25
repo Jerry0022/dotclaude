@@ -42,7 +42,7 @@ describe('tmp-sweep (#699)', () => {
       'dotclaude-team-changelog-abc123',
       'dotclaude-locale',
       'dotclaude-locale-b1',
-      'dotclaude-mcp-dotclaude-ship-4711.pid',
+      'dotclaude-mcp-dotclaude-4711.pid',
       'dotclaude-mcp-reap-status.json',
       'dotclaude-inuse-0.258.3',
       'dotclaude-graphupdate-abc.lock',

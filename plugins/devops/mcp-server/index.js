@@ -1,10 +1,21 @@
 #!/usr/bin/env node
 /**
- * @module dotclaude-completion-mcp
- * @version 0.15.0
+ * @module dotclaude-mcp
+ * @version 0.16.0
  * @plugin devops
- * @description MCP server with three tools:
- *   - `health_check`           — boot diagnostics (#324)
+ * @description THE devops MCP server (`dotclaude`) — one process per session
+ *   for every devops tool. Until 0.15.0 there were three servers per session
+ *   (dotclaude-completion, dotclaude-ship, dotclaude-issues, ~85-98 MB each);
+ *   the ship tools (ship/server.js) and match_issues (issues/server.js) are
+ *   now tool groups of this server, each imported on its own after the card
+ *   tools, so a broken group drops its own tools and nothing else.
+ *   Ship steps run out of process (ship/cli.js via lib/run-child.js): the
+ *   event loop stays free, so a card or usage call during a 15-minute
+ *   ship_build answers at once. Crash robustness (lib/crash-guard.js): every
+ *   tool handler is guarded, uncaught errors are logged and the server keeps
+ *   serving, child process trees are killed on timeout and on shutdown.
+ *   Tools:
+ *   - `health_check`           — boot diagnostics (#324) + tool-group status
  *   - `get_usage`              — live usage via the claude.ai internal API
  *                                (cookie-authed in-page fetch, headless Edge)
  *   - `render_completion_card` — fetches usage, computes build-ID, renders card.
@@ -104,7 +115,7 @@ function classifyBudget(snapshot) {
     const { readBudget, budgetSummary } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'budget.js'));
     return budgetSummary(readBudget({ snapshot: snapshot ?? null }));
   } catch (err) {
-    console.error('[dotclaude-completion-mcp] budget class unavailable:', err?.message || err);
+    console.error('[dotclaude-mcp] budget class unavailable:', err?.message || err);
     return null;
   }
 }
@@ -617,7 +628,7 @@ function getBuildId(overrideCwd) {
       { windowsHide: true, encoding: 'utf8', timeout: 10000, cwd }
     ).trim();
   } catch (err) {
-    console.error('[dotclaude-completion-mcp] build-id computation failed:', err.message);
+    console.error('[dotclaude-mcp] build-id computation failed:', err.message);
     return 'no-build-id';
   }
 }
@@ -2289,13 +2300,13 @@ function refreshUsage() {
     } catch (err) {
       scrapeErr = err;
       console.error(
-        '[dotclaude-completion-mcp] Usage fetch failed:',
+        '[dotclaude-mcp] Usage fetch failed:',
         describeScrapeFailure(err), '—', err.message,
       );
     }
   } else {
     scrapeErr = { status: 1, message: 'refresh-usage-headless.js not found in any plugin version' };
-    console.error('[dotclaude-completion-mcp] No scraper script resolvable — plugin cache incomplete?');
+    console.error('[dotclaude-mcp] No scraper script resolvable — plugin cache incomplete?');
   }
 
   // The 60s bound is safe even for a slow cold-launch fetch: the scraper
@@ -2502,7 +2513,7 @@ function buildCompletionCard(params) {
   const shipGuard = correctShipVariant(params.variant, params.state);
   if (shipGuard.downgraded) {
     console.error(
-      `[dotclaude-completion-mcp] Variant guard: "ship-successful" rejected ` +
+      `[dotclaude-mcp] Variant guard: "ship-successful" rejected ` +
       `(${shipGuard.reason}) → corrected to "${shipGuard.variant}"`
     );
     params.variant = shipGuard.variant;
@@ -2516,7 +2527,7 @@ function buildCompletionCard(params) {
   if (Array.isArray(params.open) && params.open.length) {
     const foreign = dropForeignOpenItems(params.open, foreignTokensFor(params.cwd));
     if (foreign.dropped) {
-      console.error(`[dotclaude-completion-mcp] dropped ${foreign.dropped} open point(s) naming another worktree's branch`);
+      console.error(`[dotclaude-mcp] dropped ${foreign.dropped} open point(s) naming another worktree's branch`);
       params.open = foreign.open;
     }
   }
@@ -2528,7 +2539,7 @@ function buildCompletionCard(params) {
   if (Array.isArray(params.open) && params.open.length) {
     const chipped = dropChipOpenItems(params.open, params.session_id, params.cwd);
     if (chipped.dropped) {
-      console.error(`[dotclaude-completion-mcp] dropped ${chipped.dropped} open point(s) a task chip already offers`);
+      console.error(`[dotclaude-mcp] dropped ${chipped.dropped} open point(s) a task chip already offers`);
       params.open = chipped.open;
     }
   }
@@ -2540,7 +2551,7 @@ function buildCompletionCard(params) {
   if ((params.variant === 'test' || params.variant === 'ready') && Array.isArray(params.open) && params.open.length) {
     const routine = dropNextStepOpenItems(params.open);
     if (routine.dropped) {
-      console.error(`[dotclaude-completion-mcp] dropped ${routine.dropped} open point(s) that are the scope's routine next step`);
+      console.error(`[dotclaude-mcp] dropped ${routine.dropped} open point(s) that are the scope's routine next step`);
       params.open = routine.open;
       params._openDropped = routine.dropped;
     }
@@ -2641,7 +2652,7 @@ function buildCompletionCard(params) {
       writeFileSync(join(tmpdir(), 'dotclaude-devops-pending-attested-' + key), new Date().toISOString());
     }
   } catch (e) {
-    console.error('[dotclaude-completion-mcp] Failed to write completion flag:', e.message);
+    console.error('[dotclaude-mcp] Failed to write completion flag:', e.message);
   }
 
   // 6. A delegated --card-data ship's stored input (#712 R6) is spent once
@@ -2680,7 +2691,7 @@ function runRenderCardCli(source) {
   try {
     raw = readFileSync(source === '-' ? 0 : source, 'utf8');
   } catch (e) {
-    process.stderr.write(`[dotclaude-completion] cannot read payload "${source}": ${e.message}\n`);
+    process.stderr.write(`[dotclaude-card-cli] cannot read payload "${source}": ${e.message}\n`);
     process.exit(2);
   }
 
@@ -2688,7 +2699,7 @@ function runRenderCardCli(source) {
   try {
     payload = JSON.parse(raw);
   } catch (e) {
-    process.stderr.write(`[dotclaude-completion] payload is not valid JSON: ${e.message}\n`);
+    process.stderr.write(`[dotclaude-card-cli] payload is not valid JSON: ${e.message}\n`);
     process.exit(2);
   }
 
@@ -2704,14 +2715,14 @@ function runRenderCardCli(source) {
   // (#406) — `variant: "ship"` no longer renders a generic card.
   const check = validateCardInput(params);
   if (!check.ok) {
-    process.stderr.write('[dotclaude-completion] payload does not match the card schema:\n' + formatIssues(check.issues) + '\n');
+    process.stderr.write('[dotclaude-card-cli] payload does not match the card schema:\n' + formatIssues(check.issues) + '\n');
     process.exit(2);
   }
   // Parity with the zod strip on the MCP path: unknown keys never reach the
   // renderer there either, but the CLI says so instead of dropping them mutely.
   const unknown = unknownCardKeys(payload);
   if (unknown.length) {
-    process.stderr.write(`[dotclaude-completion] ignored unknown top-level key(s): ${unknown.join(', ')} — not part of the card schema\n`);
+    process.stderr.write(`[dotclaude-card-cli] ignored unknown top-level key(s): ${unknown.join(', ')} — not part of the card schema\n`);
   }
   withDetectedRepoMode(params);
   const localShip = localShipInstruction(params);
@@ -2746,13 +2757,26 @@ const { McpServer } = await import("@modelcontextprotocol/sdk/server/mcp.js");
 const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
 const { z } = await import("zod");
 
-const SERVER_NAME = "dotclaude-completion";
-const SERVER_VERSION = "0.6.1";
+const SERVER_NAME = "dotclaude";
+const SERVER_VERSION = "0.7.0";
+
+const { guardHandler, installProcessGuards, crashCount, crashLogPath } = await import("./lib/crash-guard.js");
+const { activeChildCount, killAllChildrenSync } = await import("./lib/run-child.js");
 
 const server = new McpServer({
   name: SERVER_NAME,
   version: SERVER_VERSION,
 });
+
+// Every tool handler of every group is guarded: a throw is an error result,
+// never a dead server (Claude Code does not restart one within a session).
+{
+  const rawRegister = server.registerTool.bind(server);
+  server.registerTool = (name, cfg, handler) => rawRegister(name, cfg, guardHandler(name, handler));
+}
+
+// Status of the tool groups that load after the card tools (health_check).
+const toolGroups = { card: "ok", ship: "pending", issues: "pending" };
 
 // Set once the stdio transport is live — see the boot block at the bottom.
 let bootMs = null;
@@ -2783,6 +2807,10 @@ server.registerTool(
         bootMs,
         node: process.version,
         depsResolved: true,
+        toolGroups,
+        crashesSinceStart: crashCount(),
+        crashLog: crashLogPath(),
+        runningChildren: activeChildCount(),
       }, null, 2),
     }],
   }),
@@ -3128,6 +3156,37 @@ export {
   openQuestionOf, localShipInstruction, renderExpiredNote, formatLastReading, cardHead, outcomeTitlePrefix, HEADINGS,
 };
 
+// --- Tool groups: ship pipeline + issue matching ---
+//
+// Imported on their own and registered before connect (the tool list must be
+// complete at initialize). A group whose module fails to load is reported in
+// health_check and the crash log; the card tools above are unaffected.
+
+let issueGroup = null;
+try {
+  const ship = await import("./ship/server.js");
+  const shipOpts = process.env.VITEST && process.env.DOTCLAUDE_SHIP_CLI_TEST ? { cliPath: process.env.DOTCLAUDE_SHIP_CLI_TEST } : {};
+  const { registered, failed } = await ship.registerShipTools(server, shipOpts);
+  toolGroups.ship = failed.length ? { registered, failed } : "ok";
+  for (const f of failed) logGroupFailure(`ship tool ${f.name}`, f.error);
+} catch (e) {
+  toolGroups.ship = { error: e && e.message };
+  logGroupFailure("ship tools", e);
+}
+try {
+  issueGroup = await import("./issues/server.js");
+  issueGroup.registerIssueTools(server, z);
+  toolGroups.issues = "ok";
+} catch (e) {
+  toolGroups.issues = { error: e && e.message };
+  issueGroup = null;
+  logGroupFailure("issue tools", e);
+}
+
+function logGroupFailure(what, e) {
+  console.error(`[${SERVER_NAME}-mcp] ${what} unavailable:`, e && e.message ? e.message : e);
+}
+
 // ---------------------------------------------------------------------------
 // Start — connect FIRST, then everything else (#324 boot discipline)
 // ---------------------------------------------------------------------------
@@ -3148,6 +3207,12 @@ bootMs = Math.round(process.uptime() * 1000);
 // and issues servers. Not under vitest: the card tests import this module,
 // and a worker must not register itself (or its SIGINT exit) as the server.
 if (!process.env.VITEST) registerHeartbeat(SERVER_NAME);
+// Keep serving through stray errors; end only on stdin close / signal, and
+// take every child process tree (a running ship step) down with us.
+if (!process.env.VITEST) installProcessGuards({ onShutdown: killAllChildrenSync });
+if (issueGroup && !process.env.VITEST) {
+  try { issueGroup.startIssueWarmup(); } catch (e) { logGroupFailure("issue warm-up", e); }
+}
 // Pull this version's card client into jsDelivr's cache now, in the
 // background, so the first Desktop card does not hit the cold-tag 503
 // (card-widget.js#warmCardClient). Never awaited, never fatal.

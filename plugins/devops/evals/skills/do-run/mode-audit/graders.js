@@ -15,5 +15,5 @@ module.exports = (g) => ({
   "findings-persisted": g.toolUsed("Write", { inputMatch: /\.claude[\\/]+audit[\\/][^"]*findings\.json/ }),
   "concept-branch": g.toolUsed("Skill", { inputMatch: /auto-concept/ }),
   "source-untouched": g.toolUsed(/^(Edit|Write)$/, { inputMatch: /src[\\/]+(notes|cli)\.js\b/, min: 0, max: 0 }),
-  "no-direct-ship-tools": g.toolUsed(/dotclaude-ship__ship_/, { min: 0, max: 0 }),
+  "no-direct-ship-tools": g.toolUsed(/dotclaude(?:-ship)?__ship_/, { min: 0, max: 0 }),
 });

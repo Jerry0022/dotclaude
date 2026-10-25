@@ -19,7 +19,7 @@ function commit(name) {
 function runHook() {
   const r = spawnSync(process.execPath, [HOOK], {
     cwd: work, encoding: "utf8", input: JSON.stringify({ cwd: work }),
-    env: { ...process.env, DEVOPS_ALLOW_MAIN: "1", HOME: root, USERPROFILE: root },
+    env: { ...process.env, DEVOPS_DEFERRED_PHASE: "inline", DEVOPS_ALLOW_MAIN: "1", HOME: root, USERPROFILE: root },
   });
   return r.stdout || "";
 }
@@ -52,5 +52,21 @@ describe("ss.git.check unpushed scope (main checkout)", () => {
   test("unpushed commits on the current branch are still reported", () => {
     commit("m1");
     expect(runHook()).toMatch(/1 unpushed commit\(s\)/);
+  }, 60_000);
+});
+
+describe("ss.git.check phases (deferred fetch)", () => {
+  const run = (phase) => spawnSync(process.execPath, [HOOK], {
+    cwd: work, encoding: "utf8", input: JSON.stringify({ cwd: work, session_id: "gc-phase" }),
+    env: { ...process.env, DEVOPS_DEFERRED_PHASE: phase, DEVOPS_ALLOW_MAIN: "1", HOME: root, USERPROFILE: root },
+  }).stdout || "";
+
+  test("the sync part (no fetch) never reports unpushed commits", () => {
+    commit("m2");
+    expect(run("sync")).not.toMatch(/unpushed commit/);
+  }, 60_000);
+
+  test("the bg part reports the unpushed finding after a fetch", () => {
+    expect(run("bg")).toMatch(/unpushed commit\(s\)/);
   }, 60_000);
 });

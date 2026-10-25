@@ -33,15 +33,15 @@ describe("expectedServers", () => {
     const root = mkTmpDir();
     fs.writeFileSync(path.join(root, ".mcp.json"), JSON.stringify({
       mcpServers: {
-        "dotclaude-ship": { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/mcp-server/ship/index.js"] },
-        "dotclaude-completion": { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/mcp-server/index.js"] },
+        "dotclaude": { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/mcp-server/index.js"] },
+        "other": { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/other/server.js"] },
       },
     }));
     const servers = expectedServers(root);
     expect(servers).toHaveLength(2);
-    const ship = servers.find((s) => s.name === "dotclaude-ship");
+    const ship = servers.find((s) => s.name === "dotclaude");
     expect(ship.entry.startsWith(root)).toBe(true);
-    expect(ship.entry.endsWith("ship/index.js")).toBe(true);
+    expect(ship.entry.endsWith("mcp-server/index.js")).toBe(true);
   });
 
   test("missing .mcp.json → empty list", () => {

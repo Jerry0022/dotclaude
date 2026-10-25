@@ -20,7 +20,7 @@ user-invocable: false
 triggers:
   en: ["create issue", "new issue", "refine issue", "update issue", "plan a milestone"]
   de: ["neues Issue", "Issue erstellen", "mach ein Issue", "Issue refinen", "Issue ergänzen", "Issue anpassen", "milestone planen"]
-allowed-tools: Bash(gh *), AskUserQuestion, Read, Grep, mcp__plugin_devops_dotclaude-issues__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
+allowed-tools: Bash(gh *), AskUserQuestion, Read, Grep, mcp__plugin_devops_dotclaude__health_check, mcp__plugin_devops_dotclaude__match_issues, mcp__plugin_devops_dotclaude__render_completion_card
 ---
 
 # Setup Issue — GitHub Issue & Milestone Management
@@ -293,7 +293,7 @@ See deep-knowledge/milestone-rules.md for naming conventions and level prefixes.
 ## Step 5 — Completion Card
 
 After the issue/milestone is created or refined and verified, call
-`mcp__plugin_devops_dotclaude-completion__render_completion_card` with variant
+`mcp__plugin_devops_dotclaude__render_completion_card` with variant
 `fallback` (no code change, no ship — just a GitHub artifact created or
 updated).
 

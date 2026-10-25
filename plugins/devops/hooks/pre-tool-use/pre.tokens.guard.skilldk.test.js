@@ -85,15 +85,28 @@ describe("pre.tokens.guard — skill deep-knowledge reads pass", () => {
     fs.cpSync(path.join(__dirname, "..", "lib"), path.join(root, "hooks", "lib"), { recursive: true });
     fs.cpSync(path.join(__dirname, "pre.tokens.guard.js"), path.join(hookDir, "pre.tokens.guard.js"));
     const dir = project();
-    for (const rel of ["skills/auto-concept/deep-knowledge/bridge-server.md", "deep-knowledge/big.md", "agents/big.md"]) {
+    const readAt = (file) => {
       const res = spawnSync(process.execPath, [path.join(hookDir, "pre.tokens.guard.js")], {
         cwd: dir,
-        input: JSON.stringify({ tool_name: "Read", tool_input: { file_path: bigMd(root, rel) }, session_id: "skilldk-root" }),
+        input: JSON.stringify({ tool_name: "Read", tool_input: { file_path: file }, session_id: `skilldk-root-${Date.now()}` }),
         encoding: "utf8",
         env: { ...process.env, HOME: HOME_DIR, USERPROFILE: HOME_DIR, TMPDIR: path.join(dir, ".tmp"), TEMP: path.join(dir, ".tmp"), TMP: path.join(dir, ".tmp") },
       });
-      expect(blocked({ status: res.status, stderr: res.stderr || "" }), rel).toBe(false);
+      return { status: res.status, stderr: res.stderr || "" };
+    };
+    for (const rel of ["skills/auto-concept/deep-knowledge/bridge-server.md", "deep-knowledge/big.md", "agents/big.md"]) {
+      expect(blocked(readAt(bigMd(root, rel))), rel).toBe(false);
     }
+    // only the docs: a big script or data file under the same root is still size-checked
+    const script = bigMd(root, "skills/auto-concept/big.md").replace(/big\.md$/, "big.js");
+    fs.renameSync(bigMd(root, "skills/auto-concept/big.md"), script);
+    expect(blocked(readAt(script))).toBe(true);
+  });
+
+  test("a user folder that is merely named devops is not exempt", () => {
+    const dir = project();
+    expect(blocked(runRead(dir, bigMd(dir, "src/devops/agents/huge.md")))).toBe(true);
+    expect(blocked(runRead(dir, bigMd(dir, "work/devops/deep-knowledge/notes.md")))).toBe(true);
   });
 
   test("source repo: plugins/devops/deep-knowledge and agents pass", () => {

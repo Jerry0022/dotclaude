@@ -354,8 +354,8 @@ describe("AUD-026 / AUD-030: one pass, marker first, a hooks.json timeout", () =
     expect(Date.now() - t0).toBeLessThan(1000);
   });
 
-  test("hooks.json gives post.agent.nudge a timeout", () => {
-    const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks.json"), "utf8"));
+  test("the hook manifest gives post.agent.nudge a timeout", () => {
+    const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "dispatch", "manifest.json"), "utf8"));
     const entries = Object.values(cfg.hooks).flat().flatMap(g => g.hooks || [])
       .filter(h => String(h.command).includes("post.agent.nudge.js"));
     expect(entries.length).toBeGreaterThan(0);

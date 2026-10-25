@@ -123,6 +123,11 @@ function collectDecisions(action = 'iterate') {
   if (template === 'design') payload = collectDesignDecisions();
   else if (template === 'free') payload = collectFreeDecisions();
   else payload = collectDecisionDecisions();
+  // Own note pins of a document round (§ Document pins); design rounds
+  // build their own `userPins` in collectDesignDecisions().
+  if (template !== 'design') {
+    payload.userPins = (typeof window.documentPinsPayload === 'function') ? window.documentPinsPayload(active) : [];
+  }
   payload.action = action;
   payload.allFields = allFields;
   // The round this payload answers. restoreInFlightRound() needs it after a

@@ -25,7 +25,7 @@ function projectRuleFiles(root) {
 module.exports = (g) => ({
   "learn-skill": g.skillInvoked("do-learn"),
   "rule-in-project": (ctx) => projectRuleFiles(ctx.workdir).length > 0,
-  "no-issue": (ctx) => g.skillNotInvoked("auto-issue")(ctx) && g.toolUsed(/^mcp__plugin_devops_dotclaude-issues__/, { min: 0, max: 0 })(ctx),
+  "no-issue": (ctx) => g.skillNotInvoked("auto-issue")(ctx) && g.toolUsed(/^mcp__plugin_devops_dotclaude(?:-issues)?__match_issues$/,{ min: 0, max: 0 })(ctx),
   "no-memory-write": (ctx) =>
     g.toolUsed("Write", { inputMatch: /memory|feedback_/i, min: 0, max: 0 })(ctx) &&
     g.toolUsed("Edit", { inputMatch: /memory|feedback_/i, min: 0, max: 0 })(ctx),

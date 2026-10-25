@@ -20,15 +20,15 @@ describe('clearPluginEntries (#mcp failure cache, 2026-10-01)', () => {
     fs.writeFileSync(file, JSON.stringify({
       'claude.ai Readme.io': { timestamp: now, id: 'a' },
       'plugin:playwright:playwright': { timestamp: now, id: 'b' },
-      'plugin:devops:dotclaude-ship': { timestamp: now - 1000, id: 'c' },
-      'plugin:devops:dotclaude-completion': { timestamp: now - WINDOW_MS - 1, id: 'd' },
+      'plugin:devops:dotclaude': { timestamp: now - 1000, id: 'c' },
+      'plugin:devops:context7': { timestamp: now - WINDOW_MS - 1, id: 'd' },
     }));
 
     const res = clearPluginEntries(file, now);
 
-    expect(res.cleared.sort()).toEqual(['plugin:devops:dotclaude-completion', 'plugin:devops:dotclaude-ship']);
-    expect(res.active).toEqual(['plugin:devops:dotclaude-ship']);
-    expect(res.activeEntries).toEqual([{ key: 'plugin:devops:dotclaude-ship', ts: now - 1000 }]);
+    expect(res.cleared.sort()).toEqual(['plugin:devops:context7', 'plugin:devops:dotclaude']);
+    expect(res.active).toEqual(['plugin:devops:dotclaude']);
+    expect(res.activeEntries).toEqual([{ key: 'plugin:devops:dotclaude', ts: now - 1000 }]);
     expect(Object.keys(JSON.parse(fs.readFileSync(file, 'utf8'))).sort())
       .toEqual(['claude.ai Readme.io', 'plugin:playwright:playwright']);
     expect(fs.readdirSync(path.dirname(file)).filter((f) => f.endsWith('.tmp'))).toEqual([]);
@@ -87,11 +87,11 @@ describe('ss.mcp.failcache hook', () => {
   test('an active block is cleared and the user gets a first-reply note with the offline paths', () => {
     const home = tmpHome();
     fs.writeFileSync(cacheFile(home), JSON.stringify({
-      'plugin:devops:dotclaude-ship': { timestamp: Date.now(), id: 'c' },
+      'plugin:devops:dotclaude': { timestamp: Date.now(), id: 'c' },
     }));
     const out = runHook(home);
     expect(out).toContain('[mcp-failcache]');
-    expect(out).toContain('dotclaude-ship');
+    expect(out).toContain('dotclaude');
     expect(out).toContain('In your FIRST reply, before any other work');
     expect(out).toContain('mcp-server/ship/cli.js" <tool> <params.json>');
     expect(out).toContain('never a manual ship');
@@ -105,7 +105,7 @@ describe('ss.mcp.failcache hook', () => {
   test('an entry that predates this start names the other session, with the same offline hints', () => {
     const home = tmpHome();
     fs.writeFileSync(cacheFile(home), JSON.stringify({
-      'plugin:devops:dotclaude-ship': { timestamp: Date.now() - 5 * 60_000, id: 'c' },
+      'plugin:devops:dotclaude': { timestamp: Date.now() - 5 * 60_000, id: 'c' },
     }));
     const out = runHook(home);
     expect(out).toContain("Another session's connect timeout");
@@ -116,7 +116,7 @@ describe('ss.mcp.failcache hook', () => {
   test('an expired entry is cleared silently; no cache file is silent too', () => {
     const home = tmpHome();
     fs.writeFileSync(cacheFile(home), JSON.stringify({
-      'plugin:devops:dotclaude-ship': { timestamp: Date.now() - WINDOW_MS - 1, id: 'c' },
+      'plugin:devops:dotclaude': { timestamp: Date.now() - WINDOW_MS - 1, id: 'c' },
     }));
     expect(runHook(home)).toBe('');
     expect(JSON.parse(fs.readFileSync(cacheFile(home), 'utf8'))).toEqual({});

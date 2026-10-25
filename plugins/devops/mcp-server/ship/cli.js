@@ -1,10 +1,15 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-ship-cli
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Offline entry point to the ship pipeline tools — the same
- *   handlers the dotclaude-ship MCP server registers, called without MCP.
+ *   handlers the devops MCP server (`dotclaude`) offers, called without MCP.
+ *   It is ALSO the server's executor: the server runs every ship_* call
+ *   through this file in a child process (ship/server.js), so the long,
+ *   synchronous git/gh/npm work never blocks the shared event loop. On that
+ *   path (env DOTCLAUDE_SHIP_VIA_SERVER=1) the .ship-cli-last.json write is
+ *   skipped — the hooks count the MCP result directly.
  *
  *     node mcp-server/ship/cli.js <tool> [<params.json> | -]
  *
@@ -81,10 +86,9 @@ if (!parsed.success) {
 try {
   const result = await handler(parsed.data);
   recordStep(tool, parsed.data, result);
-  writeLastResult(tool, parsed.data, result);
-  process.stdout.write(JSON.stringify(result, null, 2) + "\n"); // stdout-ok — CLI result
-  process.exit(0);
+  if (process.env.DOTCLAUDE_SHIP_VIA_SERVER !== "1") writeLastResult(tool, parsed.data, result);
+  // Exit only once stdout is flushed — a pipe reader (the server) must get the whole JSON.
+  process.stdout.write(JSON.stringify(result, null, 2) + "\n", () => process.exit(0)); // stdout-ok — CLI result
 } catch (e) {
-  process.stdout.write(JSON.stringify({ error: true, message: e && e.message }) + "\n"); // stdout-ok
-  process.exit(1);
+  process.stdout.write(JSON.stringify({ error: true, message: e && e.message }) + "\n", () => process.exit(1)); // stdout-ok
 }
