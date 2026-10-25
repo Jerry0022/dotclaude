@@ -395,6 +395,9 @@ describe("message builders", () => {
     expect(lines[1]).toBe("   „der Button im Header ist zu klein“");
     const long = "x".repeat(90);
     expect(buildAck(1, ">>", false, {}, 0, long).split("\n")[1]).toBe(`   „${"x".repeat(70)}…“`);
+    // The cut counts code points: an emoji at the edge stays whole, never a lone surrogate.
+    const emoji = `${"x".repeat(69)}🎉🎉🎉`;
+    expect(buildAck(1, ">>", false, {}, 0, emoji).split("\n")[1]).toBe(`   „${"x".repeat(69)}🎉…“`);
   });
 
   test("the question hint appears only for question-shaped notes", () => {

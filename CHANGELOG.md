@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.306.0] — 2026-10-25
+
+In batch mode the "note saved" answer is now easy to see. The red panel no longer shows the hook's plugin path or the whole prompt again.
+
+Why: with exit 2 Claude Code builds the block message as `[<hook command>]: <stderr>`, which puts the full plugin path first. It also adds the plugin attribution and an `Original prompt:` block, so the one line that matters got lost. A JSON `decision: "block"` shows only `reason`, and `suppressOriginalPrompt` drops the prompt block (checked in the bundled CLI 2.1.308 and npm CLI 2.1.175). No hook can change the fixed "operation blocked by hook" header or the red styling.
+
+### Changed
+- **Batch ack layout.** `prompt.batch.collect` (0.13.0) blocks collected, rearm and help prompts with stdout JSON plus exit 0 (`blockPrompt`, written synchronously so a cut-off line cannot fail open). The ack now opens with `💾 NOTIZ #n GESPEICHERT`. Below it come the first 70 characters of the prompt in quotes (a hook cannot summarize, so the echo lets you match the note; the cut never splits an emoji), then `(rotes Panel = Absicht, kein Fehler)`, then the three command lines as before. The new icon is `PANEL_ICONS.saved`. 💾 rather than ✅, because ✅ belongs to the completion card.
+
 ## [0.305.0] — 2026-10-25
 
 A concept tab now shows its state in the browser tab, and exclusive decisions get one recommended choice instead of all of them.

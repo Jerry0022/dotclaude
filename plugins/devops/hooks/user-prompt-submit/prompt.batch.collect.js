@@ -138,9 +138,11 @@ const ECHO_CHARS = 70;
  * the plugin attribution and an `Original prompt:` block, which buried the one
  * line that matters. With JSON the panel is its fixed header plus `reason`;
  * `suppressOriginalPrompt` drops the prompt block (the ack echoes its start).
+ * Written synchronously: the verdict now lives on stdout, and a JSON line cut
+ * off by the exit would read as plain context and let the prompt through.
  */
 function blockPrompt(message) {
-  process.stdout.write(`${JSON.stringify({
+  fs.writeSync(1, `${JSON.stringify({
     decision: 'block',
     reason: message,
     hookSpecificOutput: { hookEventName: 'UserPromptSubmit', suppressOriginalPrompt: true },
@@ -155,7 +157,8 @@ function blockPrompt(message) {
 function promptEcho(text) {
   const flat = String(text || '').replace(/\s+/g, ' ').trim();
   if (!flat) return '';
-  return `„${flat.length > ECHO_CHARS ? `${flat.slice(0, ECHO_CHARS).trimEnd()}…` : flat}“`;
+  const chars = Array.from(flat); // code points — never split an emoji's surrogate pair
+  return `„${chars.length > ECHO_CHARS ? `${chars.slice(0, ECHO_CHARS).join('').trimEnd()}…` : flat}“`;
 }
 
 /**
@@ -163,8 +166,8 @@ function promptEcho(text) {
  *
  * The harness renders every UserPromptSubmit block as a red "a hook blocked
  * your input" panel — that framing is not ours to change, and blocking IS the
- * mechanism the mode runs on. So the first line has to carry the all-clear:
- * the note landed, nothing failed.
+ * mechanism the mode runs on. So the first line says the note landed, and the
+ * line under the prompt echo says the red panel is no error.
  *
  * Short on purpose — it shows on EVERY collected prompt: the headline, the
  * prompt echo and the all-clear, an extra line only when it matters (question,
