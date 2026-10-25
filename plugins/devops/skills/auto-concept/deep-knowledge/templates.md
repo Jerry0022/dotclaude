@@ -25,28 +25,29 @@ Index of the concept engine reference: the three templates (decision, design, fr
 | 17 | [templates-design-overview-css.md](templates-design-overview-css.md) | 537 | Variant overview CSS (≥2 designs) |
 | 18 | [templates-design-overview-css-2.md](templates-design-overview-css-2.md) | 69 | Variant overview CSS (≥2 designs) (continued) |
 | 19 | [templates-design-hotkeys.md](templates-design-hotkeys.md) | 235 | Hotkey overlay, Space and nudges — `wireChromeHotkeys()` |
-| 20 | [templates-free.md](templates-free.md) | 233 | Template: free · Layout — Document, freeform body · Mapping block (optional) · Optional bi-state auto-detection · Decision schema · collectDecisions (free branch) · Document pins (`wireDocumentPins()`) |
-| 21 | [templates-section-nav.md](templates-section-nav.md) | 428 | Shared Systems (all templates) · Section Navigation (Decision Panel as TOC) |
-| 22 | [templates-section-nav-2.md](templates-section-nav-2.md) | 500 | Shared Systems (all templates) · Section Navigation (Decision Panel as TOC) (continued) |
-| 23 | [templates-panel-state.md](templates-panel-state.md) | 560 | Decision Panel State CSS |
-| 24 | [templates-panel-state-2.md](templates-panel-state-2.md) | 577 | Decision Panel State CSS (continued) |
-| 25 | [templates-panel-state-3.md](templates-panel-state-3.md) | 332 | Decision Panel State CSS (continued) |
-| 26 | [templates-persistence.md](templates-persistence.md) | 599 | State Persistence (localStorage + TTL) |
-| 27 | [templates-persistence-2.md](templates-persistence-2.md) | 110 | State Persistence (localStorage + TTL) (continued) |
-| 28 | [templates-persistence-comments.md](templates-persistence-comments.md) | 126 | Persist Warning Banner CSS · Comment Slot Injection |
-| 29 | [templates-attachments.md](templates-attachments.md) | 214 | Attachments — HTML and CSS |
-| 30 | [templates-attachments-js.md](templates-attachments-js.md) | 428 | Attachments — JS |
-| 31 | [templates-mapping.md](templates-mapping.md) | 291 | Information Mapping (engine) — Spec to Wiring, CSS |
-| 32 | [templates-mapping-js.md](templates-mapping-js.md) | 1323 | Information Mapping (engine) — JS |
-| 33 | [templates-submit.md](templates-submit.md) | 341 | collectDecisions (dispatcher) · Two-Button Submit (iterate vs. implement) — HTML and CSS |
-| 34 | [templates-submit-js.md](templates-submit-js.md) | 526 | Two-Button Submit — JS |
-| 35 | [templates-submit-js-2.md](templates-submit-js-2.md) | 569 | Two-Button Submit — JS (continued) |
-| 36 | [templates-submit-js-3.md](templates-submit-js-3.md) | 282 | Two-Button Submit — JS (continued) |
-| 37 | [templates-submit-journey.md](templates-submit-journey.md) | 543 | Journey row · Panel State Reset · Submit Progress Steps |
-| 38 | [templates-utilities.md](templates-utilities.md) | 268 | App Tooltips · Theme Toggle |
-| 39 | [templates-heartbeat.md](templates-heartbeat.md) | 597 | Claude Connection Heartbeat (HTTP Bridge) |
-| 40 | [templates-rounds.md](templates-rounds.md) | 447 | Iteration Tabs |
-| 41 | [templates-final-report.md](templates-final-report.md) | 499 | Final Report Panel · Design System |
+| 20 | [templates-free.md](templates-free.md) | 257 | Template: free · Layout — Document, freeform body · Mapping block (optional) · Optional bi-state auto-detection · Decision schema · collectDecisions (free branch) |
+| 21 | [templates-free-pins.md](templates-free-pins.md) | 492 | Document pins — own notes in decision / free rounds (`wireDocumentPins()`) |
+| 22 | [templates-section-nav.md](templates-section-nav.md) | 428 | Shared Systems (all templates) · Section Navigation (Decision Panel as TOC) |
+| 23 | [templates-section-nav-2.md](templates-section-nav-2.md) | 500 | Shared Systems (all templates) · Section Navigation (Decision Panel as TOC) (continued) |
+| 24 | [templates-panel-state.md](templates-panel-state.md) | 560 | Decision Panel State CSS |
+| 25 | [templates-panel-state-2.md](templates-panel-state-2.md) | 577 | Decision Panel State CSS (continued) |
+| 26 | [templates-panel-state-3.md](templates-panel-state-3.md) | 332 | Decision Panel State CSS (continued) |
+| 27 | [templates-persistence.md](templates-persistence.md) | 599 | State Persistence (localStorage + TTL) |
+| 28 | [templates-persistence-2.md](templates-persistence-2.md) | 110 | State Persistence (localStorage + TTL) (continued) |
+| 29 | [templates-persistence-comments.md](templates-persistence-comments.md) | 126 | Persist Warning Banner CSS · Comment Slot Injection |
+| 30 | [templates-attachments.md](templates-attachments.md) | 214 | Attachments — HTML and CSS |
+| 31 | [templates-attachments-js.md](templates-attachments-js.md) | 428 | Attachments — JS |
+| 32 | [templates-mapping.md](templates-mapping.md) | 291 | Information Mapping (engine) — Spec to Wiring, CSS |
+| 33 | [templates-mapping-js.md](templates-mapping-js.md) | 1323 | Information Mapping (engine) — JS |
+| 34 | [templates-submit.md](templates-submit.md) | 341 | collectDecisions (dispatcher) · Two-Button Submit (iterate vs. implement) — HTML and CSS |
+| 35 | [templates-submit-js.md](templates-submit-js.md) | 526 | Two-Button Submit — JS |
+| 36 | [templates-submit-js-2.md](templates-submit-js-2.md) | 569 | Two-Button Submit — JS (continued) |
+| 37 | [templates-submit-js-3.md](templates-submit-js-3.md) | 282 | Two-Button Submit — JS (continued) |
+| 38 | [templates-submit-journey.md](templates-submit-journey.md) | 543 | Journey row · Panel State Reset · Submit Progress Steps |
+| 39 | [templates-utilities.md](templates-utilities.md) | 268 | App Tooltips · Theme Toggle |
+| 40 | [templates-heartbeat.md](templates-heartbeat.md) | 597 | Claude Connection Heartbeat (HTTP Bridge) |
+| 41 | [templates-rounds.md](templates-rounds.md) | 447 | Iteration Tabs |
+| 42 | [templates-final-report.md](templates-final-report.md) | 499 | Final Report Panel · Design System |
 
 ## Using the parts
 

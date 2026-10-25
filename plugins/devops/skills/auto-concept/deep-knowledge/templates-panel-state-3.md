@@ -1,4 +1,4 @@
-# Concept templates, part 25 of 41: Shared systems — decision panel state CSS (continued 3)
+# Concept templates, part 26 of 42: Shared systems — decision panel state CSS (continued 3)
 
 ```css
 /* Open-questions section — checkbox list with optional "[Issue #NNN]"
