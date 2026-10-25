@@ -57,6 +57,7 @@
       if (lbl) { panelToggle.setAttribute('aria-label', lbl); panelToggle.dataset.tip = lbl; }
     }
     document.body.classList.add('panel-open');
+    window.markPanelCurrent?.();
     // Only re-home focus that the dock just lost — never steal it from a
     // pointer user who was not typing anywhere.
     if (fromDock) panelCloseBtn?.focus();
@@ -75,9 +76,50 @@
   // Bound by reference, exactly as before the extraction: both handlers are
   // globals (window.openPanel / window.closePanel), so a bare identifier here
   // resolves to the same function the dock paths call.
+  // The ☰ menu is navigation the user clicks THROUGH: a click on an entry
+  // switches the page and leaves the menu open (the user's call). Layout
+  // handlers still call closePanel() after a nav click; a click that started
+  // inside the panel (anything but ✕) marks this tick, and closePanel()
+  // ignores calls made while it is marked. Closing stays: ✕, Esc, a click
+  // outside (backdrop) and the ☰ FAB.
+  let navClickTick = false;
+  panel?.addEventListener('click', e => {
+    if (panelCloseBtn && panelCloseBtn.contains(e.target)) return;
+    navClickTick = true;
+    setTimeout(() => { navClickTick = false; }, 0);
+  }, true);
+  const closeForReal = window.closePanel;
+  window.closePanel = () => { if (!navClickTick) closeForReal(); };
   panelToggle?.addEventListener('click', openPanel);
-  panelCloseBtn?.addEventListener('click', closePanel);
-  backdrop?.addEventListener('click', closePanel);
+  panelCloseBtn?.addEventListener('click', () => closeForReal());
+  backdrop?.addEventListener('click', () => closeForReal());
+
+  // "What is open now" is always marked in the menu, live: the layout writes
+  // data-active on its nav entries (screen / view / overview items, design
+  // headings, quick pages); this mirrors it to aria-current — the one hook
+  // the highlight CSS (§ Panel CSS) and screen readers read — and keeps the
+  // current entry scrolled into view while the menu is open, so arrow-key
+  // page switches are followed by the highlight.
+  const NAV_ENTRY = '.screen-nav-item, .screen-nav-view-item, .screen-nav-overview-item, .screen-nav-design-heading, .design-quick-page, .design-quick-vitem, .design-quick-qitem';
+  function markPanelCurrent() {
+    if (!panel) return;
+    let cur = null;
+    panel.querySelectorAll(NAV_ENTRY).forEach(el => {
+      const on = el.dataset.active === 'true';
+      const val = el.classList.contains('screen-nav-design-heading') ? 'true' : 'page';
+      if (on) { if (el.getAttribute('aria-current') !== val) el.setAttribute('aria-current', val); if (val === 'page') cur = el; }
+      else if (el.hasAttribute('aria-current') && !el.classList.contains('section-nav-item')) el.removeAttribute('aria-current');
+    });
+    if (cur && panel.classList.contains('open') && typeof cur.scrollIntoView === 'function') {
+      try { cur.scrollIntoView({ block: 'nearest' }); } catch (err) { /* old engines */ }
+    }
+  }
+  window.markPanelCurrent = markPanelCurrent;
+  if (panel) {
+    new MutationObserver(markPanelCurrent)
+      .observe(panel, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-active'] });
+    markPanelCurrent();
+  }
 
   // Escape closes it. The panel is a backdropped modal on every page now, and
   // ✕ plus the backdrop were the only ways out for a keyboard user. The
@@ -113,9 +155,10 @@
 //   * Fields grow with their text while the whole dock still fits under its
 //     ceiling; past that the OTHER visible fields shrink (never below 3 lines
 //     or their CSS min-height) to make room for the active one; only then
-//     does the active field scroll. Redistribution runs on typing in the
-//     active field (incremental, monotonic, no height transition) and on
-//     open / page switch / resize — never on a mere focus change.
+//     does the active field scroll. An empty field stays at 3 lines — spare
+//     room is never handed out. Recomputed from scratch (no incremental
+//     state, no height transition) on input / focus / open / page switch /
+//     resize / maximise.
 //   * Esc inside the dock closes it (closeDock() returns focus to 💬).
 (() => {
   const boot = () => {
@@ -159,14 +202,13 @@
   });
   dock.addEventListener('input', e => {
     if (e.target && e.target.dataset) delete e.target.dataset.autoNewline;
-    // Incremental: only the field being typed in changes size; the others
-    // only give way (it grew) or get back what they gave (it shrank).
-    if (e.target && e.target.tagName === 'TEXTAREA') fitDockFields(e.target, true);
+    if (e.target && e.target.tagName === 'TEXTAREA') fitDockFields(e.target);
   });
-  // NO refit on focusin: moving the caret between fields used to re-run the
-  // allocation with a different "active" field, so the heights swapped back
-  // and forth on every click (hysteresis = the layout stays as it is until
-  // the user types).
+  // Focus decides which field is "active" (the one that may scroll last),
+  // so a focus move re-runs the same deterministic rule.
+  dock.addEventListener('focusin', e => {
+    if (e.target && e.target.tagName === 'TEXTAREA') fitDockFields(e.target);
+  });
   dock.addEventListener('keydown', e => {
     if (e.key !== 'Escape' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || !isOpen()) return;
     e.preventDefault();
@@ -213,50 +255,41 @@
     const natural = Math.max(floor, Math.ceil(probe.scrollHeight + borders));
     return { natural, floor };
   }
-  // Pure allocation (exported for the tests): heights for the fields'
-  // natural heights `nat` and floors `floor` under `budget`; `active` = the
-  // index of the field being typed in, which keeps its natural height for
-  // as long as the others can still give way. `cur` (optional) = the
-  // heights on screen now; given, the step is incremental and monotonic —
-  // while the active field grows the others only shrink, while it shrinks
-  // they only grow back (never past their own natural height), and nothing
-  // moves while the active field keeps its height.
-  window.allocDockHeights = function(nat, floor, budget, active, cur) {
-    const h = nat.map((v, i) => (cur && i !== active && cur[i] > 0) ? Math.min(v, Math.max(floor[i], cur[i])) : v);
-    let over = h.reduce((a, b) => a + b, 0) - budget;
-    while (over > 0) {
-      let k = -1;
-      for (let i = 0; i < h.length; i++) {
-        if (i === active || h[i] <= floor[i]) continue;
-        if (k < 0 || h[i] > h[k]) k = i;
-      }
-      if (k < 0) break;
-      // Tallest other field first, down to the next-tallest (then in small
-      // steps), so the shrinking is even rather than one field collapsing.
-      let second = floor[k];
-      h.forEach((v, i) => { if (i !== k && i !== active && v > second && v < h[k]) second = v; });
-      const step = Math.min(over, h[k] > second ? h[k] - second : Math.min(4, h[k] - floor[k]));
-      h[k] -= step;
-      over -= step;
+  // Pure allocation (exported for the tests). One deterministic rule, no
+  // incremental state — the same inputs always give the same heights:
+  //   target(i) = max(floor(i), nat(i))   (floor = 3 lines / CSS min-height)
+  //   * all targets fit the budget → every field gets EXACTLY its target. An
+  //     empty field stays at 3 lines and never grows to fill spare room; the
+  //     leftover is simply unused (the dock ends shorter).
+  //   * otherwise the NON-active fields give way, tallest first, levelled
+  //     down to a common height (never below their floor);
+  //   * still too tall → the active field takes what is left (≥ its floor)
+  //     and scrolls. `active` = index of the focused field, -1 = none (then
+  //     every field is levelled alike).
+  window.allocDockHeights = function(nat, floor, budget, active) {
+    const h = nat.map((v, i) => Math.max(v || 0, floor[i] || 0));
+    const total = h.reduce((a, b) => a + b, 0);
+    if (total <= budget) return h;
+    const hasActive = active >= 0 && active < h.length;
+    const others = h.map((_, i) => i).filter(i => i !== active);
+    const lvl = L => others.reduce((s, i) => s + Math.max(floor[i] || 0, Math.min(h[i], L)), 0);
+    const room = budget - (hasActive ? h[active] : 0);
+    // Largest whole-pixel level L with lvl(L) <= room (lvl is monotonic).
+    let lo = 0, hi = Math.ceil(Math.max(0, ...others.map(i => h[i])));
+    if (lvl(0) > room) hi = 0;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (lvl(mid) <= room) lo = mid; else hi = mid - 1;
     }
-    // Room to spare: the most-squeezed other field gets its height back first.
-    let slack = -over;
-    while (slack > 0) {
-      let k = -1;
-      for (let i = 0; i < h.length; i++) {
-        if (i === active || h[i] >= nat[i]) continue;
-        if (k < 0 || nat[i] - h[i] > nat[k] - h[k]) k = i;
-      }
-      if (k < 0) break;
-      const give = Math.min(slack, nat[k] - h[k]);
-      h[k] += give;
-      slack -= give;
+    others.forEach(i => { h[i] = Math.max(floor[i] || 0, Math.min(h[i], lo)); });
+    if (hasActive) {
+      const rest = budget - others.reduce((s, i) => s + h[i], 0);
+      h[active] = Math.max(floor[active] || 0, Math.min(h[active], rest));
     }
-    if (over > 0 && active >= 0) h[active] = Math.max(floor[active], h[active] - over);
     return h;
   };
   let fitting = false;
-  function fitDockFields(activeEl, incremental) {
+  function fitDockFields(activeEl) {
     if (fitting || !isOpen()) return;
     fitting = true;
     const keep = dock.scrollTop;
@@ -264,21 +297,22 @@
       const list = fields();
       if (!list.length) return;
       const pick = list.includes(activeEl) ? activeEl : document.activeElement;
-      const active = Math.max(0, list.indexOf(pick));
+      const active = list.indexOf(pick);
       const m = list.map(measure);
       const cur = list.map(ta => ta.offsetHeight);
       const dcs = getComputedStyle(dock);
       const cap = px(dcs.maxHeight) || innerHeight * 0.8;
+      // Chrome = everything in the dock that is not a field (header, crumbs,
+      // gaps, tip, padding) — independent of the fields' current heights.
       const used = cur.reduce((a, b) => a + b, 0);
       const outer = dock.scrollHeight + px(dcs.borderTopWidth) + px(dcs.borderBottomWidth);
       const budget = Math.max(0, cap - (outer - used) - 1);
-      const h = window.allocDockHeights(m.map(x => x.natural), m.map(x => x.floor), budget, active,
-        incremental && used > 0 ? cur : null);
+      const h = window.allocDockHeights(m.map(x => x.natural), m.map(x => x.floor), budget, active);
       list.forEach((ta, i) => {
         // A sub-pixel difference is not a change: writing it anyway is what
         // made the fields twitch on every keystroke.
         if (Math.abs(cur[i] - h[i]) >= 1 || !ta.style.height) ta.style.height = h[i] + 'px';
-        const sc = h[i] < m[i].natural ? 'true' : 'false';
+        const sc = h[i] < m[i].natural - 1 ? 'true' : 'false';
         if (ta.dataset.scroll !== sc) ta.dataset.scroll = sc;
       });
       if (dock.scrollTop !== keep) dock.scrollTop = keep;
@@ -293,6 +327,10 @@
   new MutationObserver(recs => {
     if (isOpen() && recs.some(r => r.oldValue !== 'true')) raf(focusPrimary);
   }).observe(dock, { attributes: true, attributeFilter: ['data-open'], attributeOldValue: true });
+  // Maximise / size flips change the width (re-wrap) and the ceiling: same
+  // rule, recomputed once the new geometry is laid out.
+  new MutationObserver(() => { if (isOpen()) raf(() => fitDockFields()); })
+    .observe(dock, { attributes: true, attributeFilter: ['data-user-maximized', 'data-size'] });
   // Page switches: wait one frame so the layout's own handlers (same event)
   // have swapped which fields are visible.
   ['screen:changed', 'view:changed', 'overview:changed', 'iteration:changed'].forEach(ev =>
@@ -346,6 +384,10 @@
    --field-* is the one look of every text input in the concept UI. */
 :root {
   --tip-color: #3fa7d6;
+  /* Single-line pill / label text that clips (overflow: hidden, ellipsis)
+     needs room for descenders: at line-height 1 the "g" of "Umsetzung"
+     was cut. Every such rule reads this token (test-enforced ≥ 1.2). */
+  --pill-line-height: 1.3;
   --question-color: var(--warning-color, #d29922);
   --field-radius: 10px;
   --field-bg: color-mix(in srgb, var(--text-color, #c9d1d9) 5%, var(--input-bg, #0d1117));
@@ -392,10 +434,21 @@ html .feedback-dock .feedback-section textarea {
   resize: none; overflow-y: hidden; padding: 0.7rem 0.85rem; scrollbar-gutter: stable;
 }
 .feedback-dock .feedback-section textarea[data-scroll="true"] { overflow-y: auto; }
+/* A scrolling dock field must SHOW that it scrolls, focused or not. The
+   universal scrollbar skin (§ Layout CSS → Scrollbars) paints its thumb in
+   --border-color, which vanished on the field surface. No second skin here:
+   the field only re-points the token the skin reads (its own border is
+   --field-border, so nothing else moves). The focus ring is a box-shadow
+   outside the border and never covers the bar. */
+.feedback-dock .feedback-section textarea {
+  --border-color: color-mix(in srgb, var(--text-secondary, #8b949e) 70%, transparent);
+}
 
 /* ── Notes dock fields (R4 "Notiz-Dock"): breadcrumb header per field, soft
    glow on the active one, 📎 inside the field, "Wusstest du schon?" tip. ── */
-.feedback-dock .feedback-section { padding: 10px; border-radius: 14px; background: rgba(255,255,255,0.025); }
+/* Theme-neutral surfaces: a tint of --text-color, never a fixed white
+   rgba that vanished on the light theme. */
+.feedback-dock .feedback-section { padding: 10px; border-radius: 14px; background: color-mix(in srgb, var(--text-color, #c9d1d9) 4%, transparent); }
 .feedback-dock .feedback-section:focus-within {
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent-color, #58a6ff) 12%, transparent), rgba(137,87,229,0.07));
 }
@@ -415,7 +468,7 @@ html .feedback-dock .feedback-section textarea {
 .feedback-dock .dock-crumb strong, .feedback-dock .dock-crumb .dock-crumb-last { color: var(--text-color, #f0f6fc); font-weight: 650; font-size: 13px; }
 .dock-crumb .dock-tag {
   margin-left: auto; font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
-  color: var(--text-secondary); background: rgba(255,255,255,0.05); white-space: nowrap;
+  color: var(--text-secondary); background: color-mix(in srgb, var(--text-color, #c9d1d9) 8%, transparent); white-space: nowrap;
 }
 .feedback-dock .feedback-section:focus-within .dock-tag { color: var(--accent-color); background: color-mix(in srgb, var(--accent-color, #58a6ff) 15%, transparent); }
 /* The 📎 sits inside the field (bottom-right); thumbnails flow under it. */

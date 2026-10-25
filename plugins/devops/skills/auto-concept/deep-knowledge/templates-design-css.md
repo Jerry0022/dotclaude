@@ -140,7 +140,8 @@ section[data-iteration][hidden] { display: none; }
   /* Chrome safe area top, plain gutter sides and bottom. */
   padding: var(--chrome-safe-top, 5.75rem) 2rem var(--chrome-safe-bottom, 2rem);
   overflow-y: auto;
-  animation: screen-in 0.25s ease;
+  /* No blanket entrance: a fade on every switch read as a flicker. The
+     direction-aware motion is § Page transitions (overview CSS, part 2). */
 }
 section[data-screen][hidden] { display: none; }
 /* The screen centers its mock with flexbox, and a flex item shrinks to its
@@ -181,7 +182,6 @@ section[data-design]:has(section[data-screen][data-screen-active="true"])
      be full-height, and it is the one that always scrolls. */
   padding: var(--chrome-safe-top, 5.75rem) 2rem var(--chrome-safe-bottom, 2rem);
   overflow-y: auto;
-  animation: screen-in 0.25s ease;
 }
 section[data-view][hidden] { display: none; }
 /* Same backstop, the other direction: outside view mode NO view paints, flag
@@ -332,6 +332,20 @@ body.anno-hidden .anno-layer { display: none !important; }
 /* The eye hides EVERYTHING except the header and the FABs: pins, connectors,
    summaries, own pins, the overview's top-3 info box and its change chip. */
 body.anno-hidden .upin-layer, body.anno-hidden .design-ov-overlay, body.anno-hidden .design-ov-change { display: none !important; }
+/* Calm view: the same eye also takes the quick nav, the design switcher and
+   both FABs (☰, 💬) away, so the concept can be looked at undisturbed. The
+   eye itself (and the device switch beside it) stays, dimmed. visibility
+   keeps the hidden controls out of the tab order; their hotkeys still work.
+   !important beats the intro keyframes, which animate opacity too. */
+body.anno-hidden #design-quick, body.anno-hidden .design-switcher,
+body.anno-hidden .panel-fab, body.anno-hidden .feedback-fab {
+  opacity: 0 !important; visibility: hidden; pointer-events: none;
+  transition: opacity 0.18s ease, visibility 0s linear 0.18s;
+}
+@media (prefers-reduced-motion: reduce) {
+  body.anno-hidden #design-quick, body.anno-hidden .design-switcher,
+  body.anno-hidden .panel-fab, body.anno-hidden .feedback-fab { transition: none; }
+}
 /* Eye = island control: filled, glow, no ring. The counter is the number of
    OPEN (unanswered) notes of the page; it hides at 0, the eye itself stays. */
 .anno-toggle-fab {

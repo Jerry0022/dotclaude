@@ -59,10 +59,14 @@ describe("concept SKILL.md — session title prefix", () => {
   // A submission arrives as a task notification, which the title-work hook
   // leaves alone — the skill swaps the compass itself, and the round's card
   // brings it back.
-  test("Step 5 swaps the compass for the hourglass once a submission is confirmed", () => {
+  // The concept's own working prefix, never a bare "⏳ ": a bare hourglass
+  // reads as generic work and a card-less notification turn would rename it
+  // to Interrupted while the round's agents still run.
+  test("Step 5 swaps the compass for the concept's working prefix once a submission is confirmed", () => {
     const work = section("### Mark the round as work", "### 5a. Read & Parse");
     expect(work).toContain("`" + SESSION_PREFIX["concept-waiting"] + "`");
-    expect(work).toContain('"⏳ "');
+    expect(work).toContain('"' + SESSION_PREFIX["concept-working"] + '"');
+    expect(work).toMatch(/never a bare/);
     expect(work).toMatch(/stale wake changes nothing/i);
     expect(work).toMatch(/MUST end with its completion card/);
   });
