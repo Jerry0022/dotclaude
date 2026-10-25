@@ -263,5 +263,11 @@ carries a `parked/` name.
 **Machine-wide view:** `scripts/orphan-scan.js` (daily; refreshed by the
 `ss.orphan.nudge` SessionStart hook) scans every repo under the parent folder
 of the main checkout and writes `~/.claude/orphan-report.json`; the hook then
-shows `⚠ N ungelandete Branches / M Worktrees mit uncommitteter Arbeit →
-/auto-cleanup` for the current repo. See `scheduled-tasks/orphan-scan/SKILL.md`.
+shows `⚠ N ungelandete Branches / M Worktrees mit uncommitteter Arbeit / K
+Sicherungskopien ohne Entscheidung → /auto-cleanup · Rechner gesamt: X in Y
+Repos` for the current repo. A safety copy (autosave snapshot, legacy
+`wip/`/`backup/`/`salvage/`/`salvage-land/`/`rescue/` ref) is a crash net,
+never a decision: after 3 days it counts until someone ships, parks it with a
+reason (`parked/<topic>`) or discards it. The autosave Stop line asks for that
+decision on the turn it saves (unless the turn shipped). See
+`scheduled-tasks/orphan-scan/SKILL.md`.

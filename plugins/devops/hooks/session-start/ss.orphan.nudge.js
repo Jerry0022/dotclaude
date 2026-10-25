@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 /**
  * @hook ss.orphan.nudge
- * @version 0.2.0
+ * @version 0.3.0
  * @event SessionStart
  * @plugin devops
- * @description One-line nudge when the current repo has unlanded work or
- *   worktrees with uncommitted changes. Reads ~/.claude/orphan-report.json
+ * @description One-line nudge when the current repo has unlanded work,
+ *   worktrees with uncommitted changes, or safety copies nobody decided on
+ *   (autosave snapshots and salvage/rescue/backup/wip copies older than 3
+ *   days — park-register isUndecided). When other repos have such work too,
+ *   the line adds the machine-wide total, so work in repos nobody opens no
+ *   longer stays invisible. Reads ~/.claude/orphan-report.json
  *   (written daily by scripts/orphan-scan.js) — no git calls, no network, so
  *   it is boot-window safe. Silent without a report, with a report older than
  *   24 h (the line names the report age otherwise), for an unknown repo, or when nothing is at risk. The report entry
@@ -22,6 +26,8 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+
+const { isUndecided } = require('../lib/park-register');
 
 const MAX_AGE_MS = 24 * 3_600_000;
 
@@ -47,14 +53,46 @@ function buildNudge({ cwd, lang = 'de', report, now = Date.now() }) {
     .filter((r) => r && r.path && (here === norm(r.path) || here.startsWith(`${norm(r.path)}/`)))
     .sort((a, b) => norm(b.path).length - norm(a.path).length)[0];
   if (!entry) return null;
+  const { unlanded, dirty, undecided } = counts(entry);
+  if (unlanded + dirty + undecided === 0) return null;
+  const age = formatAge(now - t);
+  const en = lang === 'en';
+  const parts = [];
+  if (unlanded + dirty > 0) {
+    parts.push(en
+      ? `${unlanded} unlanded ${unlanded === 1 ? 'branch' : 'branches'} / ${dirty} ${dirty === 1 ? 'worktree' : 'worktrees'} with uncommitted work`
+      : `${unlanded} ungelandete ${unlanded === 1 ? 'Branch' : 'Branches'} / ${dirty} ${dirty === 1 ? 'Worktree' : 'Worktrees'} mit uncommitteter Arbeit`);
+  }
+  if (undecided > 0) {
+    parts.push(en
+      ? `${undecided} safety ${undecided === 1 ? 'copy' : 'copies'} without a decision`
+      : `${undecided} ${undecided === 1 ? 'Sicherungskopie' : 'Sicherungskopien'} ohne Entscheidung`);
+  }
+  let line = en
+    ? `⚠ ${parts.join(' / ')} (as of ${age} ago) → /auto-cleanup`
+    : `⚠ ${parts.join(' / ')} (Stand vor ${age}) → /auto-cleanup`;
+  // the whole machine: work piles up in repos nobody opens, so every start names the total
+  let total = 0;
+  let repos = 0;
+  for (const r of report.repos) {
+    const c = r && r.path ? counts(r) : null;
+    const n = c ? c.unlanded + c.dirty + c.undecided : 0;
+    if (n > 0) { total += n; repos++; }
+  }
+  if (repos > 1) line += en ? ` · whole machine: ${total} in ${repos} repos` : ` · Rechner gesamt: ${total} in ${repos} Repos`;
+  return line;
+}
+
+/** Copies an autosave or cleanup made count once they are this old — a fresh one is the live session's net. */
+const UNDECIDED_AFTER_DAYS = 3;
+
+/** At-risk branches, dirty worktrees and undecided safety copies of one report entry. */
+function counts(entry) {
   const risk = Array.isArray(entry.atRisk) ? entry.atRisk : [];
   const dirty = risk.filter((r) => r.dirty > 0).length;
-  const unlanded = risk.length - dirty;
-  if (unlanded + dirty === 0) return null;
-  const age = formatAge(now - t);
-  return lang === 'en'
-    ? `⚠ ${unlanded} unlanded ${unlanded === 1 ? 'branch' : 'branches'} / ${dirty} ${dirty === 1 ? 'worktree' : 'worktrees'} with uncommitted work (as of ${age} ago) → /auto-cleanup`
-    : `⚠ ${unlanded} ungelandete ${unlanded === 1 ? 'Branch' : 'Branches'} / ${dirty} ${dirty === 1 ? 'Worktree' : 'Worktrees'} mit uncommitteter Arbeit (Stand vor ${age}) → /auto-cleanup`;
+  const parked = Array.isArray(entry.parked) ? entry.parked : [];
+  const undecided = parked.filter((p) => (p.ageDays || 0) >= UNDECIDED_AFTER_DAYS && isUndecided(p)).length;
+  return { unlanded: risk.length - dirty, dirty, undecided };
 }
 
 /** "3 h" from one hour on, otherwise minutes (at least 1). */
