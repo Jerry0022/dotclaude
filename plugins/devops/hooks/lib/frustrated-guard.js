@@ -270,7 +270,7 @@ function segmentReason(rawSeg, opts, ps) {
     if (base === 'env' && ws.length > 1) return segmentReason(ws.slice(1).join(' '), opts, ps);
     return null;
   }
-  if (base === 'sed') return ws.slice(1).some((w) => /^--in-place/.test(w) || /^-[a-zA-Z]*i/.test(w)) ? 'edits a file in place (sed -i)' : null;
+  if (base === 'sed') return ws.slice(1).some((w) => /^--in-place(?:=|$)/.test(w) || /^-[a-zA-Z]*i/.test(w)) ? 'edits a file in place (sed -i)' : null;
   if (base === 'awk' || base === 'gawk') return /system\s*\(|print[^|]*>|-i\s*inplace/.test(seg) ? 'awk writes or runs commands' : null;
   if (base === 'find') return ws.some((w) => /^-(?:delete|exec|execdir|ok|okdir|fprint\w*|fls)$/.test(w)) ? 'find with -delete/-exec' : null;
   if (base === 'git') return gitReadOnly(ws) ? null : `\`git ${ws.find((w, i) => i > 0 && !/^-/.test(w)) || ''}\` changes the repository`;
