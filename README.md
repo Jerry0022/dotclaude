@@ -228,10 +228,18 @@ token behind it expired: the file route needs no generator, and `claude` +
 
 ### Prompt cache TTL
 
-In overage (usage credits) Claude Code silently drops the prompt cache from
-1 hour to 5 minutes, so every short break re-writes the whole context.
-`"promptCacheTtl": "1h"` in `~/.claude/settings.json` keeps it (Claude Code
-≥ 2.1.242; check with `/usage` → `Prompt cache (main)`).
+> **Only matters in overage (usage credits).** Within your Pro/Max plan the
+> main chat already caches for 1 hour; this setting changes nothing there.
+
+- **Set `"promptCacheTtl": "1h"` in `~/.claude/settings.json`** (Claude Code
+  ≥ 2.1.242). Why: in overage Claude Code silently drops the main chat to
+  5 minutes, so every break of 5–60 min re-writes the whole context. Measured
+  on 87k main-chat requests (Sept–Oct 2026): 1 h is 25–57 % cheaper than 5 min.
+- **Leave subagents on 5 minutes** — do not set `subagentPromptCacheTtl`.
+  Why: subagents write much and pause rarely; 1 h would make them 4–11 % more
+  expensive (same data, 72k subagent requests).
+- **Check it** with `/usage` → `Prompt cache (main)` in a new session — the
+  TTL is read at start-up, a running session keeps its value.
 
 <details>
 <summary><strong>Measure first, then set</strong> — prompt for Claude, how the cache works</summary>
@@ -264,13 +272,17 @@ Analyse my prompt-cache pauses, then decide on promptCacheTtl:
    transcript content.
 ```
 
-Every API call (each tool call, not just each message) re-sends the full
-context; an unchanged prefix is read from the cache at ~0.1× the input price
-(0.05× on Opus 5.5), new content is written once at 2× (1h TTL). A pause
-longer than the TTL, a model switch or a changed tool list (MCP server or
-plugin toggled mid-session) re-writes everything. Keep one topic per session,
-run big reads in subagents, and `/compact` or write a hand-off *before* a long
-break while the cache is still warm.
+Keep the cache warm — each rule avoids a full re-write of the context:
+
+- **One topic per session.** A model switch or an MCP server/plugin toggled
+  mid-session re-writes everything.
+- **Big reads in subagents.** Their tokens stay out of the main chat's prefix.
+- **`/compact` or a hand-off *before* a break longer than 1 h**, while the
+  cache is still warm.
+
+How it is priced: every tool call re-sends the full context; an unchanged
+prefix is read at ~0.1× the input price (0.05× on Opus 5.5), new content is
+written once at 1.25× (5 min) or 2× (1 h).
 
 </details>
 
