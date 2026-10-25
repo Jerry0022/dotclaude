@@ -196,26 +196,60 @@ signal Claude monitors.
    **frozen veil**: `showIteration()` re-arms it on every non-live tab and
    shows the `#frozen-bar` floating pill with a back-to-live button (see
    `deep-knowledge/iteration-rules.md` § Rules, "Veil + floating bar").
-5. Switch the decision panel from "ready" to "submitted" state — showing a
-   clear "Entscheidungen übermittelt" indicator with a hint to switch to the
-   Claude chat (see `deep-knowledge/templates-submit.md` § Submit Handler)
+5. Switch the decision panel from "ready" to "submitted" state — the journey
+   row's round toggle turns into the "Rethinking x/y" run bar (implement: the
+   implement toggle turns into "Umsetzung n/m"), see
+   `deep-knowledge/templates-submit.md` § Journey row
 
-**Decision panel states** (the foot + the pinned status line above it):
-- **Ready**: split button active, decision summary visible; the status line
-  reads "✓ Gespeichert · verbunden" (or "… Speichert" while the draft mirror
-  flushes, "◐ Gespeichert · verbinde…" before the first heartbeat)
+**Decision panel states** (the journey row + the status line under it; see
+`templates-submit.md` § Journey row):
+- **Ready**: round toggle "👉 Zur nächsten Runde | 🤖" — wire — 🔒 — 🤖 — 🏁;
+  the status line reads "👉 Du bist dran · gespeichert" ("speichert…" while
+  the draft mirror flushes, "verbindet…" before the first heartbeat). A click
+  on 🔒 unlocks: the round toggle shrinks to ↩ | 🤖 while the implement
+  toggle "🔓 Jetzt umsetzen / keine weitere Runde | 🤖" grows; ↩ reverts.
 - **Disconnected**: the buttons stay ENABLED (a click is cached and delivered
-  on reconnect, the cache badge on the button says so); the status line flips
-  to the one categorically different state, "⚠ Nur lokal gespeichert ·
-  getrennt" on a warning background (Claude heartbeat stale or three failed
-  draft flushes — see `deep-knowledge/templates-utilities.md` § Claude Connection
-  Heartbeat)
-- **Submitted**: "Entscheidungen übermittelt" + "Wechsle zum Claude Chat"
-  hint in the foot; the status line reads "⏳ Übermittelt · Claude arbeitet"
-  with one progress dot per step (the step list expands under it)
+  on reconnect); the line reads "👉 Du bist dran · alles gespeichert ·
+  verbinde…" and the bottom toast shows the same bright blue pill with a
+  floating "verbinde…" (see `templates-utilities.md` § Status line / toast)
+- **Submitted**: "🤖 überdenkt · gespeichert" (iterate) / "🤖 setzt um ·
+  gespeichert" (implement); the bar counts `#status-steps` (x/y) or the
+  bridge's `_progress` (n/m, else indeterminate). With the panel closed the
+  toast repeats the pill under a "Runde N" caption; disconnected it dims and
+  "verbinde…" floats below. The panel-head round chip turns green.
 - **Frozen** (any non-live tab): `#panel-frozen` with the back-link; the
-  status line reads "🕘 Iteration N · nur lesen"
+  journey row is hidden, the status line reads "🕘 Runde N · nur lesen"
 - After Claude processes and resets the page → back to **Ready**
+
+**Notes, pins and hotkeys** (chrome polish; the engine owns all of it):
+- **Wording**: "Notiz"/"Notizen" (en "note(s)") for every note surface — never
+  "Kommentar"/"Anmerkung" — and "Runde" (en "Round") for what the payload
+  calls `iteration`; round chips read `{{iteration.tab}} N`. UI strings never
+  name the assistant ("Claude"/"AI"): bridge and connection strings are
+  neutral; user-addressed lines start with "Du"/"You".
+  `locale-wording.test.js` enforces this on the locale table.
+- **Notes dock** (💬): each field has a breadcrumb (Concept › Variante › Seite;
+  fewer levels on plain pages) with a scope tag, and a "Wusstest du schon?" tip
+  rotating through a static pool of plugin facts, a different one per open.
+- **Pins**: automatic pins are glow-only bubbles, answered ones show a bold ✓.
+  An own pin is set with Ctrl+click or — on touch — a ~500 ms long-press
+  without movement; the whole pin drags, takes attachments, and opening one
+  closes any other. While one note's input is open (`body[data-note-editing]`,
+  maintained by the annotation layer, so single-design pages get it too) the
+  connectors and summaries of all others hide and their pins fade.
+- **Eye (👁)**: toggles all notes; its counter shows the OPEN automatic notes
+  of the current page, also while they are hidden; it hides on pages with no
+  notes at all.
+- **Hotkeys** (hold Alt to show every hint as `<kbd>`): Space opens/closes the
+  notes dock, ←/→ page through screens (or slides on the overview), ↑/↓ change
+  level, 1–9 pick a design / question / round tab, Ctrl+Enter starts the next
+  round; ignored while typing in a field. One-time nudges point at the useful
+  ones and stay dismissed for 30 days.
+- **Staged entrance**: the journey row builds up left to right once per round
+  on the first panel open; a new round opens at the first page/top (overview
+  start page on overview concepts, scroll top on plain pages). Reduced motion
+  turns all of it off. The final report has no journey row, so nothing builds
+  up there.
 
 ## File naming and iteration tabs
 

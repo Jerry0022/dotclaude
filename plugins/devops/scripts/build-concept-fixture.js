@@ -247,7 +247,7 @@ function freeRound(n, { live }) {
   return [
     `<section id="iter-${n}" data-iteration="${n}" data-iteration-template="free"${live ? ' data-active' : ' hidden'}>`,
     '  <header class="iteration-intro">',
-    `    <h2>Iteration ${n} · ${live ? 'live round' : 'frozen round'}</h2>`,
+    `    <h2>{{iteration.tab}} ${n} · ${live ? 'live round' : 'frozen round'}</h2>`,
     `    <p>Synthetic free round ${n} of the Kompass fixture — one mapping block between two context sections.</p>`,
     '  </header>',
     plainSection(`r${n}-s0`, `Context — round ${n}`),
@@ -266,7 +266,7 @@ function decisionRound(n, { live, entries, plain, discard = 0 }) {
   const parts = [];
   parts.push(`<section id="iter-${n}" data-iteration="${n}" data-iteration-template="decision"${live ? ' data-active' : ' hidden'}>`);
   parts.push('  <div class="iteration-intro">');
-  parts.push(`    <h2>Iteration ${n} · ${live ? 'live round' : 'frozen round'}</h2>`);
+  parts.push(`    <h2>{{iteration.tab}} ${n} · ${live ? 'live round' : 'frozen round'}</h2>`);
   parts.push(`    <p>Synthetic round ${n} of the Kompass fixture — ${entries} sections, ${plain} of them context.</p>`);
   parts.push('  </div>');
   for (let i = 0; i < entries; i++) {
@@ -317,7 +317,7 @@ function tabs(rounds, live) {
   // present (stripActiveSuffix), but new chips should not carry it at all
   // (iteration-rules.md § Iteration append checklist, item 7).
   return rounds.map(n =>
-    `<button class="iteration-tab" role="tab" data-iteration="${n}" aria-selected="${n === live ? 'true' : 'false'}">Iteration ${n}</button>`
+    `<button class="iteration-tab" role="tab" data-iteration="${n}" aria-selected="${n === live ? 'true' : 'false'}">{{iteration.tab}} ${n}</button>`
   ).join('\n');
 }
 

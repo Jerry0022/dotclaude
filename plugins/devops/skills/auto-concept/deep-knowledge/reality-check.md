@@ -154,7 +154,7 @@ What differs:
 - `<section data-iteration="N+1" data-iteration-template="…" data-reality-check
   data-reality-head="<sha>" data-active>` and a matching tab carrying
   `data-reality-check` with the label
-  `{{iteration.reality_tab}}` — never "Iteration N+1". The markers go on the
+  `{{iteration.reality_tab}}` — never "{{iteration.tab}} N+1". The markers go on the
   section and the tab, and nowhere else; in particular never inside a block that
   § 2.6's engine-drift re-sync copies verbatim from `templates.md`, which would
   overwrite them.

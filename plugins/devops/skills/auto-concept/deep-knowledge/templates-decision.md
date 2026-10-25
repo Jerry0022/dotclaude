@@ -323,7 +323,7 @@ of the variant cards — not a different page layout.
   ├── Description + evidence
   ├── [Tri-state: Verwerfen / Miteinbeziehen (default) / Nur diese]
   ├── [Priority: Hoch / Mittel / Niedrig]
-  └── [Comment field: "Anmerkung..."]
+  └── [Note field: "Notiz..."]
 
 [Finding 2]
   └── ...

@@ -259,7 +259,7 @@ design round has: the three row builders and the ordering of stash → rebuild
         btn.type = 'button';
         btn.dataset.screenId = sec.id;
         btn.dataset.designId = d.dataset.design;
-        navRowLabel(btn, sec.dataset.navLabel || sec.id, `${idx + 1}.`);
+        navRowLabel(btn, sec.dataset.navLabel || sec.id, romanNumeral(idx + 1));
         navRowMarker(btn, 'noteMarker', '');
         btn.addEventListener('click', () => {
           // Resolve the active design at CLICK time. buildDesignUI() only
@@ -988,8 +988,7 @@ design round has: the three row builders and the ordering of stash → rebuild
     // Guarded like every other indicator write — see updateScreenScope().
     const labelEl = document.getElementById('active-screen-label');
     if (labelEl) labelEl.textContent = label;
-    const idxEl = document.getElementById('active-screen-idx');
-    if (idxEl) idxEl.textContent = idx + 1;
+    document.querySelectorAll('#active-screen-idx, #dock-screen-idx').forEach(n => { n.textContent = romanNumeral(idx + 1); });
     const dockLabel = document.getElementById('dock-screen-label');
     if (dockLabel) dockLabel.textContent = label;
     const dockScreenDesign = document.getElementById('dock-screen-design');
@@ -1325,8 +1324,22 @@ design round has: the three row builders and the ordering of stash → rebuild
     updateNoteMarkers();
   });
 
-  // Keyboard: Arrow Left/Right (and Space) jump between screens (within the
-  // active design) when no textarea/input is focused and no overlay is open.
+  // Detail pages are numbered with roman numerals (I, II, III …) in the quick
+  // nav and in this TOC; digits stay reserved for the variant hotkeys 1–9.
+  function romanNumeral(n) {
+    const map = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'],
+      [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']];
+    let out = '';
+    let rest = Math.max(1, Math.floor(Number(n) || 1));
+    map.forEach(([v, sym]) => { while (rest >= v) { out += sym; rest -= v; } });
+    return out;
+  }
+  window.romanNumeral = romanNumeral;
+
+  // Keyboard: Arrow Left/Right jump between screens (within the active
+  // design) when no textarea/input is focused and no overlay is open. Space
+  // is NOT a page key any more — it toggles the notes dock (wireDesignOverview
+  // / wireChromeHotkeys); ↑ / ↓ change the level (overview ↔ variant).
   document.addEventListener('keydown', e => {
     // Both optional: this handler is bound on every design page, and either
     // overlay can be absent from the markup. Unguarded, a missing one threw
@@ -1354,7 +1367,7 @@ design round has: the three row builders and the ordering of stash → rebuild
     const currentIdx = screens.findIndex(s => s.dataset.screenActive === 'true');
     if (currentIdx < 0) return;
     let nextIdx = currentIdx;
-    if (e.key === 'ArrowRight' || e.key === ' ') nextIdx = Math.min(currentIdx + 1, screens.length - 1);
+    if (e.key === 'ArrowRight') nextIdx = Math.min(currentIdx + 1, screens.length - 1);
     else if (e.key === 'ArrowLeft') nextIdx = Math.max(currentIdx - 1, 0);
     else return;
     e.preventDefault();

@@ -13,7 +13,7 @@ selections, read-only comments).
 
 | Situation | Action | Result |
 |-----------|--------|--------|
-| First generation | Write the file with `<section data-iteration="1" data-active>` and one tab "Iteration 1" | Tab 1 active |
+| First generation | Write the file with `<section data-iteration="1" data-active>` and one tab "{{iteration.tab}} 1" | Tab 1 active |
 | Feedback loop iteration (Step 5c) | Append `<section data-iteration="N+1" data-active>` to the same file, remove `data-active` from the previous section, freeze it, add a new tab and make it active | New tab "Iteration N+1" auto-active, old tab selectable and read-only |
 | Fundamental rework ("nochmal neu") | Same as a feedback iteration — just another tab. The full history stays visible. | Another tab appended |
 | Implement submission diverted by the reality check (Step 5b step 0) | Append `<section data-iteration="N+1" data-reality-check data-reality-head="{sha}" data-active>` — an ordinary iteration in every mechanical respect, with the `.reality-banner` explainer first and one flat decision card per drift item. Tab label `{{iteration.reality_tab}}` ("Realitäts-Check" / "Reality check") with `data-reality-check` on the chip, NEVER "Iteration N+1". Freeze the previous section as usual. NO `phase: "implemented"` — no code was written. | New tab "Realitäts-Check" auto-active, both submit buttons live. Implementing from it skips the check and writes code, so two forced rounds can never follow each other. See `reality-check.md` |
@@ -42,7 +42,7 @@ selections, read-only comments).
 - **Veil + floating bar on every past tab (all templates).** Entering a
   non-live tab locks it behind the shared `#content-dimmer` (the "veil";
   `showIteration()` → `lockFrozenView()`) and unhides `#frozen-bar`, a fixed
-  top-centre pill reading "🕘 Iteration N · frühere Runde, schreibgeschützt"
+  top-centre pill reading "🕘 Runde N · frühere Runde, schreibgeschützt"
   with a `#frozen-bar-back` button to the live round. The veil is
   click/Escape-to-lift so the round can be read in full; the bar stays up
   after the lift — it is the signal that survives the reflex click. Lock
@@ -353,7 +353,7 @@ When appending a new iteration section (Step 5c of `SKILL.md`), verify
       comments: `GET /draft?slug={slug}` must list them under `recovered`.
       That is the copy that survives if the rewrite goes wrong.
 7. ☐ The new chip is ONE plain `<button class="iteration-tab" role="tab"
-      data-iteration="N+1" aria-selected="true">Iteration N+1</button>`
+      data-iteration="N+1" aria-selected="true">{{iteration.tab}} N+1</button>`
       string-appended at the end of `nav.iteration-tabs` (previous chip →
       `aria-selected="false"`) — **no `{{iteration.active_suffix}}` / "·
       aktiv" / "· active" text on it.** The bar is hidden chrome now

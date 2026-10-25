@@ -317,6 +317,9 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    implement branch, additionally POST `/status` once code changes are done
    (see SKILL.md Step 5b · implement, sub-step 3) so the third step
    ("Implementierung abgeschlossen") lights up before the page reloads.
+   `/status` also takes an optional `"progress": {"done": n, "total": m}`
+   (validated, transient, cleared with `_phase`) that the browser reads as
+   `_progress` to draw the "Umsetzung n/m" bar; absent = indeterminate bar.
 
    The waker (below) makes the submit-to-process lag ~20 s; the cron's
    15-min cadence is the lag only when both watchers are gone.

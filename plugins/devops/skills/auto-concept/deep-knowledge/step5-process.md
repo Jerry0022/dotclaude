@@ -211,6 +211,17 @@ never re-run a completed step. The checkpoint records what the previous run
      others marked Verwerfen)
    - For free-template findings: apply the Miteinbeziehen findings as fixes
    - For design iterations: build the designed UI/flow with the feedback applied
+   **Optional — live counter.** While implementing, POST the progress after
+   each approved requirement so the panel's "Umsetzung n/m" bar advances
+   (`m` = number of requirements in the approved scope, `n` = done so far):
+   ```bash
+   curl -s -X POST -H "Content-Type: application/json" \
+        -d "{\"phase\":\"implementing\",\"progress\":{\"done\":$N,\"total\":$M},\"version\":$NOTED_VERSION}" \
+        http://localhost:$PORT/status
+   ```
+   The bridge validates `progress` (`0 <= done <= total`, `total >= 1`, ints;
+   anything else is dropped) and echoes it to the browser as `_progress` on
+   `GET /decisions`. Without it the bar is indeterminate — never required.
 3. **Signal completion to the panel.** Right after the implementation work
    is done — and BEFORE the final-report append + `/reload` in Step 5c — POST
    the implemented phase so the submit panel's third progress step lights

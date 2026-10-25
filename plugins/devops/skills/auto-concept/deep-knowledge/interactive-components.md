@@ -323,7 +323,7 @@ within its container — never narrow.
 <div class="comment-field">
   <textarea
     data-comment="variant-a"
-    placeholder="Anmerkungen zu Orbital Ring..."
+    placeholder="Notizen zu Orbital Ring..."
     rows="3"
   ></textarea>
 </div>

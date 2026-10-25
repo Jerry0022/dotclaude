@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.303.0] — 2026-10-25
+
+The auto-concept page chrome got a rework. The decision panel shows one journey row (round toggle, lock, Umsetzung, Abschluss) with a status line and a status toast. The header, quick nav and FABs are islands, and the notes dock has breadcrumbs and tips. New hotkeys: Space opens the notes dock, the arrow keys move between levels and Alt shows the overlay. Page numbers are roman numerals, and the wording is neutral ("Runde", "Notiz").
+
+Why: the split button, progress dots, green "submitted" box and hint told the same state four times. Nobody could see whose turn it was or whether the work was saved. Quick-nav entries needed two clicks.
+
+### Added
+- **Journey row.** `mountJourney()` adopts `#submit-iterate-btn` / `#submit-implement-btn`; ids, confirms and payloads are unchanged. Rethinking x/y is counted from `#status-steps`. Umsetzung n/m comes from the new optional `POST /status` `progress {done,total}` (the bridge validates it and echoes it as transient `_progress`); without it the bar is indeterminate.
+- **Status line and toast.** "turn · save state" under the panel, and a toast with the same run bar under a "Runde N" caption. The toast is dimmed with "verbinde…" while the page is away during a run, and says "Du bist dran – alles gespeichert" on the user's turn.
+- **Chrome.** Header islands, FAB islands with glow, an eye counter, own pins with long-press, a notes dock with breadcrumbs and tips, and note editing in the annotation layer. Situational nudges can be dismissed for 30 days.
+- **Hotkeys.** Space for the notes dock, arrows for levels, Alt for the overlay.
+
+### Changed
+- **Wording.** "Runde"/"Notiz" and neutral strings in both locales. The round chips use the new `iteration.tab` locale key, and `design.feedback_in` is gone.
+- **Overview.** No arrows, a hover glow, one Neugedacht/Verbessert chip, and a "Fragen" segment that jumps to the next open question.
+- **Docs.** auto-concept SKILL.md and the `templates-*.md`, `step2-*`, `step5-*`, `bridge-server.md`, `interactive-components.md`, `iteration-rules.md` and `reality-check.md` deep-knowledge.
+
+### Fixed
+- Quick nav acts on pointerdown, so one click is enough.
+- The overview preview scale ignores the transforms of ancestor elements.
+- The header name is capped at 17rem, and short names stay whole once the pin left the row.
+
+Known limits: a doubled check on old rounds could not be reproduced. The build-up animation does not run on the final report. Several template files are over the 600-line budget.
+
 ## [0.302.0] — 2026-10-23
 
 Session titles that a crash or an app quit left on ⏳ are now marked `👉 ➜ ⚡ Interrupted ┃ <title>` as soon as any session is started again. The Quiet style ends an answer with actions under a "Was nun?" heading, with a 👉 line and a 🤖 line instead of "Du:"/"Ich:".
