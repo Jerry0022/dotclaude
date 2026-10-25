@@ -216,3 +216,85 @@ describe("secret-file guard (audit 2026-10-20)", () => {
     expect(agent.runTool(proj, "read_file", { path: "src/a.js" })).toContain("answer");
   });
 });
+
+describe("model per task", () => {
+  beforeEach(() => enable());
+  const done = { content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage };
+  async function modelFor(argv, env = {}) {
+    const calls = [];
+    await runAgent(argv, { env, fetchImpl: scripted([{ ...done }], calls) });
+    return calls[0].model;
+  }
+  test("scout and --web follow the tag; --locate is Haiku; audit/unknown stay Opus", async () => {
+    expect(await modelFor(["t"])).toBe("claude-sonnet-5-5");
+    expect(await modelFor(["--web", "t"])).toBe("claude-sonnet-5-5");
+    expect(await modelFor(["--locate", "t"])).toBe("claude-haiku-5-5");
+    expect(await modelFor(["--tag", "locate", "t"])).toBe("claude-haiku-5-5");
+    expect(await modelFor(["--tag", "audit", "t"])).toBe("claude-opus-5-5");
+  });
+  test("--model and the env var win over the tag", async () => {
+    expect(await modelFor(["--model", "claude-opus-5-5", "t"])).toBe("claude-opus-5-5");
+    expect(await modelFor(["t"], { CLAUDE_API_AGENT_MODEL: "claude-haiku-5-5" })).toBe("claude-haiku-5-5");
+  });
+});
+
+describe("context editing", () => {
+  const done = () => ({ content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage });
+  const logRows = () => fs.readFileSync(path.join(home, ".claude", "api-credit-usage.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+
+  function capture(responses, seen) {
+    return async (url, init) => {
+      seen.push({ body: JSON.parse(init.body), headers: init.headers });
+      const r = responses.shift();
+      return { ok: !r.status || r.status < 300, status: r.status || 200, json: async () => r.body || r };
+    };
+  }
+
+  test("on by default: beta header, thresholds, cache_control kept; applied edits are logged", async () => {
+    enable();
+    const seen = [];
+    const res = { ...done(), context_management: { applied_edits: [{ type: "clear_tool_uses_20250919", cleared_tool_uses: 4, cleared_input_tokens: 65000 }] } };
+    const r = await runAgent(["t"], { fetchImpl: capture([res], seen) });
+    expect(r.rc).toBe(0);
+    expect(seen[0].headers["anthropic-beta"]).toBe("context-management-2025-06-27");
+    expect(seen[0].body.context_management.edits[0]).toEqual({
+      type: "clear_tool_uses_20250919",
+      trigger: { type: "input_tokens", value: 100000 },
+      keep: { type: "tool_uses", value: 3 },
+      clear_at_least: { type: "input_tokens", value: 60000 },
+    });
+    expect(seen[0].body.cache_control).toEqual({ type: "ephemeral" });
+    const row = logRows()[0];
+    expect(row.ctxClears).toBe(1);
+    expect(row.ctxClearedTokens).toBe(65000);
+  });
+
+  test("env DEVOPS_API_CONTEXT_EDITING=0 and the config switch turn it off", async () => {
+    enable();
+    let seen = [];
+    await runAgent(["t"], { env: { DEVOPS_API_CONTEXT_EDITING: "0" }, fetchImpl: capture([done()], seen) });
+    expect(seen[0].body.context_management).toBeUndefined();
+    expect(seen[0].headers["anthropic-beta"]).toBeUndefined();
+    // The config key is registered in hooks/lib/devops-config.js (orchestrator-owned); assert once it exists.
+    if (require("../hooks/lib/devops-config").listKeys().includes("apiCredit.contextEditing")) {
+      fs.writeFileSync(path.join(home, ".claude", "devops-config.json"), JSON.stringify({ apiCredit: { enabled: true, contextEditing: false } }));
+      seen = [];
+      await runAgent(["t"], { fetchImpl: capture([done()], seen) });
+      expect(seen[0].body.context_management).toBeUndefined();
+    }
+  });
+
+  test("a rejected beta is retried once without it and stays off for the run", async () => {
+    enable();
+    const seen = [];
+    const tool = { content: [{ type: "tool_use", id: "t1", name: "list_files", input: { path: "." } }], stop_reason: "tool_use", usage };
+    const reject = { status: 400, error: { message: "context_management: Extra inputs are not permitted" } };
+    const r = await runAgent(["t"], { fetchImpl: capture([reject, tool, done()], seen) });
+    expect(r.rc).toBe(0);
+    expect(seen).toHaveLength(3);
+    expect(seen[0].body.context_management).toBeDefined();
+    expect(seen[1].body.context_management).toBeUndefined();
+    expect(seen[2].body.context_management).toBeUndefined();
+    expect(seen[2].headers["anthropic-beta"]).toBeUndefined();
+  });
+});
