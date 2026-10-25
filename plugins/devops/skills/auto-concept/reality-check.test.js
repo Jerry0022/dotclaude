@@ -22,9 +22,9 @@ import { readTemplates } from "./templates-source.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DK = path.join(__dirname, "deep-knowledge");
 const md = readTemplates();
-const gate = fs.readFileSync(path.join(DK, "validation-gate.md"), "utf8");
+const gate = ["validation-gate.md", "validation-gate-phase2.md"].map((f) => fs.readFileSync(path.join(DK, f), "utf8")).join("");
 const iterRules = fs.readFileSync(path.join(DK, "iteration-rules.md"), "utf8");
-const bridge = fs.readFileSync(path.join(DK, "bridge-server.md"), "utf8");
+const bridge = ["bridge-server.md", "bridge-server-state.md"].map((f) => fs.readFileSync(path.join(DK, f), "utf8")).join("");
 const realityDoc = fs.readFileSync(path.join(DK, "reality-check.md"), "utf8");
 const skill = readSkill();
 

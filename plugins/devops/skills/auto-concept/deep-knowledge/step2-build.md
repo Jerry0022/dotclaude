@@ -135,7 +135,7 @@ would refuse over it.
   not from the HTML.
 - **Engine reference (`templates-*.md`):** only the markup sections this round
   authors, e.g. `templates-decision.md` for variant cards,
-  `templates-design.md` § Rules / Views / Annotation Layer for a design round,
+  `templates-design.md` § Rules / Annotation Layer and `templates-design-views.md` § Views for a design round,
   `templates-mapping.md` § Information Mapping for a spec,
   `templates-rounds.md` § Final-report section HTML for the report. Find the
   heading with Grep and read that range (`offset` / `limit`), never a whole

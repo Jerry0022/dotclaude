@@ -258,3 +258,36 @@ describe("journey strings — both locales, final wording", () => {
     expect(rows.find((l) => l.startsWith("| `panel.submit_iterate`"))).toContain("Zur nächsten Runde");
   });
 });
+
+describe("old rounds and the final report", () => {
+  test("a frozen round says its state once: the status line, not a second 🕘 indicator", () => {
+    expect(cssSource).toMatch(/#panel-frozen \.frozen-indicator \{ display: none; \}/);
+  });
+
+  test("the final report shows the finished journey row on top of its panel", () => {
+    const dom = new JSDOM(`<!doctype html><body class="viewing-final panel-open">
+      <div id="panel-final-report"><div class="closeout-sheet"></div></div></body>`,
+      { runScripts: "outside-only", url: "http://localhost/" });
+    const { window } = dom;
+    window.eval(localeKeys([
+      "var STORAGE_KEY = 'concept-state-t';",
+      constLine("_JR_CHK"),
+      fnSource("_jrEl"),
+      fnSource("mountFinalJourney"),
+      fnSource("maybeBuildFinalJourney"),
+      "mountFinalJourney(); maybeBuildFinalJourney();",
+    ].join("\n")));
+    const row = window.document.querySelector("#panel-final-report > .journey-final");
+    expect(row).not.toBeNull();
+    expect(row.dataset.phase).toBe("done");
+    expect(row.querySelectorAll(".jr-dot .jr-chk").length).toBe(2);
+    expect(row.querySelector(".jr-run-done").style.width).toBe("100%");
+    expect(row.querySelector(".jr-finish").textContent).toBe("🏁");
+    expect(row.classList.contains("jr-build")).toBe(true);
+    // Once per page: a second open does not rebuild.
+    row.classList.remove("jr-build");
+    window.eval("maybeBuildFinalJourney();");
+    expect(row.classList.contains("jr-build")).toBe(false);
+    expect(cssSource).toContain("body.viewing-final .journey:not(.journey-final)");
+  });
+});

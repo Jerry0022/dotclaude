@@ -673,7 +673,7 @@ if (require.main === module) {
           `, last activity ${store.lastActivityAt || 'none recorded'}, no draft, nothing pending): ` +
           `no activity for more than 24 h. The durable store stays at ${store.storeDir}. ` +
           `If the concept is still wanted, recreate the state file from that store and relaunch the bridge ` +
-          `(bridge-server.md step 4 — same port ${state.port}, same --html ${state.html_path}).\n`
+          `(bridge-server-state.md step 4 — same port ${state.port}, same --html ${state.html_path}).\n`
         );
         process.exit(0);
       }

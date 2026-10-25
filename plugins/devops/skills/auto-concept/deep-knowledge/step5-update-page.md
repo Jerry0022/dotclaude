@@ -77,7 +77,7 @@ first (`step2-build.md` § Legacy pages).
    final step. The browser's `pollProcessedState` is a safety-net —
    it will only restore the panel state when a reload counter advance
    has been observed OR a long stale timeout elapses. See
-   `deep-knowledge/templates-submit.md` § Panel State Reset for the polling contract.
+   `deep-knowledge/templates-submit-journey.md` § Panel State Reset for the polling contract.
    **428 `no_reload_since_submission`** = no `/reload` since this
    iterate/implement submission arrived: the round was never delivered. Do
    steps 1–5 (bake, fragment, `build`, `/reload`), then `/reset` again —
@@ -110,7 +110,7 @@ lives in the single built `{date}-{slug}.html` and its source folder
    The session writes it itself, because the implementation is in its
    context. The build makes it the live round. The `data-final-report` flag switches the panel to
    `panel-final-report` mode (no iterate/implement buttons — see
-   `deep-knowledge/templates-rounds.md` § Final Report Panel). The template is
+   `deep-knowledge/templates-final-report.md` § Final Report Panel). The template is
    **always `free`** and is never omitted: a report is a document with a TOC,
    the `design` layout is built for a mockup, and a section that declares no
    template used to inherit whatever tab the reader came from — the same
@@ -232,7 +232,7 @@ part B), or to nothing. Write `data-issue-body` for every item as if it were
 BOTH: an issue read cold in three months and a brief handed to an
 implementing agent ten minutes later. The presence of this section is what
 adds the follow-up block to the close-out sheet — see
-`deep-knowledge/templates-rounds.md` § Final Report Panel for the HTML pattern.
+`deep-knowledge/templates-final-report.md` § Final Report Panel for the HTML pattern.
 Default each `<input type="checkbox">` to `checked` so the user opts items
 OUT rather than IN. The validation gate rejects a final report whose open
 points lack `data-oq-origin` (`deep-knowledge/validation-gate.md` pattern

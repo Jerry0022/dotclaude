@@ -123,7 +123,7 @@ with an overview table carrying a recommendation column and jump links
    topic per round; only then the favourite ☆ exists) or `"topics"` when they
    show different topics. The engine builds the variant overview carousel,
    the header and the quick nav from them; the gate warns when one is
-   missing. See `deep-knowledge/templates-design.md` § Variant
+   missing. See `deep-knowledge/templates-design-views.md` § Variant
    overview (≥2 designs).
 
    **Single-screen, single-design (exactly one `data-screen`):** no
@@ -153,7 +153,7 @@ with an overview table carrying a recommendation column and jump links
    **Optional views:** alongside the ≥1 design, this same `design` iteration
    MAY also hold `section[data-view]` — fullscreen, non-visual questions
    with their own TOC entry, switched exactly like a design (see
-   `deep-knowledge/templates-design.md` § Views (optional)).
+   `deep-knowledge/templates-design-views.md` § Views (optional)).
    Three kinds ship as templates: `decision` (2..n named alternatives, bi-state per alternative),
    `comparison` (2..n concrete candidates side by side, verdict per
    option, optional criteria matrix) and `mapping` (many items assigned to

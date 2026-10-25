@@ -188,7 +188,7 @@ On success the server stamps `_processed_at` with the current UTC time.
 The visible panel reset already happened via `location.reload()` (triggered
 by `/reload` in the previous step). The browser's `pollProcessedState` only
 flips the panel locally as a safety-net — when a reload counter advance
-has been observed OR a long stale timeout elapses. See `templates-submit.md`
+has been observed OR a long stale timeout elapses. See `templates-submit-journey.md`
 § Panel State Reset for the client contract.
 
 **WARNING:** NEVER use `get_page_text`, `browser_snapshot`, or `preview_snapshot`
