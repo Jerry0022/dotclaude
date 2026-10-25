@@ -273,10 +273,13 @@ describe("browser tab title carries the live status", () => {
     ].join("\n"));
     return dom.window.document.title;
   }
-  test("👉 your turn, ⏳ rethinking, 🛠️ implementing — no 'Concept —' prefix", () => {
+  // ⏳ is the one "Claude works" sign (as in the session title) — also while
+  // implementing; an old 🛠️ title is still cleaned.
+  test("👉 your turn, ⏳ while Claude works (also implementing) — no 'Concept —' prefix", () => {
     expect(tabPage("data-active", "renderTabTitle();")).toBe("👉 Wetter-Widget");
     expect(tabPage("data-active", "_submittedAt = 1; _submittedAction = 'iterate'; renderTabTitle();")).toBe("⏳ Wetter-Widget");
-    expect(tabPage("data-active", "_submittedAt = 1; _submittedAction = 'implement'; renderTabTitle();")).toBe("🛠️ Wetter-Widget");
+    expect(tabPage("data-active", "_submittedAt = 1; _submittedAction = 'implement'; renderTabTitle();")).toBe("⏳ Wetter-Widget");
+    expect(tabPage("data-active", "document.title = '🛠️ Wetter-Widget'; renderTabTitle();")).toBe("👉 Wetter-Widget");
   });
   test("🏁 on an open final report, ✅ once it is closed", () => {
     expect(tabPage("data-active data-final-report", "renderTabTitle();")).toBe("🏁 Wetter-Widget");
@@ -290,8 +293,8 @@ describe("browser tab title carries the live status", () => {
   test("a second tab follows the server state from GET /decisions", () => {
     const pre = (extra) => ["var _serverRound = null;", fnSource("noteServerRound"), extra].join("\n");
     expect(tabPage("data-active", pre("noteServerRound({ submitted: true, action: 'iterate' });"))).toBe("⏳ Wetter-Widget");
-    expect(tabPage("data-active", pre("noteServerRound({ submitted: true, action: 'implement' });"))).toBe("🛠️ Wetter-Widget");
-    expect(tabPage("data-active", pre("noteServerRound({ submitted: true, action: 'iterate', _phase: 'implementing' });"))).toBe("🛠️ Wetter-Widget");
+    expect(tabPage("data-active", pre("noteServerRound({ submitted: true, action: 'implement' });"))).toBe("⏳ Wetter-Widget");
+    expect(tabPage("data-active", pre("noteServerRound({ submitted: true, action: 'iterate', _phase: 'implementing' });"))).toBe("⏳ Wetter-Widget");
     expect(tabPage("data-active", pre("noteServerRound({ submitted: true }); noteServerRound({ submitted: false });"))).toBe("👉 Wetter-Widget");
     expect(fnSource("pollProcessedState")).toContain("noteServerRound");
   });

@@ -111,6 +111,8 @@ returns — the single-design page is untouched.
     keysTitle: '{{design.keys_title}}', keysDesign: '{{design.keys_design}}',
     keysView: '{{design.keys_view}}', keysNext: '{{design.keys_next}}',
     keysRound: '{{design.keys_round}}', keysNotes: '{{design.keys_notes}}',
+    keysViewport: '{{design.keys_viewport}}', keysMenu: '{{design.keys_menu}}',
+    keysHide: '{{design.keys_hide}}', keysTheme: '{{design.keys_theme}}',
     keysPin: '{{design.keys_pin}}', keysClick: '{{design.keys_click}}',
     keysClose: '{{design.keys_close}}', ctrl: '{{design.key_ctrl}}',
     upinHint: '{{design.upin_hint}}', upinArm: '{{design.upin_arm}}',
@@ -610,7 +612,7 @@ returns — the single-design page is untouched.
       if (e.key === 'Enter' && slide.dataset.pos === 'cur') { e.preventDefault(); open(); }
     });
     slide.appendChild(preview);
-    slide.appendChild(sideLabelOf(iconEl(m.icon, { color: m.color }), m.label));
+    slide.appendChild(sideLabelOf(iconEl(m.icon, { color: m.color })));
     // Overlay: kicker (icon name + ☆/★), motto, three traits, and for a
     // changed variant the "Verbessert …" line — at the anchor the author
     // picked, in the tint the author picked.
@@ -648,14 +650,13 @@ returns — the single-design page is untouched.
     return slide;
   }
   // Side-tile label: only a neighbour (a plain bordered tile) shows it — the
-  // variant's icon, exactly the quick-nav icon (no frame of its own),
-  // vertically centred right where the hover chevron points; the name
-  // appears under it on hover, wrapped, never cut. The centre tile carries
-  // no badge: the quick nav marks which variant it is.
-  function sideLabelOf(icon, label) {
+  // variant's icon alone, exactly the quick-nav icon (no frame, no name: the
+  // quick nav names it), vertically centred right where the hover chevron
+  // points. The centre tile carries no badge: the quick nav marks it.
+  function sideLabelOf(icon) {
     const b = el('span', 'design-ov-side');
     b.setAttribute('aria-hidden', 'true');
-    b.append(icon, el('span', 'design-ov-side-name', label));
+    b.append(icon);
     return b;
   }
   function buildQuestionsSlide() {
@@ -663,7 +664,7 @@ returns — the single-design page is untouched.
     slide.dataset.questions = 'true';
     slide.setAttribute('aria-label', L.qLabel);
     slide.appendChild(el('div', 'design-ov-qcard'));
-    slide.appendChild(sideLabelOf(iconEl('question', { kind: 'plain' }), L.qLabel));
+    slide.appendChild(sideLabelOf(iconEl('question', { kind: 'plain' })));
     wireSlide(slide, null);
     return slide;
   }
@@ -819,11 +820,14 @@ returns — the single-design page is untouched.
     bar.appendChild(fill);
     return bar;
   }
-  function questionItem(q, onPick) {
+  // Every question entry carries its hotkey (⇧ + its number) as a keycap
+  // only — the title is on screen — like the designs' digits.
+  function questionItem(q, onPick, n) {
     const item = el('button', 'design-quick-qitem');
     item.type = 'button';
     item.dataset.done = String(q.done);
     item.append(el('span', 'design-quick-qstate', q.done ? '✓' : ''), el('span', 'design-quick-qtitle', q.title));
+    if (n >= 1 && n <= 9) keyTip(item, '⇧+' + n);
     item.addEventListener('click', onPick);
     return item;
   }
@@ -991,8 +995,8 @@ returns — the single-design page is untouched.
     head.append(el('strong', '', L.qLabel),
       el('span', '', L.qProgress.replace('{done}', String(qs.length - open.length)).replace('{n}', String(qs.length))));
     pop.append(head, progressBar(qs.length - open.length, qs.length));
-    qs.forEach(q => {
-      const item = questionItem(q, () => { wrap.dataset.open = 'false'; goQuestion(q.id); });
+    qs.forEach((q, i) => {
+      const item = questionItem(q, () => { wrap.dataset.open = 'false'; goQuestion(q.id); }, i + 1);
       item.setAttribute('role', 'menuitem');
       item.dataset.viewId = q.id;
       item.dataset.active = String(viewOn === q.v);
@@ -1030,7 +1034,11 @@ returns — the single-design page is untouched.
         b.dataset.active = String(isCur);
         if (isCur) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
         setDot(b, fresh.includes(b.dataset.screenId));
-        keyTip(b, !isCur && i >= 0 && i === (idx + 1) % screens.length ? 'Tab' : '');
+        // Every page names its key, one kind for all: the page on screen ↑
+        // (a click on it goes one level up), the next Tab, the previous ←.
+        // A page further away has no key and so no tooltip.
+        keyTip(b, i < 0 ? '' : isCur ? '↑'
+          : i === (idx + 1) % screens.length ? 'Tab' : i === idx - 1 ? '←' : '');
       });
       const chip = quick.querySelector('.design-quick-more');
       if (chip && chip.firstElementChild) {
@@ -1183,7 +1191,7 @@ returns — the single-design page is untouched.
     card.append(head, el('p', 'design-ov-qprogress', open.length
       ? L.qProgress.replace('{done}', String(qs.length - open.length)).replace('{n}', String(qs.length))
       : L.qAllDone), progressBar(qs.length - open.length, qs.length));
-    qs.forEach(q => card.appendChild(questionItem(q, () => goQuestion(q.id))));
+    qs.forEach((q, i) => card.appendChild(questionItem(q, () => goQuestion(q.id), i + 1)));
   }
   function renderSubmitHint(it) {
     const ready = document.getElementById('panel-ready');
@@ -1266,9 +1274,12 @@ returns — the single-design page is untouched.
     if (!sheet || sheet.firstChild) return;
     sheet.appendChild(el('h2', '', L.keysTitle));
     const dl = el('dl');
-    [['Esc', L.overview], ['1–9', L.keysDesign], ['⇧+1–9', L.keysView], ['Tab', L.keysNext],
+    const rows = [['Esc', L.overview], ['1–9', L.keysDesign], ['⇧+1–9', L.keysView], ['Tab', L.keysNext],
      ['←/→', L.keysCarousel], ['↑/↓', L.keysLevel], ['Enter', L.open], [L.space, L.keysDock], ['F', L.fav], ['Alt+1–9', L.keysRound], ['N', L.keysNotes], [L.ctrl + '+Enter', L.submit],
-     [L.ctrl + '+' + L.keysClick, L.keysPin], ['?', L.keysTitle]].forEach(([k, label]) => {
+     [L.ctrl + '+' + L.keysClick, L.keysPin], ['M', L.keysMenu], ['H', L.keysHide], ['T', L.keysTheme], ['?', L.keysTitle]];
+    // V only where there is a device view to switch to.
+    if (document.getElementById('viewport-toggle') && body.dataset.singleViewport !== 'true') rows.splice(9, 0, ['V', L.keysViewport]);
+    rows.forEach(([k, label]) => {
       const dt = el('dt');
       dt.appendChild(kbdNode(k));
       dl.append(dt, el('dd', '', label));
@@ -1279,12 +1290,16 @@ returns — the single-design page is untouched.
     close.addEventListener('click', () => toggleSheet(false));
     sheet.appendChild(close);
   }
+  // `?` shows the sheet AND the hotkey badges on the page (wireChromeHotkeys):
+  // one key for "every hotkey", never a held Alt (it focuses the browser menu).
   function toggleSheet(force) {
     if (!sheet) return;
     const open = typeof force === 'boolean' ? force : sheet.hidden;
     sheet.hidden = !open;
+    if (typeof window.conceptKeyBadges === 'function') window.conceptKeyBadges(open);
     if (open) sheet.querySelector('.design-keys-close')?.focus();
   }
+  if (sheet) window.conceptKeySheet = toggleSheet;
 
   // ── Build / teardown ───────────────────────────────────────────────────
   let metas = [];

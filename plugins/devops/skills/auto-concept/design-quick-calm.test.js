@@ -123,7 +123,9 @@ describe("quick nav — one level up, in-place repaint, direction", () => {
 });
 
 describe("quick nav tooltips — never the visible name again", () => {
-  test("named segments carry the keycap only; pages only the Tab keycap; Fragen no tooltip", async () => {
+  // One kind of tooltip per group: every page names its key (↑ on screen,
+  // Tab next, ← previous) and every question entry its ⇧ + number.
+  test("named segments carry the keycap only; pages ↑ / Tab / ← keycaps; question entries ⇧+n; Fragen no tooltip", async () => {
     const { window, document } = await boot(page(3));
     const segs = [...document.querySelectorAll("#design-quick .design-quick-designs > .design-quick-seg")];
     expect(segs.length).toBe(3);
@@ -134,10 +136,15 @@ describe("quick nav tooltips — never the visible name again", () => {
     }
     window.showDesign("d2");
     const pages = [...document.querySelectorAll("#design-quick .design-quick-page")];
-    const withTip = pages.filter((b) => b.dataset.tip);
-    expect(withTip.length).toBe(1);
-    expect(withTip[0].dataset.tipKey).toBe("Tab");
-    expect(withTip[0].dataset.tipKeyOnly).toBe("true");
+    expect(pages.map((b) => b.dataset.tipKey || "")).toEqual(["↑", "Tab", ...pages.slice(2).map(() => "")]);
+    for (const b of pages.filter((p) => p.dataset.tip)) expect(b.dataset.tipKeyOnly).toBe("true");
+    window.showScreen(pages[1].dataset.screenId);
+    expect(pages[0].dataset.tipKey).toBe("←");
+    expect(pages[1].dataset.tipKey).toBe("↑");
+    document.querySelectorAll("#design-quick .design-quick-qitem").forEach((item, i) => {
+      expect(item.dataset.tipKey).toBe("⇧+" + (i + 1));
+      expect(item.dataset.tipKeyOnly).toBe("true");
+    });
     const q = document.querySelector("#design-quick .design-quick-q");
     if (q) {
       expect(q.dataset.tip).toBeUndefined();

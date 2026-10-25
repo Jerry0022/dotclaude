@@ -80,13 +80,17 @@
   // switches the page and leaves the menu open (the user's call). Layout
   // handlers still call closePanel() after a nav click; a click that started
   // inside the panel (anything but ✕) marks this tick, and closePanel()
-  // ignores calls made while it is marked. Closing stays: ✕, Esc, a click
-  // outside (backdrop) and the ☰ FAB.
+  // ignores calls made while it is marked. The mark lasts 400 ms, not one
+  // tick: a page switch can finish (and call closePanel) after its slide
+  // transition, and a question entry must leave the menu open like any
+  // other. Closing stays: ✕, Esc, a click outside (backdrop) and the ☰ FAB.
   let navClickTick = false;
+  let navClickTimer = 0;
   panel?.addEventListener('click', e => {
     if (panelCloseBtn && panelCloseBtn.contains(e.target)) return;
     navClickTick = true;
-    setTimeout(() => { navClickTick = false; }, 0);
+    clearTimeout(navClickTimer);
+    navClickTimer = setTimeout(() => { navClickTick = false; }, 400);
   }, true);
   const closeForReal = window.closePanel;
   window.closePanel = () => { if (!navClickTick) closeForReal(); };

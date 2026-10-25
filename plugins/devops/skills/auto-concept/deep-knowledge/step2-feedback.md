@@ -237,8 +237,8 @@ signal Claude monitors.
   journey row is hidden, the status line reads "🕘 Runde N · nur lesen"
 - After Claude processes and resets the page → back to **Ready**
 - **Browser tab title** (`renderTabTitle()`): one status glyph + the concept
-  title, no "Concept —" prefix — 👉 your turn · ⏳ rethinking · 🛠️
-  implementing · 🏁 final report waiting · ✅ closed. It follows the live
+  title, no "Concept —" prefix — 👉 your turn · ⏳ Claude works (next round
+  or implementation) · 🏁 final report waiting · ✅ closed. It follows the live
   round and updates from the poll, so background tabs show it too.
 
 **Notes, pins and hotkeys** (chrome polish; the engine owns all of it):
@@ -260,7 +260,7 @@ signal Claude monitors.
 - **Eye (👁)**: toggles all notes; its counter shows the OPEN automatic notes
   of the current page, also while they are hidden; it hides on pages with no
   notes at all.
-- **Hotkeys** (hold Alt to show every hint as `<kbd>`): Space opens/closes the
+- **Hotkeys** (`?` shows every hint as `<kbd>`, with the shortcut sheet): Space opens/closes the
   notes dock, ←/→ page through screens (or slides on the overview), ↑/↓ change
   level, 1–9 pick a design / question / round tab, Ctrl+Enter starts the next
   round; ignored while typing in a field. One-time nudges point at the useful
