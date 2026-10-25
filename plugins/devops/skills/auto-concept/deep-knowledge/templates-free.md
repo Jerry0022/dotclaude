@@ -161,6 +161,29 @@ does not have because the dock provides it there.
   note textarea is frozen like every other comment of that round
   (`iteration-rules.md` § Freezing Design Iterations).
 
+## Report / audit rounds — overview with recommendation (mandatory)
+
+A `free` round that closes out an analysis — a report, audit, review or
+findings round with several evaluable items, not a prototype and not a pure
+choice between alternatives — opens with an **overview table** that lists
+every evaluable item with:
+
+- a **recommendation column** (`Empfehlung` / `Recommendation`): whether and
+  when to tackle it (e.g. wave 1 / wave 2 / your action / drop), and
+- a **jump link** (`<a href="#{section-id}">`) to the item's own section with
+  its bi-state and note field.
+
+Every **additional decision** of the round (a choice that is not one of the
+items — a radio group, a number, a PR split) gets its own row in a second
+table of the same style directly below, again with recommendation and jump
+link. Item ids stay round-unique (`r2-v1`) so the links never hit a frozen
+round.
+
+Why: the user reads the overview first and starts writing into the general
+note of the 💬 dock — and only further down finds that every item already has
+a recommendation, a verdict and its own note field, so the general note has to
+be moved item by item. The table shows that up front.
+
 ## Optional bi-state auto-detection
 
 The section nav auto-detects whether a `<section data-nav-label>` contains an
