@@ -215,7 +215,7 @@ describe('wipCommit', () => {
   test('R4: secrets, build output, tooling files and big files are left out and reported', async () => {
     g(main, 'checkout', '-b', 'topic');
     const bad = ['.env', '.env.local', 'cert.pem', 'id_rsa', 'prod-credentials.json', 'dump.sql', 'dist/app.js',
-      'coverage/lcov.info', 'AUTONOMOUS-STATE.json', 'BACKLOG-REPORT.html', 'BURN-STATE.json'];
+      'coverage/lcov.info', 'graphify-out/g.json', 'AUTONOMOUS-STATE.json', 'BACKLOG-REPORT.html', 'BURN-STATE.json'];
     for (const f of bad) {
       fs.mkdirSync(path.dirname(path.join(main, f)), { recursive: true });
       fs.writeFileSync(path.join(main, f), 'x');
