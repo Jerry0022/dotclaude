@@ -18,8 +18,8 @@ const path = require("path");
 
 const COMPLETION_TOOL_PREFIX = "mcp__plugin_devops_dotclaude__";
 // One devops server since v0.309 carries every tool, so the prefix alone no
-// longer means "card". Older refs (A/B --a-ref) still use dotclaude-completion.
-const CARD_TOOL_RE = /^mcp__plugin_devops_dotclaude(?:-completion)?__render_/;
+// longer means "card".
+const CARD_TOOL_RE = /^mcp__plugin_devops_dotclaude__render_/;
 
 function toRegex(p) {
   return p instanceof RegExp ? p : new RegExp(p);

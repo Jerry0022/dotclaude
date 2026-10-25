@@ -13,7 +13,7 @@ triggers:
   en: []
   de: []
 argument-hint: "[target or complaint] [--lite]"
-allowed-tools: Read, Grep, Glob, Bash, Agent, AskUserQuestion, Skill, mcp__plugin_devops_dotclaude-completion__*
+allowed-tools: Read, Grep, Glob, Bash, Agent, AskUserQuestion, Skill, mcp__plugin_devops_dotclaude__*
 ---
 
 # Frustrated analysis
