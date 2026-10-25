@@ -26,7 +26,7 @@ keep git clean, block risky moves and stop context waste.
 - **Runs while you are away** — `/do-run` works off a backlog, a task or the leftover weekly budget, and ships each item
 - **Per-project tuning** — extend any skill with a `reference.md`, no fork
 
-<!--devops:count:hooks-->90<!--/devops:count:hooks--> hooks ·
+<!--devops:count:hooks-->89<!--/devops:count:hooks--> hooks ·
 <!--devops:count:skills-->14<!--/devops:count:skills--> skills ·
 <!--devops:count:agents-->12<!--/devops:count:agents--> agents ·
 ~0.7M tokens/week overhead (1–4 % of a Max plan), paid back 1.5–6× by the
@@ -495,7 +495,7 @@ A different stack: extend the skills per project — see [Customize](#customize)
 </details>
 
 <details>
-<summary><strong>Hooks</strong> — <!--devops:count:hooks-->90<!--/devops:count:hooks--> hooks by lifecycle and by category</summary>
+<summary><strong>Hooks</strong> — <!--devops:count:hooks-->89<!--/devops:count:hooks--> hooks by lifecycle and by category</summary>
 
 ```
 SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolUse  ──>  Stop
@@ -585,7 +585,6 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 #### PostToolUse — runs after each tool call
 
 - `post.flow.completion` — Keeps the completion-card contract in Claude's context: on the FIRST tool call of eve…
-- `post.flow.debug` — After 2+ consecutive shell failures: MANDATE the devops `auto-fix` skill before the n…
 - `post.graphify.query` — When Claude runs `graphify query ...`, record a per-session flag (`markQueryDone` — k…
 - `post.graphify.search` — Telemetry only: record every Grep/Glob that actually RAN (`search_ran`) with its resu…
 - `post.concept.gate` — Deterministic backstop for concept pages.
@@ -664,7 +663,6 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.flow.appstart` *(UserPromptSubmit)*
 - `pre.ask.title` *(PreToolUse)*
 - `post.flow.completion` *(PostToolUse)*
-- `post.flow.debug` *(PostToolUse)*
 - `post.ask.answers` *(PostToolUse)*
 - `post.ask.title` *(PostToolUse)*
 - `post.flow.title-mode` *(PostToolUse)*
@@ -767,7 +765,7 @@ plugins/
 │   ├── .claude-plugin/plugin.json ← Plugin manifest (SemVer, tags v0.x.y)
 │   ├── .mcp.json                  ← MCP servers: completion card, ship, issues
 │   ├── CONVENTIONS.md             ← Naming, versioning, extension rules
-│   ├── hooks/                     ← <!--devops:count:hooks-->90<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+│   ├── hooks/                     ← <!--devops:count:hooks-->89<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
 │   ├── skills/                    ← <!--devops:count:skills-->14<!--/devops:count:skills--> skill definitions (SKILL.md)
 │   ├── agents/                    ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 │   ├── mcp-server/                ← Card renderer + Desktop widget, ship tools, issue matching

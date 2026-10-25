@@ -97,8 +97,8 @@ function main() {
 
       // Once per context: a delivered reminder stays there for the rest of
       // the session. A subagent is its own context — its copy never reaches
-      // the main thread, so it must not spend the main thread's (keyed like
-      // post.flow.debug). The exclusive create is the claim: parallel UI edits
+      // the main thread, so it must not spend the main thread's (keyed per
+      // session and agent). The exclusive create is the claim: parallel UI edits
       // run this hook side by side, and only one of them may send it. A marker
       // that cannot be written sends nothing — never the same text every call.
       const contextKey = hook.agent_id ? `${hook.session_id || 'unknown'}-agent-${hook.agent_id}` : hook.session_id;
