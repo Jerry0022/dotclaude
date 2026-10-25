@@ -1,4 +1,4 @@
-# Concept templates, part 27 of 33: Shared systems — collectDecisions, two-button submit (HTML, CSS)
+# Concept templates, part 33 of 41: Shared systems — collectDecisions, two-button submit (HTML, CSS)
 
 ## collectDecisions (dispatcher)
 

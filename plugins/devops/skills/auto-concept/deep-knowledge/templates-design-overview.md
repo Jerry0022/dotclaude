@@ -1,4 +1,4 @@
-# Concept templates, part 15 of 33: Template: design — variant overview JS
+# Concept templates, part 16 of 41: Template: design — variant overview JS
 
 ## Variant overview JS — `wireDesignOverview()`
 
