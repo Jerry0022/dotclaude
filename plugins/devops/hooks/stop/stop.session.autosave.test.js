@@ -7,7 +7,7 @@ import path from "node:path";
 const require = createRequire(import.meta.url);
 const worker = require("../lib/session-autosave-worker.js");
 const gate = require("../lib/session-archive-gate.js");
-const { main, lastCardVariant, RUNNING, FINISHED } = require("./stop.session.autosave.js");
+const { main, lastCardVariant, RUNNING, FINISHED, DECIDE } = require("./stop.session.autosave.js");
 
 let dir;
 let cwd;
@@ -40,6 +40,16 @@ describe("stop.session.autosave time budget", () => {
   });
 
   test("done in time with a save: the autosaved line", async () => {
+    const out = await main(hook(), { waitMs: 2000, spawn: fakeWorker(50, { message: "[devops] autosaved x" }) });
+    const msg = JSON.parse(out).systemMessage;
+    expect(msg.startsWith("[devops] autosaved x ")).toBe(true);
+    // the snapshot is a net, not a decision: the line asks for one
+    expect([DECIDE.de, DECIDE.en].some((d) => msg.endsWith(d))).toBe(true);
+  });
+
+  test("a save on a turn that shipped carries no landing ask", async () => {
+    fs.writeFileSync(path.join(dir, "t.jsonl"), `${card("ship-successful")}
+`);
     const out = await main(hook(), { waitMs: 2000, spawn: fakeWorker(50, { message: "[devops] autosaved x" }) });
     expect(JSON.parse(out).systemMessage).toBe("[devops] autosaved x");
   });
