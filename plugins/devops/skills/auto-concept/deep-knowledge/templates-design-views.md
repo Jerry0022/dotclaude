@@ -563,8 +563,9 @@ icon, when the traits are not exactly three, when the round has no
   `Ctrl`+`Enter` submit · `N` notes dock. A digit or quick-nav switch keeps
   the page: design A page 2 → design B page 2 (B's first page when it has
   none); a view tied to a design maps to the target design's view at the
-  same position. Holding `Alt` shows every hotkey badge
-  (`body.hk-alt`, `#hk-overlay`) plus an example own pin "Strg + Klick".
+  same position. `?` shows the shortcut sheet together with every hotkey
+  badge (`body.hk-keys`, `#hk-overlay`) plus an example own pin "Strg + Klick"
+  — never a held Alt, which hands the focus to the browser menu.
   Situational **nudges** (`wireChromeHotkeys()`, templates-design-overview.md):
   a quiet tip tab on top of the status toast appears when the user does by
   mouse what a hotkey does faster; ✕ silences that tip for 30 days

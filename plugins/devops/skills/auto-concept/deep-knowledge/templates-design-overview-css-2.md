@@ -3,8 +3,8 @@
 ```css
 /* ── Side-tile label: neighbours only. The variant icon — exactly the
    quick-nav icon, no frame of its own — sits vertically centred just
-   outside the hover chevron, so the chevron points at it; on hover the name
-   appears under it, wrapped, never cut. The centre tile carries no badge
+   outside the hover chevron, so the chevron points at it — no name (the
+   quick nav names the variant). The centre tile carries no badge
    (the quick nav marks it). The chevron is 2.6rem wide at 7 % from the
    tile's visible edge (.design-ov-slide::after). ── */
 .design-ov-side {
@@ -15,15 +15,6 @@
 .design-ov-slide[data-pos="prev"] .design-ov-side { right: calc(7% + 3.2rem); transform-origin: right center; }
 .design-ov-slide[data-pos="next"] .design-ov-side { left: calc(7% + 3.2rem); transform-origin: left center; }
 .design-ov-side > .dz-icon { display: grid; }
-.design-ov-side-name {
-  position: absolute; top: calc(100% + 0.4rem); left: 50%; transform: translateX(-50%);
-  width: max-content; max-width: 8rem; text-align: center;
-  white-space: normal; overflow-wrap: anywhere; line-height: 1.2;
-  color: var(--text, #e6edf3); font-size: 0.75rem; font-weight: 600;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
-  opacity: 0; transition: opacity 0.2s ease;
-}
-.design-ov-slide:is([data-pos="prev"], [data-pos="next"]):hover .design-ov-side-name { opacity: 1; }
 /* A changed variant: one line under the traits, "Verbessert" + the phrase
    from data-design-improved. */
 .design-ov-improved {
@@ -163,7 +154,6 @@ html[data-theme="light"] .design-ov-slide:is([data-pos="prev"], [data-pos="next"
   mask: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 80' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 3L5 40l14 37'/%3E%3C/svg%3E");
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--dz-color) 45%, transparent));
 }
-html[data-theme="light"] .design-ov-side-name { color: var(--text-color, #1f2328); text-shadow: 0 1px 4px rgba(255, 255, 255, 0.9); }
 html[data-theme="light"] .design-ov[data-has-favorite="true"] .design-ov-slide[data-design-id]:not([data-favorite="true"]) .design-ov-preview { filter: saturate(0.6) brightness(0.97); }
 html[data-theme="light"] .design-quick-designs { background: color-mix(in srgb, var(--bg-color, #ffffff) 88%, transparent); box-shadow: 0 2px 10px rgba(31, 35, 40, 0.06); }
 html[data-theme="light"] .design-quick-group,
