@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.batch.collect
- * @version 0.12.0
+ * @version 0.13.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Collect mode for `/do-batch`: while active, blocks the user
- *   prompt (exit 2 — the harness erases it, so it never reaches the model) and
+ *   prompt (JSON `decision: "block"` — the harness erases it, so it never
+ *   reaches the model; see `blockPrompt` for why not exit 2) and
  *   appends it to `.claude/batch.md`. A prompt starting with the configured
  *   execute marker instead fires the merge: the whole note list is injected as
  *   context and Claude merges the collected intent into ONE plan, which it
@@ -126,6 +127,37 @@ const INLINE_LIMIT = 24000;
 /** Per-note excerpt length in the over-limit index. */
 const EXCERPT_CHARS = 200;
 
+/** Length of the prompt echo under the ack's headline. */
+const ECHO_CHARS = 70;
+
+/**
+ * Block the prompt with `message` as the only text in the panel.
+ *
+ * JSON `decision: "block"` instead of exit 2: on exit 2 the harness prefixes
+ * the message with `[<hook command>]:` — the full plugin path — and appends
+ * the plugin attribution and an `Original prompt:` block, which buried the one
+ * line that matters. With JSON the panel is its fixed header plus `reason`;
+ * `suppressOriginalPrompt` drops the prompt block (the ack echoes its start).
+ */
+function blockPrompt(message) {
+  process.stdout.write(`${JSON.stringify({
+    decision: 'block',
+    reason: message,
+    hookSpecificOutput: { hookEventName: 'UserPromptSubmit', suppressOriginalPrompt: true },
+  })}\n`);
+  process.exit(0);
+}
+
+/**
+ * The start of the prompt, quoted — the hook cannot summarize a note, but the
+ * first words are enough to tell which prompt landed. '' for an image-only note.
+ */
+function promptEcho(text) {
+  const flat = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!flat) return '';
+  return `„${flat.length > ECHO_CHARS ? `${flat.slice(0, ECHO_CHARS).trimEnd()}…` : flat}“`;
+}
+
 /**
  * Acknowledgement shown to the user on a blocked (collected) prompt.
  *
@@ -134,20 +166,25 @@ const EXCERPT_CHARS = 200;
  * mechanism the mode runs on. So the first line has to carry the all-clear:
  * the note landed, nothing failed.
  *
- * Short on purpose — it shows on EVERY collected prompt: the status line, an
- * extra line only when it matters (question, near auto-end), a blank line, then
- * the three command lines (`renderCommandLines`). The full mode summary is for
- * activation, rearm and `/do-batch status`.
+ * Short on purpose — it shows on EVERY collected prompt: the headline, the
+ * prompt echo and the all-clear, an extra line only when it matters (question,
+ * near auto-end), a blank line, then the three command lines
+ * (`renderCommandLines`). The full mode summary is for activation, rearm and
+ * `/do-batch status`.
  *
  * @param {number} count total notes after this one
  * @param {string} marker configured execute marker
  * @param {boolean} question whether the note reads like a question
  * @param {{expiryHours?:number,maxNotes?:number,expiresAt?:string}} [bounds] pinned mode bounds
  * @param {number} [images] pasted images kept with this note
+ * @param {string} [text] the collected prompt, echoed so the user can match it
  */
-function buildAck(count, marker, question, bounds = {}, images = 0) {
+function buildAck(count, marker, question, bounds = {}, images = 0, text = '') {
   const I = B.PANEL_ICONS;
-  const lines = [`${I.stored} Notiz #${count} abgelegt${imageTag(images)} — rotes Panel ist Absicht, kein Fehler.`];
+  const echo = promptEcho(text);
+  const lines = [`${I.saved} NOTIZ #${count} GESPEICHERT${imageTag(images)}`];
+  if (echo) lines.push(`   ${echo}`);
+  lines.push('   (rotes Panel = Absicht, kein Fehler)');
   if (question) {
     // Advisory only. The hook never decides what is a question; it just makes a
     // forgotten marker visible instead of silent.
@@ -874,8 +911,7 @@ process.stdin.on('end', () => {
       const inv = B.parseBatchCommand(text);
       if (inv?.route === 'help') {
         // Static text — the long form of the summary. Nothing to store.
-        process.stderr.write(`${B.renderHelp({ marker, ...bounds })}\n`);
-        process.exit(2);
+        blockPrompt(B.renderHelp({ marker, ...bounds }));
       }
       const residue = inv?.residue || '';
       // An image pasted with `/do-batch <text>` belongs to that note too (#490);
@@ -890,8 +926,7 @@ process.stdin.on('end', () => {
         process.stderr.write('[do-batch] Aufruf konnte nicht als Notiz gespeichert werden — Skill übernimmt.\n');
         process.exit(0);
       }
-      process.stderr.write(`${buildRearmAck(count, marker, Boolean(noteText), bounds, copies.length)}\n`);
-      process.exit(2);
+      blockPrompt(buildRearmAck(count, marker, Boolean(noteText), bounds, copies.length));
     } catch (err) {
       // Could not store — let the skill handle it, as before this branch existed.
       process.stderr.write(`[do-batch] Aufruf konnte nicht abgefangen werden (${err.message}) — Skill übernimmt.\n`);
@@ -947,8 +982,7 @@ process.stdin.on('end', () => {
       process.stderr.write('[do-batch] Notiz konnte nicht gespeichert werden — Prompt läuft normal weiter.\n');
       process.exit(0);
     }
-    process.stderr.write(`${buildAck(count, marker, B.looksLikeQuestion(text), bounds, copies.length)}\n`);
-    process.exit(2);
+    blockPrompt(buildAck(count, marker, B.looksLikeQuestion(text), bounds, copies.length, text));
   } catch (err) {
     // Storing failed — blocking now would erase the prompt with nothing kept.
     // Let it through instead; a lost prompt is worse than a missed collection.
