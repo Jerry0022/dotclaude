@@ -9,10 +9,10 @@ describe("gen-trigger-evals", () => {
     expect(changed, `evals/triggers/ is stale, rerun node plugins/devops/scripts/gen-trigger-evals.js:\n${diffs.join("\n")}`).toBe(false);
   });
 
-  it("expands into 100 cases across fix/auto-issue/concept/auto-harden/auto-extend", () => {
+  it("expands into 44 cases across auto-issue/concept/auto-harden/auto-extend", () => {
     const data = loadCases();
     const dirs = buildDirs(data);
-    expect(dirs.size).toBe(100);
+    expect(dirs.size).toBe(44);
   });
 
   it("generates every translated case in all 11 languages plus one language-independent case", () => {

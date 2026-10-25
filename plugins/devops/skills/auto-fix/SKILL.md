@@ -1,19 +1,16 @@
 ---
 name: auto-fix
-version: 0.3.0
+version: 0.4.0
 description: >-
-  Read session logs, runtime errors, and crash output to diagnose and fix the
-  current issue — root-cause analysis first. Use when something is broken or
-  behaving unexpectedly. Triggers on: "debug", "this is broken", "doesn't work",
-  "error", "crash", "blank screen", "warum geht das nicht", "funktioniert nicht".
-  Also triggers on pasted error/stack traces.
-  Do NOT trigger for general code questions.
+  Root-cause-first bug fix: read logs and stack traces, name the broken
+  invariant, fix it, report file:line. On request only — typed /auto-fix or
+  asked for by name, or a Fix button prompt. Never auto-loaded: A/B evals
+  (6 bug cases) showed no gain over fixing inline, so nothing routes a bug
+  report here.
 layer: 2
 invokes: [auto-agents]
 user-invocable: false
-triggers:
-  en: ["debug", "this is broken", "doesn't work", "error", "crash", "blank screen"]
-  de: ["warum geht das nicht", "funktioniert nicht"]
+triggers: {}
 argument-hint: "[optional: describe the symptom or paste error]"
 allowed-tools: Read, Grep, Glob, Bash(git log *), Bash(git diff *), Bash(git bisect *), Bash(npm *), Bash(node *), AskUserQuestion, mcp__plugin_devops_dotclaude__health_check, mcp__plugin_devops_dotclaude__match_issues, mcp__plugin_devops_dotclaude__render_completion_card
 ---
