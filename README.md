@@ -26,7 +26,7 @@ keep git clean, block risky moves and stop context waste.
 - **Runs while you are away** — `/do-run` works off a backlog, a task or the leftover weekly budget, and ships each item
 - **Per-project tuning** — extend any skill with a `reference.md`, no fork
 
-<!--devops:count:hooks-->88<!--/devops:count:hooks--> hooks ·
+<!--devops:count:hooks-->90<!--/devops:count:hooks--> hooks ·
 <!--devops:count:skills-->14<!--/devops:count:skills--> skills ·
 <!--devops:count:agents-->12<!--/devops:count:agents--> agents ·
 ~0.7M tokens/week overhead (1–4 % of a Max plan), paid back 1.5–6× by the
@@ -483,7 +483,7 @@ A different stack: extend the skills per project — see [Customize](#customize)
 </details>
 
 <details>
-<summary><strong>Hooks</strong> — <!--devops:count:hooks-->88<!--/devops:count:hooks--> hooks by lifecycle and by category</summary>
+<summary><strong>Hooks</strong> — <!--devops:count:hooks-->90<!--/devops:count:hooks--> hooks by lifecycle and by category</summary>
 
 ```
 SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolUse  ──>  Stop
@@ -553,6 +553,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `pre.readme.standards` — Once per session, before the first substantial write to a README file, points Claude…
 - `pre.mcp.health` — Detects dead or stale MCP servers before tool calls fail cryptically.
 - `pre.session.archive` — Only the post-ship hand-over archives this session (#632).
+- `pre.ask.title` — Puts `👉 ➜ ❓ Question ┃ ` on the session title BEFORE a question blocks: a title stil…
 - `pre.strict.agent-gate` — While strict mode is active, refuse an Agent spawn whose prompt does not start with t…
 - `pre.agent.model` — Refuses an Agent spawn once when it would silently inherit the session model — no `mo…
 - `pre.agent.announce` — Makes every Agent spawn visible to the user: resolves the agent's effective model and…
@@ -581,6 +582,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `post.design.remind` — Once per context, when a UI file is written or edited, reminds Claude of the standing…
 - `post.run.contract` — Record what happened for the do-run RUN CONTRACT (spec A events, B arming, E batch ma…
 - `post.ask.answers` — Answer-check (run-contract spec F): an AskUserQuestion answer token that equals the O…
+- `post.ask.title` — The question is answered, so Claude works again: hands Claude the set call that puts…
 - `post.cleanup.gate` — Arms and feeds the /auto-cleanup deletion gate (lib/cleanup-gate.js).
 - `post.skill.marker` — Record a loaded skill in the caller's per-turn marker (lib/skill-turn-marker) — the "…
 - `post.skill.overrides` — The override loader for a skill started through the Skill tool: resolves the skill's…
@@ -648,9 +650,11 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.flow.silent-turn` *(UserPromptSubmit)*
 - `prompt.flow.title-work` *(UserPromptSubmit)*
 - `prompt.flow.appstart` *(UserPromptSubmit)*
+- `pre.ask.title` *(PreToolUse)*
 - `post.flow.completion` *(PostToolUse)*
 - `post.flow.debug` *(PostToolUse)*
 - `post.ask.answers` *(PostToolUse)*
+- `post.ask.title` *(PostToolUse)*
 - `post.flow.title-mode` *(PostToolUse)*
 - `stop.flow.browsertest` *(Stop)*
 - `stop.flow.guard` *(Stop)*
@@ -751,7 +755,7 @@ plugins/
 │   ├── .claude-plugin/plugin.json ← Plugin manifest (SemVer, tags v0.x.y)
 │   ├── .mcp.json                  ← MCP servers: completion card, ship, issues
 │   ├── CONVENTIONS.md             ← Naming, versioning, extension rules
-│   ├── hooks/                     ← <!--devops:count:hooks-->88<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+│   ├── hooks/                     ← <!--devops:count:hooks-->90<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
 │   ├── skills/                    ← <!--devops:count:skills-->14<!--/devops:count:skills--> skill definitions (SKILL.md)
 │   ├── agents/                    ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 │   ├── mcp-server/                ← Card renderer + Desktop widget, ship tools, issue matching
