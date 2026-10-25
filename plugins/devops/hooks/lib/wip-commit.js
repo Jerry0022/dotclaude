@@ -132,7 +132,7 @@ async function savablePaths(wt, { timeout } = {}) {
  * index. Returns the new commit sha or null. HEAD, index, tree untouched.
  */
 function snapshotCommit(wt, paths, message, parents = ['HEAD'], timeout) {
-  const idx = path.join(os.tmpdir(), `dotclaude-wip-index-${process.pid}-${Date.now()}`);
+  const idx = path.join(os.tmpdir(), `dotclaude-wip-index-${process.pid}.${Math.random().toString(36).slice(2, 8)}-${Date.now()}`);
   const env = { GIT_INDEX_FILE: idx, GIT_LITERAL_PATHSPECS: '1' };
   try {
     if (git(['read-tree', 'HEAD'], wt, { env, timeout }) === null) return null;

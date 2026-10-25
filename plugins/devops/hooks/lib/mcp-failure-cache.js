@@ -64,7 +64,7 @@ function clearPluginEntries(file, now = Date.now()) {
 
   // Atomic replace: a half-written file would make Claude Code drop the whole
   // cache (or worse, fail to parse it) for every other server too.
-  const tmp = `${file}.${process.pid}.tmp`;
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data));
   fs.renameSync(tmp, file);
   return { cleared, active, activeEntries };

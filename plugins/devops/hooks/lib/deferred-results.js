@@ -44,7 +44,7 @@ function write(sessionId, name, text, dir = os.tmpdir()) {
   if (!text || !String(text).trim()) return false;
   const f = resultFile(sessionId, name, dir);
   try {
-    const tmp = `${f}.${process.pid}.tmp`;
+    const tmp = `${f}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify({ name, ts: Date.now(), text: String(text) }));
     fs.renameSync(tmp, f);
     return true;
@@ -74,7 +74,7 @@ function collect(sessionId, { dir = os.tmpdir(), now = Date.now() } = {}) {
   const texts = [];
   for (const e of names) {
     const full = path.join(dir, e);
-    const claim = `${full}.taken-${process.pid}`;
+    const claim = `${full}.taken-${process.pid}.${Math.random().toString(36).slice(2, 8)}`;
     try { fs.renameSync(full, claim); } catch { continue; } // another prompt got it
     try {
       const r = JSON.parse(fs.readFileSync(claim, 'utf8'));

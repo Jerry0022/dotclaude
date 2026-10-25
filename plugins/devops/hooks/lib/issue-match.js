@@ -121,7 +121,7 @@ function writeCache(remoteUrl, issues, { dir, now = Date.now() } = {}) {
   const file = cacheFile(remoteUrl, dir);
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   if (!cacheDirSafe(path.dirname(file))) return;
-  const tmp = `${file}.${process.pid}.tmp`;
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify({ ts: now, remote: normalizeRemote(remoteUrl), issues: sanitizeIssues(issues) }));
   fs.renameSync(tmp, file);
 }
