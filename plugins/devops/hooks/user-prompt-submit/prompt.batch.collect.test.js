@@ -26,7 +26,24 @@ function runHook(payload, env) {
     encoding: "utf8",
     env: { ...process.env, ...(env || {}) },
   });
-  return { code: res.status, stdout: res.stdout || "", stderr: res.stderr || "" };
+  return panelView(res);
+}
+
+/**
+ * A collected prompt is blocked with JSON on stdout (decision "block"), not
+ * exit 2: `blocked` is that verdict, `panel` the text the user sees in the
+ * red panel (the block reason, else stderr), `stdout` only context for the
+ * model — empty on a block.
+ */
+function panelView(res) {
+  const out = res.stdout || "";
+  let block = null;
+  try { const j = JSON.parse(out.trim()); if (j && j.decision === "block") block = j; } catch { /* plain context */ }
+  const stderr = res.stderr || "";
+  return {
+    code: res.status, blocked: Boolean(block), stdout: block ? "" : out, stderr,
+    panel: block ? block.reason : stderr, json: block,
+  };
 }
 
 /** A throwaway home dir holding a known claude-batch.json, so a test never
@@ -65,22 +82,32 @@ describe("mode on — collecting", () => {
 
   test("an ordinary prompt is blocked and stored", () => {
     const r = runHook({ prompt: "Der Button im Header ist verrutscht" });
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain("Notiz #1 abgelegt");
+    expect(r.blocked).toBe(true);
+    expect(r.panel).toContain("NOTIZ #1 GESPEICHERT");
     expect(readNotes(cwd).map(n => n.text)).toEqual(["Der Button im Header ist verrutscht"]);
+  });
+
+  test("the block is JSON, not exit 2 — no hook path, no 'Original prompt' in the panel", () => {
+    // Exit 2 makes the harness prefix the message with `[<hook command>]:` and
+    // append the original prompt; the JSON reason is the panel text alone.
+    const r = runHook({ prompt: "Der Button im Header ist verrutscht" });
+    expect(r.code).toBe(0);
+    expect(r.stderr).toBe("");
+    expect(r.json.hookSpecificOutput).toEqual({ hookEventName: "UserPromptSubmit", suppressOriginalPrompt: true });
+    expect(r.panel).toContain("„Der Button im Header ist verrutscht“");
   });
 
   test("the counter advances across prompts", () => {
     runHook({ prompt: "erste" });
     const r = runHook({ prompt: "zweite" });
-    expect(r.stderr).toContain("Notiz #2 abgelegt");
+    expect(r.panel).toContain("NOTIZ #2 GESPEICHERT");
     expect(readNotes(cwd)).toHaveLength(2);
   });
 
   test("a question is collected but flagged in the acknowledgement", () => {
     const r = runHook({ prompt: "gibt es das schon?" });
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain("Frage");
+    expect(r.blocked).toBe(true);
+    expect(r.panel).toContain("Frage");
     expect(readNotes(cwd)).toHaveLength(1);
   });
 
@@ -88,8 +115,8 @@ describe("mode on — collecting", () => {
     // Half the hooks in this repo read `prompt`, the other half
     // `user_message || message`. Reading only one yields '' and would block
     // every prompt while storing nothing.
-    expect(runHook({ user_message: "über user_message" }).code).toBe(2);
-    expect(runHook({ message: "über message" }).code).toBe(2);
+    expect(runHook({ user_message: "über user_message" }).blocked).toBe(true);
+    expect(runHook({ message: "über message" }).blocked).toBe(true);
     expect(readNotes(cwd).map(n => n.text)).toEqual(["über user_message", "über message"]);
   });
 });
@@ -272,7 +299,7 @@ describe("mode on — an attachment prompt is filed, not executed", () => {
 
   test("an attachment-free collected prompt gets no guard", () => {
     const r = runHook({ prompt: "ganz normale beobachtung" });
-    expect(r.code).toBe(2);
+    expect(r.blocked).toBe(true);
     expect(r.stdout).toBe("");
   });
 
@@ -286,14 +313,14 @@ describe("mode on — an attachment prompt is filed, not executed", () => {
 
     const followUp = runHook({ prompt: "ja, so umsetzen" });
     expect(followUp.code).toBe(0);
-    expect(followUp.stderr).not.toContain("gespeichert");
+    expect(followUp.panel).not.toMatch(/gespeichert/i);
   });
 
   test("a marker prompt on an empty queue leaves the mode armed", () => {
     // Nothing fired, so nothing ended — the user just typed the marker early.
     expect(runHook({ prompt: ">> leg los" }).code).toBe(0);
     expect(isModeActive(cwd)).toBe(true);
-    expect(runHook({ prompt: "noch eine beobachtung" }).code).toBe(2);
+    expect(runHook({ prompt: "noch eine beobachtung" }).blocked).toBe(true);
   });
 
   test("a mode file pinned to the old `!` marker still has a working escape", () => {
@@ -323,8 +350,8 @@ describe("failsafe — collection cannot trap the user", () => {
 
   test("the note cap stops collecting on its own", () => {
     activate(cwd, { maxNotes: 2 });
-    expect(runHook({ prompt: "eins" }).code).toBe(2);
-    expect(runHook({ prompt: "zwei" }).code).toBe(2);
+    expect(runHook({ prompt: "eins" }).blocked).toBe(true);
+    expect(runHook({ prompt: "zwei" }).blocked).toBe(true);
     const r = runHook({ prompt: "drei" });
     expect(r.code).toBe(0);
     expect(readNotes(cwd)).toHaveLength(2);
@@ -336,7 +363,7 @@ describe("failsafe — collection cannot trap the user", () => {
     fs.mkdirSync(path.join(cwd, ".claude", "batch.md"), { recursive: true });
     const r = runHook({ prompt: "darf nicht verloren gehen" });
     expect(r.code).toBe(0);
-    expect(r.stderr).toContain("normal weiter");
+    expect(r.panel).toContain("normal weiter");
   });
 
   test("malformed stdin never blocks a prompt", () => {
@@ -349,7 +376,7 @@ describe("failsafe — collection cannot trap the user", () => {
 describe("message builders", () => {
   test("the acknowledgement names the count and both exits", () => {
     const ack = buildAck(3, ">>", false);
-    expect(ack).toContain("Notiz #3 abgelegt");
+    expect(ack).toContain("NOTIZ #3 GESPEICHERT");
     expect(ack).toContain('">> <text>"');
     expect(ack).toContain("/do-batch off");
     expect(ack).not.toContain("Frage");
@@ -358,7 +385,19 @@ describe("message builders", () => {
   test("the acknowledgement defuses the harness's red block panel", () => {
     // The user reads a red "a hook blocked your input" box. The first line has
     // to say the note landed, or a correct collection reads as a failure.
-    expect(buildAck(3, ">>", false).split("\n")[0]).toContain("kein Fehler");
+    const lines = buildAck(3, ">>", false).split("\n");
+    expect(lines[0]).toBe("💾 NOTIZ #3 GESPEICHERT");
+    expect(lines[1]).toContain("kein Fehler");
+  });
+
+  test("the ack echoes the prompt start so the user can match the note", () => {
+    const lines = buildAck(1, ">>", false, {}, 0, "der Button\n  im Header ist zu klein").split("\n");
+    expect(lines[1]).toBe("   „der Button im Header ist zu klein“");
+    const long = "x".repeat(90);
+    expect(buildAck(1, ">>", false, {}, 0, long).split("\n")[1]).toBe(`   „${"x".repeat(70)}…“`);
+    // The cut counts code points: an emoji at the edge stays whole, never a lone surrogate.
+    const emoji = `${"x".repeat(69)}🎉🎉🎉`;
+    expect(buildAck(1, ">>", false, {}, 0, emoji).split("\n")[1]).toBe(`   „${"x".repeat(69)}🎉…“`);
   });
 
   test("the question hint appears only for question-shaped notes", () => {
@@ -512,19 +551,19 @@ describe("mode on — a re-activation is absorbed, never a turn", () => {
     // The user forgot the mode is on. The answer they need is the summary —
     // paying a turn for "already active" is the cost the mode exists to avoid.
     const r = runHook({ prompt: expanded(args) });
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain("läuft schon");
-    expect(r.stderr).toContain("kein Fehler");
-    expect(r.stderr).toContain("/do-batch off");
-    expect(r.stderr).toContain("/do-batch go");
+    expect(r.blocked).toBe(true);
+    expect(r.panel).toContain("läuft schon");
+    expect(r.panel).toContain("kein Fehler");
+    expect(r.panel).toContain("/do-batch off");
+    expect(r.panel).toContain("/do-batch go");
     expect(readNotes(cwd)).toEqual([]);
     expect(isModeActive(cwd)).toBe(true);
   });
 
   test("free text through the command becomes a note", () => {
     const r = runHook({ prompt: expanded("der Header ist rot") });
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain("Notiz #1 abgelegt");
+    expect(r.blocked).toBe(true);
+    expect(r.panel).toContain("Notiz #1 abgelegt");
     expect(readNotes(cwd).map(n => n.text)).toEqual(["der Header ist rot"]);
   });
 
@@ -536,7 +575,7 @@ describe("mode on — a re-activation is absorbed, never a turn", () => {
   test.each(["off", "go", "status", "marker"])("the exit `%s` still reaches the skill", (args) => {
     const r = runHook({ prompt: expanded(args) });
     expect(r.code).toBe(0);
-    expect(r.stderr).not.toContain("läuft schon");
+    expect(r.panel).not.toContain("läuft schon");
     expect(readNotes(cwd)).toEqual([]);
   });
 
@@ -551,7 +590,7 @@ describe("mode on — a re-activation is absorbed, never a turn", () => {
     activate(cwd, { marker: ">>", startedAt: Date.now() - 9 * 3600_000, expiryHours: 8 });
     const r = runHook({ prompt: expanded("on") });
     expect(r.code).toBe(0);
-    expect(r.stderr).toBe("");
+    expect(r.panel).toBe("");
   });
 });
 
@@ -560,10 +599,10 @@ describe("the collected-prompt panel carries the mode summary", () => {
 
   test("every blocked prompt explains the mode with the pinned bounds", () => {
     const r = runHook({ prompt: "der Button ist verrutscht" });
-    expect(r.stderr).toContain("Notiz #1 abgelegt");
-    expect(r.stderr).toContain("\">go <text>\"");
-    expect(r.stderr).toContain("/do-batch off");
-    expect(r.stderr).toContain("3 h oder 50 Notizen");
+    expect(r.panel).toContain("NOTIZ #1 GESPEICHERT");
+    expect(r.panel).toContain("\">go <text>\"");
+    expect(r.panel).toContain("/do-batch off");
+    expect(r.panel).toContain("3 h oder 50 Notizen");
   });
 });
 
@@ -604,23 +643,24 @@ describe("message builders — 0.4.0", () => {
     expect(buildRearmAck(3, ">>", false)).toContain("3 Notizen");
   });
 
-  test("the ack is short: status line, blank line, three command lines", () => {
-    const lines = buildAck(4, ">>", false, { expiryHours: 8, maxNotes: 100 }).split("\n");
-    expect(lines).toHaveLength(5);
-    expect(lines[0]).toContain("Notiz #4 abgelegt");
-    expect(lines[1]).toBe("");
+  test("the ack is short: headline, echo, all-clear, blank line, three command lines", () => {
+    const lines = buildAck(4, ">>", false, { expiryHours: 8, maxNotes: 100 }, 0, "eins").split("\n");
+    expect(lines).toHaveLength(7);
+    expect(lines[0]).toContain("NOTIZ #4 GESPEICHERT");
+    expect(lines[1]).toContain("„eins“");
+    expect(lines[3]).toBe("");
   });
 
   test("question and near-auto-end lines sit above the blank line", () => {
     const lines = buildAck(97, ">>", true, { expiryHours: 8, maxNotes: 100 }).split("\n");
-    expect(lines[1]).toContain("Klang nach Frage");
-    expect(lines[2]).toContain("Nur noch 3 Notizen");
-    expect(lines[3]).toBe("");
+    expect(lines[2]).toContain("Klang nach Frage");
+    expect(lines[3]).toContain("Nur noch 3 Notizen");
+    expect(lines[4]).toBe("");
   });
 
   test("the ack still opens with the all-clear and names both exits", () => {
     const ack = buildAck(2, ">start", false, { expiryHours: 8, maxNotes: 100 });
-    expect(ack.split("\n")[0]).toContain("kein Fehler");
+    expect(ack.split("\n").slice(0, 2).join("\n")).toContain("kein Fehler");
     expect(ack).toContain("\">start <text>\"");
     expect(ack).toContain("/do-batch off");
     expect(ack).toContain("8 h oder 100 Notizen");
@@ -678,11 +718,11 @@ describe("help — the long form, free of charge while collecting", () => {
   test("`/do-batch help` while active prints both step lists and stores nothing", () => {
     activate(cwd, { marker: ">start" });
     const r = runHook({ prompt: expanded("help") });
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain("A) Was DU machst");
-    expect(r.stderr).toContain("B) Was CLAUDE macht");
-    expect(r.stderr).toContain("\">start <text>\"");
-    expect(r.stderr).not.toContain("läuft schon");
+    expect(r.blocked).toBe(true);
+    expect(r.panel).toContain("A) Was DU machst");
+    expect(r.panel).toContain("B) Was CLAUDE macht");
+    expect(r.panel).toContain("\">start <text>\"");
+    expect(r.panel).not.toContain("läuft schon");
     expect(readNotes(cwd)).toEqual([]);
     expect(isModeActive(cwd)).toBe(true);
   });
@@ -690,13 +730,13 @@ describe("help — the long form, free of charge while collecting", () => {
   test("`/do-batch help` while off reaches the skill", () => {
     const r = runHook({ prompt: expanded("help") });
     expect(r.code).toBe(0);
-    expect(r.stderr).toBe("");
+    expect(r.panel).toBe("");
   });
 
   test("the collected-prompt panel names status, marker and help", () => {
     activate(cwd, { marker: ">>" });
     const r = runHook({ prompt: "der Rand ist zu dick" });
-    expect(r.stderr).toContain("status · marker · help");
+    expect(r.panel).toContain("status · marker · help");
   });
 });
 
@@ -727,8 +767,8 @@ describe("mode on — a pasted Desktop image is kept with its note (#490)", () =
   test("the image saved at submit time is copied and named in the note", () => {
     fs.writeFileSync(path.join(imagesDir, "1.png"), "png-bytes");
     const r = runHook({ prompt: "siehe Bild in rot eingezeichnet", session_id: SID }, tmpEnv());
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain("🖼️ mit Bild");
+    expect(r.blocked).toBe(true);
+    expect(r.panel).toContain("🖼️ mit Bild");
     const [note] = readNotes(cwd);
     expect(note.text).toContain("siehe Bild in rot eingezeichnet");
     const line = note.text.split("\n").find(l => l.startsWith("[Anhang-Datei] "));
@@ -775,8 +815,8 @@ describe("mode on — a pasted Desktop image is kept with its note (#490)", () =
 
   test("without a session images folder the note is stored as before", () => {
     const r = runHook({ prompt: "kein Bild", session_id: "no-such-session" }, tmpEnv());
-    expect(r.code).toBe(2);
-    expect(r.stderr).not.toContain("Bild ist mit der Notiz");
+    expect(r.blocked).toBe(true);
+    expect(r.panel).not.toContain("Bild ist mit der Notiz");
     expect(readNotes(cwd)[0].text).toBe("kein Bild");
   });
 });
@@ -834,8 +874,8 @@ describe("image tracking — the cases seen in real batch sessions (2026-10-03)"
     const before = new Date(Date.now() - 4000);
     fs.utimesSync(img, before, before);
     const r = runHook({ prompt: "Rotationsicon näher ans Label", session_id: SID }, tmpEnv());
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain("🖼️ mit Bild");
+    expect(r.blocked).toBe(true);
+    expect(r.panel).toContain("🖼️ mit Bild");
     expect(readNotes(cwd)[0].text).toContain("[Anhang-Datei] ");
   });
 
@@ -886,7 +926,7 @@ describe("`/do-batch <text>` with a pasted image keeps the image (#490)", () => 
 
   test("the residue note carries the image", () => {
     const r = runHook({ prompt: expanded("so soll der Header aussehen"), session_id: SID }, env());
-    expect(r.code).toBe(2);
+    expect(r.blocked).toBe(true);
     const [note] = readNotes(cwd);
     expect(note.text).toContain("so soll der Header aussehen");
     expect(note.text).toContain("[Anhang-Datei] ");
@@ -894,8 +934,8 @@ describe("`/do-batch <text>` with a pasted image keeps the image (#490)", () => 
 
   test("an image with a bare `/do-batch` still becomes a note", () => {
     const r = runHook({ prompt: expanded(""), session_id: SID }, env());
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain("als Notiz #1 abgelegt");
+    expect(r.blocked).toBe(true);
+    expect(r.panel).toContain("als Notiz #1 abgelegt");
     expect(readNotes(cwd)[0].text).toMatch(/^\[Anhang-Datei\] /);
   });
 });
