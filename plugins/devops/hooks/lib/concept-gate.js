@@ -756,7 +756,7 @@ function findViewOverlap(html) {
  * Advisory only — never blocks. A design round with ≥2 `section[data-design]`
  * renders an overview slide per design from `data-design-motto`,
  * `data-design-traits` (exactly three, `|`-separated) and `data-design-icon`
- * (templates-design.md § Variant overview (≥2 designs)). A missing one still
+ * (templates-design-views.md § Variant overview (≥2 designs)). A missing one still
  * renders (no motto line, no traits, a generic icon), so a page written
  * before the overview existed must keep building; the warning names what the
  * overlay is missing. The round itself should say what its designs are
@@ -786,7 +786,7 @@ function findDesignAuthoringWarnings(html) {
     const set = attrOf(g.tag, 'data-design-set');
     if (!set || !/^(alternatives|topics)$/.test(set.trim())) {
       warnings.push({ kind: 'overview-set', at: g.at,
-        why: `iteration ${g.n}: ${g.designs.length} designs but ${set ? `data-design-set="${set}" is neither "alternatives" nor "topics"` : 'no data-design-set'} — set "alternatives" when the designs answer the same thing (favourite ☆ on), "topics" when they show different topics (templates-design.md § Variant overview)` });
+        why: `iteration ${g.n}: ${g.designs.length} designs but ${set ? `data-design-set="${set}" is neither "alternatives" nor "topics"` : 'no data-design-set'} — set "alternatives" when the designs answer the same thing (favourite ☆ on), "topics" when they show different topics (templates-design-views.md § Variant overview)` });
     }
     for (const d of g.designs) {
       const missing = [];
@@ -798,7 +798,7 @@ function findDesignAuthoringWarnings(html) {
       if (!icon) missing.push('data-design-icon');
       if (missing.length) {
         warnings.push({ kind: 'overview-authoring', at: d.at,
-          why: `iteration ${g.n}, design "${d.id}": ${missing.join(', ')} missing — the variant overview slide renders without it (templates-design.md § Variant overview)` });
+          why: `iteration ${g.n}, design "${d.id}": ${missing.join(', ')} missing — the variant overview slide renders without it (templates-design-views.md § Variant overview)` });
       }
       const anchor = attrOf(d.tag, 'data-design-overlay');
       if (anchor !== null && !/^(tl|tr|bl|br|tc|bc)$/.test(anchor.trim())) {

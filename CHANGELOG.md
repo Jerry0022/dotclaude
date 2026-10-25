@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.303.2] — 2026-10-25
+
+Closes the three known limits of 0.303.0 on the auto-concept page.
+
+### Fixed
+- **One state mark on old rounds.** The frozen panel foot repeated the status line's 🕘 state ("🕘 Eingefrorene Runde" under "🕘 Runde N · nur lesen"). That was the doubled mark. The foot now shows only the back button. Pinned in `journey-row.test.js`.
+- **Final report journey row.** The close-out sheet now starts with a finished, non-interactive journey row (✓✓ · Umsetzung ✓ · 🏁). It builds up left to right the first time the final report opens (`mountFinalJourney` / `maybeBuildFinalJourney`).
+- **Template loader.** A `(continued N)` template part that does not reopen a fence right after its header now throws. Before, it was appended raw.
+
+### Changed
+- **Deep-knowledge split.** The auto-concept template parts are split at topic and top-level boundaries, from 17 files to about 41. `bridge-server.md` and `validation-gate.md` are split by topic too. `templates-source.js` re-joins the `(continued N)` parts, so `readTemplates()` and the built concept HTML stay byte-identical. Checked on two concepts.
+
+Doc debt: four files stay over the 600-line budget. Three are single-IIFE fences (`templates-design-js.md` 1377, `templates-design-overview.md` 1710, `templates-mapping-js.md` 1323). The fourth is the HTML skeleton fence (`templates-common-structure.md` 626). Cutting them needs an engine refactor.
+
 ## [0.303.1] — 2026-10-25
 
 A session that waits on a question now says so in the sidebar. `AskUserQuestion` mid-turn used to block with the hourglass still on the title, because only the completion card ever set `👉 ➜ ❓ Question ┃`.

@@ -348,7 +348,7 @@ function bakeFrozenFeedback(fragment, payload) {
     const v = (c[k] && typeof c[k] === 'object') ? c[k] : (payload && payload[k] && typeof payload[k] === 'object' ? payload[k] : null);
     if (v) blob[k] = v;
   }
-  // Variant overview (templates-design.md § Variant overview): the frozen tab
+  // Variant overview (templates-design-views.md § Variant overview): the frozen tab
   // shows the favourite and the user's own pins read-only. A favourite only
   // means something on a round of alternatives (data-design-set).
   const rootTag = rootSection(fragment);

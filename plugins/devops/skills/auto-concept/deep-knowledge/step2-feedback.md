@@ -8,7 +8,7 @@ Feedback dock, annotation layer, views, reload resilience, comment durability, p
 
 A **speech-bubble feedback dock** anchored to the 💬 FAB (bottom-right) is
 page chrome on every concept page (#399), like the ☰ panel: the same markup
-(`templates-common.md` § Common Structure, § Panel Chrome (all templates) → Feedback
+(`templates-common-structure.md` § Common Structure, § Panel Chrome (all templates) → Feedback
 dock) on a `decision`, `free` and `design` round. In a **document round** it
 holds exactly one thing — the general-notes textarea with its attachment
 slot — and renders `compact`; the itemised notes of such a round are the
@@ -101,7 +101,7 @@ alternatives, bi-state per alternative) and `data-view-kind="comparison"`
 (2..n concrete candidates side by side, verdict per option, optional
 criteria matrix — mandatory skeleton, free interior). See § Step 1a above
 for when to use a view instead of a separate `decision` iteration, and
-`deep-knowledge/templates-design.md` § Views (optional) for the full HTML/CSS/JS
+`deep-knowledge/templates-design-views.md` § Views (optional) for the full HTML/CSS/JS
 reference and the payload shape (`decisions[].view`, `comments.views`).
 **≥1 `data-design` stays mandatory** — views augment a design iteration,
 they never replace it. **And a view never re-asks the design choice** — the
@@ -199,10 +199,10 @@ signal Claude monitors.
 5. Switch the decision panel from "ready" to "submitted" state — the journey
    row's round toggle turns into the "Rethinking x/y" run bar (implement: the
    implement toggle turns into "Umsetzung n/m"), see
-   `deep-knowledge/templates-submit.md` § Journey row
+   `deep-knowledge/templates-submit-journey.md` § Journey row
 
 **Decision panel states** (the journey row + the status line under it; see
-`templates-submit.md` § Journey row):
+`templates-submit-journey.md` § Journey row):
 - **Ready**: round toggle "👉 Zur nächsten Runde | 🤖" — wire — 🔒 — 🤖 — 🏁;
   the status line reads "👉 Du bist dran · gespeichert" ("speichert…" while
   the draft mirror flushes, "verbindet…" before the first heartbeat). A click

@@ -20,7 +20,7 @@ import { readTemplates } from "./templates-source.js";
 // page whose frozen history is made of decision rounds (the mixed concept).
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const gate = fs.readFileSync(path.join(__dirname, "deep-knowledge", "validation-gate.md"), "utf8");
+const gate = ["validation-gate.md", "validation-gate-phase2.md"].map((f) => fs.readFileSync(path.join(__dirname, "deep-knowledge", f), "utf8")).join("");
 
 const BASE = { rounds: 3, entries: 6, locale: "en", out: "", designs: 1 };
 const DECISION = { ...BASE, mode: "decision", mapping: false };
