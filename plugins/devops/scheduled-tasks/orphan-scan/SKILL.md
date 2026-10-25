@@ -45,10 +45,13 @@ Uses the existing safe removal, ignoring the age/count gates. Never touches
 live-session worktrees, the current worktree, locked or dirty worktrees, or
 anything not landed. Worktrees must also have been idle for 24 h. Branches
 are spared when they are long-lived (`develop`, `staging`, `production`,
-`stable`, `trunk`, `release/*`, `hotfix/*`), parked (`parked/*` incl.
-`parked/autosave/*`, `wip/`, `backup/`, `salvage/`, "ARCHIVED" tip) or still
-have an upstream on origin (a worktree on such a branch is removed, the branch
-stays). Remote branches are not deleted.
+`stable`, `trunk`, `release/*`, `hotfix/*`) or still have an upstream on
+origin (a worktree on such a branch is removed, the branch stays). LANDED
+parked refs (`parked/*` incl. `parked/autosave/*`, `wip/`, `backup/`,
+`salvage/`) are removed too: a landed safety copy holds nothing the default
+branch lacks; unlanded ones are never touched. Remote branches are not
+deleted here (ship hygiene expires landed origin copies after 14 days). Stale
+lock files (>1 h) are cleared before the `fetch --prune`.
 
 ## Constraints
 
