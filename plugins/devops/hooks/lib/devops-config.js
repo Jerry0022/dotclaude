@@ -142,6 +142,12 @@ const SCHEMA = Object.freeze({
       doc: 'The private backup repo as <owner>/<name>, e.g. Jerry0022/claude-home.',
     }),
   }),
+  frustratedMode: Object.freeze({
+    suggest: Object.freeze({
+      type: 'boolean', default: true,
+      doc: 'Let the prompt detector ask Claude to judge a stuck session and offer an analysis (channel-gated feature; see deep-knowledge/frustrated-mode.md where available).',
+    }),
+  }),
   wipWatch: Object.freeze({
     enabled: Object.freeze({
       type: 'boolean', default: false, globalOnly: true,
