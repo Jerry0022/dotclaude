@@ -212,6 +212,8 @@ the same hotkeys and tips as a design round. Three jobs:
   window.conceptHotkeyUsed = hotkeyUsed;
   const sessionShown = new Set();
   function nudge(id, caps, text) {
+    // Calm view (the eye): no new tips while the layer is hidden.
+    if (body.classList.contains('anno-hidden')) return false;
     if (silenced(id) || current || Date.now() - lastShown < 60000) return false;
     if (sessionShown.has(id) || hotkeyUsed(id)) return false;
     const shows = Number(read(SHOWN + id)) || 0;

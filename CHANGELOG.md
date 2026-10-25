@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.317.0] — 2026-10-25
+
+On a concept page the eye now hides everything the page adds to the design. From round 2 the pins say what improved.
+
+### Added
+- **"Improved" line in pin bubbles.** From round 2 an annotation bubble on an element that already existed can start with a short `Verbessert: …` line, before the question and the answer field. A pin may also carry only the improvement, with no question, so it can still be commented on. The submit payload carries the phrase as an optional `improved` field in `annotations[]`.
+
+### Changed
+- **The eye now hides all concept chrome.** It also hides the bottom status toasts, hotkey tips, pin hints, the screen indicator and the recovered-notes strip. No new tip appears while the eye is off. The eye, the device switch and the draft-offline warning stay visible.
+- **Fewer pins in later rounds.** From round 2 only screens that changed get pins, at most 3 each, never on the overview. Round 1 keeps 3 to 7 per design.
+
 ## [0.316.0] — 2026-10-25
 
 Frustrated Mode (alpha) now carries an approved plan through auto-agents, auto-concept and do-learn, so nothing asks twice for what the plan already approved.

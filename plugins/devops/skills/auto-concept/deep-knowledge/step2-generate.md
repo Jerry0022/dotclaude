@@ -76,7 +76,10 @@ page.
   under the mock ("In round 2 the button is …" is forbidden). Captions or short
   explanations belong only on subpages that refine ONE element. Round
   commentary goes into `data-design-improved="…"` (optional, short phrase, max
-  ~40 chars) on the `section[data-design]`; the overview card shows it as
+  ~40 chars) on the `section[data-design]`; per improved element the same short
+  phrase goes into an `.anno-bubble-improved` line inside its pin bubble
+  (templates-design-screens.md § Annotated screen; rounds 2+, may be a pin
+  without question); the overview card shows it as
   "Verbessert: …" under the top-3 points. Details: templates-design-screens.md,
   templates-design-views.md § Variant overview.
 

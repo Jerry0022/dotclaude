@@ -56,7 +56,7 @@ describe("calm view — the eye takes the quick nav and both FABs along", () => 
     for (const sel of ["#design-quick", ".design-switcher", ".panel-fab", ".feedback-fab"]) {
       expect(css).toContain("body.anno-hidden " + sel);
     }
-    expect(css).toMatch(/body\.anno-hidden \.feedback-fab \{\s*opacity: 0 !important; visibility: hidden; pointer-events: none;/);
+    expect(css).toMatch(/body\.anno-hidden \.recovered-notes-strip \{\s*opacity: 0 !important; visibility: hidden; pointer-events: none;/);
     const { document, errors } = await boot(page(2));
     expect(errors).toEqual([]);
     const eye = document.getElementById("anno-toggle");
@@ -68,6 +68,25 @@ describe("calm view — the eye takes the quick nav and both FABs along", () => 
     expect(eye.dataset.tip).toMatch(/einblenden/);
     eye.click();
     expect(document.body.classList.contains("anno-hidden")).toBe(false);
+  }, BOOT_TIMEOUT);
+});
+
+describe("calm view — status messages, tips and corner chrome go too", () => {
+  test("every engine toast, tip, hint and indicator joins the calm rule; eye, device switch and offline strip stay", async () => {
+    const rule = css.match(/body\.anno-hidden #design-quick,[^{]*\{[^}]*\}/)[0];
+    for (const sel of [".jr-toast", ".submitted-toast", ".hk-nudge", ".upin-hint", ".dpin-hint", ".screen-indicator", ".recovered-notes-strip"]) {
+      expect(rule).toContain("body.anno-hidden " + sel);
+    }
+    for (const sel of [".viewport-toggle", ".draft-offline-strip", ".anno-toggle-fab"]) expect(rule).not.toContain(sel);
+    expect(rule).toMatch(/opacity: 0 !important; visibility: hidden; pointer-events: none;\s*transition: opacity 0\.18s/);
+    expect(css).toMatch(/prefers-reduced-motion: reduce\) \{\s*body\.anno-hidden #design-quick[^}]*\.recovered-notes-strip \{ transition: none; \}/);
+  });
+
+  test("no new tip appears while the layer is hidden", async () => {
+    const { window, document } = await boot(page(2));
+    document.body.classList.add("anno-hidden");
+    expect(window.conceptNudge("calm-test", ["H"], "x")).toBe(false);
+    expect(document.querySelector('[data-nudge="calm-test"]')).toBeNull();
   }, BOOT_TIMEOUT);
 });
 
