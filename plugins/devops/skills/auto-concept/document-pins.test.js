@@ -161,6 +161,18 @@ describe("document pins · eye, ? badges, frozen, design regression", () => {
     expect(document.getElementById("hk-overlay")).toBeNull();
   }, BOOT_TIMEOUT);
 
+  test("H presses the document eye, which names H in its tooltip", async () => {
+    const { window, document } = await boot(fixture("decision"));
+    const eye = document.getElementById("dpin-eye");
+    expect(eye.dataset.tipKey).toBe("H");
+    ctrlClick(window, live(document).querySelector("section[id]:not([data-iteration]) p"));
+    typeAndSave(window, document, "x");
+    key(window, document.body, { key: "h", code: "KeyH" });
+    expect(document.body.classList.contains("anno-hidden")).toBe(true);
+    key(window, document.body, { key: "h", code: "KeyH" });
+    expect(document.body.classList.contains("anno-hidden")).toBe(false);
+  }, BOOT_TIMEOUT);
+
   test("Ctrl held shows the hint pill, releasing it hides it", async () => {
     const { window, document } = await boot(fixture("decision"));
     key(window, document.body, { key: "Control", code: "ControlLeft", ctrlKey: true });

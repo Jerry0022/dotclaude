@@ -89,7 +89,9 @@ the same hotkeys and tips as a design round. Three jobs:
       e.preventDefault();
       if (body.classList.contains('panel-open')) window.closePanel(); else window.openPanel();
     } else if (k === 'h' || k === 't') {
-      const btn = document.getElementById(k === 'h' ? 'anno-toggle' : 'theme-toggle');
+      // A document round has no design eye; its pin eye (#dpin-eye) hides the notes there.
+      const onDesign = document.documentElement.dataset.template === 'design';
+      const btn = document.getElementById(k === 't' ? 'theme-toggle' : onDesign ? 'anno-toggle' : 'dpin-eye');
       if (!btn || btn.hidden) return;
       e.preventDefault();
       btn.click();

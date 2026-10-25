@@ -294,7 +294,8 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
   (`concept-build.js bake` writes it) and render the pins read-only in that
   round's section; entries without an `anchor` (design pins) are ignored.
 - **Eye + ?.** `#dpin-eye` (shown once any pin exists) toggles
-  `body.anno-hidden` like the design eye and persists with it. `?`
+  `body.anno-hidden` like the design eye and persists with it; `H` presses
+  it (tooltip key `H`). `?`
   shows the same badge overlay as everywhere, plus the example pin
   "Ctrl + click" (`wireChromeHotkeys()`, via `window.documentPinsActive()`).
   While Ctrl is held a hint pill names the gesture.
@@ -554,6 +555,9 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
     b.id = 'dpin-eye';
     b.type = 'button';
     b.hidden = true;
+    // H hides the notes here like the design eye (wireChromeHotkeys).
+    b.dataset.tipKey = 'H';
+    b.setAttribute('aria-keyshortcuts', 'H');
     b.innerHTML = '<svg class="anno-eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>'
       + '<svg class="anno-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/></svg>';
     b.addEventListener('click', () => {
