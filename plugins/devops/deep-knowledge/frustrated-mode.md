@@ -65,6 +65,54 @@ Rules:
 - **Own expiry.** The plan record expires 2 h after recording (and 2 h after approval), independent of the contract's expiry. An expired record is removed on read; approving it fails.
 - **Never ships.** A step of type `ship`/`release`/`merge`/`push`/`deploy` (or `ship: true`) is rejected by `record`, and by `approve` for a hand-edited record, unless `--from-concept-closeout` was given. The plan path never arms a contract or a ship step itself.
 
+## Guard (`pre.frustrated.readonly`)
+
+While an analysis runs, the session's guard marker is armed
+(`os.tmpdir()/dotclaude-devops-frustrated-guard-<session_id>`, 2 h expiry of
+its own). Subagent hook payloads carry the parent's `session_id`, so the guard
+covers the main thread and every analyst; frontmatter `tools:` is only defence
+in depth. Code: `hooks/lib/frustrated-guard.js`, CLI `scripts/frustrated-guard.js arm [--target …] | disarm | status`
+(session from `--session` or `$CLAUDE_CODE_SESSION_ID`; the hook also applies
+`arm` / `disarm` itself with the payload's session id; a subagent cannot disarm).
+
+| Allowed while armed | Denied (exit 2, with the reason) |
+|---|---|
+| Read / Grep / Glob / web / Agent spawns | Edit / Write / NotebookEdit / MultiEdit of the app's source or config |
+| git read commands (`log`, `show`, `diff`, `blame`, `status`, `branch --list`, …) | git that changes the repository (`commit`, `checkout`, `reset`, `stash`, `push`, `branch -D`, …) |
+| tests, lint, typecheck (`npm test`, `npm run test:*`, `vitest`, `pytest`, `go test`, …; snapshot updates included) | `--fix` / format / install / migrate runs, `node -e`, any other command |
+| writes into the temp dir / scratchpad, `.claude/` state, `~/.claude/` state, snapshots, coverage, caches, test reports, concept pages (`docs/concepts/`) | `.claude/settings*.json`, `devops-config.json`, `CLAUDE.md`, `.claude/{agents,skills,commands,hooks,worktrees,plugins}/` |
+| plugin scripts `feature-flag.js`, `run-contract.js`, `frustrated-guard.js`, `frustrated-brief.js`, the card renderer | `Workflow` (also under ultracode), mutating ship / GitHub MCP tools |
+
+A project that itself lives in the temp dir keeps its source protected. The
+guard ends on `disarm` (after the approval, a no, or before a concept
+hand-off) or after 2 h. Silent on every channel below alpha.
+
+## Analysis
+
+Brief: `scripts/frustrated-brief.js [--transcript <jsonl> | --session <id>] --out <temp file>`
+reads the bounded tail (4 MB) of the transcript and extracts the user's own
+prompts (logs collapsed), edited files, error signatures, skills and agents
+used, plus a code-free cut. It writes only into the temp dir. Another session
+is read only after the user's explicit yes.
+
+Roles (existing agents, role blocks in `skills/auto-frustrated/deep-knowledge/roles.md`):
+R1 intent `po`, R2 history `redteam`, R3 technical cause `research`, R4
+workflow & product `po`, R5 fresh alternative `rethinker`, S synthesis
+`research`. Lite: R1, R2+R4, R3, synthesis in the main thread. No new agent
+files.
+
+## Skill (`auto-frustrated`)
+
+User-only (`disable-model-invocation: true`), first step
+`feature-flag.js check frustrated-mode` (stop on 126). Flow: intake and sealed
+loop hypothesis → arm the guard, build the brief → R1–R5 in parallel →
+synthesis → `plan record` → present (non-trivial: disarm, then
+`/auto-concept`; trivial: plan text above the `analysis` card) → next prompt:
+any interpretable yes → `plan approve` → disarm → hand-off per step
+(`do-run --from=frustrated`, `auto-fix --from=frustrated`, `auto-concept`,
+`do-learn`, `auto-guide`). A no → `plan clear` and disarm. Never ships, never
+asks to ship; no Ultracode field in the report.
+
 Developer notes: `docs/dev/feature-flags.md`.
 
 ## Hand-off

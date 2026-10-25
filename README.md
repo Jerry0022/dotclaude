@@ -763,7 +763,7 @@ plugins/
 │   ├── skills/                    ← <!--devops:count:skills-->14<!--/devops:count:skills--> skill definitions (SKILL.md)
 │   ├── agents/                    ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 │   ├── mcp-server/                ← Card renderer + Desktop widget, ship tools, issue matching
-│   ├── deep-knowledge/            ← Cross-cutting reference docs (<!--devops:count:dk-->57<!--/devops:count:dk--> topics)
+│   ├── deep-knowledge/            ← Cross-cutting reference docs (<!--devops:count:dk-->55<!--/devops:count:dk--> topics)
 │   ├── scheduled-tasks/           ← Runbooks for opt-in background jobs
 │   ├── evals/                     ← Behavioral evals and skill A/B runs (ab-run.js)
 │   ├── templates/                 ← Output style, changelog and release templates

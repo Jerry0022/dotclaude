@@ -39,6 +39,23 @@ const rootArg = args.find((a) => !a.startsWith("--"));
 const projectRoot = resolve(rootArg || join(__dirname, "..", "..", ".."));
 const pluginDir = join(projectRoot, "plugins", "devops");
 
+// Channel-gated parts (features.json, docs/dev/feature-flags.md rule 3): the
+// README and architecture page reach every channel, so a gated hook, skill or
+// doc is never listed or counted — on whatever channel the maintainer runs.
+function gatedPaths() {
+  try {
+    const reg = JSON.parse(readFileSync(join(pluginDir, "features.json"), "utf8"));
+    const out = new Set();
+    for (const f of Object.values(reg.features || {})) {
+      for (const key of ["docs", "scripts", "skills"]) for (const p of f[key] || []) out.add(String(p).split("\\").join("/"));
+    }
+    return out;
+  } catch {
+    return new Set();
+  }
+}
+const GATED = gatedPaths();
+
 // ── Turn-order event metadata ───────────────────────────────────────────────
 
 const EVENTS = [
@@ -110,6 +127,7 @@ function readHooks() {
         if (entry._deprecated) continue;
         const rel = (entry.command || "").match(/hooks\/[\w./-]+\.js/);
         if (!rel) continue;
+        if (GATED.has(rel[0])) continue;
         const file = join(pluginDir, rel[0]);
         const id = rel[0].split("/").pop().replace(/\.js$/, "");
         byEvent[event].push({ id, desc: hookDescription(file) });
@@ -122,7 +140,7 @@ function readHooks() {
 function countSkills() {
   const dir = join(pluginDir, "skills");
   return readdirSync(dir, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && existsSync(join(dir, d.name, "SKILL.md")))
+    .filter((d) => d.isDirectory() && existsSync(join(dir, d.name, "SKILL.md")) && !GATED.has(`skills/${d.name}`))
     .length;
 }
 
@@ -132,7 +150,7 @@ function countAgents() {
 
 function countDeepKnowledge() {
   return readdirSync(join(pluginDir, "deep-knowledge"))
-    .filter((f) => f.endsWith(".md") && f !== "INDEX.md").length;
+    .filter((f) => f.endsWith(".md") && f !== "INDEX.md" && !GATED.has(`deep-knowledge/${f}`)).length;
 }
 
 // ── Marker rewriting ────────────────────────────────────────────────────────

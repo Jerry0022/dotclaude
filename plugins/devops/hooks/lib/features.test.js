@@ -145,7 +145,9 @@ describe("features — the real registry", () => {
       expect(["alpha", "beta"], name).toContain(raw.minChannel);
       expect(raw.summary, name).toBeTruthy();
       for (const d of f.docs) expect(d, name).toMatch(/^deep-knowledge\/[\w.-]+\.md$/);
-      for (const s of f.scripts) expect(s, name).toMatch(/^scripts\/[\w./-]+\.js$/);
+      // hooks and hook libs of a gated feature register as scripts too (the
+      // README generator skips registered hooks; each one checks the flag)
+      for (const s of f.scripts) expect(s, name).toMatch(/^(?:scripts|hooks)\/[\w./-]+\.js$/);
     }
   });
 

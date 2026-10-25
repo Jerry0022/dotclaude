@@ -19,6 +19,11 @@
       ],
       "scripts": [
         "scripts/frustration-replay.js",
+        "scripts/frustrated-guard.js",
+        "scripts/frustrated-brief.js",
+        "hooks/lib/frustrated-guard.js",
+        "hooks/pre-tool-use/pre.frustrated.readonly.js",
+        "hooks/user-prompt-submit/prompt.frustrated.detect.js",
         "scripts/run-extras.js"
       ],
       "skills": [
