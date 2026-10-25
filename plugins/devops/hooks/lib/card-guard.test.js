@@ -1506,13 +1506,15 @@ describe("lastAssistantText", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildBlockReason", () => {
-  test("finished unshipped commits in a linked side session are ready + open with a reply, never analysis (#759)", () => {
-    expect(buildBlockReason()).toContain('finished unshipped commits in a linked side session → ready + open {text, reply: "ship"}, never analysis');
+  test("finished unshipped commits in a linked side session are ready + open with a reply, never analysis (#759) — rule lives in the tool description", () => {
+    const src = require("fs").readFileSync(require("path").join(__dirname, "..", "..", "mcp-server", "index.js"), "utf8");
+    expect(src).toContain('finished unshipped commits in a linked side session = ready + open {text, reply: \\"ship\\"}, never analysis');
   });
 
-  test("contains the MCP tool name and variant decision tree", () => {
+  test("contains the MCP tool name, points at the tool description for the variant rules, and keeps the offline variant list", () => {
     const r = buildBlockReason();
     expect(r).toMatch(/mcp__plugin_devops_dotclaude-completion__render_completion_card/);
+    expect(r).toContain("render_completion_card tool description");
     expect(r).toMatch(/ship-successful/);
     expect(r).toMatch(/ship-blocked/);
     expect(r).toMatch(/aborted/);

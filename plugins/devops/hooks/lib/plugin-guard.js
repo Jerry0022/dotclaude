@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module plugin-guard
- * @version 0.3.1
+ * @version 0.4.0
  * @description Project isolation guard — self-executing on require().
  *   Checks whether devops plugin is enabled for the current project
  *   (project settings) or globally (user settings). If neither, exits
@@ -15,6 +15,9 @@
  *   from outside `~/.claude/plugins/cache/` pass the guard. Before 0.2.0
  *   every hook was a silent no-op in an eval run, so behavioral evals could
  *   never see hook-injected context.
+ *
+ *   Once the plugin is enabled the guard also starts lib/hook-telemetry.js
+ *   (fail-safe run log, see there) — every hook requires this file first.
  *
  * Usage (first line in any hook script):
  *   require('../lib/plugin-guard');
@@ -68,3 +71,5 @@ if (!isEnabledInAny(projectSettings) && !isEnabledInAny(projectLocalSettings)
     && !isEnabledInAny(globalSettings) && !isAdHocLoad()) {
   process.exit(0);
 }
+
+try { require('./hook-telemetry').start(); } catch { /* telemetry is optional */ }

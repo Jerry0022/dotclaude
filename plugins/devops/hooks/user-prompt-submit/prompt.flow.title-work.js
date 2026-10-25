@@ -63,7 +63,7 @@ require('../lib/plugin-guard');
 
 const { runOnce, releaseOnce } = require('../lib/run-once');
 const { isSilent, isScheduledTask, isMachineTurn } = require('./prompt.flow.silent-turn');
-const { isShipIntent } = require('../lib/ship-intent');
+const { isShipIntent, isDeferredShip } = require('../lib/ship-intent');
 
 /** An interrupted ship this prompt resumes, or null — never fatal. */
 function resumesShip(prompt, cwd) {
@@ -88,7 +88,9 @@ const { STATUS, BARE_WORK } = require('../lib/title-scheme');
  * hourglass is the fallback, never the override.
  */
 function prefixFor(prompt, cwd) {
-  return isShipIntent(prompt) || resumesShip(prompt, cwd) ? SHIPPING_PREFIX : WORK_PREFIX;
+  // "<work>, dann ship" works first — the ship's own title comes with do-ship.
+  if (isShipIntent(prompt) && !isDeferredShip(prompt)) return SHIPPING_PREFIX;
+  return resumesShip(prompt, cwd) ? SHIPPING_PREFIX : WORK_PREFIX;
 }
 
 /**

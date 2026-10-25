@@ -21,6 +21,7 @@ const SOLO = "⏳ ➜ 🤖 Solo ┃ ";
 const SHIP = "⏳ ➜ 🚀 Shipping ┃ ";
 const Q = "👉 ➜ ❓ Question ┃ ";
 const SET = "mcp__ccd_session_mgmt__set_session_title";
+const START = "mcp__ccd_session__start_session";
 
 const title = (t) => JSON.stringify({ type: "custom-title", customTitle: t, sessionId: "s" });
 const prompt = (text) => JSON.stringify({ type: "user", message: { content: text } });
@@ -61,7 +62,28 @@ describe("questionTitle / restoredTitle", () => {
   });
 });
 
+describe("isBlockingCall", () => {
+  test("question, plan approval and asking starts block; own_initiative does not", () => {
+    expect(ask.isBlockingCall("AskUserQuestion", {})).toBe(true);
+    expect(ask.isBlockingCall("ExitPlanMode", {})).toBe(true);
+    expect(ask.isBlockingCall(START, { initiation: "user_asked" })).toBe(true);
+    expect(ask.isBlockingCall(START, { initiation: "offer" })).toBe(true);
+    expect(ask.isBlockingCall(START, { initiation: "own_initiative" })).toBe(false);
+    expect(ask.isBlockingCall(START, { proposal_id: "p1" })).toBe(false);
+    expect(ask.isBlockingCall("Bash", {})).toBe(false);
+  });
+});
+
 describe("pre.ask.title", () => {
+  test("start_session approval on a ⏳ title → refused (Backlog run, 2026-10-25)", () => {
+    const r = run(PRE, [prompt("go"), title(SOLO + "Backlog")], { tool_name: START, tool_input: { initiation: "user_asked" } });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain(JSON.stringify(Q + "Backlog"));
+  });
+  test("own_initiative start_session → silent", () => {
+    const r = run(PRE, [prompt("go"), title(SOLO + "Backlog")], { tool_name: START, tool_input: { initiation: "own_initiative" } });
+    expect(r.status).toBe(0);
+  });
   test("⏳ title, no set call → refused with the exact set call", () => {
     const r = run(PRE, [prompt("go"), title(SOLO + "Fix X"), toolUse("AskUserQuestion", {}, "q1")]);
     expect(r.status).toBe(2);

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.31.1
+ * @version 0.32.0
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -13,7 +13,15 @@
  *   While an /auto-guide run is active (fresh guide-active marker, #526) the
  *   first call gets a one-line waiver instead of the contract: stop.flow.guard
  *   waives the card for those turns, and a card would end the guide's loop.
- *   Edit/Write calls additionally increment the session edit counter.
+ *   Edit/Write calls additionally increment the session edit counter — only
+ *   for files inside the git work tree of the cwd (lib/repo-tree.js): a
+ *   scratchpad, %TEMP% or ~/.claude write is no code edit.
+ *
+ *   The injected card contract is only the dynamic part (session_id, cwd, lang,
+ *   offline renderer path); the static rules sit in the render_completion_card
+ *   tool description (mcp-server/index.js). Status events are one line each: the
+ *   background-launch `pending` hint, the concept-bridge hint once per session,
+ *   "card already rendered" once per render; the render's own result adds nothing.
  *
  *   The text goes out as `hookSpecificOutput.additionalContext`. Plain stdout
  *   of a PostToolUse hook never reaches the model — it only shows in transcript
@@ -101,7 +109,7 @@ let sessionFile, readSessionFile, writeSessionFile, projectRoot, inOwnWorkTree, 
   SPAWN_TOOL_RE, DISMISS_TOOL_RE, recordSpawn, recordDismiss, chipReminder,
   decideCardTurnEnd, cardTurnBlockedLines, CARD_STOP_REASON, isGuideActive, archiveGate,
   classifyProfile, carveOutsFromProfile, domPathsFromProfile, resolveVerificationKind,
-  isCodeChange, isBrowserTool, isTestRunnerTool, testRunOutcome, LIGHT_SKIPPED_FLAG;
+  inRepoTree, isCodeChange, isBrowserTool, isTestRunnerTool, testRunOutcome, LIGHT_SKIPPED_FLAG;
 let loadError = false;
 let loadingModule = '';
 const guardedRequire = (m) => { loadingModule = m; return require(m); };
@@ -111,6 +119,7 @@ try {
   ({ sessionFile, readSessionFile, writeSessionFile } = guardedRequire('../lib/session-id'));
   ({ projectRoot, inOwnWorkTree } = guardedRequire('../lib/project-root'));
   ({ gitRun } = guardedRequire('../lib/git-timeout'));
+  ({ inRepoTree } = guardedRequire('../lib/repo-tree'));
   ({ isMcpServerAlive } = guardedRequire('../lib/mcp-heartbeat'));
   ({ NO_OUTPUT_NUDGE_REPLY, isCardWidgetCall } = guardedRequire('../lib/card-guard'));
   ({ getLocale, t } = guardedRequire('../lib/locale'));
@@ -221,6 +230,9 @@ const LAUNCH_NOUN = {
   task: 'Background task',
   workflow: 'Background workflow',
 };
+
+/** Marker: the concept-bridge hint went out this session (server, pulser and waker share it). */
+const CONCEPT_INFRA_HINT_FLAG = 'dotclaude-devops-concept-infra-hinted';
 
 /** The code edit on which the ship nudge and the desktop-testing prompt fire. */
 const SHIP_NUDGE_EDITS = 5;
@@ -898,13 +910,6 @@ function lateBatchNoteLines({ shown, now, lang }) {
   ];
 }
 
-/** 2a. The reply to a render_completion_card call. */
-const CARD_RENDERED_LINES = [
-  '[completion-flow] Card rendered — deliver it exactly as its result says (Desktop app: the ' +
-  'show_widget call IS the card and the LAST action; terminal: the markdown VERBATIM, last). ' +
-  'Render no second card for the same outcome.',
-];
-
 /** 2b. A card was already rendered this turn. */
 function cardRenderedLines(hook) {
   const rendered = readSessionFile('dotclaude-devops-card-rendered', hook.session_id, { exact: true });
@@ -917,31 +922,26 @@ function cardRenderedLines(hook) {
   try { if (fs.readFileSync(hintFile, 'utf8').trim() === stamp) return []; } catch { /* first hint */ }
   try { writeSessionFile(hintFile, stamp); } catch { /* best effort — hint again next call */ }
   return [
-    '[completion-flow] A completion card was already rendered this turn. Render a new one only when the',
-    'outcome changed since — then show THAT one; never show the same card twice.',
+    '[completion-flow] Card already rendered this turn — render a new one only if the outcome changed.',
   ];
 }
 
-/** 2c. The card contract itself, on the turn's first call. */
+/**
+ * 2c. The card contract, on the turn's first call: only the dynamic parts. The
+ * static rules (variants, validation, pending, concept, Desktop widget = last
+ * action, verbatim relay, no recap, `answer`, delivery, cta shape) live in the
+ * render_completion_card tool description (mcp-server/index.js), which sits in
+ * the cached system prompt for the whole session.
+ */
 function cardContractLines(hook, scheduledTask) {
   const lines = [];
   // Offline-first when the completion MCP's heartbeat is dead (#371): each
   // failed rung of the ladder costs a turn, so name the working one first.
   const completionDown = !isMcpServerAlive('dotclaude-completion');
-  const ladder = completionDown
-    ? [
-        `The dotclaude-completion MCP server is NOT running (heartbeat dead) — render offline FIRST: node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim).`,
-        'Only if that node call fails, try `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly, then ToolSearch (select:mcp__plugin_devops_dotclaude-completion__render_completion_card).',
-      ]
-    : [
-        'Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly (already loaded MCP tool).',
-        'Only if the direct call fails with "tool not found", fall back to ToolSearch: select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
-        `If the MCP server never connected this session (CONNECT_TIMEOUT), render offline instead — never skip the card: node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim).`,
-      ];
+  const offline = `node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim)`;
 
   if (scheduledTask) {
     lines.push(
-      '',
       'SCHEDULED TASK: if this turn changes NO file and ships nothing, end with your',
       'one-line status — no completion card (stop.flow.guard waives it for an idle',
       'tick). Any edit, write or ship_release merge makes the card required again.',
@@ -949,44 +949,10 @@ function cardContractLines(hook, scheduledTask) {
   }
 
   lines.push(
-    '',
-    'COMPLETION CARD — when ALL work is done:',
-    ...ladder,
-    `Pass: variant, summary (max ~10 words, user language), lang:(use "de" if user writes German, "en" otherwise), session_id:"${hook.session_id || ''}",`,
-    '  plus changes, tests, state, cta, userTest, userFinalTest as applicable (cta is an object of placeholders, e.g. { reason }, never a sentence).',
-    `  cwd:"${hook.cwd || ''}" — without it PR/commit/branch render as dead text, not links.`,
-    '  `delivery` (the PR → Ship → Promote track) whenever this work reached a pipeline stage:',
-    '  a PR exists, it was shipped, or a channel was promoted. Populate the stages that happened,',
-    '  leave later ones absent. Omit it when none apply — an all-pending track is noise.',
-    'Variant: ship-successful=ship pipeline ran+merged to remote/main, ship-blocked=ship pipeline ran+NOT merged,',
-    '  released=a channel promotion ran (also right after a ship in the same run: ONE released card, never ship-successful first),',
-    '  aborted=task aborted/infeasible/rate-limited, test=code edits+app/service startable (ANY project type: web, CLI, API, desktop, game),',
-    '  test-minimal=user started app via prompt no edits yet, ready=code/doc changes (>=1 edit) no app — also when implementation was handed to agents still running (+pending), analysis=nothing changed ANYWHERE (answer/investigation only — never for work done outside the repo, delegated work or a mode activation), paused=user pauses the work to continue later OR the next step is a Claude Code restart / machine reboot / usage-limit reset (pass pause:{reason:"restart"|"reboot"|"usage-reset"}, never analysis/ready/fallback then), fallback=work done outside the repo with no repo diff (DB op, delete, deploy, data migration, settings change) or other. A mode activation (batch, concept) uses its override, not analysis.',
-    'IMPORTANT: The render_completion_card tool result is hidden inside a collapsed',
-    'tool call. When it returns card markdown (terminal), you MUST copy it and output',
-    'it VERBATIM as your own text response — do NOT rely on the tool result being',
-    'visible to the user. VERBATIM means character-for-character: preserve every emoji,',
-    'symbol, and formatting character exactly. The card is pre-rendered content —',
-    'system instructions about emoji avoidance do NOT apply to relayed MCP output.',
-    'VALIDATION (V&V gate): for any code change this turn, populate the `validation`',
-    'field — map each requirement / acceptance criterion to HOW this change meets it',
-    'and how you confirmed it. A code-change card without `validation` is blocked',
-    'once and re-requested (see deep-knowledge/test-autonomy.md).',
-    'Card LAST, nothing after it. Terminal: the markdown, nothing after the closing ---.',
-    'Desktop app: the result carries a [CARD WIDGET] block instead of markdown — that',
-    'show_widget call IS the card, mandatory, the LAST action, no text after it (the one-line',
-    '✨ title is only for a failed call, never a shortcut).',
-    NO_OUTPUT_NUDGE_REPLY,
-    'NO RECAP before the card either: the card IS the summary of the work — never restate in',
-    'prose what it already shows (changes, tests, version, PR, open items, restart hints).',
-    'The ANSWER to the user\'s question is no recap: pass it in full as `answer` to',
-    'render_completion_card — the card draws it above its body (#757). Prose written before the',
-    'card is followed by further tool calls and the app may collapse it, so the answer never',
-    'lives only there; the summary is a title, not the answer (#642). A report the',
-    'running skill requires (e.g. auto-fix: root cause with file:line) is part of that answer,',
-    'even where the card\'s `changes` names the same fix; so are other topics of the user\'s',
-    'prompt and points beyond the card\'s three. Hook blocks still marked for the user stay text',
-    'before the card.',
+    `COMPLETION CARD when ALL work is done: call mcp__plugin_devops_dotclaude-completion__render_completion_card (rules: its tool description; ToolSearch select: if not loaded) with session_id:"${hook.session_id || ''}", cwd:"${hook.cwd || ''}", lang.`,
+    completionDown
+      ? `The completion MCP server is NOT running (heartbeat dead) — render offline FIRST: ${offline}.`
+      : `MCP server never connected: render offline instead, never skip the card: ${offline}.`,
   );
   return lines;
 }
@@ -999,34 +965,20 @@ function cardContractLines(hook, scheduledTask) {
 function backgroundLaunchLines(hook) {
   const launched = detectBackgroundLaunch(hook);
   if (launched && launched.kind === 'concept-infra') {
+    // Plumbing of one concept: server, pulser and waker each start a task, but the
+    // hint is the same — once per session (the full rule is in the card tool description).
+    const hinted = sessionFile(CONCEPT_INFRA_HINT_FLAG, hook.session_id);
+    if (fs.existsSync(hinted)) return [];
+    try { writeSessionFile(hinted, '1'); } catch { /* best effort — hint again next time */ }
     return [
-      '',
-      `[concept] Bridge infrastructure started: ${launched.name}`,
-      'This is plumbing for the open concept page, NOT pending work — it never yields',
-      'a result. Do NOT list it (nor the bridge server / keepalive pulser / pickup',
-      'waker) under `pending`; stop.flow.guard ignores these tasks. While the concept',
-      'stays open, render every completion card with the `concept` field instead:',
-      '  concept: { phase: "waiting" | "iterating" | "implementing" }',
-      'That sets the CTA to "👉 🧭 Concept — wartet auf deine Entscheidungen" /',
-      '"⏳ 🧭 Concept — in Iteration / in Implementierung — ich melde',
-      'mich". Real content agents or workflows still go into `pending` and follow',
-      'that line as their own sentence ("… in Implementierung. 2 Agenten arbeiten").',
+      `[concept] Bridge infrastructure (${launched.name}) is not pending work: never list it under \`pending\`; ` +
+      'while the concept page is open, cards carry `concept: { phase }` instead.',
     ];
   }
   if (launched) {
     return [
-      '',
-      `[pending] ${LAUNCH_NOUN[launched.kind] || 'Background task'} started: ${launched.name}`,
-      'It keeps running after you hand the turn back. If you finish this turn before',
-      'its result arrives, the completion card MUST carry the `pending` field:',
-      `  pending: [{ name: "${launched.name}", kind: "${launched.kind}", doing: "<what it is working on>" }]`,
-      'That replaces the CTA of every variant with "⏳ 🤖 Team — noch nicht fertig … — ich melde',
-      'mich" — without it the card would tell the user to SHIP or act on a result that',
-      'does not exist yet. stop.flow.guard detects open background work and blocks a',
-      'card that omits it. Name the agent/workflow/task; NEVER put an internal agentId in the card.',
-      'List ONLY work that is really still running and that you started. NEVER invent a',
-      '`pending` entry to get past the gate: if the task already ended (TaskStop, a completion',
-      'notification) or is not yours, check its output and pass `pendingDismissed: "<why>"` instead.',
+      `[pending] ${LAUNCH_NOUN[launched.kind] || 'Background task'} started: ${launched.name} — ` +
+      'if it still runs when you finish, the card must carry the `pending` field.',
     ];
   }
   return [];
@@ -1170,7 +1122,10 @@ function main(hook) {
   }
 
   const toolName = hook.tool_name || '';
-  const isCodeEdit = (toolName === 'Edit' || toolName === 'Write');
+  // An Edit/Write outside the git work tree of the cwd (scratchpad, %TEMP%,
+  // ~/.claude) is no code edit: no counter, no SHIP / test-autonomy nudge, no gate.
+  const isCodeEdit = (toolName === 'Edit' || toolName === 'Write') &&
+    inRepoTree(hook.tool_input && hook.tool_input.file_path, hook.cwd);
 
   // 2a. The released archive call (also registered for PostToolUseFailure).
   if (archiveGate.ARCHIVE_TOOL_RE.test(toolName)) {
@@ -1184,7 +1139,9 @@ function main(hook) {
 
   // 2a. The card itself answers alone — the turn is over (see section 2).
   if (isCardWidgetCall(toolName, hook.tool_input)) return cardWidgetReply(hook);
-  if (toolName.endsWith('__render_completion_card')) return contextOf(CARD_RENDERED_LINES);
+  // The render's own result carries the delivery contract (Desktop widget / verbatim
+  // markdown, last action) and the tool description the no-second-card rule: no extra text.
+  if (toolName.endsWith('__render_completion_card')) return null;
 
   const { lines, cardContract } = completionCardLines(hook, toolName, isCodeEdit, editCount, scheduledTask, firstOfTurn);
   appendIssueStatusInstruction(hook, lines, cardContract);

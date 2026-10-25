@@ -1,0 +1,199 @@
+<section data-iteration="3" data-iteration-template="free">
+  <style>
+    .d3-hk-table { width: 100%; border-collapse: collapse; margin: 10px 0 14px; font-size: .92em; }
+    .d3-hk-table th, .d3-hk-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border-color, rgba(127,127,127,.25)); vertical-align: top; }
+    .d3-hk-table th { font-weight: 600; opacity: .85; }
+    .d3-hk-table a { color: var(--accent-color); text-decoration: none; white-space: nowrap; }
+    .d3-hk-table a:hover { text-decoration: underline; }
+    .d3-hk-rec { font-weight: 600; white-space: nowrap; }
+    .d3-hk-w1 { color: #3fb950; } .d3-hk-w2 { color: #58a6ff; } .d3-hk-w3 { color: #a371f7; } .d3-hk-you { color: #d29922; }
+    .d3-hk-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+    .d3-hk-meta span { font-size: .82em; border-radius: 999px; padding: 2px 10px; border: 1px solid var(--border-color, rgba(127,127,127,.35)); }
+    .d3-hk-answer { border-left: 3px solid var(--accent-color); padding: 6px 12px; margin: 8px 0 12px; background: color-mix(in srgb, var(--accent-color) 7%, transparent); border-radius: 0 8px 8px 0; }
+    .d3-hk-answer p { margin: 4px 0; }
+    .d3-hk-choice { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 10px; }
+    .d3-hk-choice label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+    .d3-hk-note { font-size: .88em; opacity: .8; }
+  </style>
+
+  <header class="iteration-intro">
+    <h2>Runde 3 · Umsetzungsplan</h2>
+    <p>Alles aus Runde 2 ist angenommen: graphify fliegt komplett raus, Welle 1 kommt als ein PR, Autosave wartet 8 s. Diese Runde liefert die zwei angefragten Nachprüfungen (Codebase-Karte statt graphify, auto-fix) und schneidet alles in sechs PRs, die am Ende alle geshippt werden. Passt der Plan, startest du die Umsetzung über ☰ → „Mit Feedback implementieren“.</p>
+  </header>
+
+  <section id="r3-plan" data-nav-label="Plan: 6 PRs">
+    <h3>Plan — sechs PRs, alle werden geshippt</h3>
+    <table class="d3-hk-table">
+      <thead><tr><th>PR</th><th>Inhalt</th><th>Empfehlung</th><th>Absicherung</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>A</td><td>Welle 1: V1 Karten-Vertrag · V2 Status-State · V3 Edit-Zähler · V5 Relay/Matcher/Governor · V6 Autosave 8 s · V8 Debug-Nudge raus · V10 Telemetrie · V12 Pflicht-Reads · V13 Dispatch · V16 Regex-Warnungen</td><td class="d3-hk-rec d3-hk-w1">zuerst</td><td>Unit-Tests je Hook, A/B-Eval für V1</td><td><a href="#r3-pr-a">→ A</a></td></tr>
+        <tr><td>B</td><td>graphify komplett raus (Plugin + Rechner), project-map bleibt</td><td class="d3-hk-rec d3-hk-w1">parallel zu A</td><td>volle Suite, README-Generator --check</td><td><a href="#r3-pr-b">→ B</a></td></tr>
+        <tr><td>C</td><td>Welle 2: V4 SessionStart entkoppeln · V7 Texte konsolidieren + Skill-Durchsicht · auto-fix-Eval</td><td class="d3-hk-rec d3-hk-w2">nach A</td><td>A/B-Evals gegen main</td><td><a href="#r3-pr-c">→ C</a></td></tr>
+        <tr><td>D</td><td>V15 Notiz-Pins in Dokument- und Report-Runden</td><td class="d3-hk-rec d3-hk-w2">nach A</td><td>jsdom-Tests der Concept-Engine</td><td><a href="#r3-pr-d">→ D</a></td></tr>
+        <tr><td>E</td><td>V9 Dispatcher pro Event</td><td class="d3-hk-rec d3-hk-w3">nach A–C</td><td>Telemetrie vorher/nachher, volle Suite</td><td><a href="#r3-pr-e">→ E</a></td></tr>
+        <tr><td>F</td><td>V14 MCP-Server schlanker</td><td class="d3-hk-rec d3-hk-w3">zuletzt</td><td>erst Messung, Wahl als Rückfrage</td><td><a href="#r3-pr-f">→ F</a></td></tr>
+        <tr><td>—</td><td>V11 security-guidance und superpowers deinstallieren</td><td class="d3-hk-rec d3-hk-you">deine Aktion</td><td>—</td><td></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="r3-zusatz" data-nav-label="Zusätzliche Entscheidungen">
+    <h3>Zusätzliche Entscheidungen</h3>
+    <table class="d3-hk-table">
+      <thead><tr><th>Frage</th><th>Empfehlung</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>Codebase-Karte nach graphify</td><td class="d3-hk-rec d3-hk-w1">project-map behalten, nichts Neues ohne Eval</td><td><a href="#r3-karte">→ Entscheidung</a></td></tr>
+        <tr><td>auto-fix</td><td class="d3-hk-rec d3-hk-w2">Eval entscheidet</td><td><a href="#r3-autofix">→ Entscheidung</a></td></tr>
+        <tr><td>graphify-Reste auf dem Rechner</td><td class="d3-hk-rec d3-hk-w1">alles entfernen</td><td><a href="#r3-pr-b">→ PR B</a></td></tr>
+      </tbody>
+    </table>
+
+    <section id="r3-karte" data-nav-label="Entscheidung: Codebase-Karte">
+      <h4>Was ersetzt graphify? — Recherche (offizielle Doku, Studie, Community)</h4>
+      <div class="d3-hk-answer">
+        <ul>
+          <li><strong>Anthropic setzt bewusst auf Suche statt Index.</strong> Claude Code holt Dateien „just in time“ über Grep, Glob und Read und lädt vorab nur eine kleine CLAUDE.md (<a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" target="_blank" rel="noopener">Engineering-Blog</a>). Die Best Practices nennen „file-by-file descriptions of the codebase“ ausdrücklich als etwas, das <em>nicht</em> in CLAUDE.md gehört (<a href="https://code.claude.com/docs/en/best-practices" target="_blank" rel="noopener">Doku</a>). Einen eingebauten Index gibt es nicht: Der Wunsch danach wurde als „not planned“ geschlossen.</li>
+          <li><strong>Die einzige kontrollierte Studie</strong> (<a href="https://arxiv.org/html/2602.11988v1" target="_blank" rel="noopener">AGENTS.md-Studie, Feb. 2026</a>) fand, dass Repo-Übersichten Agents <em>nicht</em> schneller zur richtigen Datei bringen. Generierte Übersichten kosteten +20 % Tokens.</li>
+          <li><strong>Die großen Spar-Zahlen</strong> graph-basierter Tools (5–10×, 99 %) stammen von Herstellern oder aus Anekdoten und werden gegen ein schwaches Grep verglichen. Das typische Muster in der Community: Das Modell ruft das Tool kaum auf. Genau das zeigen auch deine Zahlen (4 Abfragen in 25 Tagen).</li>
+          <li><strong>Was wirkt und offiziell empfohlen ist:</strong> breite Erkundung an einen Haiku-Subagent auslagern (<code>scout</code>), damit die gelesenen Dateien nicht im Hauptkontext landen. Für typisierte Sprachen kommt das offizielle LSP-Plugin dazu (Referenzen und Symbole ohne Index).</li>
+        </ul>
+        <p><strong>Fazit:</strong> Deine Grundidee, ein „Inhaltsverzeichnis statt alles hochladen“, erfüllt heute die kleine <code>project-map.md</code> (1–2 KB, einmal pro Session, nur auf Bedarf) zusammen mit <code>scout</code>. Mehr Karte bringt laut Studie nichts. Ich würde nur ihre generischen Ordner-Hinweise durch echte Projekt-Hinweise ersetzen und die Block-Meldung des tokens.guard auf <code>scout</code> zeigen lassen.</p>
+      </div>
+      <div class="d3-hk-choice">
+        <label><input type="radio" name="karte-weg" value="map-scout" checked> <span><strong>Empfohlen:</strong> project-map behalten und schärfen, Guard verweist auf <code>scout</code>, der LSP-Plugin-Tipp kommt ins Setup. Eine Symbol-Karte nur, wenn ein A/B-Eval mit 20 „wo ist X“-Aufgaben ≥ 10 % spart.</span></label>
+        <label><input type="radio" name="karte-weg" value="symbol-map"> <span><strong>Symbol-Karte jetzt bauen:</strong> pro Ordner Zweck und wichtigste Exporte, deterministisch aus <code>git ls-files</code> erzeugt (ohne Eval-Nachweis).</span></label>
+        <label><input type="radio" name="karte-weg" value="minimal"> <span><strong>Nur project-map wie sie ist</strong>, keine weiteren Änderungen.</span></label>
+      </div>
+      <textarea data-comment="r3-karte" placeholder="Notiz…"></textarea>
+    </section>
+
+    <section id="r3-autofix" data-nav-label="Entscheidung: auto-fix">
+      <h4>auto-fix — wirkt er, wird er getriggert?</h4>
+      <div class="d3-hk-answer">
+        <p><strong>Seit 1. Oktober (alle Desktop-Sessions, 3.639 Prompts):</strong></p>
+        <ul>
+          <li>133 Prompts klangen nach Fehlern („geht nicht“, „Fehler“, „broken“ …). Bei <strong>keinem</strong> wurde auto-fix geladen.</li>
+          <li>Insgesamt wurde er dreimal geladen: zweimal, weil du „/auto-fix“ im Text geschrieben hast, einmal von Claude selbst. Jeder Lauf brauchte 50–63 Tool-Calls.</li>
+          <li>Der automatische Trigger über die Skill-Beschreibung greift also praktisch nie. Bei 3 Läufen lässt sich nicht sagen, ob er besser ist als direktes Fixen.</li>
+        </ul>
+        <p><strong>Vorschlag:</strong> Ein A/B-Eval mit 4–6 echten Bug-Fällen aus diesen Sessions, je mit und ohne Skill. Gewinnt der Skill (weniger Calls, gleiche oder bessere Lösung), bekommt er einen Trigger, der wirklich greift. Gewinnt er nicht, wird er auf „nur auf Zuruf“ verschlankt und die Auto-Trigger-Versprechen fliegen aus der Beschreibung.</p>
+      </div>
+      <div class="d3-hk-choice">
+        <label><input type="radio" name="autofix-weg" value="eval" checked> <span><strong>Empfohlen:</strong> Das Eval entscheidet, wie beschrieben (Teil von PR C).</span></label>
+        <label><input type="radio" name="autofix-weg" value="explicit"> <span><strong>Gleich verschlanken:</strong> nur noch auf Zuruf, ohne Eval.</span></label>
+        <label><input type="radio" name="autofix-weg" value="remove"> <span><strong>Entfernen.</strong></span></label>
+      </div>
+      <textarea data-comment="r3-autofix" placeholder="Notiz…"></textarea>
+    </section>
+  </section>
+
+  <section id="r3-pr-a" data-nav-label="PR A · Welle 1">
+    <h3>PR A · Welle 1</h3>
+    <div class="d3-hk-meta"><span>10 Vorschläge, ein PR, kleine Commits</span></div>
+    <ul>
+      <li><strong>V6, mit deinem Kompromiss:</strong> Das Turn-Ende wartet bis zu 8 s. Ist die Sicherung danach noch nicht fertig, erscheint eine Zeile: „läuft noch, erst danach archivieren“. Zusätzlich blockt der Archiv-Guard, solange sie läuft. Den Erfolg meldet eine Zeile nur nach einem Ship oder Release, weil man danach gern direkt archiviert. Sonst bleibt er still.</li>
+      <li><strong>V16 (neu, aus V11):</strong> Die ≈ 25 Regex-Muster von security-guidance (<code>innerHTML</code>, <code>eval</code>, <code>pickle.load</code>, hartkodierte Secrets …) werden zu einem PostToolUse-Hinweis nach Edit/Write. Er blockt nie und meldet jedes Muster einmal pro Datei.</li>
+      <li><strong>V10:</strong> Der Logger kommt ins Plugin. Die Hook-Auswertung wird Teil des Repo-Skills <code>plugin-audit</code>.</li>
+    </ul>
+    <div class="tri-state-group">
+      <label class="tri-state-option"><input type="radio" name="eval-r3-pr-a" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+      <label class="tri-state-option"><input type="radio" name="eval-r3-pr-a" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+    </div>
+    <textarea data-comment="r3-pr-a" placeholder="Notiz…"></textarea>
+  </section>
+
+  <section id="r3-pr-b" data-nav-label="PR B · graphify raus">
+    <h3>PR B · graphify komplett entfernen</h3>
+    <div class="d3-hk-meta"><span>Plugin + Rechner</span></div>
+    <ul>
+      <li><strong>Plugin:</strong>
+        <ul>
+          <li>Entfernt werden die Hooks <code>ss.graphify</code>, <code>post.graphify.query</code> und <code>post.graphify.search</code> mit ihren Einträgen in <code>hooks.json</code>.</li>
+          <li>Ebenso <code>graph-nudge</code>, <code>graphify-state</code>, <code>graphify-metrics</code>, <code>graphify-audit</code>, die Doku <code>graphify.md</code> und <code>.claude/graphify.json</code>.</li>
+          <li>Rund 40 Stellen, die graphify erwähnen, werden bereinigt: tokens.guard, scout, tool-selection, Hygiene, README-Generator.</li>
+          <li><code>project-map.md</code> bleibt, ebenso die Erstinjektion im Guard.</li>
+        </ul>
+      </li>
+      <li><strong>Rechner</strong> (wie von dir gewünscht):
+        <ul>
+          <li>das Python-Paket <code>graphifyy 0.8.46</code> mit <code>graphify.exe</code> und <code>graphify-mcp.exe</code>,</li>
+          <li>der Skill <code>~/.claude/skills/graphify</code>,</li>
+          <li>der graphify-Abschnitt in deiner globalen <code>~/.claude/CLAUDE.md</code> (3 Zeilen),</li>
+          <li>die 14 <code>graphify-out/</code>-Ordner in deinen Projekten (das sind erzeugte Daten),</li>
+          <li><code>~/.claude/graphify-metrics.jsonl</code>.</li>
+        </ul>
+      </li>
+    </ul>
+    <div class="tri-state-group">
+      <label class="tri-state-option"><input type="radio" name="eval-r3-pr-b" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+      <label class="tri-state-option"><input type="radio" name="eval-r3-pr-b" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+    </div>
+    <textarea data-comment="r3-pr-b" placeholder="Notiz…"></textarea>
+  </section>
+
+  <section id="r3-pr-c" data-nav-label="PR C · Welle 2">
+    <h3>PR C · Welle 2 — SessionStart, Texte, Skills, auto-fix</h3>
+    <div class="d3-hk-meta"><span>Eval-gated</span></div>
+    <ul>
+      <li><strong>V4:</strong>
+        <ul>
+          <li><code>ss.tokens.scan</code>, <code>ss.team.changelog</code> und <code>ss.plugin.update</code> laufen detached.</li>
+          <li><code>ss.git.check</code> wird geteilt: Die Regel kommt sofort, der Fetch läuft im Hintergrund.</li>
+          <li>Ergebnisse kommen gesammelt beim ersten Prompt.</li>
+        </ul>
+      </li>
+      <li><strong>V7, wie du es beschreibst:</strong>
+        <ul>
+          <li>Was das Modell nicht wissen kann (Plugin-Pfade, Verträge, Reihenfolgen), bleibt deterministischer Text.</li>
+          <li>Allgemeine „wenn X passiert, tu Y“-Ratschläge ohne Plugin-Wissen werden zu Eval-Fällen statt zu Prompt-Text.</li>
+          <li>Die Skills gehe ich danach vorsichtig durch. Jede Streichung braucht ein grünes A/B-Eval gegen main.</li>
+        </ul>
+      </li>
+      <li><strong>auto-fix:</strong> nach deiner Entscheidung oben.</li>
+    </ul>
+    <div class="tri-state-group">
+      <label class="tri-state-option"><input type="radio" name="eval-r3-pr-c" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+      <label class="tri-state-option"><input type="radio" name="eval-r3-pr-c" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+    </div>
+    <textarea data-comment="r3-pr-c" placeholder="Notiz…"></textarea>
+  </section>
+
+  <section id="r3-pr-d" data-nav-label="PR D · Pins in Reports">
+    <h3>PR D · Notiz-Pins in Dokument- und Report-Runden</h3>
+    <p>Die Annotation-Ebene der Concept-Engine bekommt einen Dokument-Modus: Strg+Klick (auf Touch langes Drücken) setzt eine eigene Notiz an einen Absatz oder eine Tabellenzeile. Das Anhängen von Dateien, das Eye-Toggle und die Alt-Hinweise funktionieren wie in Design-Runden. Die Notizen kommen als <code>userPins</code> im Payload an und werden beim Einfrieren mit übernommen. Wirkt erst für künftige Concepts, wie von dir gewünscht.</p>
+    <div class="tri-state-group">
+      <label class="tri-state-option"><input type="radio" name="eval-r3-pr-d" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+      <label class="tri-state-option"><input type="radio" name="eval-r3-pr-d" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+    </div>
+    <textarea data-comment="r3-pr-d" placeholder="Notiz…"></textarea>
+  </section>
+
+  <section id="r3-pr-e" data-nav-label="PR E · Dispatcher">
+    <h3>PR E · Dispatcher pro Event</h3>
+    <p>Pro Event startet nur noch ein Node-Prozess. Er lädt die Module des Events und ruft sie nacheinander auf, jedes mit try/catch und eigenem Zeitbudget, und führt die Ausgaben zusammen. Damit sinkt die Zahl der Prozessstarts pro Bash-Call von 17 auf 2. Der Nachweis kommt aus der Telemetrie von PR A (Dauer, Timeouts, Spawns vorher und nachher).</p>
+    <div class="tri-state-group">
+      <label class="tri-state-option"><input type="radio" name="eval-r3-pr-e" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+      <label class="tri-state-option"><input type="radio" name="eval-r3-pr-e" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+    </div>
+    <textarea data-comment="r3-pr-e" placeholder="Notiz…"></textarea>
+  </section>
+
+  <section id="r3-pr-f" data-nav-label="PR F · MCP-Server">
+    <h3>PR F · MCP-Server schlanker</h3>
+    <p>Zuerst wird gemessen, wie viel RAM jeder der drei Server beim Start belegt und welche Module er dafür lädt. Danach gibt es zwei Wege: Lazy-Requires, bei denen die Tool-Namen gleich bleiben, oder ein gemeinsamer Server, der die Tool-Präfixe ändert und alle Verweise mitziehen muss. Die Wahl lege ich dir mit den Messwerten vor, bevor gebaut wird. Das ist der einzige Punkt, an dem die Umsetzung noch einmal nachfragt.</p>
+    <div class="tri-state-group">
+      <label class="tri-state-option"><input type="radio" name="eval-r3-pr-f" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+      <label class="tri-state-option"><input type="radio" name="eval-r3-pr-f" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+    </div>
+    <textarea data-comment="r3-pr-f" placeholder="Notiz…"></textarea>
+  </section>
+
+  <section id="r3-befunde" data-nav-label="Live-Befunde dieser Session">
+    <h3>Live-Befunde aus dieser Session (fließen in PR A ein)</h3>
+    <ul>
+      <li><code>pre.agent.relay</code> hat zweimal einen Call zurückgehalten, obwohl die Agent-Karte schon als Text in derselben Antwort stand (V5).</li>
+      <li>Der Wissens-Dispatch hat bei den Agent-Meldungen jeweils 2–3 Dokus (≈ 2–4 k Tokens) eingefügt und die UI-Sprache dabei auf Englisch umgeschaltet (V13).</li>
+      <li><code>card-pregate</code> hat eine reine Analyse wegen Concept-Dateien als Code-Änderung gewertet (V3).</li>
+    </ul>
+  </section>
+</section>

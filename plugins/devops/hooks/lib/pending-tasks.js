@@ -257,14 +257,8 @@ const CONCEPT_INFRA_RE =
 function isConceptInfra(input) {
   const i = input || {};
   const text = [String(i.command || ''), String(i.description || '')];
-  return text.some(t => CONCEPT_INFRA_RE.test(t) || HOOK_INSTALL_RE.test(t));
+  return text.some(t => CONCEPT_INFRA_RE.test(t));
 }
-
-/**
- * Tool installs a HOOK spawns on its own (e.g. graphify's `uv tool install`) —
- * the model never asked for them and no result is owed to the user (#807).
- */
-const HOOK_INSTALL_RE = /\buv\s+tool\s+install\b[^\n]*\bgraphify/i;
 
 /** A ship subagent's launch label: "devops:do-ship", "ship" ... */
 const SHIP_AGENT_NAME_RE = /^(?:devops:)?do-ship$|^ship (?:im subagenten|in subagent)|--delegated/i;
@@ -789,6 +783,5 @@ module.exports = {
   taskEnds,
   labelFor,
   withoutOwnShipAgent,
-  HOOK_INSTALL_RE,
   sanitizeLabel,
 };

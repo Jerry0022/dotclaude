@@ -54,6 +54,15 @@ describe("agent-card-relay lib", () => {
     expect(relay.cardHeader("no card")).toBe(null);
   });
 
+  test("cardShownIn tolerates re-cased, re-formatted and rephrased cards", () => {
+    const c = card(1, "en");
+    const header = relay.cardHeader(c);
+    const rows = relay.cardRows(c);
+    expect(relay.cardShownIn("**1 Agent started** · background", header, rows)).toBe(true);
+    expect(relay.cardShownIn("Gestartet: 1 Agent, qa (Run tests)", header, rows)).toBe(true);
+    expect(relay.cardShownIn("Tests laufen noch.", header, rows)).toBe(false);
+  });
+
   test("cardFromContext keeps the fenced card, ignores other contexts", () => {
     expect(relay.cardFromContext(announce(card(1)))).toBe(card(1));
     expect(relay.cardFromContext("SHIP: 5 code edits")).toBe(null);

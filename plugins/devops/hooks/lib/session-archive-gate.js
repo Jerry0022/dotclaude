@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module session-archive-gate
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description The hook side of "archive the Desktop session after a
  *   successful ship" (#632). The completion MCP decides per card
@@ -141,6 +141,11 @@ function consumeReleased(sessionId) {
 }
 
 /** Does this archive_session call target the calling session itself? */
+/** Is the background autosave of this session still running (live marker)? */
+function autosaveRunning(sessionId) {
+  try { return require('./session-autosave-worker').isRunning(sessionId); } catch { return false; }
+}
+
 function targetsSelf(toolInput, sessionId) {
   const id = toolInput && toolInput.session_id;
   return id === undefined || id === null || id === '' || id === 'self' || id === sessionId;
@@ -162,4 +167,5 @@ module.exports = {
   isReleased,
   consumeReleased,
   targetsSelf,
+  autosaveRunning,
 };

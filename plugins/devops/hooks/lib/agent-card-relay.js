@@ -1,6 +1,6 @@
 /**
  * @module agent-card-relay
- * @version 0.1.0
+ * @version 0.2.0
  * @description Did the user actually see the agent card?
  *
  *   pre.agent.announce hands Claude the agent card on every spawn with "show
@@ -84,11 +84,27 @@ function cardRows(card) {
   return rows;
 }
 
-/** Does `shown` carry the card — its header phrase, or every agent row? */
+/** Lower-case, markdown-free, single-spaced — for tolerant matching. */
+function norm(t) {
+  return String(t || '').toLowerCase().replace(/[*_`|#>]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Does `shown` carry the card? Header phrase (case/markdown-insensitive), or
+ * every agent row, or — a rephrased card — every agent name plus an "agent"
+ * and a "started" word. Strict matching produced false holds when the model
+ * re-cased or re-formatted the card (2026-10-24).
+ */
 function cardShownIn(shown, header, rows) {
   if (!shown) return false;
-  if (header && shown.includes(header)) return true;
-  return rows.length > 0 && rows.every(r => shown.includes(r));
+  const s = norm(shown);
+  if (header && s.includes(norm(header))) return true;
+  if (rows.length > 0 && rows.every(r => s.includes(norm(r)))) return true;
+  const names = rows.map(r => (r.match(/\*\*([^*|]+)\*\*/) || [])[1]).filter(Boolean).map(norm);
+  return names.length > 0
+    && names.every(n => s.includes(n))
+    && /\bagent(s|en)?\b/.test(s)
+    && /gestartet|started|launched/.test(s);
 }
 
 /** Text an assistant entry shows the user: text blocks and show_widget code. */

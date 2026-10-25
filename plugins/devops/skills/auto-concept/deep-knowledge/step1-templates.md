@@ -69,6 +69,10 @@ decision. Iteration 1 may be a decision round, iteration 2 a fullscreen
 design round, iteration 3 a decision round again; nothing forces the page to
 stay on one template throughout.
 
+A `free` round that is a report or audit with several evaluable items opens
+with an overview table carrying a recommendation column and jump links
+(`templates-free.md` § Report / audit rounds).
+
 ## 1a · Design iteration authoring
 
    **`design` is almost always a click-dummy.** If a design has 2+ screens,

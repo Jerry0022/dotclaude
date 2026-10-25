@@ -66,12 +66,14 @@ export const BUTTONS = {
       { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Startet die Ship-Pipeline mit dem aktuellen Stand." },
       { label: "Ändern", icon: "edit", prompt: "Ich möchte noch etwas ändern, bevor wir shippen — frag mich, was.", tooltip: "Hält den Ship an und fragt zuerst, was noch anders sein soll.", conclude: true },
     ],
+    // A red row's Fix ends in the row's other path — ship (2026-10-25: "then
+    // render the card again" sent the user one more click to the same goal).
     "ready-red": [
-      { label: "Fix", icon: "tool", prompt: "Behebe zuerst die roten Befunde der letzten Card (rote Tests bzw. unerfüllte Anforderungen), dann kommt die Card neu.", primary: true, tooltip: "Ich behebe die roten Befunde zuerst, dann kommt die Card neu." },
+      { label: "Fix", icon: "tool", prompt: "Behebe zuerst die roten Befunde der letzten Card (rote Tests bzw. unerfüllte Anforderungen), dann ship.", primary: true, tooltip: "Ich behebe die roten Befunde zuerst, dann wird geshippt." },
       { label: "Trotzdem shippen", icon: "rocket", prompt: "Ship trotzdem — mit skipChecks, die roten Befunde landen als Issue.", tooltip: "Ship mit skipChecks — die roten Befunde landen als Issue." },
     ],
     "ship-blocked": [
-      { label: "Fix", icon: "tool", prompt: "Debug den Blocker der letzten Card und behebe ihn.", primary: true, tooltip: "Behebt den Blocker, dann erneut shippen." },
+      { label: "Fix", icon: "tool", prompt: "Debug den Blocker der letzten Card, behebe ihn, dann erneut ship.", primary: true, tooltip: "Behebt den Blocker, dann erneut shippen." },
       { label: "Skip", icon: "player-skip-forward", prompt: "Blocker bewusst überspringen: Ship erneut mit skipChecks (Hot-fix-Bypass) durchführen.", tooltip: "Überspringt den Blocker bewusst (Hot-fix-Bypass)." },
     ],
     "ship-successful": [
@@ -116,11 +118,11 @@ export const BUTTONS = {
       { label: "Change", icon: "edit", prompt: "I want to change something before we ship — ask me what.", tooltip: "Pauses the ship and asks what should change first.", conclude: true },
     ],
     "ready-red": [
-      { label: "Fix", icon: "tool", prompt: "Fix the red findings of the last card first (red tests or unmet requirements), then render the card again.", primary: true, tooltip: "I fix the red findings first, then the card comes back." },
+      { label: "Fix", icon: "tool", prompt: "Fix the red findings of the last card first (red tests or unmet requirements), then ship.", primary: true, tooltip: "I fix the red findings first, then ship." },
       { label: "Ship anyway", icon: "rocket", prompt: "Ship anyway — with skipChecks; the red findings land as an issue.", tooltip: "Ship with skipChecks — the red findings land as an issue." },
     ],
     "ship-blocked": [
-      { label: "Fix", icon: "tool", prompt: "Debug the blocker from the last card and fix it.", primary: true, tooltip: "Fixes the blocker, then ship again." },
+      { label: "Fix", icon: "tool", prompt: "Debug the blocker from the last card, fix it, then ship again.", primary: true, tooltip: "Fixes the blocker, then ship again." },
       { label: "Skip", icon: "player-skip-forward", prompt: "Deliberately skip the blocker: run the ship again with skipChecks (hot-fix bypass).", tooltip: "Deliberately skips the blocker (hot-fix bypass)." },
     ],
     "ship-successful": [

@@ -8,9 +8,9 @@ the gate decisions (BLOCK, lockout, STOP) stay in the skill.
 The Desktop app refuses to archive a session whose worktree is dirty, and it
 copies the main checkout's untracked `.claude/` into every new worktree. An
 untracked file moved aside so preflight passes and put back after the merge
-blocks the archive — observed with `.claude/graphify.json` (2026-09-23). Settle
+blocks the archive — observed with `.claude/settings.json` (2026-09-23). Settle
 each file where it belongs, inside this ship:
-- **Plugin configuration** (`.claude/graphify.json`, `settings.json`, the rest
+- **Plugin configuration** (`.claude/settings.json`, the rest
   of the *MUST be tracked* list in `{PLUGIN_ROOT}/deep-knowledge/project-setup.md`
   § .gitignore) → commit it. Include it in the ship when it matches the main
   checkout's copy.

@@ -157,9 +157,9 @@ describe("resolveOverrides / overrideBlock", () => {
   });
 
   test("non-devops skills: a bare user skill is never an override; a foreign plugin's reference.md is", () => {
-    put(project, "graphify", "SKILL.md", "the user skill itself");
-    put(project, "graphify", "reference.md", "its own docs");
-    expect(block("graphify")).toBeNull();
+    put(project, "notes", "SKILL.md", "the user skill itself");
+    put(project, "notes", "reference.md", "its own docs");
+    expect(block("notes")).toBeNull();
     put(project, "fix", "reference.md", "consumer skill under an old name");
     expect(block("fix")).toBeNull();
     put(project, "lint", "reference.md", "foreign override");
