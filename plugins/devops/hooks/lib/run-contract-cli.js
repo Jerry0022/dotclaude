@@ -22,6 +22,8 @@
  *   the events stay; no archive, unlike `arm --replace`.
  */
 
+const fs = require('fs');
+const plans = require('./run-contract-plan');
 const {
   LIB_PATH, disabled, contractPath, batchHandoffPath, readContract, arm, update, record, close,
   clearBatchHandoff, eventsOf, readJson, nowOf,
@@ -223,6 +225,36 @@ const CLI_COMMANDS = {
   },
 };
 
+const PLAN_USAGE = 'usage: run-contract.js plan record [--file <plan.json>|stdin] [--id <fm-id>] [--from-concept-closeout] | plan approve --id <fm-id> --hash <hash|short> | plan status | plan clear';
+
+// Frustrated Mode (alpha): plan record + approval recorder (run-contract-plan.js).
+// cli() gates on the `frustrated-mode` feature before this runs; exit 126 when off.
+function planCommand({ pos, flags, cwd, now, opts, write, fail }) {
+  const popts = { now, featureOpts: opts.featureOpts };
+  const sub = pos[1];
+  let r;
+  if (sub === 'record') {
+    let raw;
+    try {
+      raw = typeof opts.stdin === 'string' ? opts.stdin
+        : fs.readFileSync(typeof flags.file === 'string' ? flags.file : 0, 'utf8');
+    } catch (e) { return fail(`cannot read the plan: ${e.message}`); }
+    let plan;
+    try { plan = JSON.parse(raw); } catch { return fail('plan is not valid JSON'); }
+    r = plans.recordPlan(cwd, plan, { id: typeof flags.id === 'string' ? flags.id : undefined, fromConceptCloseout: flags['from-concept-closeout'] === true }, popts);
+  } else if (sub === 'approve') {
+    const live = liveContract(cwd, now);
+    r = plans.approvePlan(cwd, { id: flags.id, hash: flags.hash }, { live, replaceFn: live ? (why) => close(cwd, why, { aborted: true, now }) : null }, popts);
+  } else if (sub === 'status') {
+    r = plans.statusPlan(cwd, { live: liveContract(cwd, now) }, popts);
+  } else if (sub === 'clear') {
+    r = plans.clearPlan(cwd, popts);
+  } else return fail(PLAN_USAGE);
+  write(r);
+  if (r.disabled) return 126;
+  return r.ok ? 0 : 1;
+}
+
 const CLI_USAGE = 'usage: run-contract.js status | skip <ob> [--item N] --reason "<why>" | park <item> --reason "<why>" | done [--reason "<why>"] | abort --reason "<why>" | batch-clear --reason "<why>" | arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>] [--replace] | items <n,n,...>';
 
 function cli(argv, opts = {}) {
@@ -231,6 +263,10 @@ function cli(argv, opts = {}) {
   const write = opts.out || ((o) => process.stdout.write(JSON.stringify(o) + '\n'));
   const fail = (error) => { write({ ok: false, error }); return 1; };
   const reason = typeof flags.reason === 'string' ? flags.reason.trim() : '';
+  if (pos[0] === 'plan') {
+    if (!plans.planAllowed(opts)) { write({ ok: false, disabled: true, error: 'not available' }); return 126; }
+    return planCommand({ pos, flags, cwd, now: nowOf(opts), opts, write, fail });
+  }
   const handler = Object.prototype.hasOwnProperty.call(CLI_COMMANDS, pos[0]) ? CLI_COMMANDS[pos[0]] : null;
   if (!handler) return fail(CLI_USAGE);
   return handler({ pos, flags, cwd, now: nowOf(opts), reason, write, fail });
