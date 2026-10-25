@@ -53,9 +53,6 @@ function project() {
 // they raise the env var to a value that keeps the pre-cap behaviour intact.
 const UNCAPPED_OUTPUT_LEN = "1000000";
 
-// Requirement 8: every hook spawn points DOTCLAUDE_GRAPHIFY_METRICS at an
-// isolated temp file — never the real `~/.claude/graphify-metrics.jsonl`.
-const METRICS_FILE = path.join(HOME_DIR, "graphify-metrics-isolated.jsonl");
 
 function runBash(dir, sid, toolInput, extraEnv = {}) {
   // The full suite runs 50+ files in parallel; on a loaded machine spawnSync
@@ -69,7 +66,6 @@ function runBash(dir, sid, toolInput, extraEnv = {}) {
       HOME: HOME_DIR, USERPROFILE: HOME_DIR,
       TMPDIR: tmp, TEMP: tmp, TMP: tmp,
       BASH_MAX_OUTPUT_LENGTH: UNCAPPED_OUTPUT_LEN,
-      DOTCLAUDE_GRAPHIFY_METRICS: METRICS_FILE,
       ...extraEnv,
     };
     // Node's spawn env requires string values — `undefined` (a test's way of
@@ -342,30 +338,6 @@ describe("pre.tokens.guard — Bash cost cap (Requirement A1)", () => {
     const r = runBash(dir, "s-cap-wide", { command: `cat ${BIG}` }, { BASH_MAX_OUTPUT_LENGTH: "1000000" });
     expect(blocked(r)).toBe(true);
     expect(estCostTokens(r.stderr)).toBe(49557);
-    cleanup(dir);
-  });
-});
-
-describe("pre.tokens.guard — guard_blocked / guard_released telemetry", () => {
-  const metricsEvents = () => {
-    if (!fs.existsSync(METRICS_FILE)) return [];
-    return fs.readFileSync(METRICS_FILE, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
-  };
-
-  test("a block records guard_blocked with tool/kind/est; the releasing retry records guard_released", () => {
-    const dir = project();
-    const before = metricsEvents().length;
-    const input = { command: `cat ${BIG}` };
-    const r1 = runBash(dir, "s-metrics", input);
-    expect(blocked(r1)).toBe(true);
-    const r2 = runBash(dir, "s-metrics", input);
-    expect(r2.status).toBe(0);
-    const evs = metricsEvents().slice(before);
-    const blockedEv = evs.find((e) => e.event === "guard_blocked");
-    const releasedEv = evs.find((e) => e.event === "guard_released");
-    expect(blockedEv).toMatchObject({ tool: "Bash", kind: "bash-file" });
-    expect(blockedEv.est).toBeGreaterThan(0);
-    expect(releasedEv).toMatchObject({ tool: "Bash", kind: "bash-file" });
     cleanup(dir);
   });
 });

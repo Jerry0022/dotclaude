@@ -17,11 +17,10 @@ const HOOK = path.join(__dirname, "pre.tokens.guard.js");
 
 const HOME_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "mapguard-home-"));
 fs.mkdirSync(path.join(HOME_DIR, ".claude"), { recursive: true });
-const METRICS_FILE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "mapguard-metrics-")), "metrics.jsonl");
 const dirs = [];
 
 afterAll(() => {
-  for (const d of [HOME_DIR, path.dirname(METRICS_FILE), ...dirs]) {
+  for (const d of [HOME_DIR, ...dirs]) {
     try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best-effort temp cleanup */ }
   }
 });
@@ -52,7 +51,6 @@ function run(dir, sid, toolName, toolInput) {
     cwd: dir,
     input: JSON.stringify({ tool_name: toolName, tool_input: toolInput, session_id: sid }),
     encoding: "utf8",
-    env: { ...process.env, HOME: HOME_DIR, USERPROFILE: HOME_DIR, DOTCLAUDE_GRAPHIFY_METRICS: METRICS_FILE },
   });
   let context = "";
   try { context = JSON.parse(res.stdout).hookSpecificOutput.additionalContext; } catch { /* no JSON = nothing injected */ }
@@ -60,12 +58,8 @@ function run(dir, sid, toolName, toolInput) {
 }
 
 const sid = () => `mapguard-${crypto.randomUUID()}`;
-// "ab" is too short for the graphify gate — these tests exercise only the
-// broad-search path.
 const grep = (dir, s, p) => run(dir, s, "Grep", p === undefined ? { pattern: "ab" } : { pattern: "ab", path: p });
-const events = () => (fs.existsSync(METRICS_FILE)
-  ? fs.readFileSync(METRICS_FILE, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l))
-  : []);
+
 
 describe("pre.tokens.guard — project map is current when injected", () => {
   test("the first repo-wide search injects a REGENERATED map, not the stale copy on disk", () => {
@@ -77,7 +71,6 @@ describe("pre.tokens.guard — project map is current when injected", () => {
     expect(r.context).toContain("3 tracked files");
     expect(r.context).not.toContain("291 tracked files");
     expect(fs.readFileSync(path.join(dir, ".claude", "project-map.md"), "utf8")).toContain("3 tracked files");
-    expect(events().some((e) => e.event === "map_injected" && e.sid === s)).toBe(true);
   });
 
   test("no map on disk → none is created at search time", () => {

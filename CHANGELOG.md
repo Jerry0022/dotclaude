@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.308.0] — 2026-10-25
+
+Hooks put less text into the context and make you wait less. graphify is gone from the plugin. Wave 1 of the hooks audit covered 28 sessions, ≈1.2 M injected tokens and ≈260 timeouts.
+
+Why: `post.flow.completion` caused 57 % of all hook context. The per-prompt card contract fired 486 times, yet 83 cards were still missed. `pre.agent.relay` held calls back even after the card was shown. The debug nudge fired 8 times and was never followed. graphify was queried 4 times in 25 days.
+
+### Changed
+- **Card contract.** The static rules now live in the `render_completion_card` tool description. The per-prompt reminder is two lines, and the stop-guard block reason is shorter.
+- **Status chatter.** `post.flow.completion` keeps status as state, not context, and shows the concept-infra hint once per session. Edits outside the repo or worktree (`lib/repo-tree.js` `inRepoTree`) no longer count as code edits.
+- **Knowledge dispatch.** Docs, pointers, the glossary and the delegation nudge are injected only for real user prompts. A task notification keeps the cached locale.
+- **Governor gate.** A fast path skips the load probe when nothing is queued.
+- **Autosave.** `stop.session.autosave` works within a time budget (`sessionEnd.autosaveWaitSeconds`, default 8). The rest finishes in a detached worker, and the archive gate waits for it.
+- **tokens.guard.** It works out the plugin root itself, so skill docs, deep-knowledge and agents are exempt in every cache layout. A broad Grep or Glob now points at the `devops:scout` agent.
+- **project-map.** It reads optional `.claude/project-map.hints.json` hints per directory (`gen-project-map.mjs` 0.3.0).
+
+### Added
+- **Hook telemetry.** `plugin-guard` records each hook's duration and timeouts. `ss.orphan.nudge` warns about hooks that keep timing out. The repo-only `.claude/skills/plugin-audit/scripts/hook-audit.js` evaluates the log.
+
+### Fixed
+- **Relay false hold.** `pre.agent.relay` no longer holds a call when the agent card was already shown in the same message.
+
+### Removed
+- **graphify.** The three graphify hooks and their libs, `graph-nudge`, `graphify-audit`, `check-tool.js`, `deep-knowledge/graphify.md` and the `graphify-out` ignores are gone.
+- **`post.flow.debug`.** The "MANDATORY auto-fix" nudge after shell failures is gone.
+
 ## [0.307.1] — 2026-10-25
 
 The session title now says ❓ Question whenever a call waits for you, not only for an AskUserQuestion. A red card's Fix button ends in a ship.

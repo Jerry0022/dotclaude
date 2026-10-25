@@ -50,7 +50,7 @@
  *   counts as a devops skill when it is one of THIS plugin's own skill
  *   directory names (`skills/*` under `lib/plugin-root.js#pluginRoot()`,
  *   read once and cached), so a user/consumer skill of the same shape
- *   (e.g. `graphify`) never silences the nudge (Q8); the nudge already
+ *   (e.g. `notes`) never silences the nudge (Q8); the nudge already
  *   fired this turn (R14d); or the delegation kill switch
  *   (`lib/delegation.js`) resolves to `off`.
  *
@@ -201,7 +201,7 @@ function isMachineDrivenTurn(transcript) {
  *  …), lowercased. Read once from disk and cached for the process lifetime —
  *  a hook process is short-lived, so there is no staleness concern. Q8: an
  *  un-namespaced skill name must match THIS list to count as a devops skill;
- *  otherwise a user/consumer skill of the same bare shape (e.g. `graphify`)
+ *  otherwise a user/consumer skill of the same bare shape (e.g. `notes`)
  *  would silently be treated as devops and silence the nudge. */
 let cachedSkillDirNames = null;
 function devopsSkillDirNames() {

@@ -49,8 +49,8 @@ describe("post.skill.overrides", () => {
 
   test("silent without an override file, for other tools, and for a bare user skill", () => {
     expect(main(skill("devops:do-ship"), { home, dir: tmp })).toBeNull();
-    override("x", "graphify");
-    expect(main(skill("graphify"), { home, dir: tmp })).toBeNull();
+    override("x", "notes");
+    expect(main(skill("notes"), { home, dir: tmp })).toBeNull();
     expect(main({ tool_name: "Bash", tool_input: { command: "ls" }, cwd: project }, { home, dir: tmp })).toBeNull();
     expect(fs.existsSync(recordPath("s-post", tmp))).toBe(false);
   });

@@ -33,11 +33,11 @@ Use the skill name from the argument; otherwise list the plugin's `skills/`
 A pre-PR-2 name (`ship`, `fix`, `run-backlog`, `promote`, … — table in
 `{PLUGIN_ROOT}/hooks/lib/skill-names.js`) is translated to the skill that owns
 it now (`do-ship`, `auto-fix`, `do-run`, `do-ship`, …). A PR-3 retired name
-(`RETIRED` in the same table: setup-readme, auto-graph, auto-usage,
+(`RETIRED` in the same table: setup-readme, auto-usage,
 claude-strict) is no skill: say so and name its deep-knowledge doc
 (`RETIRED[name].doc`). An extension under that old name keeps applying only
 where the doc says so (readme-standards, usage and strict name
-`.claude/skills/<old>/reference.md` as an override; graphify never had one).
+`.claude/skills/<old>/reference.md` as an override).
 A name that matches nothing → say so and ask again.
 
 ## Step 2 — Check for an existing extension

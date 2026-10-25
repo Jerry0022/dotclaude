@@ -19,7 +19,6 @@ const HOOK = path.join(__dirname, "pre.tokens.guard.js");
 // other pre.tokens.guard.*.test.js files).
 const HOME_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "tokguard-img-home-"));
 fs.mkdirSync(path.join(HOME_DIR, ".claude"), { recursive: true });
-const METRICS_FILE = path.join(HOME_DIR, "graphify-metrics-isolated.jsonl");
 
 const dirs = [];
 afterAll(() => { for (const d of [HOME_DIR, ...dirs]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } } });
@@ -50,7 +49,6 @@ function runRead(dir, sid, filePath) {
         ...process.env,
         HOME: HOME_DIR, USERPROFILE: HOME_DIR,
         TMPDIR: tmp, TEMP: tmp, TMP: tmp,
-        DOTCLAUDE_GRAPHIFY_METRICS: METRICS_FILE,
       },
     });
     if (res.status !== null || attempt >= 3) {

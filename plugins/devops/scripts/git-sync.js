@@ -49,8 +49,7 @@ function quit(reason, { nothingToDo = false } = {}) {
 // console-less child (git-sync-bg.js). From such a parent every execSync string
 // goes through a fresh cmd.exe that cannot inherit a console, and Windows
 // Terminal's default-terminal delegation surfaces each one as a visible,
-// focus-stealing window — one per git call, measured on this machine (same
-// mechanism as documented in hooks/lib/graphify-state.js spawnBgRunner).
+// focus-stealing window — one per git call, measured on this machine.
 //
 // Per-call budget: 15 s by default. DEVOPS_GIT_SYNC_TIMEOUT_MS raises it for a
 // caller that knows the machine is loaded — the integration suites set it,

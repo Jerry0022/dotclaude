@@ -305,13 +305,13 @@ describe("matchCostlyFiles — fail-safe invariant", () => {
   // `git log -1` (a reader — `log` is outside GIT_SAFE_SUB) and `node -e` with
   // a `;` INSIDE its quoted script (which the statement splitter, not being
   // quote-aware, still cuts into extra pseudo-statements) sit in different
-  // statements and must never sweep the `graphify-out/graph.json` path in.
-  test("regression: ls;git log;graphify query;node -e '<code with ;>' file no longer blocks in full", () => {
-    const files = [{ path: "graphify-out/graph.json", estimatedTokens: 20000 }];
+  // statements and must never sweep the `docs/big.json` path in.
+  test("regression: ls;git log;echo;node -e '<code with ;>' file no longer blocks in full", () => {
+    const files = [{ path: "docs/big.json", estimatedTokens: 20000 }];
     const cmd = [
-      "ls -la graphify-out/graph.json",
+      "ls -la docs/big.json",
       "git log -1",
-      'graphify query "who calls foo?"',
+      'echo "who calls foo?"',
       `node -e 'const a = 1; console.log(a)' file`,
     ].join("; ");
     expect(matchCostlyFiles(cmd, files)).toEqual([]);

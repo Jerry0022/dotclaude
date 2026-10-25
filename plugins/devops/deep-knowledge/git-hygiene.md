@@ -203,7 +203,7 @@ directory is left on disk with no `.git` file and tens of thousands of files
   - no process names the path in its cwd or argv;
   - every top-level entry is in `origin/<default>` (`git cat-file -e
     origin/main:<entry>`) or a gitignored build artifact (`node_modules`,
-    `dist`, `graphify-out`, …).
+    `dist`, …).
 
   Then delete the directory yourself (`rm -rf`) and report it as done. The
   content is in main, and the removal was already decided; handing "delete

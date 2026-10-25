@@ -185,7 +185,7 @@ function runLoop(cwd) {
 /**
  * Spawn the loop detached and windowless. Spawns `node` directly with no shell
  * layer — a shell layer makes Windows Terminal open a visible tab even with
- * windowsHide (see the long note in hooks/lib/graphify-state.js).
+ * windowsHide.
  * @returns {number|null} pid, or null when one is already running
  */
 function start(cwd) {

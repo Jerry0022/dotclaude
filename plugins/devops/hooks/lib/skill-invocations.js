@@ -4,8 +4,7 @@
  * @description Which skills did the transcript already invoke? Shared by
  *   `prompt.skill.enforce` (the trigger router must not re-mandate a skill
  *   that is already running this session), `stop.guide.handoff` (the turn
- *   already invoked auto-guide), `post.flow.debug` (auto-fix is
- *   already active this turn) and `pre.issue.guard` (auto-issue
+ *   already invoked auto-guide) and `pre.issue.guard` (auto-issue
  *   ran this turn). Both a Skill tool_use and a slash-started skill
  *   (`<command-name>/devops:x</command-name>`, with or without the plugin
  *   prefix) count.

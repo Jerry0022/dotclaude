@@ -183,7 +183,7 @@ function wiring(root) {
       }
     }
   }
-  const textFiles = walk(root, (p) => /\.(js|mjs|md|json|py|sh|html)$/.test(p) && !/\.test\.js$/.test(p) && !/(^|\/)(\.claude\/worktrees|graphify-out|docs\/concepts|__fixtures__)\//.test(rel(root, p)) &&!/CHANGELOG\.md$/.test(p));
+  const textFiles = walk(root, (p) => /\.(js|mjs|md|json|py|sh|html)$/.test(p) && !/\.test\.js$/.test(p) && !/(^|\/)(\.claude\/worktrees|docs\/concepts|__fixtures__)\//.test(rel(root, p)) &&!/CHANGELOG\.md$/.test(p));
   const cache = new Map();
   const content = (f) => { if (!cache.has(f)) cache.set(f, readText(f) || ''); return cache.get(f); };
   const referencedElsewhere = (file) => {
@@ -306,7 +306,7 @@ function extractPaths(text) {
   const out = [];
   for (const m of text.matchAll(/`([A-Za-z0-9_.@/-]+\/[A-Za-z0-9_.@/-]*\.(?:js|mjs|md|json|py|sh))`/g)) {
     const p = m[1];
-    if (/YYYY|NN|^\.|^(?:graphify-out|attachments|docs)\//.test(p)) continue;
+    if (/YYYY|NN|^\.|^(?:attachments|docs)\//.test(p)) continue;
     out.push({ p, index: m.index });
   }
   return out;

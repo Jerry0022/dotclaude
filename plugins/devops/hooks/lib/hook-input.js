@@ -1,6 +1,6 @@
 /**
  * @module hook-input
- * @version 0.2.0
+ * @version 0.3.0
  * @description Tolerant parse of a hook's stdin payload. Claude Code sends a
  *   JSON object; anything else — empty input, `null`, a bare string/number,
  *   an array, invalid JSON, a UTF-8 BOM prefix — must make the hook exit 0
@@ -39,6 +39,7 @@ function parseHookInput(raw) {
   let parsed;
   try { parsed = JSON.parse(text); } catch { return null; }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  try { require('./hook-telemetry').note(parsed); } catch { /* telemetry is optional */ }
   return parsed;
 }
 

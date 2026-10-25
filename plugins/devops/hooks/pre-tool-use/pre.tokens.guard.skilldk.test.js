@@ -17,7 +17,6 @@ const HOOK = path.join(__dirname, "pre.tokens.guard.js");
 
 const HOME_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "tokguard-skilldk-home-"));
 fs.mkdirSync(path.join(HOME_DIR, ".claude"), { recursive: true });
-const METRICS_FILE = path.join(HOME_DIR, "graphify-metrics-isolated.jsonl");
 
 const dirs = [];
 afterAll(() => { for (const d of [HOME_DIR, ...dirs]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } } });
@@ -54,7 +53,6 @@ function runRead(dir, filePath) {
         ...process.env,
         HOME: HOME_DIR, USERPROFILE: HOME_DIR,
         TMPDIR: tmp, TEMP: tmp, TMP: tmp,
-        DOTCLAUDE_GRAPHIFY_METRICS: METRICS_FILE,
       },
     });
     if (res.status !== null || attempt >= 3) {
@@ -75,6 +73,49 @@ describe("pre.tokens.guard — skill deep-knowledge reads pass", () => {
   test("plugin cache: devops/<version>/skills/<skill>/modes/*.md passes", () => {
     const dir = project();
     expect(blocked(runRead(dir, bigMd(dir, "cache/dotclaude/devops/0.245.4/skills/do-run/modes/backlog.md")))).toBe(false);
+  });
+
+  test("installed plugin root (no `devops` path segment): skills, deep-knowledge and agents pass", () => {
+    // The hook resolves its own plugin root; a copy of it under a cache dir
+    // named like the real one (`plugin_<id>`) must exempt that root's docs.
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "plugin_abc123-"));
+    dirs.push(root);
+    const hookDir = path.join(root, "hooks", "pre-tool-use");
+    fs.mkdirSync(hookDir, { recursive: true });
+    fs.cpSync(path.join(__dirname, "..", "lib"), path.join(root, "hooks", "lib"), { recursive: true });
+    fs.cpSync(path.join(__dirname, "pre.tokens.guard.js"), path.join(hookDir, "pre.tokens.guard.js"));
+    const dir = project();
+    for (const rel of ["skills/auto-concept/deep-knowledge/bridge-server.md", "deep-knowledge/big.md", "agents/big.md"]) {
+      const res = spawnSync(process.execPath, [path.join(hookDir, "pre.tokens.guard.js")], {
+        cwd: dir,
+        input: JSON.stringify({ tool_name: "Read", tool_input: { file_path: bigMd(root, rel) }, session_id: "skilldk-root" }),
+        encoding: "utf8",
+        env: { ...process.env, HOME: HOME_DIR, USERPROFILE: HOME_DIR, TMPDIR: path.join(dir, ".tmp"), TEMP: path.join(dir, ".tmp"), TMP: path.join(dir, ".tmp") },
+      });
+      expect(blocked({ status: res.status, stderr: res.stderr || "" }), rel).toBe(false);
+    }
+  });
+
+  test("source repo: plugins/devops/deep-knowledge and agents pass", () => {
+    const dir = project();
+    expect(blocked(runRead(dir, bigMd(dir, "plugins/devops/deep-knowledge/big.md")))).toBe(false);
+    expect(blocked(runRead(dir, bigMd(dir, "plugins/devops/agents/big.md")))).toBe(false);
+  });
+
+  test("a broad Grep block points at the devops:scout agent call", () => {
+    const dir = project();
+    const tmp = path.join(dir, ".tmp");
+    const res = spawnSync(process.execPath, [HOOK], {
+      cwd: dir,
+      input: JSON.stringify({ tool_name: "Grep", tool_input: { pattern: "foo" }, session_id: "skilldk-scout" }),
+      encoding: "utf8",
+      env: { ...process.env, HOME: HOME_DIR, USERPROFILE: HOME_DIR, TMPDIR: tmp, TEMP: tmp, TMP: tmp },
+    });
+    expect(res.status).toBe(2);
+    expect(res.stderr).toContain('subagent_type: "devops:scout"');
+    expect(res.stderr).toContain('model: "haiku"');
+    expect(res.stderr).toContain("run_in_background: true");
+    expect(res.stderr).not.toMatch(/graphify/i);
   });
 
   test("the same file size elsewhere is still blocked", () => {
