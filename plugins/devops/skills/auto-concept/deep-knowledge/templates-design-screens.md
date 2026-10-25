@@ -47,6 +47,15 @@ with `data-screen`:
 - Exactly one `data-design` carries `data-design-active="true"`; the others
   are `hidden`. Within the active design, exactly one `data-screen` carries
   `data-screen-active="true"`.
+- **Whole-app screens render fullscreen, without commentary.** A screen that
+  shows the visual full screen of the whole application carries
+  `data-screen-fit="full"` (on the `section[data-screen]`, or once on the
+  `section[data-design]`): the engine then fills the content area edge to edge —
+  no chrome padding, no device caption — and FABs/navigation simply overlap the
+  app. Such a design holds NO meta text inside or under the mock: no caption, no
+  "in round 2 the button is called …", no change log (the overview card and the
+  notes dock carry that). A caption or short explanation is allowed only on a
+  subpage that refines ONE element, never on a whole-app design.
 - **One design** → the wrapper is still required (markup shape stays
   uniform across single- and multi-design concepts) but degenerates to
   today's behaviour: no switcher, no per-design feedback field. Do not omit

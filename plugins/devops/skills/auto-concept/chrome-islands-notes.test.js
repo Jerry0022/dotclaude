@@ -99,11 +99,13 @@ describe("C · header islands and FABs", () => {
   }, BOOT_TIMEOUT);
 
   test("glow pulses on first open and new round, reduced motion switches every new animation off", () => {
-    expect(md).toMatch(/body\.chrome-glow \.panel-fab, body\.chrome-glow \.feedback-fab \{ animation: chromeGlow/);
+    // The ☰ is navigation chrome now (no accent tile, no pulse); only 💬 glows.
+    expect(md).toMatch(/body\.chrome-glow \.feedback-fab \{ animation: chromeGlow/);
+    expect(md).not.toMatch(/body\.chrome-glow \.panel-fab/);
     expect(md).toMatch(/body\.chrome-glow \.design-header \{ animation: chromeGlowIsland/);
     expect(md).toMatch(/if \(last && last !== now\) pulseChromeGlow\(\);/);
     const rm = md.match(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\}/g).join("\n");
-    expect(rm).toMatch(/body\.chrome-glow \.panel-fab/);
+    expect(rm).toMatch(/body\.chrome-glow \.feedback-fab/);
     expect(rm).toMatch(/body\.chrome-glow \.design-header/);
     expect(rm).toMatch(/\.anno-pin \{ animation: none; \}/);
   });

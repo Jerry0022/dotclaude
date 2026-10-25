@@ -254,12 +254,24 @@ function renderJourney() {
 // tab too (browsers throttle hidden-tab timers to about once a minute).
 const TAB_GLYPHS = /^(?:Concept\s+[—-]\s+|(?:👉|⏳|🛠️|🛠|🏁|✅)️?\s+)/u;
 let _baseTabTitle = null;
+// What the bridge says about the live round (GET /decisions: `submitted`,
+// `action`, `_phase`). A second tab of the same page never submitted itself,
+// so its local _submittedAt stays 0 — the server state keeps its glyph honest.
+let _serverRound = null;
+function noteServerRound(data) {
+  _serverRound = (data && data.submitted === true)
+    ? { action: data.action || null, phase: data._phase || null } : null;
+  if (typeof renderTabTitle === 'function') renderTabTitle();
+}
 function renderTabTitle() {
   if (_baseTabTitle === null) _baseTabTitle = document.title.replace(TAB_GLYPHS, '');
   const live = document.querySelector('section[data-iteration][data-active]');
+  const srv = (typeof _serverRound !== 'undefined') ? _serverRound : null;
   const submitted = (typeof _submittedAt === 'number' && _submittedAt > 0)
-    || document.body.classList.contains('concept-submitted');
-  const action = (typeof _submittedAction === 'string') ? _submittedAction : null;
+    || document.body.classList.contains('concept-submitted')
+    || !!srv;
+  const action = (typeof _submittedAction === 'string') ? _submittedAction
+    : (srv && (srv.phase === 'implementing' || srv.phase === 'implemented' ? 'implement' : srv.action));
   let glyph = '👉';
   if (live && live.hasAttribute('data-final-report')) {
     glyph = live.hasAttribute('data-closed') ? '✅' : (submitted ? '⏳' : '🏁');

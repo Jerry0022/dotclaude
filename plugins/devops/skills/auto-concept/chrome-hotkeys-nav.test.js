@@ -247,11 +247,12 @@ describe("overview chrome", () => {
     });
   }, BOOT_TIMEOUT);
 
-  test("the open hotkey hangs on the open button, not on a tooltip over the preview", async () => {
+  test("no open button and no tooltip over the preview: the centre tile itself opens", async () => {
     const { document } = await boot(page(2));
     const preview = document.querySelector(".design-ov-slide[data-pos='cur'] .design-ov-preview");
     expect(preview.dataset.tip).toBeUndefined();
-    expect(preview.querySelector(".design-ov-open .design-ov-open-key")).not.toBeNull();
+    expect(preview.querySelector(".design-ov-open")).toBeNull();
+    expect(preview.getAttribute("aria-keyshortcuts")).toBe("1");
   }, BOOT_TIMEOUT);
 
   test("a new round opens the overview start page", async () => {
@@ -272,7 +273,7 @@ describe("nudges", () => {
     const tip = document.getElementById("hk-nudge");
     expect(tip).not.toBeNull();
     expect(tip.dataset.nudge).toBe("variants");
-    expect(tip.textContent).toMatch(/Hotkeys/);
+    expect(tip.textContent).toMatch(/wechseln die Variante/);
     tip.querySelector(".hk-nudge-x").click();
     expect(document.getElementById("hk-nudge")).toBeNull();
     expect(window.conceptNudgeSilenced("variants")).toBe(true);

@@ -62,7 +62,6 @@ must see their own language. The locale hint is authoritative.
 | `panel.submit_iterate_hint` | Your selection goes into the next round. No code changes. | Deine Auswahl geht in die nächste Runde. Es wird kein Code geschrieben. |
 | `panel.submit_implement` | Implement now | Jetzt umsetzen |
 | `panel.submit_implement_hint` | You approve the scope — it is turned into real changes now. | Du gibst den Umfang frei — er wird jetzt in echte Änderungen umgesetzt. |
-| `panel.submit_implement_confirm` | Implement now? Real code changes will be written. | Jetzt umsetzen? Es werden echte Code-Änderungen geschrieben. |
 | `panel.submitted` | Submitted | Übermittelt |
 | `panel.submitted_hint` | Your selection is on its way into the next round. | Deine Auswahl ist unterwegs in die nächste Runde. |
 | `panel.step_submitted`         | Submitted                      | Übermittelt |
@@ -240,11 +239,11 @@ must see their own language. The locale hint is authoritative.
 | `design.change_improved` | Improved | Verbessert |
 | `design.keys_dock` | Notes dock open / closed | Notiz-Dock auf / zu |
 | `design.keys_level` | Level up / down (overview, variant) | Ebene hoch / runter (Übersicht, Variante) |
-| `nudge.alt` | Hold Alt for all hotkeys | Halte Alt für alle Hotkeys |
-| `nudge.variants` | Hotkeys 1–{n} switch the variant | Hotkeys 1–{n} wechseln die Variante |
-| `nudge.pages` | Hotkeys ←/→ page through the screens | Hotkeys ←/→ blättern durch die Seiten |
-| `nudge.dock` | Hotkey Space opens your notes | Hotkey Leertaste öffnet deine Notizen |
-| `nudge.submit` | Hotkey Ctrl + Enter starts the next round | Hotkey Strg + Enter startet die nächste Runde |
+| `nudge.alt` | Hold Alt to see all hotkeys | Alt halten zeigt alle Hotkeys |
+| `nudge.variants` | Keys 1–{n} switch the variant | Tasten 1–{n} wechseln die Variante |
+| `nudge.pages` | Keys ←/→ flip between pages | Tasten ←/→ blättern zwischen Seiten |
+| `nudge.dock` | Space opens your notes | Leertaste öffnet deine Notizen |
+| `nudge.submit` | Ctrl + Enter starts the next round | Strg + Enter startet die nächste Runde |
 | `nudge.dismiss` | Hide this tip for 30 days | Tipp 30 Tage ausblenden |
 | `design.questions`             | Questions                       | Fragen |
 | `design.questions_open`        | {n} questions still open        | {n} Fragen noch offen |
@@ -261,12 +260,12 @@ must see their own language. The locale hint is authoritative.
 | `design.keys_next`             | Next page of this design        | Nächste Seite dieses Designs |
 | `design.keys_round` | Round tab 1–9 | Runden-Tab 1–9 |
 | `design.keys_notes`            | Open or close the notes         | Notizen öffnen oder schließen |
-| `design.keys_pin` | Your own note on a spot | Eigene Notiz an einer Stelle |
+| `design.keys_pin` | Place a note on the design | Notiz auf dem Design platzieren |
 | `design.keys_click`            | click                           | Klick |
 | `design.keys_close`            | Close                           | Schließen |
 | `design.key_ctrl`              | Ctrl                            | Strg |
-| `design.upin_hint` | + click places your own note here | + Klick setzt hier eine eigene Notiz |
-| `design.upin_arm` | Place a note pin | Notiz-Pin setzen |
+| `design.upin_hint` | + click places a note on the design here | + Klick platziert hier eine Notiz auf dem Design |
+| `design.upin_arm` | Place a note on the design | Notiz auf dem Design platzieren |
 | `design.upin_tap_hint` | Tap the spot for your note · Esc cancels | Tippe auf die Stelle für deine Notiz · Esc bricht ab |
 | `design.upin_placeholder` | Your note on this spot… | Deine Notiz zu dieser Stelle… |
 | `design.upin_keys`             | Enter saves · Esc discards      | Enter speichert · Esc verwirft |
