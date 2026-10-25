@@ -25,7 +25,24 @@ function runHook(payload, env) {
     encoding: "utf8",
     env: { ...process.env, TEMP: tmpRoot, TMP: tmpRoot, TMPDIR: tmpRoot, DEVOPS_BATCH_NO_SYNC: "1", ...(env || {}) },
   });
-  return { code: res.status, stdout: res.stdout || "", stderr: res.stderr || "" };
+  return panelView(res);
+}
+
+/**
+ * A collected prompt is blocked with JSON on stdout (decision "block"), not
+ * exit 2: `blocked` is that verdict, `panel` the text the user sees in the
+ * red panel (the block reason, else stderr), `stdout` only context for the
+ * model — empty on a block.
+ */
+function panelView(res) {
+  const out = res.stdout || "";
+  let block = null;
+  try { const j = JSON.parse(out.trim()); if (j && j.decision === "block") block = j; } catch { /* plain context */ }
+  const stderr = res.stderr || "";
+  return {
+    code: res.status, blocked: Boolean(block), stdout: block ? "" : out, stderr,
+    panel: block ? block.reason : stderr, json: block,
+  };
 }
 
 beforeEach(() => {
@@ -51,7 +68,7 @@ describe("AUD-051 — machine turns are never notes and never activations", () =
     const before = readActivity(cwd);
     const r = runHook({ prompt: NOTIFICATION, session_id: SID });
     expect(r.code).toBe(0);
-    expect(r.stderr).not.toContain("gespeichert");
+    expect(r.panel).not.toMatch(/gespeichert/i);
     expect(readNotes(cwd)).toHaveLength(0);
     expect(readActivity(cwd)).toBe(before);
   });
@@ -75,7 +92,7 @@ describe("AUD-C006 — an image-only prompt without its image is never erased", 
     activate(cwd, { marker: ">>" });
     const r = runHook({ prompt: "", session_id: SID });
     expect(r.code).toBe(0);
-    expect(r.stderr).not.toContain("gespeichert");
+    expect(r.panel).not.toMatch(/gespeichert/i);
     expect(r.stdout).toContain("[do-batch] Sammelmodus ist AKTIV");
     expect(readNotes(cwd)).toHaveLength(0);
   });
@@ -84,8 +101,8 @@ describe("AUD-C006 — an image-only prompt without its image is never erased", 
     activate(cwd, { marker: ">>" });
     fs.writeFileSync(path.join(imagesDir, "1.png"), "png-bytes");
     const r = runHook({ prompt: "", session_id: SID });
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain("Notiz #1 abgelegt");
+    expect(r.blocked).toBe(true);
+    expect(r.panel).toContain("NOTIZ #1 GESPEICHERT");
     expect(readNotes(cwd)[0].text).toMatch(/^\[Anhang-Datei\] /);
   });
 });
@@ -144,8 +161,8 @@ describe("AUD-C057 / C058 — panel and hand-off text", () => {
     activate(cwd, { marker: ">>" });
     fs.writeFileSync(path.join(imagesDir, "1.png"), "png-bytes");
     const r = runHook({ prompt: "<command-name>/do-batch</command-name><command-args></command-args>", session_id: SID });
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain("🖼️ mit Bild");
+    expect(r.blocked).toBe(true);
+    expect(r.panel).toContain("🖼️ mit Bild");
   });
 
   test("the marker merge context carries the 4.9 hand-off template", () => {
