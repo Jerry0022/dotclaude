@@ -88,6 +88,10 @@ const SCHEMA = Object.freeze({
       type: 'enum', values: Object.freeze(['push', 'local', 'off']), default: 'local',
       doc: 'Session worktree with unsaved work and no open PR when a turn ends: "local" (default) = snapshot to a local parked/autosave/<name> branch, "push" = also push it (never force), "off" = nothing. Your branch, index and files are never touched.',
     }),
+    autosaveWaitSeconds: Object.freeze({
+      type: 'integer', default: 8, min: 1, max: 40,
+      doc: 'How long the end of a turn waits for the autosave. A save that takes longer finishes in a background process; the turn ends with a one-line notice and the session must not be archived before it is done.',
+    }),
   }),
   deployParity: Object.freeze({
     enabled: Object.freeze({
