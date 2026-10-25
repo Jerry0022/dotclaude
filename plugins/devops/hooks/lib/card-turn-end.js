@@ -1,6 +1,6 @@
 /**
  * @module card-turn-end
- * @version 0.2.1
+ * @version 0.2.2
  * @description End the turn at the Desktop completion-card widget — no model
  *   call after the card, so nothing can land under it.
  *
@@ -76,14 +76,19 @@ function gatesFirst(scripts) {
 }
 
 /**
- * Absolute paths of this plugin's Stop hook scripts, in hooks.json order.
+ * Absolute paths of this plugin's Stop hook scripts, in manifest (hooks.json) order.
  * @param {string} pluginRoot
  * @returns {string[]}
  */
 function stopHookScripts(pluginRoot) {
+  // the per-hook roster: hooks.json registers one dispatcher per event, the
+  // Stop hooks themselves are listed in hooks/dispatch/manifest.json
   let json;
-  try { json = JSON.parse(fs.readFileSync(path.join(pluginRoot, 'hooks', 'hooks.json'), 'utf8')); }
-  catch { return []; }
+  for (const rel of [['hooks', 'dispatch', 'manifest.json'], ['hooks', 'hooks.json']]) {
+    try { json = JSON.parse(fs.readFileSync(path.join(pluginRoot, ...rel), 'utf8')); break; }
+    catch { /* next */ }
+  }
+  if (!json) return [];
   const groups = (json && json.hooks && Array.isArray(json.hooks.Stop)) ? json.hooks.Stop : [];
   const out = [];
   for (const g of groups) {

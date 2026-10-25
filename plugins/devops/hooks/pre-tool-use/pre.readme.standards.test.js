@@ -96,8 +96,8 @@ describe("pre.readme.standards (spawned)", () => {
     expect(bad.stdout).toBe("");
   });
 
-  test("hooks.json registers it for Write|Edit", () => {
-    const cfg = JSON.parse(fs.readFileSync(path.join(PLUGIN_ROOT, "hooks", "hooks.json"), "utf8"));
+  test("the hook manifest registers it for Write|Edit", () => {
+    const cfg = JSON.parse(fs.readFileSync(path.join(PLUGIN_ROOT, "hooks", "dispatch", "manifest.json"), "utf8"));
     const entry = cfg.hooks.PreToolUse.find((e) => e.hooks.some((h) => h.command.includes("pre.readme.standards.js")));
     expect(entry).toBeTruthy();
     expect(entry.matcher).toBe("Write|Edit");

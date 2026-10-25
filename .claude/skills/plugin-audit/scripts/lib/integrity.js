@@ -170,9 +170,9 @@ function wiring(root) {
   const registered = new Set();
   for (const p of plugins(root)) {
     const base = path.join(root, 'plugins', p);
-    const cfg = readJson(path.join(base, 'hooks/hooks.json'));
-    if (!cfg || !cfg.hooks) continue;
-    for (const groups of Object.values(cfg.hooks)) {
+    // hooks.json plus the dispatcher manifest (the per-hook roster behind it)
+    const cfgs = [readJson(path.join(base, 'hooks/hooks.json')), readJson(path.join(base, 'hooks/dispatch/manifest.json'))].filter((c) => c && c.hooks);
+    for (const groups of cfgs.flatMap((c) => Object.values(c.hooks))) {
       for (const g of groups) {
         for (const h of g.hooks || []) {
           const m = /\$\{CLAUDE_PLUGIN_ROOT\}\/(\S+)/.exec(h.command || '');
