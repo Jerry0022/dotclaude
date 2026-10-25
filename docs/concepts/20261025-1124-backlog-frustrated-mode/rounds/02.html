@@ -1,0 +1,963 @@
+<section data-iteration="2" data-iteration-template="decision">
+<style>
+section[data-iteration="2"] .r2-info { border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem 1.25rem; margin: 1rem 0; background: var(--panel-bg); }
+section[data-iteration="2"] .r2-lead { font-size: 1.02rem; }
+section[data-iteration="2"] .r2-changed { border-left: 3px solid var(--accent-color); padding: 0.5rem 0.9rem; margin: 1rem 0; background: var(--bg-subtle); border-radius: 4px; }
+section[data-iteration="2"] .r2-flow { list-style: none; counter-reset: r2step; display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0; margin: 1rem 0; }
+section[data-iteration="2"] .r2-flow li { counter-increment: r2step; flex: 1 1 140px; min-width: 140px; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.75rem; background: var(--bg-subtle); position: relative; font-size: 0.9rem; }
+section[data-iteration="2"] .r2-flow li::before { content: counter(r2step); display: inline-block; width: 1.5rem; height: 1.5rem; line-height: 1.5rem; text-align: center; border-radius: 50%; background: var(--accent-color); color: var(--bg); font-weight: 700; margin-right: 0.4rem; font-size: 0.8rem; }
+section[data-iteration="2"] .r2-flow li b { display: block; margin: 0.25rem 0; }
+section[data-iteration="2"] .r2-flow li.r2-later { border-style: dashed; opacity: 0.85; }
+section[data-iteration="2"] .r2-tag { display: inline-block; font-size: 0.75rem; padding: 0.05rem 0.45rem; border-radius: 999px; border: 1px solid var(--border-color); color: var(--text-secondary); margin-left: 0.25rem; white-space: nowrap; }
+section[data-iteration="2"] .r2-tag.now { color: var(--success-color); border-color: var(--success-color); }
+section[data-iteration="2"] .r2-tag.later { color: var(--warning-color); border-color: var(--warning-color); }
+section[data-iteration="2"] .r2-tag.no { color: var(--danger-color); border-color: var(--danger-color); }
+section[data-iteration="2"] .r2-tag.done { color: var(--accent-color); border-color: var(--accent-color); }
+section[data-iteration="2"] table.r2-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin: 0.75rem 0; }
+section[data-iteration="2"] table.r2-table th, section[data-iteration="2"] table.r2-table td { border: 1px solid var(--border-color); padding: 0.4rem 0.55rem; vertical-align: top; text-align: left; }
+section[data-iteration="2"] table.r2-table th { background: var(--bg-subtle); }
+section[data-iteration="2"] dl.r2-dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 0.9rem; margin: 0.6rem 0; }
+section[data-iteration="2"] dl.r2-dl dt { font-weight: 600; color: var(--text-secondary); }
+section[data-iteration="2"] dl.r2-dl dd { margin: 0; }
+section[data-iteration="2"] .r2-group { border-top: 2px solid var(--border-color); margin-top: 2rem; padding-top: 0.5rem; }
+section[data-iteration="2"] .r2-group > p { color: var(--text-secondary); }
+section[data-iteration="2"] .r2-opts { margin: 0.5rem 0; padding-left: 1.2rem; }
+section[data-iteration="2"] .r2-opts li { margin: 0.2rem 0; }
+section[data-iteration="2"] .r2-opts li.rec::marker { content: "✓ "; color: var(--success-color); }
+section[data-iteration="2"] .r2-opts li.rej::marker { content: "✗ "; color: var(--danger-color); }
+section[data-iteration="2"] .r2-why { margin: 0.4rem 0; }
+section[data-iteration="2"] .r2-meta { font-size: 0.85rem; color: var(--text-secondary); }
+</style>
+
+<div class="r2-info" id="intro">
+<h2>Was ist Frustrated Mode?</h2>
+<p class="r2-lead">Manchmal drehen sich Nutzer und Claude im Kreis: dieselbe Korrektur zum dritten, vierten Mal, und jeder neue Versuch baut auf dem letzten Fehlversuch auf. Frustrated Mode ist ein optionaler Modus für genau diesen Moment. Statt eines weiteren Fix-Versuchs hält Claude an und analysiert, was eigentlich gewollt war, was schon probiert wurde und warum es nicht klappt. Diese Analyse ist strikt read-only: mehrere unabhängige Sub-Agents (Rollen) sehen bewusst verschiedene Ausschnitte der Fakten, und eine Synthese hält Konsens, Widerspruch und Annahmen getrennt. Am Ende steht ein Plan, und erst nach deiner ausdrücklichen Freigabe (gebunden an Plan-ID und Hash) wird er an die vorhandenen Mechanismen übergeben: <code>do-run</code> → <code>auto-agents</code>, <code>auto-concept</code>, <code>do-learn</code> oder <code>auto-guide</code>. Ausgerollt wird gestuft: In Stufe 1 startet man den Modus nur explizit, und der Erkenner läuft unsichtbar im Shadow-Modus mit. Automatische Vorschläge kommen erst in Stufe 2, wenn das Shadow-Log zeigt, dass sie präzise genug sind. Alles ist per Channel-Gate nur auf Alpha sichtbar.</p>
+
+<ol class="r2-flow">
+<li class="r2-later"><b>Erkennen</b>Hooks zählen Runden und Signale pro Ziel. Stufe 1: nur Shadow-Log.</li>
+<li class="r2-later"><b>Anbieten</b>Eine Frage pro Session. Erst ab Stufe 2.</li>
+<li><b>Analysieren</b>5 Rollen + blinde Synthese, read-only per Guard <code>pre.frustrated.readonly</code>.</li>
+<li><b>Plan</b>Report mit 5 Abschnitten und Plantyp oder „Nur Analyse“.</li>
+<li><b>Freigabe</b>Frage <code>Plan freigeben?</code>, gebunden an <code>plan &lt;id&gt; v&lt;n&gt; · &lt;hash8&gt;</code>.</li>
+<li><b>Übergabe</b>Run-Contract im Modus <code>plan</code> → bestehende Skills, Schritt für Schritt.</li>
+</ol>
+<p class="r2-meta">Gestrichelt: in Stufe 1 noch nicht sichtbar. In Stufe 1 startet der Nutzer den Modus selbst (Trigger-Phrase oder do-run-Q4-Option) und steigt direkt bei Schritt 3 ein.</p>
+
+<div class="r2-changed"><b>Neu gegenüber Runde 1:</b> Die Bewertung „Lohnt sich das?“ (Abschnitt A) ist dazugekommen, und jede Entscheidung erklärt jetzt, zu welchem Teil des Systems sie gehört, welche Optionen die Specs abgewogen haben und warum die Empfehlung so lautet. Die IDs aller Entscheidungen sind gleich geblieben.</div>
+
+<h3>Stand des Laufs</h3>
+<ul>
+<li>8 Issues erledigt (Epic #857 mit #858–#862, Research #863/#864), alle auf dem Integrations-Branch <code>worktree-backlog-frustrated-k7q2</code>, nichts gepusht. Bis auf #861 (Code) sind alle Ergebnisse Specs, also Entscheidungsvorlagen ohne Plugin-Änderung.</li>
+<li>Volle Suite: 10402 Tests grün, Lint sauber. Der eine rote Test <code>hidden-skill-mentions.test.js</code> ist auch auf <code>origin/main</code> rot und stammt nicht aus diesem Lauf.</li>
+<li>Learning umgesetzt: Backlog-Läufe mit offenen Entscheidungen enden künftig auf so einer Seite (<code>dc3049c6</code>, do-run <code>modes/backlog.md</code> Step 5 · 1b).</li>
+</ul>
+</div>
+
+<h2 id="analysis">A · Lohnt sich das? Was bringt was?</h2>
+<p class="subtitle">Die Bewertung, die die Issues verlangt haben, je Baustein. Nur Fakten aus den Specs; was dort eine Annahme ist, steht hier auch als Annahme.</p>
+
+<div class="r2-info" id="analysis-verdict">
+<h3>Gesamturteil (#857): Go, aber verkleinert</h3>
+<p>Gebaut wird nur der explizite Kern auf Alpha: Skill nur per ausdrücklichem Aufruf, Read-only per Hook, Freigabe mit ID und Hash, Übergabe an die vier vorhandenen Mechanismen. Der Erkenner läuft nur im Shadow-Modus und zeigt nichts. Alles, dessen Nutzen von einer noch nicht gemessenen Zahl abhängt, ist hinter messbare Schwellen verschoben.</p>
+<p><b>Warum nicht No-Go:</b> Der Kern liefert genau das Gewünschte, eine Analyse, die die Schleife stoppt und nichts umsetzt, ohne einen einzigen ungemessenen Teil. <b>Warum nicht voller Go:</b> Vorschläge vor dem Shadow-Log würden die eigene Leitplanke des Epics brechen („automatische Erkennung erst nach Machbarkeitsprüfung“).</p>
+<p><b>Abbruchbedingung beim Bau:</b> Zeigt der F1-Spike, dass PreToolUse-Aufrufe von Subagents den session-gebundenen Guard nicht erreichen, verlieren die Rollen R2/R3 ihr <code>Bash</code>; der Main-Thread liefert ihnen git-Fakten vorab. Die Garantie wird nicht aufgeweicht.</p>
+</div>
+
+<div class="r2-info" id="analysis-blocks">
+<h3>Bausteine im Einzelnen</h3>
+<table class="r2-table">
+<thead><tr><th>Baustein</th><th>Was es dir bringt</th><th>Kosten · Komplexität · Risiko</th><th>Urteil</th></tr></thead>
+<tbody>
+<tr>
+<td><b>Erkennung</b><br>#858, Hooks in <code>UserPromptSubmit</code>, <code>PostToolUse(Failure)</code>, <code>Stop</code></td>
+<td>Der Modus käme von selbst, wenn man festhängt. Ein frustrierter Nutzer erinnert sich nicht an einen Skill-Namen.</td>
+<td>Der Erkenner selbst kostet 0 Tokens und wenige ms Node. Teuer ist ein Fehlalarm: eine Unterbrechung und im schlimmsten Fall eine versehentlich gestartete Analyse mit 250k–500k Tokens. Präzision ist <b>ungemessen</b>; alle Gewichte und Schwellen (≥ 3 Runden, Score ≥ 6) sind Annahmen. Die Basisrate ist niedrig: im #864-Sample 34 getippte Nutzer-Turns in 11 interaktiven Sessions über drei Tage, und eine naive Korrektur-Wortliste lag bei 2 von 6 Treffern falsch.</td>
+<td><span class="r2-tag now">jetzt: nur Shadow</span><span class="r2-tag later">sichtbar: später</span><br>Stufe 2 erst nach ≥ 20 geprüften Verdikten mit ≥ 70 % Treffern. Expliziter Aufruf ist auch allein schon nützlich.</td>
+</tr>
+<tr>
+<td><b>Analyse-Skill</b><br>#859, <code>auto-frustrated</code> + Agents <code>analyst</code> / <code>analyst-blind</code></td>
+<td>Der Kern: eine Diagnose, die nicht vom Main-Thread kommt, der die Fehlversuche selbst geschrieben hat. Liefert Absicht, Ursachen, Versuchsverlauf, Alternativen (auch eine andere Architektur) und einen Plan.</td>
+<td>Ca. 250k–500k Tokens und 4–10 min je Lauf (Lite: 120k–250k), geschätzt. Größe F4 (M) + F5 (L). Unabhängigkeit ist nur teilweise echt: alle Rollen laufen auf derselben Modellfamilie, R2–R4 teilen Quellen. Die Spec sagt das offen und zählt geteilte Quellen nur einmal.</td>
+<td><span class="r2-tag now">jetzt bauen</span><br>Kriterien 3, 4, 5 erfüllt.</td>
+</tr>
+<tr>
+<td><b>Planfreigabe &amp; Übergabe</b><br>#860, Run-Contract-Modus <code>plan</code>, <code>frustrated-plan.js</code></td>
+<td>Die Garantie „nichts wird ohne Freigabe umgesetzt“ (Kriterium 6), und zwar prüfbar: Hooks sehen, <em>welche</em> Planversion freigegeben ist. Übergabe nur an vorhandene Skills, keine neue Pipeline.</td>
+<td>Größe F6 (L) + F7 (M); elf kleine Erweiterungen G1–G11 an bestehenden Dateien. Kriterium 6 hält nur, wenn der Guard alle Tools sieht (K3), die Pflicht-Tools des Plugins erlaubt (K4, sonst Deadlock mit <code>stop.flow.guard</code>) und die Plattform-Annahmen aus K8 stimmen.</td>
+<td><span class="r2-tag now">jetzt bauen</span><br>Ohne diesen Teil gibt es keine Garantie.</td>
+</tr>
+<tr>
+<td><b>Integration</b><br>#862, Ultracode, Workflow-Tool, do-run, auto-fix</td>
+<td>Stellt sicher, dass kein zweiter, konkurrierender Ausführungsweg entsteht. Fand das größte Risiko: kein PreToolUse-Matcher in <code>hooks.json</code> nennt <code>Workflow</code>, ein Workflow-Aufruf könnte den Guard umgehen.</td>
+<td>Vier kleine Erweiterungen (I1–I4: Deny-Regeln und Textzeilen) plus Q4-Option (F8, S). Plattform-Fakten stammten nur aus dem installierten CLI 2.1.270 und wurden in #857 gegen die offizielle Doku geprüft.</td>
+<td><span class="r2-tag now">jetzt: O1 + Deny + Q4</span><span class="r2-tag later">Workflow-Laufzeit: später</span><span class="r2-tag no">Workflow als Schritttyp: nein</span></td>
+</tr>
+<tr>
+<td><b>Alpha-Gating</b><br>#861, <code>hooks/lib/channel-gate.js</code></td>
+<td>Beta- und Stable-Nutzer sehen den Skill nicht (Kriterium 8, das einzige binäre Kriterium). Wiederverwendbar für künftige Alpha-Features.</td>
+<td>Schon gebaut und getestet (19 Tests). Offen: drei Sichtbarkeitslücken, die das Gate nicht abdeckt (Skill-Liste im System-Prompt des Modells, neue Agent-Typen, README/Eval-Listen, K2), <code>GATED_SKILLS</code> ist noch leer, und Markdown-Skills haben kein CLI zum Gate (K5).</td>
+<td><span class="r2-tag done">gebaut</span><br>Rest in F2 (S).</td>
+</tr>
+<tr>
+<td><b>Webguide Skill-Capture</b><br>#863, <code>auto-guide</code></td>
+<td>Ein abgeschlossener Guide-Lauf würde zur wiederverwendbaren Route; ein Replay wäre billiger als ein neuer Guide.</td>
+<td>Option A (Plugin bemerkt Browser-Arbeit des Nutzers) ist <b>nicht machbar</b>: keine API und kein Hook sieht Nutzeraktivität außerhalb des einen Tabs, den Claude geöffnet hat, und zwischen Turns läuft nichts. B0 ist klein (S, ca. 5–15k Tokens je Entwurf). Der Nutzen hängt an der Guide-Nutzung: einziger Datenpunkt 0 Läufe in 1 128 Sessions (14.08.–23.09.2026), gemessen vor dem proaktiven Guide (#519/#742).</td>
+<td><span class="r2-tag later">B0: nach frischer Zählung</span><span class="r2-tag no">A: nein</span></td>
+</tr>
+<tr>
+<td><b>Hook Agents</b><br>#864, <code>type: "agent"</code> / <code>"prompt"</code> in <code>hooks.json</code></td>
+<td>Theoretisch: semantische Prüfungen in Hooks (Ist der Task fertig? Stimmt die Behauptung des Subagents?).</td>
+<td>Jedes wiederkehrende Muster im Sample ist ein Zustand, den Command-Hooks schon deterministisch prüfen, oder eine Wissenslücke, die kein Hook schließt. Agent-Hooks sind laut Doku experimentell, ihr Tool-Set ist undokumentiert (keine No-Write-Garantie), Timeouts 30/60 s. Alle drei Kandidaten C1–C3 verlieren gegen die einfachere Alternative.</td>
+<td><span class="r2-tag no">nicht einsetzen</span><br>Mit drei Bedingungen für eine Neubewertung.</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div class="r2-info" id="analysis-descoped">
+<h3>Was #857 bewusst gestrichen hat und warum</h3>
+<table class="r2-table">
+<thead><tr><th>Verschoben</th><th>Grund</th><th>Wann wieder</th></tr></thead>
+<tbody>
+<tr><td>Automatischer Vorschlag (#858 Stufe 2)</td><td>Präzision ungemessen (Kriterium 1), niedrige Basisrate (K6)</td><td>Stufe-1-Review nach 8 Wochen (F10)</td></tr>
+<tr><td>Hinweiszeile im auto-fix-Report (#862 § 6b)</td><td>Ist auch ein Vorschlag; in Stufe 1 nur als Shadow-Marker geloggt (D12)</td><td>Stufe 2</td></tr>
+<tr><td>Workflow-Laufzeit in einem <code>implement</code>-Schritt (#862 O2)</td><td>Ungeklärt, ob Hooks in Workflow-Agents feuern (K8 b)</td><td>wenn der Spike das positiv belegt</td></tr>
+<tr><td>Harter Pfad-Gate auf <code>objects</code> (D10)</td><td>braucht Erfahrung aus Alpha-Läufen</td><td>nach den ersten Alpha-Läufen</td></tr>
+<tr><td>Lokales LLM als Tie-Breaker (#858 Stufe 3)</td><td>erst muss Stufe 2 durch</td><td>nach Stufe 2</td></tr>
+<tr><td>Umbenennung / Promotion auf Beta (K1)</td><td>erst wenn das Feature reif ist</td><td>eigenes Issue bei Promotion</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="r2-info" id="analysis-criteria">
+<h3>Die 8 Erfolgskriterien des Epics: 5 erfüllt · 3 teilweise · 0 offen</h3>
+<table class="r2-table">
+<thead><tr><th>#</th><th>Kriterium</th><th>Status</th><th>Was fehlt / wie es geschlossen wird</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Erkennt Korrekturschleifen, ohne normale Iteration zu stören</td><td>teilweise</td><td>Design steht, Präzision ungemessen. Stufe 1 <em>ist</em> die Messung.</td></tr>
+<tr><td>2</td><td>Expliziter Start möglich, Auto-Vorschlag nicht vorausgesetzt</td><td>erfüllt</td><td>—</td></tr>
+<tr><td>3</td><td>Analyse deckt Absicht, Verlauf, Ergebnisse, technische Ursachen, externe Infos ab</td><td>erfüllt</td><td>Frühere Sessions nur per <code>--session</code> (D5)</td></tr>
+<tr><td>4</td><td>Mehrere Sub-Agents unabhängig; Synthese zeigt Konsens, Dissens, Unsicherheit</td><td>erfüllt</td><td>Grenzen der Unabhängigkeit stehen offen im Report</td></tr>
+<tr><td>5</td><td>Diagnose, Alternativen, priorisierte Empfehlung, konkreter Plan</td><td>erfüllt</td><td>—</td></tr>
+<tr><td>6</td><td>Nichts wird ohne ausdrückliche Planfreigabe umgesetzt</td><td>teilweise</td><td>Hängt an K3, K4, K8; wird im Stufe-1-Bau geschlossen (F1, F3)</td></tr>
+<tr><td>7</td><td>Übergabe nutzt vorhandene dotclaude-Workflows</td><td>erfüllt</td><td>—</td></tr>
+<tr><td>8</td><td>Beta und Stable sehen den Skill nicht</td><td>teilweise</td><td>Drei Sichtbarkeitslücken (K2), leeres <code>GATED_SKILLS</code>, kein CLI (K5); wird in F2/F4/F5 geschlossen</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="ship-h">1 · Ship</h2>
+<div class="variant-card" id="card-ship">
+<h3>Integrations-Branch shippen</h3>
+<p><b>Worum geht's:</b> Der Branch enthält die sieben Specs, den Channel-Gate-Code aus #861 und das do-run-Learning. <code>/do-ship</code> bringt alles auf main (Alpha). Danach werden die Issues #857–#864 geschlossen; das Epic schließt laut eigener Regel über die Dach-Spec, nicht nur über seine Kinder.</p>
+<p class="r2-why"><b>Empfehlung: ja.</b> Die Specs sind reine Dokumente, und F1–F10 setzen voraus, dass sie und der #861-Code auf main liegen (Annahme 1 der Dach-Spec). Ändert diese Runde noch etwas an einer Entscheidung, wird die betroffene Spec vor dem Ship angepasst.</p>
+<div class="variant-evaluation" data-decision="ship" data-label="Integrations-Branch shippen">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-ship" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-ship" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="ship-note">{{decision.comment_label}}</label>
+    <textarea id="ship-note" data-comment="ship-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<h2 id="items-h">2 · Ergebnisse je Issue</h2>
+<p class="subtitle">Unabhängig voneinander. „Verwerfen“ heißt: das Ergebnis wird nicht übernommen und vor dem Ship überarbeitet.</p>
+
+<div class="variant-card" id="card-item-858">
+<h3>#858 · Auslöser &amp; Erkennung</h3>
+<p><b>Ergebnis:</b> Machbar, aber nur gestuft. Neun Auslöser (T1–T9, z. B. negierte Fertig-Meldung, unveränderter Fehler, Revert) und elf Gegenindikatoren (C1–C11, z. B. Lob, neues Thema, laufendes <code>auto-concept</code>). Vorschlag nur bei ≥ 3 Runden und Score ≥ 6, ohne Modell-Aufruf, und erst hinter <code>post.flow.debug</code> (auto-fix nach 2 Shell-Fehlern) und der Escalation-Regel (Runde 2).</p>
+<p><b>Warum wichtig:</b> Unsicherheit wird bewusst Richtung Schweigen aufgelöst. Ein verpasster Hänger kostet eine Runde, ein falscher Vorschlag stört jemanden, der schon genervt ist. Alle Schwellen sind Startwerte, die erst das Shadow-Log kalibriert.</p>
+<p class="subtitle">Commit <code>256a5aeb</code> · <code>specs/2026-10-25-frustrated-mode-trigger-detection-design.md</code></p>
+<div class="variant-evaluation" data-decision="item-858" data-label="#858 · Auslöser &amp; Erkennung">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-item-858" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-item-858" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="item-858-note">{{decision.comment_label}}</label>
+    <textarea id="item-858-note" data-comment="item-858-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-item-859">
+<h3>#859 · Analyse-Skill</h3>
+<p><b>Ergebnis:</b> Ein eigener Skill, kein <code>do-run</code>-Modus, weil rethink am Ende selbst umsetzt. Fünf Rollen mit bewusst verschiedenen Ausschnitten: R1 Absicht (nur Nutzer-Prompts), R2 Verlauf, R3 Technik, R4 Workflow &amp; Produkt, R5 frische Alternative (der bestehende <code>rethinker</code>, unverändert). Eine blinde Synthese S führt sie nach festen Regeln zusammen; Konsens zählt nur zwischen Rollen mit getrennten Quellen, Dissens wird nie gemittelt. Read-only in drei Schichten: Agent-<code>tools</code>, Modus-Guard, Skill-Regeln.</p>
+<p><b>Warum wichtig:</b> Der Main-Thread hat jeden Fehlversuch selbst geschrieben und ist an seinen letzten Gedanken verankert. Deshalb bekommen die Rollen Rohdaten und Nutzerzitate, nie Claudes eigene Erzählung.</p>
+<p class="subtitle">Commit <code>8646803f</code> · <code>specs/…-frustrated-mode-analysis-skill-design.md</code></p>
+<div class="variant-evaluation" data-decision="item-859" data-label="#859 · Analyse-Skill">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-item-859" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-item-859" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="item-859-note">{{decision.comment_label}}</label>
+    <textarea id="item-859-note" data-comment="item-859-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-item-861">
+<h3>#861 · Alpha-Gating (Code)</h3>
+<p><b>Ergebnis:</b> Das einzige Kind mit Code. <code>isFeatureEnabled</code> liest den Channel-Pin bei jedem Aufruf aus <code>~/.claude/plugins/.channels.json</code> und ist fail-closed: Beta, Stable, unbekannter Pin oder ein Fehler schalten das Feature ab, ohne jeden Hinweis. <code>filterSkills</code> ist im Trigger-Router verdrahtet, 19 Tests. Weil das Slash-Menü nicht zur Laufzeit filterbar ist, müssen gegatete Skills <code>auto-*</code> mit <code>user-invocable: false</code> sein. Inventar der Andockpunkte in <code>channel-gating.md</code>.</p>
+<p><b>Warum wichtig:</b> Kriterium 8 ist das einzige binäre; ein sichtbarer Eintrag auf Beta wäre ein Bruch. Das Gate ist allgemein und trägt auch künftige Alpha-Features.</p>
+<p class="subtitle">Commit <code>b76c93ac, a6c0e752</code> · <code>hooks/lib/channel-gate.js</code></p>
+<div class="variant-evaluation" data-decision="item-861" data-label="#861 · Alpha-Gating (Code)">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-item-861" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-item-861" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="item-861-note">{{decision.comment_label}}</label>
+    <textarea id="item-861-note" data-comment="item-861-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-item-860">
+<h3>#860 · Planfreigabe &amp; Übergabe</h3>
+<p><b>Ergebnis:</b> Drei Phasen: A Analyse und B Entscheidung laufen beide unter dem Read-only-Guard, erst C Ausführung unter dem Run-Contract. Der Guard bleibt durch Phase B scharf, weil direkt nach dem Report der Reflex „schnell mal probieren“ am stärksten ist. Freigabe ist eine strukturierte Antwort auf <code>Plan freigeben?</code>, gebunden an <code>plan &lt;id&gt; v&lt;n&gt; · &lt;hash8&gt;</code>; „Nur Analyse“ ist die erste Option, weil jeder Durchklick-Pfad die erste Option nimmt. Der Run-Contract bekommt einen Modus <code>plan</code> mit einer Pflicht pro Schritt und drei Gates (Reihenfolge, nicht im Plan, veraltete Version).</p>
+<p><b>Warum wichtig:</b> Eine Chat-Bestätigung allein sagt nicht, <em>welcher</em> Plan gemeint war. Mit ID + Hash können Hooks jeden späteren Schritt prüfen. Der vorhandene Batch-Hand-off-Gate wurde als Träger geprüft und verworfen: er blockt nur Edit/Write und <code>git commit</code>, hat keine Plan-Identität und wird von jedem do-run-Aufruf gelöscht.</p>
+<p class="subtitle">Commit <code>9407beff</code> · <code>specs/…-plan-approval-handoff-design.md</code></p>
+<div class="variant-evaluation" data-decision="item-860" data-label="#860 · Planfreigabe &amp; Übergabe">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-item-860" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-item-860" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="item-860-note">{{decision.comment_label}}</label>
+    <textarea id="item-860-note" data-comment="item-860-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-item-862">
+<h3>#862 · Integration</h3>
+<p><b>Ergebnis:</b> Frustrated Mode dockt nur am Freigabe-Record an. Weder Ultracode noch das Workflow-Tool liegen auf dem kritischen Pfad (Option O1, dauerhafte Basis). Ein Workflow ist höchstens später eine Laufzeit <em>innerhalb</em> eines <code>implement</code>-Schritts, gewählt von <code>auto-agents</code> (O2), nie ein eigener Schritttyp. do-run Q4 bekommt eine Alpha-Option „Erst analysieren“, auto-fix ab Stufe 2 eine passive Hinweiszeile.</p>
+<p><b>Warum wichtig:</b> Das größte Risiko des ganzen Epics stammt von hier: Kein PreToolUse-Matcher nennt <code>Workflow</code>, also könnte ein einziger Workflow-Aufruf schreibende Sub-Agents am Guard vorbei starten. Fix: Workflow in den Guard (I1) und in <code>pre.run.contract</code> (I2). Die Plattform-Fakten kamen nur aus dem CLI 2.1.270; #857 hat sie gegen die Doku korrigiert (Ultracode ist ein Setting, keine Effort-Stufe).</p>
+<p class="subtitle">Commit <code>f8155744</code> · <code>specs/…-frustrated-mode-integration-design.md</code></p>
+<div class="variant-evaluation" data-decision="item-862" data-label="#862 · Integration">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-item-862" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-item-862" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="item-862-note">{{decision.comment_label}}</label>
+    <textarea id="item-862-note" data-comment="item-862-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-item-863">
+<h3>#863 · Webguide Skill-Capture (Research)</h3>
+<p><b>Ergebnis:</b> Dass das Plugin Browser- oder Desktop-Arbeit des Nutzers selbst bemerkt (Option A), ist nicht machbar: es sieht nur den einen Tab, den Claude geöffnet hat, und nur während eines Turns. Machbar ist Option B0: Ein abgeschlossener <code>auto-guide</code>-Lauf wird als Route gespeichert, die <code>auto-guide</code> später wieder abspielt. Das braucht keine neue Beobachtung, weil alle Schritte schon im Kontext liegen.</p>
+<p><b>Warum wichtig:</b> B0 ist klein (S) und hat das geringste Datenschutz-Risiko. Ob es sich lohnt, hängt an der Guide-Nutzung, und der einzige Datenpunkt (0 Läufe in 1 128 Sessions) ist veraltet. Die fünf Einzelfragen stehen in Abschnitt 4.</p>
+<p class="subtitle">Commit <code>facf3a7a</code> · <code>specs/…-webguide-skill-capture-feasibility.md</code></p>
+<div class="variant-evaluation" data-decision="item-863" data-label="#863 · Webguide Skill-Capture (Research)">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-item-863" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-item-863" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="item-863-note">{{decision.comment_label}}</label>
+    <textarea id="item-863-note" data-comment="item-863-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-item-864">
+<h3>#864 · Hook Agents (Research)</h3>
+<p><b>Ergebnis:</b> Keine Agent- oder Prompt-Hooks in <code>hooks.json</code>. Stichprobe: die 50 neuesten Sessions, davon nur 11 interaktiv (39 waren automatische Security-Reviews ohne Plugin-Hooks). Alle wiederkehrenden Muster (z. B. die Card-Gate-Schleife mit 22 Stop-Blocks und 43 Pre-Gate-Denies) sind Zustände, die Command-Hooks schon deterministisch prüfen.</p>
+<p><b>Warum wichtig:</b> Bestätigt auch #858: Ein Modell-Hook ist kein Weg für den Frustrations-Erkenner. Und die Stichprobe liefert die niedrige Basisrate (34 getippte Turns), auf der die 8-Wochen-Timebox (D4) beruht.</p>
+<p class="subtitle">Commit <code>768fd340</code> · <code>specs/…-hook-agents-evaluation.md</code></p>
+<div class="variant-evaluation" data-decision="item-864" data-label="#864 · Hook Agents (Research)">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-item-864" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-item-864" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="item-864-note">{{decision.comment_label}}</label>
+    <textarea id="item-864-note" data-comment="item-864-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-item-857">
+<h3>#857 · Epic (Dach-Spec)</h3>
+<p><b>Ergebnis:</b> Go, verkleinert. Prüft die 8 Erfolgskriterien (5 erfüllt, 3 teilweise, 0 offen), löst 13 Widersprüche zwischen den Kind-Specs (K1–K13), bündelt 16 offene Entscheidungen (U1–U16, hier D1–D16) und schlägt 10 Umsetzungs-Issues vor (F1–F10). Außerdem prüft sie die Plattform-Fakten von #862 gegen die offizielle Doku.</p>
+<p><b>Warum wichtig:</b> Nur diese Spec prüft die Kriterien, deshalb schließt das Epic über sie und nicht einfach über seine Kinder. Sie ist die Vorlage, von der aus du das Konzept freigibst.</p>
+<p class="subtitle">Commit <code>40d6ba2d</code> · <code>specs/…-frustrated-mode-umbrella-design.md</code></p>
+<div class="variant-evaluation" data-decision="item-857" data-label="#857 · Epic (Dach-Spec)">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-item-857" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-item-857" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="item-857-note">{{decision.comment_label}}</label>
+    <textarea id="item-857-note" data-comment="item-857-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<h2 id="decisions-h">3 · Die 16 offenen Entscheidungen, nach Baustein</h2>
+<p class="subtitle">Jede Karte nennt den Baustein, die Optionen aus den Specs (✓ empfohlen, ✗ verworfen) und den Grund. Die Empfehlung ist vorausgewählt; „Verwerfen“ plus Notiz heißt: anders entscheiden.</p>
+
+<div class="r2-group" id="group-erkennung">
+<h3>Erkennung · der Detector (#858, Issue F9)</h3>
+<p>Drei Hooks: <code>PostToolUse(Failure)</code> und <code>Stop</code> zeichnen nur auf (bearbeitete Dateien, Fehlersignaturen, Fertig-Meldungen), <code>UserPromptSubmit</code> entscheidet je Ziel zwischen still, Shadow und Vorschlag. In Stufe 1 wird nichts angezeigt, nur geloggt.</p>
+</div>
+
+<div class="variant-card" id="card-d2">
+<h3>D2 · Wo liegt das Shadow-Log, und was steht drin?</h3>
+<p><b>Worum geht's:</b> Der Detector schreibt in Stufe 1 seine stillen Verdikte (Shadow / Vorschlag) in ein Log, das später ausgewertet wird. Das ist ein neues, dauerhaftes Artefakt, deshalb sollst du Ort und Inhalt bestätigen.</p>
+<ul class="r2-opts">
+<li class="rec">Pro Nutzer unter <code>~/.claude/</code>, übersteht Sessions; nur Marker, Ziel-Schlüssel und Score-Aufschlüsselung, kein Prompt-Text; auf ca. 300 Zeilen begrenzt.</li>
+<li class="rej">Nur im Temp-Verzeichnis (wie der Zähler von <code>post.flow.debug</code>): verschwindet mit der Session.</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Das Stufe-1-Review braucht Daten über viele Sessions. Ohne dauerhaftes Log gibt es nichts zu prüfen, und die Timebox (D4) liefe ins Leere. Kein Prompt-Text, weil Erkennung nur Marker braucht.</p>
+<div class="variant-evaluation" data-decision="d2" data-label="D2 · Shadow-Log">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d2" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d2" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d2-note">{{decision.comment_label}}</label>
+    <textarea id="d2-note" data-comment="d2-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-d3">
+<h3>D3 · Wer bewertet die Stufe-1-Verdikte?</h3>
+<p><b>Worum geht's:</b> Für den Wechsel zu Stufe 2 muss jemand je geloggtem Verdikt sagen „ja, das war ein Hänger“ oder „nein“. Davon hängt ab, ob die Präzision ≥ 70 % erreicht ist.</p>
+<ul class="r2-opts">
+<li class="rec">Der Maintainer, offline: Log gegen die Sessions prüfen, dazu ein lokales Replay über eigene alte Transcripts zur Kalibrierung (K6).</li>
+<li class="rej">Im Chat fragen („War das gerade ein Hänger?“).</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Eine Rückfrage im Chat wäre selbst genau die Unterbrechung, die Stufe 1 vermeiden soll. Das Replay liefert Kalibrierdaten, bevor genug Live-Daten da sind.</p>
+<div class="variant-evaluation" data-decision="d3" data-label="D3 · Stufe-1-Labels">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d3" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d3" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d3-note">{{decision.comment_label}}</label>
+    <textarea id="d3-note" data-comment="d3-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-d15">
+<h3>D15 · Opt-out-Schalter für Vorschläge</h3>
+<p><b>Worum geht's:</b> Ab Stufe 2 schlägt der Detector den Modus vor. Wer das nie will, braucht einen dauerhaften Schalter in <code>hooks/lib/devops-config.js</code>. #858 hat den Key nur als Platzhalter genannt, und weder #859 noch #861 haben ihn festgelegt (K12).</p>
+<ul class="r2-opts">
+<li class="rec">Key jetzt festlegen: <code>frustratedMode.suggest</code>, boolean, Default <code>true</code>, gelesen erst ab Stufe 2. Auf Beta/Stable ist er durch das Gate ohnehin wirkungslos.</li>
+<li>Offen lassen bis zur Stufe-2-Entscheidung in F10 (dort ist „K12 key“ ohnehin Teil der Prüfung).</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Ein fester Name verhindert, dass F9 und spätere Issues verschiedene Keys erfinden. Ein Default <code>false</code> (reines Opt-in) wurde in den Specs nicht diskutiert; zusätzlich gibt es Snooze pro Session und das Limit von 1 Vorschlag pro Session.</p>
+<div class="variant-evaluation" data-decision="d15" data-label="D15 · Opt-out">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d15" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d15" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d15-note">{{decision.comment_label}}</label>
+    <textarea id="d15-note" data-comment="d15-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="r2-group" id="group-analyse">
+<h3>Analyse · der Skill <code>auto-frustrated</code> (#859, Issues F4/F5)</h3>
+<p>Der Main-Thread baut einen mechanischen Brief, schaltet den Guard scharf, startet R1–R5 parallel und danach die Synthese S. Ergebnis ist ein Report; umgesetzt wird nichts.</p>
+</div>
+
+<div class="variant-card" id="card-d5">
+<h3>D5 · Darf die Analyse frühere Sessions lesen?</h3>
+<p><b>Worum geht's:</b> Rolle R2 (Verlauf) liest das Transcript der aktuellen Session. Frühere Transcripts liegen unter <code>~/.claude/projects/&lt;slug&gt;/</code> und könnten Hänger zeigen, denen der Nutzer durch eine neue Session „entkommen“ ist.</p>
+<ul class="r2-opts">
+<li class="rec">Nur mit ausdrücklichem <code>--session=&lt;id&gt;</code>, nie automatisch.</li>
+<li class="rej">Zusätzlich automatisch „die letzte Session auf diesem Branch“.</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Hält die Datenschutz-Linie von #858 (Erkennung nur innerhalb einer Session). Der ausdrückliche Aufruf ist das, was das Erweitern rechtfertigt. Automatisch wären Kosten und Privatsphäre jedes Mal betroffen, auch wenn die alte Session nichts damit zu tun hat.</p>
+<div class="variant-evaluation" data-decision="d5" data-label="D5 · Frühere Sessions">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d5" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d5" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d5-note">{{decision.comment_label}}</label>
+    <textarea id="d5-note" data-comment="d5-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-d6">
+<h3>D6 · Dürfen während der Analyse Tests laufen?</h3>
+<p><b>Worum geht's:</b> Der Guard <code>pre.frustrated.readonly</code> erlaubt in der Analyse nur Lese-Tools und eine Liste lesender git-Befehle. Projektcode (Tests, Builds, <code>node</code>, <code>npm</code>, Dev-Server) ist verboten. Manche Hypothese ließe sich aber nur per Testlauf klären.</p>
+<ul class="r2-opts">
+<li class="rec">Nein in Stufe 1. Eine solche Hypothese wird ein <code>check</code> im Plan, der nach der Freigabe zuerst läuft.</li>
+<li class="rej">Tests erlauben, z. B. in einem Wegwerf-Worktree.</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Tests haben oft Nebenwirkungen (Snapshots, Caches, DB-Fixtures). Ein einziger erlaubter Lauf würde die Read-only-Garantie brechen, auf der Kriterium 6 ruht.</p>
+<div class="variant-evaluation" data-decision="d6" data-label="D6 · Keine Testläufe">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d6" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d6" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d6-note">{{decision.comment_label}}</label>
+    <textarea id="d6-note" data-comment="d6-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-d14">
+<h3>D14 · Ultracode im Report erwähnen?</h3>
+<p><b>Worum geht's:</b> Läuft die Session mit Ultracode (Setting, das Workflow-Orchestrierung einschaltet), könnte das für Rolle R4 (Workflow &amp; Produkt) ein Hinweis auf die Ursache sein. Frage: eigenes Feld im Report oder nicht.</p>
+<ul class="r2-opts">
+<li class="rec">Kein neues Feld. R4 sieht es ohnehin in den Transcript-Metadaten.</li>
+<li class="rej">Eigenes Feld „Session lief mit Ultracode“ im Report.</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Die Information ist schon da, ein Feld würde den festen 5-Abschnitte-Report nur erweitern. Unabhängig davon pinnt die Analyse ihre Rollen-Modelle im Agent-Frontmatter, damit Ultracode die Kosten nicht hochtreibt (K11).</p>
+<div class="variant-evaluation" data-decision="d14" data-label="D14 · Ultracode-Feld">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d14" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d14" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d14-note">{{decision.comment_label}}</label>
+    <textarea id="d14-note" data-comment="d14-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="r2-group" id="group-freigabe">
+<h3>Freigabe · Run-Contract im Modus <code>plan</code> (#860, Issues F3/F6)</h3>
+<p>Der Recorder in <code>hooks/lib/run-contract-answers.js</code> erkennt die Antwort auf <code>Plan freigeben?</code>, prüft den Hash und schaltet den Contract scharf. Erst danach fällt der Read-only-Guard.</p>
+</div>
+
+<div class="variant-card" id="card-d7">
+<h3>D7 · Zählt ein getipptes „ja“ als Freigabe?</h3>
+<p><b>Worum geht's:</b> Neben der Frage <code>Plan freigeben?</code> könnte der Prompt-Hook <code>prompt.run.contract.js</code> auch einen getippten Prompt als Freigabe werten.</p>
+<ul class="r2-opts">
+<li class="rec">Ja, aber streng: der <em>ganze</em> Prompt ist ein Freigabe-Wort (<code>ja</code>, <code>go</code>, <code>freigeben</code>, <code>mach</code>, <code>yes</code>, <code>do it</code>, dieselbe Liste wie bei <code>auto-agents</code>), optional mit <code>v&lt;n&gt;</code> oder Kurz-Hash, und es gibt genau eine offene Version. Danach Echo „Freigegeben: Plan … v2 · 3f9a1c2e“.</li>
+<li class="rej">Nur die strukturierte Frage; ein getipptes „go“ führt zu einer erneuten Frage.</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Die Desktop-App verliert manchmal eine offene Frage, dann bliebe der Nutzer hängen. Das Hash-Echo macht jede Freigabe sichtbar. Ein „ja“ mitten in einem längeren Satz zählt nie.</p>
+<div class="variant-evaluation" data-decision="d7" data-label="D7 · Getippte Freigabe">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d7" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d7" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d7-note">{{decision.comment_label}}</label>
+    <textarea id="d7-note" data-comment="d7-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-d8">
+<h3>D8 · Freigabe, während ein anderer Run-Contract läuft</h3>
+<p><b>Worum geht's:</b> Die Freigabe schaltet einen Contract im Modus <code>plan</code> scharf. Läuft in der Session schon ein Contract eines anderen Runs (z. B. ein do-run-Prompt), verweigert <code>arm</code> ohne <code>--replace</code>.</p>
+<ul class="r2-opts">
+<li class="rec">Ersetzen mit <code>--replace</code>, in der Freigabefrage angekündigt („ersetzt laufenden Run &lt;Modus&gt; seit &lt;Zeit&gt;“).</li>
+<li class="rej">Verweigern und den Nutzer bitten, den alten Run erst zu schließen.</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Der laufende Run ist in aller Regel genau die Schleife, wegen der der Modus geöffnet wurde (Annahme in #860). Verweigern hieße einen zusätzlichen Schritt, ohne dass etwas sicherer wird; der alte Run wird archiviert, nicht gelöscht.</p>
+<div class="variant-evaluation" data-decision="d8" data-label="D8 · Laufender Contract">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d8" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d8" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d8-note">{{decision.comment_label}}</label>
+    <textarea id="d8-note" data-comment="d8-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-d9">
+<h3>D9 · Ship-Frage (do-run Q2) in die Freigabe packen?</h3>
+<p><b>Worum geht's:</b> Ein <code>implement</code>-Schritt läuft über <code>do-run --from=frustrated</code>. Dort werden Q1, Q3 und Q4 per Preset übersprungen, aber Q2 (Ablauf: interaktiv/autonom, Ship: manuell/auto) bleibt.</p>
+<ul class="r2-opts">
+<li class="rec">Getrennt lassen: Q2 wird pro <code>implement</code>-Schritt in do-run gefragt.</li>
+<li class="rej">Q2 in die Freigabefrage integrieren (eine Frage weniger).</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Die Ship-Befugnis liegt im do-run-Router, und eine Planfreigabe ist keine Ship-Freigabe. Integriert würde ein Klick auf „Freigeben“ auch über den Ship entscheiden. Preis: eine Frage mehr bei Plänen mit Umsetzung.</p>
+<div class="variant-evaluation" data-decision="d9" data-label="D9 · Q2 getrennt">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d9" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d9" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d9-note">{{decision.comment_label}}</label>
+    <textarea id="d9-note" data-comment="d9-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-d10">
+<h3>D10 · Harter Pfad-Gate auf die freigegebenen Dateien?</h3>
+<p><b>Worum geht's:</b> Jeder Planschritt nennt seine <code>objects</code> (Dateien, Komponenten, Symbole). Heute setzt Strict-Mode diesen Umfang weich durch (Urteil im Agent-Prompt). Ein Hook könnte Edits auf Dateien außerhalb der Liste hart blocken.</p>
+<ul class="r2-opts">
+<li class="rec">Verschieben; nach den ersten Alpha-Läufen entscheiden, ob Strict tatsächlich abdriftet.</li>
+<li class="rej">Gleich in Stufe 1 bauen (für Datei-Objekte).</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Nur Datei-Objekte ließen sich hart prüfen, visuelle Objekte und Symbole nicht. Ein halb-harter Gate würde mehr Sicherheit vortäuschen, als er gibt. Strict plus die drei Schritt-Gates gelten für Stufe 1 als ausreichend.</p>
+<div class="variant-evaluation" data-decision="d10" data-label="D10 · Pfad-Gate">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d10" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d10" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d10-note">{{decision.comment_label}}</label>
+    <textarea id="d10-note" data-comment="d10-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-d16">
+<h3>D16 · Ablaufzeiten von Guard und Plan-Record</h3>
+<p><b>Worum geht's:</b> Der Read-only-Guard und der offene Plan-Record liegen in einer Zustandsdatei pro Session im Temp-Verzeichnis. #859 lässt den Guard nach 2 h ablaufen; #860 behält den Plan bei „Nur Analyse“ „bis zur TTL des Guards“, aber den Guard gibt es dann schon nicht mehr (K9).</p>
+<ul class="r2-opts">
+<li class="rec">Zwei getrennte Uhren: <code>guardArmedUntil</code> (2 h, erneuert beim Wieder-Scharfschalten) und <code>planRecordUntil</code> (2 h ab dem letzten <code>propose</code>). „Nur Analyse“ löscht die erste und behält die zweite.</li>
+<li class="rej">Eine gemeinsame Uhr, wie in #859/#860 geschrieben (widersprüchlich).</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> So kann man nach „Nur Analyse“ innerhalb von 2 h noch „freigeben“ sagen, ohne dass der Guard dafür weiterlaufen muss. Die 2 h selbst sind ein Platzhalter (Annahme in #859). Ablauf zählt nie als Freigabe.</p>
+<div class="variant-evaluation" data-decision="d16" data-label="D16 · Ablaufzeiten">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d16" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d16" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d16-note">{{decision.comment_label}}</label>
+    <textarea id="d16-note" data-comment="d16-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="r2-group" id="group-integration">
+<h3>Integration · do-run, auto-fix, Workflow-Tool (#862, Issues F8/F9)</h3>
+<p>Wie der Modus an bestehende Skills andockt, ohne einen zweiten Ausführungsweg zu öffnen.</p>
+</div>
+
+<div class="variant-card" id="card-d11">
+<h3>D11 · do-run Q4: „Erst analysieren“ zusammen mit anderen Passes</h3>
+<p><b>Worum geht's:</b> do-run Q4 („Passes vor dem Umsetzen“, Mehrfachauswahl) bekommt auf Alpha die Option „Erst analysieren (Frustrated Mode)“, nach „Rethink vorher“ und vor „Budget verbrennen“, nie als erste. Frustrated setzt nie um, die anderen Passes bereiten eine Umsetzung vor. Was passiert, wenn mehrere angehakt sind?</p>
+<ul class="r2-opts">
+<li class="rec">Frustrated gewinnt; die anderen Haken entfallen und werden in einer Zeile genannt.</li>
+<li class="rej">Die Kombination ablehnen und noch einmal fragen.</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Die Analyse kann die Richtung ändern; vorher zu rethinken oder Budget zu verbrennen wäre wieder die Schleife. Eine Frage weniger als die Alternative.</p>
+<div class="variant-evaluation" data-decision="d11" data-label="D11 · do-run Q4">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d11" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d11" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d11-note">{{decision.comment_label}}</label>
+    <textarea id="d11-note" data-comment="d11-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-d12">
+<h3>D12 · auto-fix-Hinweis in Stufe 1</h3>
+<p><b>Worum geht's:</b> Ab Stufe 2 bekommt der Report von <code>auto-fix</code> (Step 8) eine passive Zeile „Sieht eher nach einem Missverständnis aus als nach einem Bug — Frustrated Mode kann das analysieren“, wenn auto-fix keine technische Ursache findet. Was passiert in Stufe 1?</p>
+<ul class="r2-opts">
+<li class="rec">Nur als Shadow-Marker ins Log, kein sichtbarer Text.</li>
+<li>Gar nichts in Stufe 1.</li>
+<li class="rej">Die Zeile schon in Stufe 1 zeigen.</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Auch eine passive Zeile ist ein Vorschlag, und das Epic erlaubt Vorschläge erst nach der Machbarkeitsprüfung. Der Marker kostet nichts und zeigt, wie oft die Zeile feuern würde, als Beleg für die Stufe-2-Entscheidung. Eine automatische Übergabe von auto-fix an Frustrated Mode ist ohnehin ausgeschlossen (auto-fix ist Pflicht, Frustrated Mode muss ablehnbar bleiben).</p>
+<div class="variant-evaluation" data-decision="d12" data-label="D12 · auto-fix-Hinweis">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d12" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d12" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d12-note">{{decision.comment_label}}</label>
+    <textarea id="d12-note" data-comment="d12-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-d13">
+<h3>D13 · Wenn Hooks in Workflow-Agents nicht feuern</h3>
+<p><b>Worum geht's:</b> Später (O2) könnte <code>auto-agents</code> einen <code>implement</code>-Schritt per Workflow-Tool ausführen. Voraussetzung: PreToolUse-Hooks feuern nachweislich auch für Tool-Aufrufe von Workflow-Sub-Agents. Die Doku sagt dazu nichts; ein Wegwerf-e2e über <code>evals/ab-run.js</code> soll es klären. Was gilt, wenn der Test negativ ausgeht?</p>
+<ul class="r2-opts">
+<li class="rec">Dauerhaft kein Workflow in Plan-Läufen, bis die Plattform Hook-Abdeckung dokumentiert.</li>
+<li>Nicht dauerhaft festlegen, sondern bei späteren Builds erneut testen (die Spec stellt das nur als Frage, ohne es auszuführen).</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Ohne Hooks sähe kein dotclaude-Gate die Edits der Workflow-Agents; die Freigabe-Garantie wäre im Workflow ausgehebelt. Für Stufe 1 ändert sich nichts: dort ist Workflow in Plan-Läufen sowieso verboten (I2).</p>
+<div class="variant-evaluation" data-decision="d13" data-label="D13 · Workflow-Hook-Test negativ">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d13" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d13" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d13-note">{{decision.comment_label}}</label>
+    <textarea id="d13-note" data-comment="d13-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="r2-group" id="group-rollout">
+<h3>Rollout · Alpha-Gate und Stufen (#861, #858, Issues F2/F10)</h3>
+<p>Wer den Modus wann sieht, und wie lange Stufe 1 dauern darf.</p>
+</div>
+
+<div class="variant-card" id="card-d1">
+<h3>D1 · Skill-Name während Alpha</h3>
+<p><b>Worum geht's:</b> #859 schlug <code>do-frustrated</code> vor, eine <code>do-*</code>-Tür im Slash-Menü. Die Gate-Regel aus #861 verlangt für gegatete Skills <code>auto-*</code> mit <code>user-invocable: false</code>, weil Claude Code das Slash-Menü aus dem Frontmatter baut und es zur Laufzeit nicht filterbar ist (K1).</p>
+<ul class="r2-opts">
+<li class="rec"><code>auto-frustrated</code>, <code>user-invocable: false</code>; bei der Promotion Umbenennung zu <code>do-frustrated</code> (Frontmatter + ein <code>RENAMED</code>-Eintrag in <code>skill-names.js</code>).</li>
+<li class="rej"><code>do-frustrated</code> sofort, das Slash-Menü als bekanntes Leck akzeptieren.</li>
+<li class="rej"><code>do-stepback</code> / <code>do-diagnose</code> (#859; das zweite überschneidet sich inhaltlich mit auto-fix).</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Mit <code>do-*</code> sähen Beta- und Stable-Nutzer den Eintrag im Menü, das bricht Kriterium 8. Der Aufruf auf Alpha funktioniert trotzdem über Trigger-Phrasen und per Name, wie bei <code>auto-concept</code> und <code>auto-guide</code>. <code>--from=frustrated</code>, die Feature-ID und die Hook-Namen hängen nicht am Skill-Namen.</p>
+<div class="variant-evaluation" data-decision="d1" data-label="D1 · Skill-Name">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d1" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d1" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d1-note">{{decision.comment_label}}</label>
+    <textarea id="d1-note" data-comment="d1-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-d4">
+<h3>D4 · Zeitlimit für Stufe 1 und was bei Verfehlen passiert</h3>
+<p><b>Worum geht's:</b> Stufe 2 (sichtbare Vorschläge) braucht ≥ 20 geprüfte Vorschlags-Verdikte mit ≥ 70 % echten Hängern. Bei der Basisrate aus #864 (34 getippte Nutzer-Turns in 11 Sessions über drei Tage) kann das Monate dauern (K6).</p>
+<ul class="r2-opts">
+<li class="rec">8 Wochen Timebox, parallel ein lokales Offline-Replay über eigene alte Transcripts zur Kalibrierung. Verfehlt: dauerhaft nur expliziter Aufruf.</li>
+<li class="rej">Ohne Zeitlimit warten, bis 20 Verdikte da sind.</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Ohne Limit bliebe Stufe 1 ewig ein halbfertiger Zustand. „Nur expliziter Aufruf“ ist laut #858 auch für sich wertvoll. Ob 8 Wochen reichen, ist eine Annahme der Dach-Spec. Das Review ist Issue F10.</p>
+<div class="variant-evaluation" data-decision="d4" data-label="D4 · Stufe-1-Timebox">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-d4" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-d4" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="d4-note">{{decision.comment_label}}</label>
+    <textarea id="d4-note" data-comment="d4-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<h2 id="webguide-h">4 · #863 Webguide Skill-Capture</h2>
+<p class="subtitle">Betrifft <code>auto-guide</code>: ein Live-Tutorial in einem Edge-Tab, bei dem der Nutzer klickt und Claude nur navigiert, liest und Schritte einblendet. Die Fragen stammen aus § 11 der Studie.</p>
+
+<div class="variant-card" id="card-w-route">
+<h3>Route statt Automatisierung</h3>
+<p><b>Worum geht's:</b> Was soll der gespeicherte „Skill“ sein? Eine Route, die <code>auto-guide</code> später wieder abspielt, oder eine Automatisierung, bei der Claude die Klicks macht?</p>
+<ul class="r2-opts">
+<li class="rec">Guide-Route: <code>auto-guide</code> prüft jeden Schritt erneut gegen die Live-Seite, der Nutzer klickt weiterhin selbst.</li>
+<li class="rej">Automatisierung: Claude klickt für den Nutzer.</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Automatisierung widerspricht „der Nutzer bedient die Seite“ (#514) und dem Edge-Credo (Computer Use nie im Browser ohne ausdrücklichen Wunsch). Sie wäre eine eigene Grundsatzentscheidung. Eine Route übersteht kleine UI-Änderungen, weil sie ein Plan ist, kein Klick-Skript.</p>
+<div class="variant-evaluation" data-decision="w-route" data-label="Route statt Claude klickt">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-w-route" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-w-route" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="w-route-note">{{decision.comment_label}}</label>
+    <textarea id="w-route-note" data-comment="w-route-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-w-storage">
+<h3>Ablage: pro Projekt als Default</h3>
+<p><b>Worum geht's:</b> Wo liegt eine gespeicherte Route? Der Override-Loader (<code>skill-overrides.js</code>) lädt <code>reference.md</code> eines Skills schon heute aus Projekt und Home.</p>
+<ul class="r2-opts">
+<li class="rec">Bei jedem Speichern fragen, Default Projekt: <code>{project}/.claude/skills/auto-guide/routes/</code>, versioniert mit dem Repo.</li>
+<li>Immer global: <code>~/.claude/skills/auto-guide/routes/</code>, für alle Projekte, aber ohne Versionierung (außer das Home ist ein git-Repo).</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Projekt-Routen bekommen Git-Historie und Löschen als sichtbaren Diff gratis. Global ist sinnvoll für Dienste, die man in vielen Projekten braucht, daher die Frage pro Speichern.</p>
+<div class="variant-evaluation" data-decision="w-storage" data-label="Ablage pro Projekt">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-w-storage" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-w-storage" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="w-storage-note">{{decision.comment_label}}</label>
+    <textarea id="w-storage-note" data-comment="w-storage-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-w-offer">
+<h3>Angebot am Guide-Ende standardmäßig an</h3>
+<p><b>Worum geht's:</b> Am letzten Schritt eines abgeschlossenen Guides (≥ 3 Schritte) erscheint ein zweiter Button „Fertig + als Ablauf speichern“. Das Overlay kann solche Auswahlen schon. Config-Vorschlag: <code>guide.skillCapture.offer</code> = <code>"done-panel"</code> oder <code>"off"</code>.</p>
+<ul class="r2-opts">
+<li class="rec">Standardmäßig an (<code>"done-panel"</code>); höchstens ein Angebot pro Guide und pro Dienst + Ziel, ein Nein wird gemerkt.</li>
+<li>Opt-in wie andere devops-Extras.</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Das Angebot unterbricht nichts (kein Chat-Block), kostet bis zur Annahme keine Tokens und ist der einzige Moment, in dem der Ablauf bewiesen und frisch ist. Opt-in würde ein Feature, das ohnehin selten greift, praktisch unsichtbar machen.</p>
+<div class="variant-evaluation" data-decision="w-offer" data-label="Angebot am Guide-Ende default an">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-w-offer" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-w-offer" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="w-offer-note">{{decision.comment_label}}</label>
+    <textarea id="w-offer-note" data-comment="w-offer-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-w-b1">
+<h3>B1 (Aufzeichnung nutzergeführter Abläufe) vorerst nicht bauen</h3>
+<p><b>Worum geht's:</b> B1 wäre ein REC-Modus: der Nutzer macht den Ablauf, ein Klick-Listener im Tab zeichnet Label und Rolle der angeklickten Elemente auf (nie Eingabewerte), ein rotes Badge zeigt die Aufnahme. Das bricht die heutige Regel in <code>protocol.md</code>, dass das Overlay die Seite nie liest.</p>
+<ul class="r2-opts">
+<li class="rec">Erst wenn B0 echten Bedarf zeigt (Stufe 3 der Studie).</li>
+<li class="rej">Gleich mitbauen.</li>
+<li>Gar nie (die Regel „Overlay liest die Seite nie“ bleibt unangetastet).</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> B1 ist M–L groß (Protokolländerung, Listener-Härtung, REC-UI, Tests), die Label-Qualität hängt von der Seite ab (Icon-Buttons, Shadow DOM, iframes), und es braucht die volle Redaktions-Pipeline. B0 liefert verlässlichere Routen ohne neue Beobachtung.</p>
+<div class="variant-evaluation" data-decision="w-b1" data-label="B1 nicht bauen">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-w-b1" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-w-b1" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="w-b1-note">{{decision.comment_label}}</label>
+    <textarea id="w-b1-note" data-comment="w-b1-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-w-count">
+<h3>Zuerst frisch zählen, dann B0 einplanen</h3>
+<p><b>Worum geht's:</b> Lohnt sich B0 überhaupt? Der einzige Datenpunkt steht im Header von <code>hooks/lib/guide-handoff.js</code>: <code>auto-guide</code> lief 0-mal in 1 128 Sessions (14.08.–23.09.2026), gemessen bevor #519/#742 den Guide proaktiv gemacht haben.</p>
+<ul class="r2-opts">
+<li class="rec">Vor dem Einplanen frisch zählen, wie viele Guide-Läufe <code>done</code> erreicht haben.</li>
+<li class="rej">B0 ohne Zählung einplanen.</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Die Zählung ist billig, und das Ergebnis entscheidet, ob B0 (Größe S) überhaupt Nutzen bringt. Bei weiterhin fast null Läufen wäre jede Route ungenutzt.</p>
+<div class="variant-evaluation" data-decision="w-count" data-label="Zuerst frisch zählen">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-w-count" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-w-count" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="w-count-note">{{decision.comment_label}}</label>
+    <textarea id="w-count-note" data-comment="w-count-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<h2 id="hookagents-h">5 · #864 Hook Agents</h2>
+<div class="variant-card" id="card-hookagents-no">
+<h3>„Nicht einsetzen“ bestätigen</h3>
+<p><b>Worum geht's:</b> Claude Code kann statt eines Node-Skripts auch ein Modell als Hook laufen lassen: <code>type: "prompt"</code> (ein Modell-Aufruf) oder <code>type: "agent"</code> (ein Subagent mit Tools, bis 50 Turns). Sollen solche Hooks in <code>plugins/devops/hooks/hooks.json</code>?</p>
+<ul class="r2-opts">
+<li class="rej">C1 · Agent-Hook auf <code>SubagentStop</code>: prüft, ob behauptete Commits/Dateien eines Subagents existieren. Kein einziger Fall im Sample; deterministisch über eine Erweiterung von <code>substop.agent.wip</code> lösbar.</li>
+<li class="rej">C2 · Prompt-Hook auf <code>Stop</code>: „Ist die Aufgabe wirklich fertig?“ Wäre ein neunter Stop-Hook und zweiter Blocker neben <code>stop.flow.guard</code>, bis 30 s pro Turn-Ende, Rekursionsschutz unklar.</li>
+<li class="rej">C3 · Prompt-Hook auf <code>PostToolUseFailure</code>: Shell-Fehler diagnostizieren. Bei ca. 15 Fehlern pro Session 15 Modell-Aufrufe und bis 7,5 min mögliches Blockieren; dupliziert auto-fix.</li>
+<li class="rec">Nicht einsetzen; bei Command-Hooks bleiben.</li>
+</ul>
+<p class="r2-why"><b>Warum:</b> Agent-Hooks sind laut Doku experimentell, ihr Tool-Set ist undokumentiert (keine No-Write-Garantie), sie sind nur mit echten Modellläufen testbar, und auf <code>SessionStart</code> gar nicht erlaubt, wo schon heute 48 Hook-Abbrüche im Sample auftraten. <b>Neu bewerten nur, wenn alle drei gelten:</b> Agent-Hooks nicht mehr experimentell und Tool-Set dokumentiert; ein Muster in ≥ 3 Sessions einer frischen Stichprobe, das sich aus keinem Zustand ableiten lässt; enger Matcher mit deterministischem Vorfilter, der ≥ 90 % der Aufrufe ohne Modell erledigt.</p>
+<div class="variant-evaluation" data-decision="hookagents-no" data-label="„Nicht einsetzen“ bestätigen">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-hookagents-no" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-hookagents-no" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="hookagents-no-note">{{decision.comment_label}}</label>
+    <textarea id="hookagents-no-note" data-comment="hookagents-no-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<h2 id="issues-h">6 · Umsetzungs-Issues F1–F10 anlegen</h2>
+<p class="subtitle">Werden als GitHub-Issues unter Epic #857 angelegt (noch nicht geschehen). Kritischer Pfad: F1 → F3 → F6 → F7, dazu F5 für ein nutzbares Feature. F2, F4 und F9 können sofort starten. Größen sind Schätzungen: S ≤ 1 Tag, M 1–3 Tage, L &gt; 3 Tage.</p>
+
+<div class="variant-card" id="card-issue-f1">
+<h3>F1 · Spike: Subagent-Hook-Payload und Agent-Tools-Grenze prüfen</h3>
+<p><b>Liefert:</b> Ein Wegwerf-e2e über <code>evals/ab-run.js</code> (Temp-Repo, <code>--cwd</code> gepinnt) klärt zwei Fragen: Trägt das PreToolUse-Payload eines Subagents die <code>session_id</code> der Eltern-Session, und ist <code>tools:</code> im Agent-Frontmatter eine harte Grenze? Optional: feuern Hooks in Workflow-Agents (D13)?</p>
+<p><b>Warum nötig:</b> Auf beiden Annahmen ruht die Read-only-Garantie (Kriterium 6, K8). Fällt eine, ändert sich das Design des Guards (Abbruchbedingung oben).</p>
+<p class="r2-meta">Hängt ab von: — · Größe S · kritischer Pfad</p>
+<div class="variant-evaluation" data-decision="issue-f1" data-label="F1 · Spike: Subagent-Hook-Payload / Agent-Tools-Grenze prüfen">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-issue-f1" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-issue-f1" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="issue-f1-note">{{decision.comment_label}}</label>
+    <textarea id="issue-f1-note" data-comment="issue-f1-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-issue-f2">
+<h3>F2 · Gate: <code>auto-frustrated</code> registrieren + channel-gate-CLI</h3>
+<p><b>Liefert:</b> Eintrag in <code>GATED_SKILLS</code>; ein minimales CLI <code>node channel-gate.js skill &lt;name&gt;</code>, das <code>1</code> oder <code>0</code> ausgibt und immer mit 0 endet (fail-closed); README- und Zähler-Generator überspringen gegatete Skills; Trigger-Evals des Skills als Alpha-only markiert.</p>
+<p><b>Warum nötig:</b> Markdown-Skills (der Skill selbst, do-run Q4, auto-fix) können das Gate heute nicht abfragen (K5), und README/Evals würden den Skill auf Beta zeigen (K2 c).</p>
+<p class="r2-meta">Hängt ab von: — · Größe S · kann sofort starten</p>
+<div class="variant-evaluation" data-decision="issue-f2" data-label="F2 · Gate: auto-frustrated registrieren + channel-gate-CLI">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-issue-f2" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-issue-f2" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="issue-f2-note">{{decision.comment_label}}</label>
+    <textarea id="issue-f2-note" data-comment="issue-f2-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-issue-f3">
+<h3>F3 · Guard <code>pre.frustrated.readonly</code></h3>
+<p><b>Liefert:</b> PreToolUse-Hook mit Matcher auf <em>alle</em> Tools (<code>*</code>), der ohne scharfe Zustandsdatei sofort zurückkehrt; Allowlist als eine exportierte Konstante (Lese-Tools, git-Lesebefehle, <code>AskUserQuestion</code>, Card, <code>get_usage</code>, Titel- und Plan-Tools des Hosts, exakt der <code>frustrated-plan.js</code>-Befehl); Workflow-Deny mit Begründung; Zustandsdatei mit den zwei Uhren (D16); arm/disarm-CLI; Test „jedes Tool, das ein Plugin-Hook verlangen kann, ist erlaubt“.</p>
+<p><b>Warum nötig:</b> Das ist die harte Read-only-Schicht. Eine aufgezählte Tool-Liste ließe neue Tools wie <code>Workflow</code> durch (K3); ohne die Pflicht-Tools des Plugins gäbe es einen Deadlock mit <code>stop.flow.guard</code> (K4).</p>
+<p class="r2-meta">Hängt ab von: F1, F2 · Größe M · kritischer Pfad</p>
+<div class="variant-evaluation" data-decision="issue-f3" data-label="F3 · Guard pre.frustrated.readonly">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-issue-f3" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-issue-f3" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="issue-f3-note">{{decision.comment_label}}</label>
+    <textarea id="issue-f3-note" data-comment="issue-f3-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-issue-f4">
+<h3>F4 · Analyst-Agents + Brief-Extractor</h3>
+<p><b>Liefert:</b> Zwei Agent-Dateien <code>analyst</code> und <code>analyst-blind</code> mit neutralen Beschreibungen ohne Skill-Namen; Eintrag in <code>READ_ONLY_AGENT_RE</code> (sonst wartet das Browser-Test-Stop-Gate auf sie); <code>scripts/frustrated-brief.js</code>, das den Brief mechanisch aus dem Transcript baut, plus Tests.</p>
+<p><b>Warum nötig:</b> Die Rollen brauchen harte Tool-Listen (Schicht L1) und einen Brief aus Rohdaten statt Claudes Erzählung. Neutrale Beschreibungen, weil Agent-Listen auf allen Channels sichtbar sind (K2 b).</p>
+<p class="r2-meta">Hängt ab von: F1 · Größe M · kann nach F1 parallel laufen</p>
+<div class="variant-evaluation" data-decision="issue-f4" data-label="F4 · Analyst-Agents + Brief-Extractor">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-issue-f4" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-issue-f4" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="issue-f4-note">{{decision.comment_label}}</label>
+    <textarea id="issue-f4-note" data-comment="issue-f4-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-issue-f5">
+<h3>F5 · Skill <code>auto-frustrated</code> (Alpha)</h3>
+<p><b>Liefert:</b> <code>SKILL.md</code> mit Schutzsatz in der Beschreibung („nur bei Trigger-Phrasen aufrufen, sonst nie nennen“) und Gate-Prüfung als Schritt 0; <code>deep-knowledge/roles.md</code> (R1–R5, S, Findings-Format, Synthese-Regeln); die Trigger-Phrasen aus #859 + Evals; Budget-Frage mit der #859-Kostenzahl; Report + <code>analysis</code>-Card; die Liste „das ist keine Freigabe“ inklusive Plattform-Dialogen (K13).</p>
+<p><b>Warum nötig:</b> Das ist das eigentliche Feature. Der Schutzsatz schließt die Lücke, dass das Modell den Skill auf Beta in seiner Skill-Liste sieht (K2 a).</p>
+<p class="r2-meta">Hängt ab von: F2, F3, F4 · Größe L · nötig für ein nutzbares Feature</p>
+<div class="variant-evaluation" data-decision="issue-f5" data-label="F5 · Skill auto-frustrated">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-issue-f5" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-issue-f5" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="issue-f5-note">{{decision.comment_label}}</label>
+    <textarea id="issue-f5-note" data-comment="issue-f5-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-issue-f6">
+<h3>F6 · Run-Contract Plan-Modus / Approval-Recorder</h3>
+<p><b>Liefert:</b> <code>mode: "plan"</code> mit validiertem <code>plan</code>-Header, Events <code>plan-approved</code> und <code>step</code>; <code>scripts/frustrated-plan.js propose|status|discard</code> (rechnet den Hash, damit das Modell ihn nie tippt); Recorder für <code>Plan freigeben?</code> und die getippte Regel (D7); Drift-Regel; die drei Gates; Plan-Zeile in CLI-Status und Card; <code>Workflow</code> im Matcher von <code>pre.run.contract</code> (I2).</p>
+<p><b>Warum nötig:</b> Der Contract kennt heute nur <code>prompt | backlog | audit</code> und keine Plan-Identität (G1). Ein <code>learn</code>-Schritt würde unter einem <code>prompt</code>-Contract wie eine Umsetzung geblockt.</p>
+<p class="r2-meta">Hängt ab von: F3 · Größe L · kritischer Pfad</p>
+<div class="variant-evaluation" data-decision="issue-f6" data-label="F6 · Run-Contract Plan-Modus / Approval-Recorder">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-issue-f6" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-issue-f6" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="issue-f6-note">{{decision.comment_label}}</label>
+    <textarea id="issue-f6-note" data-comment="issue-f6-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-issue-f7">
+<h3>F7 · <code>--from=frustrated</code> Hand-off-Presets</h3>
+<p><b>Liefert:</b> Presets in <code>do-run</code> (Q1/Q3/Q4 vorbelegt, Q3 → Strikt), <code>auto-agents</code> (keine zweite Bestätigung), <code>auto-concept</code> (Implement-Klick wird zur neuen Planversion v+1), <code>do-learn</code> (kein „richtig?“ bei unverändertem Text) und Strict (bei mehrdeutigem Objekt anhalten statt raten). Payload wird wörtlich durchgereicht.</p>
+<p><b>Warum nötig:</b> Ohne Presets würde jeder Ziel-Skill erneut fragen oder eigenmächtig raten; mit ihnen ist die Planfreigabe das eine „Go“ (G5–G9).</p>
+<p class="r2-meta">Hängt ab von: F6 · Größe M · kritischer Pfad</p>
+<div class="variant-evaluation" data-decision="issue-f7" data-label="F7 · --from=frustrated Hand-off-Presets">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-issue-f7" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-issue-f7" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="issue-f7-note">{{decision.comment_label}}</label>
+    <textarea id="issue-f7-note" data-comment="issue-f7-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-issue-f8">
+<h3>F8 · do-run Q4-Option „Erst analysieren“</h3>
+<p><b>Liefert:</b> Die Alpha-Option in Q4 über das F2-CLI, mit der exklusiven Logik aus D11; nie bei Maschinen-Prompts (<code>AUTONOMOUS_AUTOSTART:</code>, <code>RUN_BACKLOG_AUTOSTART:</code>), Backlog, Audit oder Burn.</p>
+<p><b>Warum nötig:</b> Die Brücke für Nutzer, die rethinks Hänger-Phrasen tippen („wir drehen uns im Kreis“). Diese Phrasen bleiben bei rethink, weil sie umzuhängen das Verhalten auf allen Channels ändern würde.</p>
+<p class="r2-meta">Hängt ab von: F5 · Größe S</p>
+<div class="variant-evaluation" data-decision="issue-f8" data-label="F8 · do-run Q4-Option „Erst analysieren“">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-issue-f8" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-issue-f8" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="issue-f8-note">{{decision.comment_label}}</label>
+    <textarea id="issue-f8-note" data-comment="issue-f8-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-issue-f9">
+<h3>F9 · Detector im Shadow-Modus + Offline-Replay</h3>
+<p><b>Liefert:</b> #858 Stufe 1: Aufzeichnungs-Hooks (<code>PostToolUse(Failure)</code>, <code>Stop</code>), Verdikt in <code>UserPromptSubmit</code>, Shadow-Log (D2), auto-fix-Shadow-Marker (D12) und ein Dev-only-Replay-Skript über lokale Transcripts (K6). Alles gegatet, auf Beta/Stable stumm.</p>
+<p><b>Warum nötig:</b> Ohne Shadow-Daten lässt sich nie entscheiden, ob automatische Vorschläge präzise genug sind. Das Replay liefert Kalibrierdaten, bevor genug Live-Daten da sind.</p>
+<p class="r2-meta">Hängt ab von: F2 · Größe M · kann sofort nach F2 starten</p>
+<div class="variant-evaluation" data-decision="issue-f9" data-label="F9 · Detector im Shadow-Modus + Offline-Replay">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-issue-f9" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-issue-f9" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="issue-f9-note">{{decision.comment_label}}</label>
+    <textarea id="issue-f9-note" data-comment="issue-f9-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="variant-card" id="card-issue-f10">
+<h3>F10 · Stufe-1-Review / Stufe-2-Go/No-go</h3>
+<p><b>Liefert:</b> Nach der 8-Wochen-Timebox (D4): Shadow-Log auswerten und über Stufe 2 entscheiden (sichtbarer Vorschlag, auto-fix-Hinweistext, das Veto „kein Vorschlag, solange ein Durchklick-Pfad aktiv ist“ aus K10, der Opt-out-Key aus K12).</p>
+<p><b>Warum nötig:</b> Macht die Stufen-Entscheidung zu einem festen Termin statt zu einem offenen Ende. Ohne F10 bliebe der Detector unbegrenzt im Shadow-Modus.</p>
+<p class="r2-meta">Hängt ab von: F9 + 8 Wochen · Größe S</p>
+<div class="variant-evaluation" data-decision="issue-f10" data-label="F10 · Stufe-1-Review / Stufe-2-Go/No-go">
+  <div class="eval-group">
+    <label class="eval-option"><input type="radio" name="eval-issue-f10" value="discard"><span class="eval-label">Verwerfen</span></label>
+    <label class="eval-option"><input type="radio" name="eval-issue-f10" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="issue-f10-note">{{decision.comment_label}}</label>
+    <textarea id="issue-f10-note" data-comment="issue-f10-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+  </div>
+</div>
+</div>
+
+<div class="r2-info" id="notes">
+<h2>Hinweise</h2>
+<ul>
+<li>Bewusst <b>kein</b> Issue jetzt: die Workflow-Laufzeit in <code>implement</code> (O2), der Pfad-Gate (D10) und die Promotion/Umbenennung (D1). Jedes bekommt ein eigenes Issue, sobald seine Voraussetzung erfüllt ist.</li>
+<li>npm-CLI 2.1.175 und Desktop 2.1.30x laufen auseinander. #862 hat Plattform-Fakten aus dem installierten CLI 2.1.270 gelesen; #857 hat sie gegen die offizielle Doku korrigiert (Ultracode ist ein Setting, Key <code>disableWorkflows</code>). Evals über <code>claude -p</code> testen womöglich gegen eine deutlich ältere Runtime.</li>
+<li>Zwei Agent-Worktrees bleiben bestehen (live/locked): <code>agent-a932862870cef42de</code>, <code>agent-ac5dd1a990260e4a4</code>.</li>
+</ul>
+</div>
+</section>
