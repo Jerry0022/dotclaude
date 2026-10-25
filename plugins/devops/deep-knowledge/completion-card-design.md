@@ -572,7 +572,8 @@ stable?`, `🟩 🎊 Stable — v0.179.0 — done.`, `⏳ 🤖 Team — not done
    block — verified in Desktop session transcripts (2026-10-13: narration
    blocks before, text blocks after, same session). While that is
    missing, `pre.agent.relay` stands down and `pre.agent.announce` asks
-   for the agent card in the turn's final text instead.
+   for the agent card in the turn's final text instead — also when the
+   transcript already holds a `narration` block, which beats the env (`narrationSeen`).
 
 ## 6. Signs and colours
 

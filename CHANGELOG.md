@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.314.1] — 2026-10-25
+
+The agent card no longer gets stuck when it was written as narrated text.
+
+### Fixed
+- **Agent-card relay.** The agent-card relay no longer holds a tool call back when the card was written as narrated text (progress updates were on although `CLAUDE_CODE_THINKING_DISPLAY_UPDATES=0`). A `narration` block in the transcript now counts as proof of progress updates and beats the env opt-out. The spawn announcement then asks for the card in the turn's final text. A card that is really missing is still held once.
+
 ## [0.314.0] — 2026-10-25
 
 A finished ship no longer asks whether you want to continue.
