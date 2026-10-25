@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.306.1] — 2026-10-25
+## [0.307.1] — 2026-10-25
 
 The session title now says ❓ Question whenever a call waits for you, not only for an AskUserQuestion. A red card's Fix button ends in a ship.
 
