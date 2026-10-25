@@ -29,14 +29,50 @@ describe("ss.orphan.nudge", () => {
     expect(buildNudge({ cwd: "C:/r/app", report: report(repos, "2026-10-17T12:00:00Z"), now: NOW })).toBeNull();
   });
 
-  test("silent: unknown repo, nothing at risk, stale or missing report", () => {
-    expect(buildNudge({ cwd: "C:/r/other", report: report(repos), now: NOW })).toBeNull();
+  test("silent: nothing at risk anywhere, stale or missing report; an unknown repo only names the machine total", () => {
+    expect(buildNudge({ cwd: "C:/r/other", report: report(repos), now: NOW })).toMatch(/^ℹ Rechner gesamt: 5 offen in 1 Repo/);
     expect(buildNudge({ cwd: "C:/r/app", report: report([{ path: "C:/r/app", atRisk: [] }]), now: NOW })).toBeNull();
     expect(buildNudge({ cwd: "C:/r/app", report: report(repos, "2026-10-01T00:00:00Z"), now: NOW })).toBeNull();
     expect(buildNudge({ cwd: "C:/r/app", report: null, now: NOW })).toBeNull();
   });
 
   test("a prefix that is only a name prefix does not match (app vs app2)", () => {
-    expect(buildNudge({ cwd: "C:/r/app2", report: report(repos), now: NOW })).toBeNull();
+    expect(buildNudge({ cwd: "C:/r/app2", report: report(repos), now: NOW })).toMatch(/^ℹ Rechner gesamt/);
+  });
+
+  describe("safety copies without a decision", () => {
+    const parked = (branch, ageDays, extra = {}) => ({ branch, ageDays, legacy: false, ...extra });
+    const app = {
+      path: "C:/r/app", atRisk: [],
+      parked: [
+        parked("parked/autosave/old", 5), parked("origin/rescue/a", 9, { legacy: true }),
+        parked("parked/autosave/fresh", 1), parked("parked/idea", 10),
+      ],
+    };
+
+    test("only undecided copies of 3+ days count; a fresh autosave and a deliberate park do not", () => {
+      expect(buildNudge({ cwd: "C:/r/app", report: report([app]), now: NOW }))
+        .toBe("⚠ 2 Sicherungskopien ohne Entscheidung (Stand vor 6 h) → /auto-cleanup");
+      expect(buildNudge({ cwd: "C:/r/app", lang: "en", report: report([app]), now: NOW }))
+        .toBe("⚠ 2 safety copies without a decision (as of 6 h ago) → /auto-cleanup");
+    });
+
+    test("joins the at-risk counts and adds the machine-wide total when other repos have work", () => {
+      const both = { ...app, atRisk: [risk(), { kind: "worktree", dirty: 1 }] };
+      const other = { path: "C:/r/other", atRisk: [risk(), risk()], parked: [parked("salvage/z", 40, { legacy: true })] };
+      const quiet = { path: "C:/r/quiet", atRisk: [], parked: [] };
+      expect(buildNudge({ cwd: "C:/r/app", report: report([both, other, quiet]), now: NOW }))
+        .toBe("⚠ 1 ungelandete Branch / 1 Worktree mit uncommitteter Arbeit / 2 Sicherungskopien ohne Entscheidung (Stand vor 6 h) → /auto-cleanup · Rechner gesamt: 7 in 2 Repos");
+    });
+
+    test("nothing open here: names the machine-wide total — also for a repo the scan does not know", () => {
+      const clean = { path: "C:/r/app", atRisk: [], parked: [parked("parked/autosave/fresh", 0)] };
+      const other = { path: "C:/r/other", atRisk: [risk()] };
+      expect(buildNudge({ cwd: "C:/r/app", report: report([clean, other]), now: NOW }))
+        .toBe("ℹ Hier nichts offen · Rechner gesamt: 1 offen in 1 Repo (Stand vor 6 h) → /auto-cleanup");
+      expect(buildNudge({ cwd: "C:/r/new", lang: "en", report: report([clean, other]), now: NOW }))
+        .toBe("ℹ whole machine: 1 open in 1 repo (as of 6 h ago) → /auto-cleanup");
+      expect(buildNudge({ cwd: "C:/r/app", report: report([clean]), now: NOW })).toBeNull();
+    });
   });
 });

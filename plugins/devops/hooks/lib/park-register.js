@@ -3,8 +3,11 @@
  * @description The park register. "Parked" = deliberately set-aside, UNLANDED
  *   work somebody wants to keep. The register is derived from refs — no state
  *   file. One prefix is canonical: `parked/<topic>`. Read-only aliases (never
- *   created any more, still recognized): `wip/`, `backup/`, `salvage/`, and
- *   any branch whose tip commit subject contains "ARCHIVED".
+ *   created any more, still recognized): `wip/`, `backup/`, `salvage/`,
+ *   `salvage-land/`, `rescue/` (the copies an earlier cleanup pushed), and
+ *   any branch whose tip commit subject contains "ARCHIVED". None of these
+ *   aliases, nor `parked/autosave/*`, is a decision: they are safety copies
+ *   still waiting for one (`isUndecided`).
  *
  *   Shipped/landed branches are NEVER parked: they are landed leftovers and
  *   ship hygiene removes them. The caller (orphan-scan) filters landed
@@ -21,7 +24,8 @@
 const { execFileSync } = require('child_process');
 
 const PARKED_PREFIX = 'parked/';
-const LEGACY_PREFIXES = ['wip/', 'backup/', 'salvage/'];
+const LEGACY_PREFIXES = ['wip/', 'backup/', 'salvage/', 'salvage-land/', 'rescue/'];
+const AUTOSAVE_PREFIX = 'parked/autosave/';
 const STALE_DAYS = 30;
 const DAY_MS = 86_400_000;
 const NUDGE = 'behalten, integrieren oder verwerfen';
@@ -45,6 +49,19 @@ function classify(name, subject = '') {
   if (legacy) return { parked: true, legacy: true, topic: n.slice(legacy.length) };
   if (/ARCHIVED/.test(String(subject))) return { parked: true, legacy: true, topic: n };
   return { parked: false, legacy: false, topic: null };
+}
+
+/**
+ * A parked entry (orphan-scan report shape) that nobody decided on: an
+ * autosave snapshot, a legacy safety copy, or work only covered by one.
+ * A deliberate `parked/<topic>` is a decision — until it goes stale.
+ */
+function isUndecided(entry) {
+  const name = String((entry && entry.branch) || '').replace(/^origin\//, '');
+  if (name.startsWith(AUTOSAVE_PREFIX)) return true;
+  // an "ARCHIVED" tip is somebody's explicit decision, not a pending one
+  if (/ARCHIVED/.test(String((entry && entry.reason) || '')) && !(entry && entry.nudge)) return false;
+  return Boolean(entry && (entry.legacy || entry.coveredBy || entry.nudge));
 }
 
 function isParked(name, subject = '') {
@@ -108,4 +125,4 @@ function listStashes(cwd, now = Date.now()) {
   });
 }
 
-module.exports = { coveringRef, PARKED_PREFIX, LEGACY_PREFIXES, STALE_DAYS, NUDGE, classify, isParked, listParked, listStashes };
+module.exports = { coveringRef, PARKED_PREFIX, AUTOSAVE_PREFIX, LEGACY_PREFIXES, STALE_DAYS, NUDGE, classify, isParked, isUndecided, listParked, listStashes };
