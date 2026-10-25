@@ -115,6 +115,7 @@ work exactly the same either way:
               aria-expanded="false" aria-controls="anno-bubble-a1"
               aria-label="{{anno.pin_label}}">1</button>
       <div class="anno-bubble" id="anno-bubble-a1" data-anno-bubble="a1" data-open="false">
+        <p class="anno-bubble-improved"><strong>{{design.change_improved}}</strong> Queue now refreshes on its own</p>
         <button type="button" class="anno-bubble-summary" data-anno-summary="a1"
                 aria-expanded="false" aria-controls="anno-bubble-a1">
           <span class="anno-bubble-question">Should the dispatch queue auto-refresh, or stay manual?</span>
@@ -136,6 +137,18 @@ work exactly the same either way:
   anywhere inside the `[data-screen]` section — it is absolutely positioned
   to the screen's own box by CSS (§ Layout CSS), so it does not need to
   live inside `.device-frame` specifically.
+- **Improved line (rounds 2+, optional).** `<p class="anno-bubble-improved">`
+  is the FIRST child of `.anno-bubble`, before the summary/question and the
+  textarea: `<strong>{{design.change_improved}}</strong>` (the existing
+  "Improved"/"Verbessert" key, no new key) plus a phrase of max ~40 chars (same
+  cap as `data-design-improved`) saying what changed on THIS element. Only
+  when the element already existed in the previous round and was improved —
+  never in round 1, never for new elements. Collapsed it stays visible as one
+  ellipsised line; open it wraps. An improvement-only pin (no question) omits
+  `.anno-bubble-question` (the summary button keeps only the chevron) but keeps
+  the textarea, so the user can comment on the improvement or develop it
+  further. Pin counts from round 2: only screens that changed this round, at
+  most 3 per changed screen, never on the overview (round 1: top 3 to top 7).
 - Annotation ids (`data-anno`, `data-anno-pin`, `data-anno-bubble`,
   `data-anno-summary`, `data-annotation`, `data-attach-slot`'s `anno-{id}`
   suffix) MUST be unique **page-wide**. Prefix them with the screen id —
@@ -237,6 +250,7 @@ contributes no `decisions[]` entry; its result is one `mappings[]` entry:
       "screen": "d1-s1",
       "design": "dispatch",
       "question": "Should the dispatch queue auto-refresh, or stay manual?",
+      "improved": "Queue now refreshes on its own",
       "answer": "Auto-refresh, but with a manual pause toggle."
     }
   ],
@@ -444,11 +458,15 @@ function collectDesignDecisions() {
       const screen = anno.closest('section[data-screen][id]');
       const design = anno.closest('section[data-design]');
       const questionEl = anno.querySelector('.anno-bubble-question');
+      const improvedEl = anno.querySelector('.anno-bubble-improved');
+      const improvedText = improvedEl
+        ? improvedEl.textContent.replace(((improvedEl.querySelector('strong') || {}).textContent) || '', '').trim() : '';
       annotations.push({
         id: anno.dataset.anno,
         screen: screen ? screen.id : null,
         design: design ? design.dataset.design : null,
         question: questionEl ? questionEl.textContent.trim() : '',
+        ...(improvedText ? { improved: improvedText } : {}),
         answer
       });
     });
