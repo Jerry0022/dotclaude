@@ -34,7 +34,7 @@ const { deepKnowledgePath } = require('../lib/plugin-root');
 
 const RULES = [
   { id: 'R0', text: "app style everywhere: every element in the app's tokens (surface, border, radius, type, shadow, motion) in every theme, never the browser/OS default look; part of every rule, project rules included" },
-  { id: 'R1', text: (d) => `tooltips through the app's styled tooltip component, never a native title; delay Info ${d.info} ms (default), Label ${d.label} ms only when the tooltip is the only name, shows cut-off content or explains a disabled control; instant on keyboard focus and within 300 ms of the previous tooltip` },
+  { id: 'R1', text: (d) => `tooltips through the app's styled tooltip component, never a native title; never echo the visible label, one tooltip kind per group (all hotkey / all description / none); delay Info ${d.info} ms (default), Label ${d.label} ms only when the tooltip is the only name, shows cut-off content or explains a disabled control, instant for an info/"?" button that exists only for its tooltip, on keyboard focus and within 300 ms of the previous tooltip` },
   { id: 'R2a', text: "dropdowns styled with the app's tokens, not native" },
   { id: 'R2b', text: 'uniform item structure within a menu' },
   { id: 'R3', text: 'same component type -> same spacing tokens as siblings' },

@@ -64,12 +64,20 @@ No rule repeats it.
   cannot be set and it never opens on keyboard focus. `aria-label` stays the
   accessible name; it is not a tooltip. A project without an app-styled
   tooltip component gets one project-level R0 finding, not one per element.
-- **Delay — two tiers, long is the default:**
+- **Content — never an echo, uniform per group:** a tooltip never repeats
+  text the element already shows; an element with a visible label gets either
+  no tooltip or only what the label lacks (its hotkey, a description). Elements
+  of one kind in one group (the items of a nav bar, a toolbar's buttons) carry
+  the same kind of tooltip content — all hotkey, all description, or none —
+  unless the user asked for something else. Why: an echo tooltip is noise, and
+  "Radar" without a hotkey next to "Orte" with one reads as a bug.
+- **Delay — two tiers, long is the default, plus help buttons:**
 
   | Tier | Delay | Use when |
   |---|---|---|
   | **Info** (default) | 1500 ms | The element can be understood and operated without the tooltip: descriptions, hotkey hints (R4b), tips, tutorial-style explanations |
   | **Label** | 500 ms | Only when one criterion holds: (a) the tooltip is the element's only name — an icon-only control whose icon is not a universal convention; (b) it shows content that is cut off on screen (truncated text) or a value the user is inspecting (chart point); (c) it says why a control is disabled or unavailable |
+  | **Help** | 0 ms | The element exists only to show the tooltip — an info "i" / "?" button. The one case that opens instantly on hover |
 
   Both tiers: once a tooltip has closed, the next one opens **instantly** when
   another trigger is entered within 300 ms (skip delay); keyboard focus opens
@@ -89,8 +97,11 @@ No rule repeats it.
   `TooltipTrigger` 1500 ms). The skip delay is Radix's `skipDelayDuration`
   (300 ms). None of the checked systems uses 2 s.
 - **Static (delay):** a finding when a tooltip that meets none of (a)–(c) uses
-  the Label tier or a short delay, when a call site sets a raw delay number,
-  or when the tooltip component does not carry the two tiers.
+  the Label tier or a short delay, when the Help tier sits on anything but a
+  tooltip-only button, when a call site sets a raw delay number, or when the
+  tooltip component does not carry the tiers.
+- **Static (content):** a finding when a tooltip's text equals the element's
+  visible label, or when siblings of one group mix tooltip kinds.
 - **Runtime:** an Info tooltip opens at ~1.5 s and a Label tooltip at ~0.5 s
   (±150 ms); the next tooltip opens instantly within the skip window; focus
   opens it; the pointer can move onto it; Escape closes it.

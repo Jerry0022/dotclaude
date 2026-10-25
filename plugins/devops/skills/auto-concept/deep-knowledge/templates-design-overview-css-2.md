@@ -106,5 +106,73 @@ body[data-note-editing="true"]:has(.upin[data-editing="true"]) .anno-layer { opa
 @media (prefers-reduced-motion: reduce) {
   .design-ov-slide, .design-ov-overlay, .design-header, .design-quick { transition: none; }
 }
+
+/* ── Page transitions — the motion names the direction ──
+   body[data-dz-nav] is set by playNav() (overview JS) for ~320 ms after a
+   switch; only the section that just became visible animates. in = the
+   variant grows out of its tile, out = the page shrinks back into the
+   carousel, next / prev = a short slide from the side the user moved to.
+   No attribute, no motion: a re-render never replays anything. */
+@keyframes dz-nav-in { from { opacity: 0; transform: scale(0.84); } }
+@keyframes dz-nav-out { from { opacity: 0; transform: scale(1.14); } }
+@keyframes dz-nav-next { from { opacity: 0; transform: translateX(56px); } }
+@keyframes dz-nav-prev { from { opacity: 0; transform: translateX(-56px); } }
+body[data-dz-nav="in"] section[data-iteration] > section[data-design] > section[data-screen],
+body[data-dz-nav="in"] section[data-iteration] > section[data-view] { animation: dz-nav-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
+body[data-dz-nav="out"] .design-ov-stage { animation: dz-nav-out 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
+body[data-dz-nav="next"] section[data-iteration] > section[data-design] > section[data-screen],
+body[data-dz-nav="next"] section[data-iteration] > section[data-view] { animation: dz-nav-next 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+body[data-dz-nav="prev"] section[data-iteration] > section[data-design] > section[data-screen],
+body[data-dz-nav="prev"] section[data-iteration] > section[data-view] { animation: dz-nav-prev 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+/* Arriving back on the overview: slides take their places without sliding. */
+.design-ov[data-instant="true"] .design-ov-slide { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  body[data-dz-nav] section[data-screen], body[data-dz-nav] section[data-view],
+  body[data-dz-nav] .design-ov-stage, .design-quick-group[data-fan="true"] { animation: none !important; }
+}
+
+/* ── Light theme — the overview, quick nav and info card on a light page ──
+   Same tokens as the rest of the page: a light surface with dark text for
+   the info card, soft grey shadows instead of the dark theme's black ones,
+   a chevron in the variant colour instead of white. */
+html[data-theme="light"] .design-ov {
+  --dz-ov-tint: color-mix(in srgb, var(--panel-bg, #f6f8fa) 94%, transparent);
+  --dz-ov-tint-line: var(--border-color, #d1d9e0);
+  --dz-ov-warm: color-mix(in srgb, #fff8f1 95%, transparent);
+  --dz-ov-warm-line: color-mix(in srgb, var(--warning-color, #9a6700) 30%, var(--border-color, #d1d9e0));
+  --dz-ov-ink: var(--text-color, #1f2328);
+  --dz-ov-dot-ring: var(--panel-bg, #f6f8fa);
+  --dz-ov-shadow: 0 18px 48px rgba(31, 35, 40, 0.14);
+}
+html[data-theme="light"] .design-ov-overlay { box-shadow: 0 10px 28px rgba(31, 35, 40, 0.12); }
+html[data-theme="light"] .design-ov-slide[data-pos="cur"] .design-ov-overlay:not(:hover):not(:focus-within) { opacity: 0.88; }
+html[data-theme="light"] .design-ov-kicker { color: var(--text-secondary, #59636e); opacity: 1; }
+html[data-theme="light"] .design-ov-slide[data-pos="cur"] .design-ov-preview:hover,
+html[data-theme="light"] .design-ov-slide[data-pos="cur"] .design-ov-preview:focus-visible {
+  box-shadow: var(--dz-ov-shadow), 0 0 0 2px var(--dz-color), 0 0 34px 4px color-mix(in srgb, var(--dz-color) 35%, transparent);
+}
+html[data-theme="light"] .design-ov-slide:is([data-pos="prev"], [data-pos="next"]) { opacity: 0.75; filter: saturate(0.85); }
+html[data-theme="light"] .design-ov-slide:is([data-pos="prev"], [data-pos="next"]) .design-ov-preview,
+html[data-theme="light"] .design-ov-slide:is([data-pos="prev"], [data-pos="next"]) .design-ov-qcard {
+  background: color-mix(in srgb, var(--dz-color) 6%, var(--bg-color, #ffffff));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dz-color) 35%, var(--border-color, #d1d9e0)), 0 8px 24px rgba(31, 35, 40, 0.06);
+}
+html[data-theme="light"] .design-ov-slide:is([data-pos="prev"], [data-pos="next"])::after {
+  background: var(--dz-color);
+  -webkit-mask: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 80' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 3L5 40l14 37'/%3E%3C/svg%3E");
+  mask: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 80' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 3L5 40l14 37'/%3E%3C/svg%3E");
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--dz-color) 45%, transparent));
+}
+html[data-theme="light"] .design-ov-side-name { color: var(--text-color, #1f2328); text-shadow: 0 1px 4px rgba(255, 255, 255, 0.9); }
+html[data-theme="light"] .design-ov[data-has-favorite="true"] .design-ov-slide[data-design-id]:not([data-favorite="true"]) .design-ov-preview { filter: saturate(0.6) brightness(0.97); }
+html[data-theme="light"] .design-quick-designs { background: color-mix(in srgb, var(--bg-color, #ffffff) 88%, transparent); box-shadow: 0 2px 10px rgba(31, 35, 40, 0.06); }
+html[data-theme="light"] .design-quick-group,
+html[data-theme="light"] .design-quick-seg[data-ov-focus="true"] { background: color-mix(in srgb, var(--dz-color, var(--accent-color)) 12%, var(--bg-color, #ffffff)); }
+html[data-theme="light"] .design-quick-page[data-active="true"],
+html[data-theme="light"] .design-quick-more { color: #fff; }
+html[data-theme="light"] .design-quick-vlist, html[data-theme="light"] .design-quick-qpop,
+html[data-theme="light"] .design-keys, html[data-theme="light"] .upin-hint { box-shadow: 0 14px 34px rgba(31, 35, 40, 0.14); }
+html[data-theme="light"] .design-header .anno-toggle-fab:hover, html[data-theme="light"] .design-header .anno-toggle-fab:focus-visible,
+html[data-theme="light"] .viewport-mode:hover, html[data-theme="light"] .viewport-mode:focus-visible { background: var(--bg-color, #ffffff); }
 ```
 

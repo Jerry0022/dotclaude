@@ -238,13 +238,23 @@ describe("comment durability — the live round's text", () => {
     expect(window.localStorage.getItem(KEY + "-archive")).toContain("input:d-auth:yes");
   });
 
-  test("survives a page-version change instead of being deleted by it", () => {
+  test("a different build (new pageVersion, same slug) never restores the old drafts — archived instead", () => {
     const { window } = buildDom({
-      storage: { _pageVersion: "an-older-generation", "text:i2:d-auth-note": "noch nicht abgeschickt" },
+      storage: { _pageVersion: "an-older-generation", "text:i2:d-auth-note": "Notiz vom vorigen Concept" },
     });
-    expect(readBlob(window)["text:i2:d-auth-note"]).toBe("noch nicht abgeschickt");
-    expect(window.document.querySelector('[data-iteration="2"] [data-comment="d-auth-note"]').value)
-      .toBe("noch nicht abgeschickt");
+    expect(readBlob(window)["text:i2:d-auth-note"]).toBeUndefined();
+    expect(window.document.querySelector('[data-iteration="2"] [data-comment="d-auth-note"]').value).toBe("");
+    expect(window.document.querySelector(".recovered-notes-strip")).toBeFalsy();
+    expect(window.localStorage.getItem(KEY + "-archive")).toContain("Notiz vom vorigen Concept");
+  });
+
+  test("drafts of a submitted (earlier) round are cleared once the next round is live", () => {
+    const { window } = buildDom({
+      storage: { _pageVersion: PAGE_VERSION, "text:i1:general": "schon abgeschickt", "text:i2:d-auth-note": "läuft noch" },
+    });
+    const blob = readBlob(window);
+    expect(blob["text:i1:general"]).toBeUndefined();
+    expect(blob["text:i2:d-auth-note"]).toBe("läuft noch");
   });
 
   test("keeps being saved after a storage quota error, and says so", () => {

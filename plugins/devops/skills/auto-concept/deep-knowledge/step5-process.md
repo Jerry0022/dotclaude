@@ -18,7 +18,10 @@ the swap is yours. Once the wake is confirmed real (`/pending` is `true` with
 a new `_version`, Step 5d § re-confirm) and before Step 5a, Desktop app only:
 `mcp__ccd_session_mgmt__get_session` `self`; if the `title` starts with
 `👉 ➜ 🧭 Concept ┃ `, `mcp__ccd_session_mgmt__set_session_title` `self` with
-`"⏳ " + {title without that prefix}`. Any other title is left as it is. A
+`"⏳ ➜ 🧭 Concept ┃ " + {title without that prefix}` — the concept's own
+working prefix, never a bare `⏳ ` (a bare hourglass reads as generic work,
+and a card-less turn while the round's agents still run then gets renamed to
+Interrupted). Any other title is left as it is. A
 stale wake changes nothing. Deferred is not unavailable: when the tools sit in the
 deferred-tools list, load both once with `ToolSearch`
 `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`,

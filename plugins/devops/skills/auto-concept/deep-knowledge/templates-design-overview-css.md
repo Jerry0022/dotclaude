@@ -42,7 +42,7 @@ html:not([data-template="design"]) .upin-hint { display: none !important; }
      two tints, the bluish default and the warm graphite for bluish mocks. */
   --dz-ov-tint: rgba(34, 66, 138, 0.62); --dz-ov-tint-line: rgba(150, 185, 255, 0.45);
   --dz-ov-warm: rgba(46, 36, 30, 0.76); --dz-ov-warm-line: rgba(255, 210, 165, 0.4);
-  animation: screen-in 0.25s ease;
+  --dz-ov-ink: #fff; --dz-ov-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
 }
 .design-ov[hidden] { display: none; }
 body:not([data-overview-active="true"]) .design-ov { display: none; }
@@ -88,14 +88,14 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-ov-preview {
   position: absolute; inset: 0; display: block; overflow: hidden; border-radius: 22px;
   background: var(--bg-secondary, var(--panel-bg, #0d1117));
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5), 0 0 0 2px var(--dz-color);
+  box-shadow: var(--dz-ov-shadow), 0 0 0 2px var(--dz-color);
   transition: box-shadow 0.25s ease;
 }
 .design-ov-slide[data-pos="cur"] .design-ov-preview { cursor: pointer; }
 /* Hover / focus on the centre tile: a glow, never a scale. */
 .design-ov-slide[data-pos="cur"] .design-ov-preview:hover,
 .design-ov-slide[data-pos="cur"] .design-ov-preview:focus-visible {
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5), 0 0 0 2px var(--dz-color),
+  box-shadow: var(--dz-ov-shadow), 0 0 0 2px var(--dz-color),
               0 0 44px 6px color-mix(in srgb, var(--dz-color) 55%, transparent);
 }
 /* Neighbours are plain bordered tiles: no cut-off preview, no questions
@@ -120,7 +120,7 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 /* ── Overlay: kicker, motto, three traits — authored anchor and tint ── */
 .design-ov-overlay {
   position: absolute; z-index: 2; box-sizing: border-box; max-width: 40%;
-  padding: 1.1rem 1.4rem 1.25rem; border-radius: 16px; color: #fff; line-height: 1.4;
+  padding: 1.1rem 1.4rem 1.25rem; border-radius: 16px; color: var(--dz-ov-ink); line-height: 1.4;
   background: var(--dz-ov-tint); border: 1px solid var(--dz-ov-tint-line);
   backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
   transition: opacity 0.2s ease, visibility 0.2s ease;
@@ -145,7 +145,7 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-ov-traits li { display: flex; gap: 0.6rem; align-items: baseline; }
 .design-ov-traits li::before {
   content: ""; flex: none; width: 9px; height: 9px; border-radius: 50%;
-  background: var(--dz-color); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6); transform: translateY(-1px);
+  background: var(--dz-color); box-shadow: 0 0 0 2px var(--dz-ov-dot-ring, rgba(255, 255, 255, 0.6)); transform: translateY(-1px);
 }
 /* ☆ / ★ — only on an alternatives round (the engine un-hides it). */
 .design-ov-star {
@@ -154,7 +154,7 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 }
 .design-ov-star:disabled { opacity: 0.55; cursor: default; }
 .design-ov-slide[data-favorite="true"] .design-ov-preview {
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5), 0 0 0 3px var(--warning-color, #d29922);
+  box-shadow: var(--dz-ov-shadow), 0 0 0 3px var(--warning-color, #d29922);
 }
 .design-ov[data-has-favorite="true"] .design-ov-slide[data-design-id]:not([data-favorite="true"]) .design-ov-preview { filter: saturate(0.6) brightness(0.8); }
 @media (max-width: 900px) {
@@ -167,7 +167,7 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-ov-change {
   display: inline-flex; align-items: center; gap: 0.4rem; margin: 0 0 0.55rem; box-sizing: border-box;
   padding: 0.2rem 0.65rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.02em;
-  color: #fff; background: color-mix(in srgb, var(--dz-new-color) 38%, transparent);
+  color: var(--dz-ov-ink, #fff); background: color-mix(in srgb, var(--dz-new-color) 38%, transparent);
   border: 1px solid var(--dz-new-color); box-shadow: 0 0 14px color-mix(in srgb, var(--dz-new-color) 45%, transparent);
 }
 .design-ov-change::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--dz-new-color); }
@@ -261,9 +261,11 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
   background: color-mix(in srgb, var(--dz-color, var(--accent-color)) 16%, var(--panel-bg, #161b22));
   box-shadow: inset 0 -2px 0 var(--dz-color, var(--accent-color)),
               inset 0 0 0 1px color-mix(in srgb, var(--dz-color, var(--accent-color)) 40%, transparent);
-  /* No fill: a clip-path left in place would clip the "2 / 7" list. */
-  animation: dz-quick-fan 0.32s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
+/* The pages fan out only when a variant is entered (renderQuick sets
+   data-fan); a sideways switch or a page step never replays it.
+   No fill: a clip-path left in place would clip the "2 / 7" list. */
+.design-quick-group[data-fan="true"] { animation: dz-quick-fan 0.22s cubic-bezier(0.2, 0.9, 0.3, 1); }
 .design-quick-group > .design-quick-seg { color: var(--text, #e6edf3); font-weight: 700; }
 .design-quick-group > .design-quick-seg:hover { background: transparent; }
 .design-quick-sep { width: 1px; height: 16px; margin: 0 2px; flex: none; background: color-mix(in srgb, var(--dz-color, var(--border-color)) 45%, var(--border-color, #30363d)); }
@@ -398,7 +400,7 @@ body.panel-open .design-quick, body.panel-open .design-header { opacity: 0; poin
   display: flex; flex-direction: column; gap: 0.6rem;
   padding: 5% 6%; border-radius: 22px;
   background: color-mix(in srgb, var(--q) 6%, var(--panel-bg, #161b22));
-  box-shadow: 0 0 0 2px var(--q), 0 24px 70px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 2px var(--q), var(--dz-ov-shadow);
 }
 .design-ov-qcard[data-state="done"] { --q: var(--success-color, #3fb950); }
 .design-ov-qhead { display: flex; align-items: center; gap: 0.75rem; color: var(--q); font-size: clamp(1.2rem, 2vw, 2.2rem); }

@@ -46,7 +46,7 @@ describe("dock tips", () => {
 
   test("hotkey tips name the same key in both locales", () => {
     const { DOCK_TIPS, DOCK_TIP_HOTKEY } = evalTips();
-    const keyOf = { alt: /Alt/, upin: /(Strg|Ctrl) \+/, dock: /Leertaste|Space/, variants: /1–3/, fav: /^F /,
+    const keyOf = { alt: /Alt/, upin: /(Strg|Ctrl) \+/, dock: /Leertaste|Space/, variants: /1–9/, fav: /^F /,
       view: /^V /, pages: /←\/→/, esc: /^Esc/, "dock-esc": /^Esc/, submit: /Enter/ };
     expect(Object.keys(DOCK_TIP_HOTKEY).length).toBeGreaterThanOrEqual(8);
     for (const [i, id] of Object.entries(DOCK_TIP_HOTKEY)) {
@@ -63,20 +63,40 @@ describe("dock tips", () => {
   });
 });
 
-describe("auto-grow allocation", () => {
+describe("auto-grow allocation — one deterministic rule", () => {
   const alloc = allocFn();
-  test("everything fits: natural heights", () => {
+  const sum = (a) => a.reduce((x, y) => x + y, 0);
+  test("everything fits: every field gets exactly its target, spare room stays unused", () => {
     expect(alloc([100, 80, 60], [70, 70, 60], 400, 0)).toEqual([100, 80, 60]);
+    // An EMPTY focused field (natural below its floor) stays at the floor.
+    expect(alloc([130, 40, 300], [92, 92, 92], 900, 1)).toEqual([130, 92, 300]);
   });
-  test("others shrink down to their floor before the active field gives way", () => {
+  test("screenshot case: empty focused middle field never balloons; others give way tallest first", () => {
+    // top: 4 filled lines, middle: EMPTY + focused, bottom: a long note.
+    const h = alloc([130, 92, 300], [92, 92, 92], 400, 1);
+    expect(h[1]).toBe(92);
+    expect(sum(h)).toBeLessThanOrEqual(400);
+    expect(h[0]).toBe(130);            // the shorter one keeps its text
+    expect(h[2]).toBe(178);            // the tallest gives way (and scrolls)
+  });
+  test("others are levelled evenly, never below their floor", () => {
     const h = alloc([300, 200, 150], [70, 70, 60], 450, 0);
     expect(h[0]).toBe(300);
-    expect(h[1] + h[2]).toBe(150);
-    expect(h[1]).toBeGreaterThanOrEqual(70);
-    expect(h[2]).toBeGreaterThanOrEqual(60);
+    expect(h[1] + h[2]).toBeLessThanOrEqual(150);
+    expect(h[1]).toBe(75);
+    expect(h[2]).toBe(75);
   });
   test("only when the others are at their floor does the active one shrink (and scroll)", () => {
     expect(alloc([500, 200, 150], [70, 70, 60], 400, 0)).toEqual([270, 70, 60]);
+  });
+  test("no focused field: all are levelled alike; same inputs → same output", () => {
+    const a = alloc([500, 200, 150], [70, 70, 60], 400, -1);
+    expect(sum(a)).toBeLessThanOrEqual(400);
+    expect(a).toEqual(alloc([500, 200, 150], [70, 70, 60], 400, -1));
+    expect(a).toEqual([133, 133, 133]);
+  });
+  test("expanded mode is the same rule with a larger budget", () => {
+    expect(alloc([130, 92, 300], [92, 92, 92], 700, 1)).toEqual([130, 92, 300]);
   });
 });
 

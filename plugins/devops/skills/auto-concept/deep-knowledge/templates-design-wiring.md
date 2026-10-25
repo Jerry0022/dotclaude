@@ -366,11 +366,21 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     // notes, no own pins, no overview box) — and never while the layer is
     // off, or it could not be switched back on.
     const scope = onOverview ? (it ? [...it.querySelectorAll('section[data-design] [data-anno]')] : []) : all;
-    const hideable = scope.length > 0 || !!document.querySelector('.upin')
+    // The eye is also the calm-view switch: it hides the quick nav and both
+    // FABs with the notes (CSS: body.anno-hidden), so wherever that chrome
+    // exists there is always something to hide.
+    const calm = !!document.querySelector('#design-quick, .panel-fab, .feedback-fab');
+    const hideable = calm || scope.length > 0 || !!document.querySelector('.upin')
       || (onOverview && !!document.querySelector('.design-ov'));
     toggle.hidden = !hideable && !hidden;
     paintEyeCount();
-    const label = (hidden ? toggle.dataset.labelShow : toggle.dataset.labelHide) || '';
+    // Fallbacks until the locale table carries anno.toggle_calm_hide /
+    // anno.toggle_calm_show (data-label-calm-hide / -show on the button).
+    const de = /^de\b/i.test(document.documentElement.lang || '');
+    const calmLabel = hidden
+      ? (toggle.dataset.labelCalmShow || (de ? 'Notizen und Navigation einblenden' : 'Show notes and navigation'))
+      : (toggle.dataset.labelCalmHide || (de ? 'Notizen und Navigation ausblenden' : 'Hide notes and navigation'));
+    const label = (calm ? calmLabel : (hidden ? toggle.dataset.labelShow : toggle.dataset.labelHide)) || '';
     if (label) { toggle.setAttribute('aria-label', label); toggle.setAttribute('data-tip', label); }
     toggle.setAttribute('aria-pressed', String(!hidden));
   }

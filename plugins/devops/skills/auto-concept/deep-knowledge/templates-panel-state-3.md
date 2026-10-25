@@ -167,7 +167,7 @@ body.viewing-frozen .journey, body.viewing-final .journey:not(.journey-final) { 
   flex: 1 1 auto; min-width: 0; width: auto; height: 38px; margin: 0; padding: 0 8px;
   border: 0; border-radius: 999px;
   display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 8px;
-  font: inherit; font-size: 13px; font-weight: 600; line-height: 1;
+  font: inherit; font-size: 13px; font-weight: 600; line-height: var(--pill-line-height, 1.3);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   color: #fff; cursor: pointer;
   background: linear-gradient(180deg, color-mix(in srgb, var(--jr-you) 88%, #fff), var(--jr-you));
@@ -191,7 +191,7 @@ body.viewing-frozen .journey, body.viewing-final .journey:not(.journey-final) { 
   background: rgba(31, 21, 0, .18);
   display: flex; align-items: center; justify-content: center; font-size: 14px; line-height: 1;
 }
-.jr-ul-txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; text-align: left; }
+.jr-ul-txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; text-align: left; }
 .jr-ul-txt b { font-size: 13.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
 .jr-ul-txt small { font-size: 10.5px; font-weight: 500; opacity: .72; overflow: hidden; text-overflow: ellipsis; }
 .jr-lock {
@@ -221,7 +221,7 @@ body.viewing-frozen .journey, body.viewing-final .journey:not(.journey-final) { 
   position: relative; flex: 1 1 auto; min-width: 0; height: 38px; box-sizing: border-box;
   display: flex; align-items: center; gap: 8px; padding: 0 14px 0 4px;
   border-radius: 999px; overflow: hidden; white-space: nowrap;
-  font-size: 14px; font-weight: 600; line-height: 1; color: #fff;
+  font-size: 14px; font-weight: 600; line-height: var(--pill-line-height, 1.3); color: #fff;
   background: color-mix(in srgb, var(--jr-ai) 9%, #0c1410);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--jr-ai) 45%, transparent), 0 4px 14px color-mix(in srgb, var(--jr-ai) 25%, transparent);
 }
@@ -235,20 +235,23 @@ body.viewing-frozen .journey, body.viewing-final .journey:not(.journey-final) { 
   background: linear-gradient(90deg, transparent, rgba(170, 255, 180, .35), transparent);
   animation: jr-shine 1.6s linear infinite;
 }
-.jr-run[data-indeterminate] .jr-run-done { width: 38% !important; animation: jr-sweep 1.8s var(--jr-ease) infinite; }
+/* Indeterminate (no _progress yet): the SAME left-anchored fill as a real
+   count, sized to cover 🤖 + label, the shimmer running only inside it — in
+   the ☰ journey row and the toast alike (one rule for both). The old
+   travelling 38% oval (jr-sweep) read as a stray blob in the narrow row. */
+.jr-run[data-indeterminate] .jr-run-done { width: min(100%, 9.5rem) !important; }
 .jr-bot {
   position: relative; width: 30px; height: 30px; flex: none; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; font-size: 15px; line-height: 1;
   background: linear-gradient(180deg, color-mix(in srgb, var(--jr-ai) 85%, #fff), color-mix(in srgb, var(--jr-ai) 75%, #000));
   animation: jr-breathe 2.4s ease-in-out infinite;
 }
-.jr-run b { position: relative; font-weight: 650; overflow: hidden; text-overflow: ellipsis; }
+.jr-run b { position: relative; font-weight: 650; overflow: hidden; text-overflow: ellipsis; line-height: var(--pill-line-height, 1.3); padding-block: 1px; }
 .jr-count { position: relative; margin-left: auto; font-style: normal; font-size: 13px; font-weight: 700; color: color-mix(in srgb, var(--jr-ai) 70%, #fff); cursor: help; }
 .jr-count:empty { display: none; }
 .jr-run[data-paused] { filter: saturate(.45) brightness(.85); }
 .jr-run[data-paused] .jr-shine, .jr-run[data-paused] .jr-bot, .jr-run[data-paused] .jr-run-done { animation-play-state: paused; }
 @keyframes jr-shine { to { left: 100%; } }
-@keyframes jr-sweep { 0% { left: -38%; } 100% { left: 100%; } }
 @keyframes jr-breathe { 50% { transform: scale(.9); } }
 /* Build-up: once per round, the row assembles left → right. */
 .journey.jr-build > * { animation: jr-in .42s ease-out both; }
@@ -268,29 +271,84 @@ body.viewing-frozen .journey, body.viewing-final .journey:not(.journey-final) { 
 .status-turn:empty { display: none; }
 .status-turn:not(:empty)::after { content: " ·"; font-weight: 400; color: var(--text-secondary, #8b949e); }
 .panel-status[data-turn="you"] .status-line { color: var(--text-secondary, #8b949e); }
-.panel-status[data-turn="you"] .status-turn { color: color-mix(in srgb, var(--jr-you) 70%, #fff); }
+/* Mixed toward --text-color, not #fff: on the light theme the white mix
+   left pale text on a pale panel. */
+.panel-status[data-turn="you"] .status-turn { color: color-mix(in srgb, var(--jr-you) 70%, var(--text-color, #fff)); }
 .panel-status[data-turn="rethinking"] .status-line,
-.panel-status[data-turn="implementing"] .status-line { color: color-mix(in srgb, var(--jr-ai) 75%, #fff); }
+.panel-status[data-turn="implementing"] .status-line { color: color-mix(in srgb, var(--jr-ai) 75%, var(--text-color, #fff)); }
 /* The steps list stays the data model of the counter (x/y + tooltip); its
    own dots/disclosure are no longer drawn. */
 .panel-status .status-detail { display: none !important; }
 
-/* Round chip in the panel head — coloured like whose turn it is. */
+/* The ☰ head row is secondary chrome: quiet, one size, one rhythm with the
+   panel body. ✕ and the theme toggle are the same 28px ghost button in
+   --text-secondary that firms up to --text-color on hover / focus; no
+   oversized ✕, no greyed emoji (that read as a dusty gear). */
+.panel-head .panel-close-btn,
+.panel-head .theme-toggle-btn {
+  width: 28px; height: 28px; padding: 0; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  align-self: center; font-size: 15px; line-height: 1;
+  color: var(--text-secondary, #8b949e); opacity: 1; filter: none;
+  transition: color 0.15s, background-color 0.15s;
+}
+.panel-head .panel-close-btn:hover, .panel-head .panel-close-btn:focus-visible,
+.panel-head .theme-toggle-btn:hover, .panel-head .theme-toggle-btn:focus-visible {
+  color: var(--text-color, #c9d1d9);
+  background: color-mix(in srgb, var(--text-color, #c9d1d9) 8%, transparent);
+  filter: none;
+}
+.panel-head .panel-close-btn:focus-visible,
+.panel-head .theme-toggle-btn:focus-visible { outline: 2px solid var(--accent-color, #58a6ff); outline-offset: 1px; }
+/* Theme glyphs as monochrome line icons in currentColor (masked SVG), so
+   they take the head's text colour in both themes; the emoji stay in the
+   markup as the fallback for engines without mask support. */
+@supports ((mask: url("")) or (-webkit-mask: url(""))) {
+  .panel-head .theme-toggle-btn .theme-glyph {
+    width: 16px; height: 16px; font-size: 0; color: transparent;
+    background: var(--text-secondary, #8b949e);
+    -webkit-mask: var(--glyph) center / contain no-repeat; mask: var(--glyph) center / contain no-repeat;
+  }
+  .panel-head .theme-toggle-btn:hover .theme-glyph,
+  .panel-head .theme-toggle-btn:focus-visible .theme-glyph { background: var(--text-color, #c9d1d9); }
+  .panel-head .theme-toggle-btn [data-glyph="sun"] {
+    --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3Cpath d='M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4'/%3E%3C/svg%3E");
+  }
+  .panel-head .theme-toggle-btn [data-glyph="moon"] {
+    --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z'/%3E%3C/svg%3E");
+  }
+}
+
+/* What is open now — marked in the ☰ menu at all times (markPanelCurrent,
+   § Panel Chrome JS mirrors the layout's data-active to aria-current). One
+   look for every entry type: accent tint + a 3px accent bar + full text
+   colour; a design heading only takes the accent text. */
+.concept-decision-panel [aria-current="page"] {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 16%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent-color, #58a6ff);
+  color: var(--text-color, #c9d1d9);
+  font-weight: 600;
+}
+.concept-decision-panel .screen-nav-design-heading[aria-current="true"] { color: var(--accent-color, #58a6ff); }
+
+/* Round label in the panel head — secondary info, NOT a pill: the head's
+   own small text in --text-secondary, a 6px dot in the colour of whose turn
+   it is (you = accent, 🤖 = success, a frozen past round = muted). The old
+   gradient pill with glow read as dusty and out of place above the calm
+   panel body. */
 .panel-head .panel-here-round:not(:empty) {
-  flex: 0 1 auto; padding: 3px 9px; border-radius: 999px;
-  font-size: 11px; font-weight: 700; color: #fff;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-color, #388bfd) 88%, #fff), var(--accent-color, #388bfd));
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-color, #388bfd) 35%, transparent);
+  flex: 0 1 auto; display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; font-weight: 600; letter-spacing: .02em;
+  line-height: var(--pill-line-height, 1.3);
+  color: var(--text-secondary, #8b949e);
+  --round-dot: var(--accent-color, #388bfd);
+}
+.panel-head .panel-here-round:not(:empty)::before {
+  content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--round-dot);
 }
 body[data-journey="rethinking"] .panel-head .panel-here-round:not(:empty),
-body[data-journey="implementing"] .panel-head .panel-here-round:not(:empty) {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--success-color, #3fb950) 85%, #fff), color-mix(in srgb, var(--success-color, #3fb950) 75%, #000));
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--success-color, #3fb950) 35%, transparent);
-}
-body.viewing-frozen .panel-head .panel-here-round:not(:empty) {
-  background: color-mix(in srgb, var(--text-color, #c9d1d9) 10%, transparent);
-  color: var(--text-secondary, #8b949e); box-shadow: none;
-}
+body[data-journey="implementing"] .panel-head .panel-here-round:not(:empty) { --round-dot: var(--success-color, #3fb950); }
+body.viewing-frozen .panel-head .panel-here-round:not(:empty) { --round-dot: var(--text-secondary, #8b949e); }
 
 /* ── Status toast — the same pill as the panel (renderSubmittedToast) ── */
 .jr-toast {
@@ -325,7 +383,6 @@ body:has(.draft-offline-strip:not([hidden])) .jr-toast { bottom: 4.75rem; }
 @media (prefers-reduced-motion: reduce) {
   .jr-toggle, .jr-face, .jr-face[data-on], .jr-face-lock, .jr-face-lock[data-on], .jr-wire, .jr-node, .jr-run-done { transition: none !important; }
   .jr-shine, .jr-bot, .journey.jr-build > *, .jr-toast, .jr-float, .jr-float i { animation: none !important; }
-  .jr-run[data-indeterminate] .jr-run-done { animation: none !important; width: 100% !important; opacity: .45; }
   .jr-lock:hover:not(:disabled) { transform: none; }
 }
 ```
