@@ -404,7 +404,7 @@ async function run(argv, {
   }
 }
 
-module.exports = { MODEL_BY_TAG, CONTEXT_BETA, CONTEXT_MANAGEMENT, RC, CLIENT_TOOLS, PRICES, webTools, costOf, runTool, parseArgs, run };
+module.exports = { SECRET_FILE, walk, MODEL_BY_TAG, CONTEXT_BETA, CONTEXT_MANAGEMENT, RC, CLIENT_TOOLS, PRICES, webTools, costOf, runTool, parseArgs, run };
 
 if (require.main === module) {
   run(process.argv.slice(2)).then((rc) => { process.exitCode = rc; });

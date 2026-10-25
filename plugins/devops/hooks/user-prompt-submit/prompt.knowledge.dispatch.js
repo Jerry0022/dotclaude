@@ -87,6 +87,11 @@ const TOPIC_MAP = [
     patterns: [/\bapi.?(?:guthaben|credits?)\b/i, /\baktionsguthaben/i, /\bpromo(?:tional)?.?credits?/i],
   },
   {
+    file: 'api-batch.md',
+    specificity: 3,
+    patterns: [/batch.?(?:api|mode|modus)/i, /message.?batch/i, /batch.?(?:audit|policy)/i],
+  },
+  {
     file: 'home-backup.md',
     specificity: 3,
     patterns: [/\bhome.?backup/i, /\bclaude.?home\b/i, /\b(?:~\/)?\.claude\b.{0,30}\b(?:sichern|backup|back up)/i],

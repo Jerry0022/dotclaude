@@ -43,10 +43,6 @@ auto-reload off.
 | Plan quota | untouched — the work moves off the 5 h window and the week |
 | Cost to the user | none until the month's credit is spent (it expires anyway); then the workspace spend limit stops it (rc 75 → plan) |
 
-Batch API (−50 %) is **not** used: a tool loop needs each answer before the
-next request, and batches return within up to 24 h. It fits only fire-and-forget
-jobs; none exists yet.
-
 Net: for read-only side work the credit route is cheaper in tokens and free
 in plan quota → **preferred whenever switched on**, the plan is the fallback.
 
