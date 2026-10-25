@@ -86,6 +86,8 @@ describe("prompt.flow.title-work", () => {
     expect(prefixFor("/devops:do-ship --keep")).toBe(SHIPPING_PREFIX);
     expect(prefixFor("ab damit")).toBe(SHIPPING_PREFIX);
     expect(prefixFor("fix the login bug")).toBe(WORK_PREFIX);
+    // Work first, ship last: the fix runs under the work head, do-ship sets its own.
+    expect(prefixFor("fix den error und dann ship")).toBe(WORK_PREFIX);
     expect(prefixFor("")).toBe(WORK_PREFIX);
   });
 

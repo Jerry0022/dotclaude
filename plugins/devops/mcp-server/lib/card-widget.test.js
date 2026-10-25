@@ -220,7 +220,7 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     for (const v of ["ready-red", "ship-blocked"]) {
       for (const lang of ["de", "en"]) {
         const fix = buttonsFor(v, lang).find((b) => b.label === "Fix");
-        expect(fix.prompt).toMatch(/ship/);
+        expect(fix.prompt).toMatch(/\bship\b/);
         expect(fix.prompt).not.toMatch(/Card neu|card again/);
       }
     }
@@ -278,7 +278,7 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
   // promotion argument — so the promote buttons are promotion requests, not
   // plain ships, and the blocker's Debug button is neither.
   test("plain-text prompts still route: ship buttons ship, promote buttons promote, the others neither", () => {
-    const { isShipIntent, parseShipRequest } = createRequire(import.meta.url)("../../hooks/lib/ship-intent.js");
+    const { isDeferredShip, parseShipRequest } = createRequire(import.meta.url)("../../hooks/lib/ship-intent.js");
     for (const lang of ["de", "en"]) {
       for (const key of ["ready", "test"]) {
         expect(parseShipRequest(buttonsFor(key, lang)[0].prompt)).toMatchObject({ ship: true, promote: false });
@@ -287,7 +287,10 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
       expect(parseShipRequest(buttonsFor("ship-successful", lang, v)[0].prompt)).toMatchObject({ ship: true, promote: true, channel: "beta", version: "0.193.0" });
       expect(parseShipRequest(buttonsFor("ship-successful", lang, v)[1].prompt)).toMatchObject({ ship: true, promote: true, channel: "stable", version: "0.193.0" });
       expect(parseShipRequest(buttonsFor("released-beta", lang, v)[0].prompt)).toMatchObject({ ship: true, promote: true, channel: "stable", version: "0.193.0" });
-      expect(isShipIntent(buttonsFor("ship-blocked", lang)[0].prompt), `${lang}/ship-blocked`).toBe(false);
+      // Fix buttons ship only after the fix: a deferred ship, never a ship now.
+      for (const v of ["ship-blocked", "ready-red"]) {
+        expect(isDeferredShip(buttonsFor(v, lang)[0].prompt), `${lang}/${v}`).toBe(true);
+      }
       expect(buttonsFor("ship-successful", lang, v).map((b) => b.prompt)).toEqual(["promote beta 0.193.0", "promote stable 0.193.0"]);
       expect(buttonsFor("released-beta", lang, v)[0].prompt).toBe("promote stable 0.193.0");
       expect(buttonsFor("ship-blocked", lang)[0].prompt).toMatch(/^Debug\b/);

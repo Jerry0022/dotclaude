@@ -216,7 +216,10 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   of the variant, primary first; each has a tooltip explaining what it
   triggers (`Fix` → "Ich behebe die roten Befunde zuerst, dann wird
   geshippt." — a red row's Fix ends in the row's other path, ship, never in
-  "render the card again"; `Trotzdem shippen` → "Ship mit skipChecks — die roten Tests
+  "render the card again"; `prompt.ship.detect` reads such a "<work>, dann
+  ship" prompt as a deferred ship (`isDeferredShip`, lib/ship-intent.js): the
+  work first, do-ship last, the title on the work head until then;
+  `Trotzdem shippen` → "Ship mit skipChecks — die roten Tests
   landen als Issue."). Equal height, 13px; only border/text colour differs.
 - **`Web-Guide starten` button** (#506/#519): when `hooks/lib/guide-handoff.js`
   `detectCardHandoff` finds a manual web hand-off in `open`/`userFinalTest`
