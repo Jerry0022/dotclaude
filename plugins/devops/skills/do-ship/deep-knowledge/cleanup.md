@@ -189,7 +189,9 @@ Evaluate all sources; ANY positive hit → keep-mode.
 **Never a signal:** "fertig", "final", "abschließen" in the trigger, and any wrap-up of
 this session after the merge (a concept close-out, stopping a bridge, the card). The
 user who says "ich bin fertig … shippen" gets a finished-ship card, not "weiter in
-<branch>?" with a Weiter button (2026-10-25).
+<branch>?" with a Weiter button (2026-10-25). These words only do not count as a
+signal; they never cancel an explicit keep phrase in the same trigger ("Phase 1
+fertig, ship und weiter mit Phase 2" still keeps).
 
 ### When the signal is ambiguous
 

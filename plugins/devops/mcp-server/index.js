@@ -1683,12 +1683,12 @@ function evidenceHasDeviation(input) {
   return tests.some(t => classifyGate(t) === 'test' && glyphForResult(t.result) !== '✓');
 }
 
-/** A ship that is one item of an orchestrated queue: do-ship's `(Queue n/N)` summary suffix. */
 /** The follow-up a kept ship names (`nextStep`), trimmed; '' when none. */
 function keptNextStep(input) {
   return String((input && input.nextStep) || '').trim();
 }
 
+/** A ship that is one item of an orchestrated queue: do-ship's `(Queue n/N)` summary suffix. */
 function isQueuedShip(input) {
   return typeof input.summary === 'string' && /\(Queue \d+\s*\/\s*\d+\)/i.test(input.summary);
 }
@@ -2023,7 +2023,7 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // made after it (prompt.ship.detect: a named version is promotion-only).
   return {
     heading, context, points: iconizePoints(shown, input), buttonsKey, version: ctx.version || null, replies, noShip, guideHandoff, appStart,
-    nextStep: key === 'analysis' || key === 'ship-successful-kept' ? String(input.nextStep || '').trim() : '',
+    nextStep: key === 'analysis' || key === 'ship-successful-kept' ? keptNextStep(input) : '',
   };
 }
 
