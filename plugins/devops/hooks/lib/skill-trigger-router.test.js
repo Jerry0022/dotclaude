@@ -433,7 +433,6 @@ const NEGATIVE_PROMPTS = [
   "rethink the naming later",
   "PR #471 failed CI",
   "make the TS config strict",
-  "graphify the repo later",
   "release notes are missing",
   "that's a new issue after the merge",
   "keep the token budget low",

@@ -88,3 +88,42 @@ describe("gen-project-map header name (issue #303)", () => {
     expect(headerOf(root)).toBe(basename(root));
   });
 });
+
+describe("gen-project-map project hints (.claude/project-map.hints.json)", () => {
+  let base;
+  beforeAll(() => {
+    base = mkdtempSync(join(tmpdir(), "gen-project-map-hints-"));
+  });
+  afterAll(() => {
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  function repoWithDirs(name, hints) {
+    const root = join(base, name);
+    makeRepo(root);
+    for (const f of ["lib/a.js", "src/deep/b.js", "other/lib/c.js"]) {
+      mkdirSync(join(root, dirname(f)), { recursive: true });
+      writeFileSync(join(root, f), "x\n");
+    }
+    git(root, "add", ".");
+    git(root, "commit", "-q", "-m", "files");
+    if (hints !== undefined) {
+      mkdirSync(join(root, ".claude"), { recursive: true });
+      writeFileSync(join(root, ".claude", "project-map.hints.json"), hints);
+    }
+    execFileSync(process.execPath, [SCRIPT, root], { stdio: ["ignore", "pipe", "pipe"] });
+    return readFileSync(join(root, ".claude", "project-map.md"), "utf8");
+  }
+
+  it("prefers a full-path hint over a bare name over the generic hint", () => {
+    const map = repoWithDirs("a", JSON.stringify({ lib: "Billing core", "other/lib": "Legacy adapters", "src/deep": "Parser internals" }));
+    expect(map).toMatch(/^lib\/ {2}\(1\) — Billing core$/m);
+    expect(map).toMatch(/^ {2}lib\/ {2}\(1\) — Legacy adapters$/m);
+    expect(map).toMatch(/^ {2}deep\/ {2}\(1\) — Parser internals$/m);
+  });
+
+  it("falls back to the generic hint without a hints file or with a malformed one", () => {
+    expect(repoWithDirs("b")).toMatch(/^lib\/ {2}\(1\) — Library code$/m);
+    expect(repoWithDirs("c", "{not json")).toMatch(/^lib\/ {2}\(1\) — Library code$/m);
+  });
+});

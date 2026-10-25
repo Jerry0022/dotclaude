@@ -15,7 +15,7 @@
  *     `promote`).
  *   - `RETIRED` — PR 3: skills that are no skill at all any more; their body
  *     is a deep-knowledge doc and their triggers live in a hook
- *     (`setup-readme`, `auto-graph`, `auto-usage`, `claude-strict`; later
+ *     (`setup-readme`, `auto-usage`, `claude-strict`; later
  *     `setup-project`). An old
  *     slash name maps to that mechanism, NEVER to a Skill: the router has no
  *     alias for them (`ALIAS_MAP` is built from RENAMED + FOLDED only), and
@@ -110,10 +110,6 @@ const RETIRED = Object.freeze({
     doc: 'readme-standards.md',
     home: 'pre.readme.standards (first README write/edit) + prompt.knowledge.dispatch pointer',
   }),
-  'auto-graph': Object.freeze({
-    doc: 'graphify.md',
-    home: 'ss.graphify / pre.tokens.guard / post.graphify.* + prompt.knowledge.dispatch pointer',
-  }),
   'auto-usage': Object.freeze({
     doc: 'usage.md',
     home: 'MCP get_usage (dotclaude-completion) + prompt.knowledge.dispatch pointer',
@@ -139,9 +135,6 @@ const RETIRED_TRIGGERS = Object.freeze({
   'setup-readme': Object.freeze({
     en: ['create a readme', 'update the readme', 'improve the readme'],
     de: ['README erstellen', 'README aktualisieren'],
-  }),
-  'auto-graph': Object.freeze({
-    en: ['knowledge graph', 'graphify', 'code graph', '/auto-graph'],
   }),
   'auto-usage': Object.freeze({
     en: ['refresh usage', 'token budget'],

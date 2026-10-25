@@ -53,6 +53,9 @@ Use it to derive the correct `path` parameter:
 2. Find the relevant directory for your search term
 3. Run Grep/Glob with that directory as `path`
 
+A project can add its own one-line directory descriptions in
+`.claude/project-map.hints.json` (see `project-setup.md` Step 6).
+
 This avoids the token guard blocking full-repo searches and produces faster,
 more precise results.
 
@@ -62,13 +65,19 @@ more precise results.
 **When to skip:** If the project has no `.claude/project-map.md`, fall back to
 scoped searches using your best guess, or use the `devops:scout` agent (haiku · medium) for broad searches.
 
-## Knowledge Graph for Exploration
+## Broad Exploration: Delegate to the Scout
 
-When `graphify-out/` exists (in the project or the primary checkout), a
-"where/how is X wired" question across several files starts with
-`graphify query "<question>"`; then read only the files it names. A single
-narrow lookup stays a scoped Grep — cheaper than a graph answer. Details:
-`deep-knowledge/graphify.md` § When the graph helps.
+A "where/how is X wired" question across several files, or a sweep over more
+than ~10 files, runs outside the main context:
+
+```
+Agent({ subagent_type: "devops:scout", model: "haiku", run_in_background: true,
+        description: "locate <topic>", prompt: "<what to find, what to return>" })
+```
+
+It returns the conclusion with `path:line` references. A single narrow lookup
+stays a scoped Grep. The `pre.tokens.guard` block on a broad Grep/Glob names
+this call.
 
 ## Priority
 Functionality > aesthetics. Get the job done with the right tool, don't optimize for pretty output.

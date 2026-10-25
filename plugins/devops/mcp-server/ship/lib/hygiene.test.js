@@ -530,7 +530,7 @@ describe("auto-clean — what a worktree removal would destroy (AUD-C001/C009/C0
   test("isToolingState: run bookkeeping and pure runtime state only", () => {
     for (const e of [".claude/.ship-watcher/", ".claude/.ship-watcher/state.json", ".claude/project-map.md", ".claude/run-contract.json",
       ".claude/batch-mode.json", "AUTONOMOUS-LOG.md", "AUTONOMOUS-REPORT.html", "BACKLOG-DONE.flag", "BURN-STATE.json",
-      "BURN-STATE.json.lock", "graphify-out/"]) {
+      "BURN-STATE.json.lock"]) {
       expect(isToolingState(e), e).toBe(true);
     }
     for (const e of [".claude/", ".claude/batch.md", ".claude/batch-assets/", ".claude/concepts/", ".claude/audit/",

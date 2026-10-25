@@ -25,7 +25,7 @@ const count = (text, marker) => text.split("\n").filter((l) => l.startsWith(mark
 describe("runtime-ignores — the one list of project-rooted runtime paths", () => {
   test("every entry is a .claude/ path and none is shared configuration", () => {
     for (const e of allEntries()) expect(e.startsWith(".claude/"), e).toBe(true);
-    for (const tracked of [".claude/settings.json", ".claude/graphify.json", ".claude/skills/", ".claude/project-map.md"]) {
+    for (const tracked of [".claude/settings.json", ".claude/skills/", ".claude/project-map.md"]) {
       expect(allEntries()).not.toContain(tracked);
     }
     expect(allEntries()).toContain(".claude/devops-config.json");
