@@ -30,7 +30,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DK = path.join(__dirname, "deep-knowledge");
 const md = readTemplates();
 const skill = readSkill();
-const gate = fs.readFileSync(path.join(DK, "validation-gate.md"), "utf8");
+const gate = ["validation-gate.md", "validation-gate-phase2.md"].map((f) => fs.readFileSync(path.join(DK, f), "utf8")).join("");
 const realityDoc = fs.readFileSync(path.join(DK, "reality-check.md"), "utf8");
 
 // Line-based scanner (same reason as viewport-switcher.test.js): a lazy

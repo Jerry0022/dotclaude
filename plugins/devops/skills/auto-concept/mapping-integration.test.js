@@ -250,7 +250,7 @@ describe("mapping reference docs", () => {
 
 describe("mapping skill + gate + freeze docs", () => {
   const skill = readSkill();
-  const gate = fs.readFileSync(path.join(__dirname, "deep-knowledge", "validation-gate.md"), "utf8");
+  const gate = ["validation-gate.md", "validation-gate-phase2.md"].map((f) => fs.readFileSync(path.join(__dirname, "deep-knowledge", f), "utf8")).join("");
   const iter = fs.readFileSync(path.join(__dirname, "deep-knowledge", "iteration-rules.md"), "utf8");
   test("SKILL.md: views list, free-round sentence, Step 1c, 5a/5b/5c handling", () => {
     expect(skill).toMatch(/Three kinds ship as templates/);

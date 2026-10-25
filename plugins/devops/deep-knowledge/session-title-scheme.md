@@ -30,6 +30,12 @@ turn end. Nothing else strips or sets titles.
 
 A named abort keeps its activity (`🟥 ➜ 🚀 Ship ┃ X`).
 
+**A question mid-turn.** An `AskUserQuestion` blocks the session before any
+card, so it carries `👉 ➜ ❓ Question ┃` itself: `pre.ask.title` refuses the
+question once per turn until a `set_session_title` to that head goes out in
+the same message, and `post.ask.title` puts the ⏳ head back after the answer
+(a running ship keeps `🚀 Shipping`). Rules: `hooks/lib/ask-title.js`.
+
 **The 👉-vs-🟩 rule** is decided by content, not by variant name: a
 mandatory user step (an open point or question, a required userTest, a
 requirement with `waitsOn: "user"`, red tests, unverified, blocked, ready

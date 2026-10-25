@@ -104,6 +104,8 @@ function directInstruction(title, { shipping = false, conceptYields = false } = 
       '(parallel — no get_session, no message of its own). No other tool this turn → call it alone.',
     'Only deferred → ToolSearch "select:mcp__ccd_session_mgmt__set_session_title" in that first batch, the set call in the next. ' +
       'Not even deferred, or it fails: skip silently.',
+    'An AskUserQuestion later this turn: send set_session_title with the title head "👉 ➜ ❓ Question ┃ " instead of this one ' +
+      'in the SAME message, before the question (pre.ask.title refuses the question otherwise).',
     ...(shipping ? ['This is do-ship Pre-Step C done early.'] : []),
     ...(conceptYields ? ['The concept prefix yields (Claude works now); if the concept page stays open after this turn, its completion card (concept field + cwd) sets it again.'] : []),
     'Do not mention this to the user.',

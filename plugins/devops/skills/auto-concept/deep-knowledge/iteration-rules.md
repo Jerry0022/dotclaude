@@ -4,7 +4,7 @@ Every concept page is a stack of iteration tabs. The **tab bar lives at the
 top of the right-side decision panel** (a compact vertical chip list inside
 the panel's scroll box `.panel-nav-scroll`, together with the section TOC;
 the status line and the submit foot below it are pinned and never scroll
-away — templates-common.md § Common Structure "Panel anatomy"). It must NEVER
+away — templates-common-structure.md § Common Structure "Panel anatomy"). It must NEVER
 render inside the left-hand content area — the content area is reserved for
 the actual concept. Each
 chip represents exactly one iteration; the active one is interactive, all
@@ -51,7 +51,7 @@ selections, read-only comments).
   live round → the dimmer is hidden and every past round is locked). So at
   most ONE past round is unlocked at any time, and zero while the live round
   is shown. The bar is page-level chrome outside `section[data-iteration]`
-  and must be copied verbatim into every template skeleton (see templates-common.md
+  and must be copied verbatim into every template skeleton (see templates-common-structure.md
   § Common Structure; gate entry 30b).
   - **Exemption for `design` iterations:** freezing must NOT disable
     navigation — the user still has to be able to revisit the mockups. The
@@ -70,7 +70,7 @@ selections, read-only comments).
     reads as the complete "controls that must survive freezing" set; the
     sweep itself never reaches them and needs no exemption for them.
     **When the iteration uses views (optional, see
-    templates-design.md § Views (optional)), also skip `.view-switch-item` and
+    templates-design-views.md § Views (optional)), also skip `.view-switch-item` and
     `.screen-nav-view-item`** — switching to/between views must keep working
     on a frozen tab exactly like switching designs/screens does. Textareas
     (including annotation answers and view notes) still go `readonly`
@@ -195,7 +195,7 @@ and revisit their own submitted notes:
   OUTSIDE `section[data-iteration]`, same decorative caveat as
   `#panel-toggle`/`#feedback-toggle` above.
 - `.view-switch-item` — the view segments in the top-centre switcher, when
-  the iteration uses views (optional, templates-design.md § Views (optional)).
+  the iteration uses views (optional, templates-design-views.md § Views (optional)).
 - `.screen-nav-view-item` — the view entries in the panel's second nav
   group. Their (non-interactive) `.screen-nav-views-heading` label needs no
   exemption — it was never disabled in the first place.
@@ -319,7 +319,7 @@ HTML. The rules:
 iteration. It applies to every template, not just `design`. Without that block
 the panel's lower half is simply empty on a frozen tab, and the only way back
 is guessing which chip is live — which is not the last one once a final report
-exists. See templates-common.md § Common Structure.
+exists. See templates-common-structure.md § Common Structure.
 
 ## Iteration append checklist
 

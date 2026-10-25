@@ -189,7 +189,7 @@ describe("attachment tooltip locale (#343)", () => {
   });
 
   test("every reason the bridge documents maps to a runtime key (client-bug 400s excepted)", () => {
-    const bridgeMd = fs.readFileSync(path.join(__dirname, "deep-knowledge", "bridge-server.md"), "utf8");
+    const bridgeMd = ["bridge-server.md", "bridge-server-state.md"].map((f) => fs.readFileSync(path.join(__dirname, "deep-knowledge", f), "utf8")).join("");
     // | 413    | `too_large`           | ... — the error-response table.
     const reasonRe = /^\s*\|\s*\d{3}\s*\|\s*`([a-z_]+)`\s*\|/gm;
     const reasons = new Set();
