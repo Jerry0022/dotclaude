@@ -203,10 +203,20 @@ window.addEventListener('pagehide', sendTabBye);
 const PROCESSED_SAFETY_MS = 5 * 60 * 1000;
 
 async function pollProcessedState() {
-  if (!_submittedAt) return;
+  if (!_submittedAt) {
+    // Not submitted from this tab — still follow the server so the tab-title
+    // glyph of a second open tab flips to ⏳ / 🛠️ without a reload.
+    if (typeof noteServerRound !== 'function') return;
+    try {
+      const r = await fetch('/decisions', { cache: 'no-store' });
+      if (r.ok) noteServerRound(await r.json());
+    } catch (e) { /* bridge away — keep the last glyph */ }
+    return;
+  }
   try {
     const res = await fetch('/decisions', { cache: 'no-store' });
     const data = await res.json();
+    if (typeof noteServerRound === 'function') noteServerRound(data);
     // Advance the submit-panel progress list based on the per-submission
     // signals on the server. Done before the processed_at gate so the
     // user sees pickup/implementation states even while the panel is
@@ -341,6 +351,7 @@ function renderPanelStatus() {
   if (detail) detail.hidden = (status !== 'submitted');
   if (typeof renderStatusDots === 'function') renderStatusDots();
   if (typeof renderJourney === 'function') renderJourney();
+  if (typeof renderTabTitle === 'function') renderTabTitle();
   // Toast: while the round is in flight, and while it is the user's turn but
   // the bridge is away ("👉 Du bist dran · alles gespeichert" + verbinde…).
   if (typeof renderSubmittedToast === 'function') {

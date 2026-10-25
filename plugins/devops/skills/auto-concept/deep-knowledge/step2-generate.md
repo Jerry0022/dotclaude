@@ -69,6 +69,16 @@ page.
 - No external dependencies — all CSS/JS inline
 - Professional typography, spacing, and color palette
 - Subtle animations for interactions (toggle, expand, submit)
+- **Design concepts — whole-app screens are fullscreen and silent.** A screen
+  showing the visual full screen of the whole application gets
+  `data-screen-fit="full"` (fills the content area edge to edge; FABs and
+  navigation may overlap it) and carries no meta/round commentary inside or
+  under the mock ("In round 2 the button is …" is forbidden). Captions or short
+  explanations belong only on subpages that refine ONE element. Round
+  commentary goes into `data-design-improved="…"` (optional, short phrase, max
+  ~40 chars) on the `section[data-design]`; the overview card shows it as
+  "Verbessert: …" under the top-3 points. Details: templates-design-screens.md,
+  templates-design-views.md § Variant overview.
 
 ### Page Header (keep it lean)
 
@@ -184,10 +194,14 @@ Variant/section evaluation uses a **bi-state selector** (not tri-state):
 
 | State | Label | Behavior |
 |-------|-------|----------|
-| **Miteinbeziehen** | "Miteinbeziehen" (default) | Claude considers this variant/finding in the next iteration or implementation |
+| **Miteinbeziehen** | "Miteinbeziehen" | Claude considers this variant/finding in the next iteration or implementation |
 | **Verwerfen** | "Verwerfen" | Claude discards this variant/finding and excludes it from all further steps |
 
-- Default: **Miteinbeziehen** for every variant/section
+- The pre-selection is Claude's recommendation; the user can flip any of it:
+  **mutually exclusive alternatives** → exactly one **Miteinbeziehen** (the
+  recommended one), all others **Verwerfen**; **independent topics or
+  findings** → **Miteinbeziehen**, **Verwerfen** only where Claude advises
+  against one (`templates-decision.md` § Bi-State Variant Evaluation)
 - No "Nur diese"/"only" option — the user implicitly picks a single option by
   setting all other variants to "Verwerfen"
 - No "Claude setzt um" / "Feedback" hint labels — bi-state makes the intent
@@ -206,7 +220,7 @@ action from the menu and confirms.
 |---|---|---|---|
 | Primary (`#submit-iterate-btn`) | "Zur nächsten Runde" / "Next round" | `action: "iterate"` — Claude processes the feedback and appends a new iteration section (no code changes) | Fills the row, accent color; its hint is the `title` tooltip |
 | Caret (`#submit-menu-btn`) | ▾ | Opens `#submit-menu` (`role="menu"`, `aria-expanded`); Escape / outside click closes it | Same accent pill, right end |
-| Secondary (`#submit-implement-btn`, inside the menu) | "Mit Feedback implementieren" / "Implement with feedback" | `action: "implement"` — Claude applies the selections as actual code/file changes, after the `panel.submit_implement_confirm` dialog | Warning-colored border + ⚠ icon, one level deeper behind the caret |
+| Secondary (`#submit-implement-btn`, inside the menu) | "Mit Feedback implementieren" / "Implement with feedback" | `action: "implement"` — Claude applies the selections as actual code/file changes, without a browser dialog (the caret menu / 🔒 unlock is the second step; only an unchanged page asks via `panel.empty_implement_confirm`) | Warning-colored border + ⚠ icon, one level deeper behind the caret |
 
 The click-away handler in the feedback dock does NOT apply to these buttons
 — they are explicit commits. The misclick barrier is colour + border + the

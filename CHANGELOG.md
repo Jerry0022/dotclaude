@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.307.1] — 2026-10-25
+
+The session title now says ❓ Question whenever a call waits for you, not only for an AskUserQuestion. A red card's Fix button ends in a ship.
+
+Why: a Backlog run waited on a `start_session` approval card with ⏳ in the sidebar, as if Claude were still working. The Fix button said "then render the card again", although the only other way out of that card row is shipping.
+
+### Fixed
+- **Question title for every blocking call.** `pre.ask.title` / `post.ask.title` (0.2.0) now match `AskUserQuestion`, `ExitPlanMode` and `mcp__ccd_session__start_session` (all initiations except `own_initiative`, and not a start by `proposal_id`). The rule lives in `lib/ask-title.js` `isBlockingCall`.
+- **Fix button ends in ship.** For red findings the button now ends in "dann ship" / "then ship", for a blocker in "dann erneut ship" / "then ship again". `prompt.ship.detect` reads a "<work>, dann ship" prompt as a deferred ship (`lib/ship-intent.js` `isDeferredShip`): the work comes first and do-ship runs last. Until then `prompt.flow.title-work` keeps the work title instead of switching to Shipping.
+- **Load-proof hook tests.** Three tests failed only on a machine under heavy load. Spawned cleanup-gate runs now get `DEVOPS_GIT_TIMEOUT_MS=30000` (`lib/git-timeout.js` never goes below 5000). The parse ceilings rise to 1000 ms, and RT3-R4 may run for 120 s.
+
+## [0.307.0] — 2026-10-25
+
+The design overview, the notes dock and the tips were reworked from a full round of feedback on an example concept.
+
+### Changed
+- **Overview.** The eye sits inside the header and the layers button is gone. The focused tile glows on hover instead of showing a "Design öffnen" button. Previews fill the tile but keep clear of the info card. Side tiles are plain and show the variant icon; arrows are tall chevrons that fade in with a glow. Enter opens the focused tile. The current page in the header is a quiet label, not a button. The info card is half-transparent until hovered, shows icon + name only, and replaces the "Verbessert" chip with a short line from the new `data-design-improved` attribute.
+- **Notes dock.** Opening it (Space or click) focuses the most specific field with the caret at the end and a fresh line; switching pages moves the focus along. Fields grow with their text and shrink the others first. The dock no longer overlaps the ☰ button, which now wears the navigation-bar surface.
+- **Tips.** Every tip fits one line, users never see the word "Pin" (it is "Notiz"), a tip shows at most once per session, and a hotkey tip stops once the hotkey was used. Tips get their own calm `--tip-color`, apart from the amber `--question-color` of open questions.
+- **Fields.** One modern look for every input and textarea; the 📎 button no longer covers the text.
+- **Designs of a whole app** render edge to edge (`data-screen-fit="full"`) and carry no round commentary under the mock.
+- **Menu.** The "Fragen offen" hint sits above the submit row.
+
+### Fixed
+- **Implement asked twice.** After the 🔒 unlock (or the caret menu) "Umsetzen" no longer opens a browser confirm.
+- **Second tab's title.** A tab that did not submit itself now follows the server state (⏳/🛠️) without a reload.
+
+## [0.306.0] — 2026-10-25
+
+In batch mode the "note saved" answer is now easy to see. The red panel no longer shows the hook's plugin path or the whole prompt again.
+
+Why: with exit 2 Claude Code builds the block message as `[<hook command>]: <stderr>`, which puts the full plugin path first. It also adds the plugin attribution and an `Original prompt:` block, so the one line that matters got lost. A JSON `decision: "block"` shows only `reason`, and `suppressOriginalPrompt` drops the prompt block (checked in the bundled CLI 2.1.308 and npm CLI 2.1.175). No hook can change the fixed "operation blocked by hook" header or the red styling.
+
+### Changed
+- **Batch ack layout.** `prompt.batch.collect` (0.13.0) blocks collected, rearm and help prompts with stdout JSON plus exit 0 (`blockPrompt`, written synchronously so a cut-off line cannot fail open). The ack now opens with `💾 NOTIZ #n GESPEICHERT`. Below it come the first 70 characters of the prompt in quotes (a hook cannot summarize, so the echo lets you match the note; the cut never splits an emoji), then `(rotes Panel = Absicht, kein Fehler)`, then the three command lines as before. The new icon is `PANEL_ICONS.saved`. 💾 rather than ✅, because ✅ belongs to the completion card.
+
+## [0.305.0] — 2026-10-25
+
+A concept tab now shows its state in the browser tab, and exclusive decisions get one recommended choice instead of all of them.
+
+### Added
+- **Status glyph in the tab title.** `renderTabTitle()` puts 👉 (your turn), ⏳ (submitted), 🛠️ (implementing), 🏁 (final report open) or ✅ (closed) in front of the page title. The poll and the heartbeat drive it, so a background tab updates without being focused. The "Concept —" prefix is gone; `concept-build.js` strips it (and an old glyph) when it imports a page.
+
+### Changed
+- **Exclusive decisions pre-select one option.** Mutually exclusive alternatives default to exactly one Miteinbeziehen (Claude's recommendation) and Verwerfen for the rest. Independent topics stay on Miteinbeziehen. The user can still change every choice (`templates-decision.md`, `step2-generate.md`, `templates-design-views.md`).
+
 ## [0.304.0] — 2026-10-25
 
 The API credit route now picks the model per task, shows where the money goes and trims long agent runs. Alpha features can now ship to alpha pins only: the first one is batch mode for large unattended jobs.

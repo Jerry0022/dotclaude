@@ -220,6 +220,10 @@ signal Claude monitors.
 - **Frozen** (any non-live tab): `#panel-frozen` with the back-link; the
   journey row is hidden, the status line reads "🕘 Runde N · nur lesen"
 - After Claude processes and resets the page → back to **Ready**
+- **Browser tab title** (`renderTabTitle()`): one status glyph + the concept
+  title, no "Concept —" prefix — 👉 your turn · ⏳ rethinking · 🛠️
+  implementing · 🏁 final report waiting · ✅ closed. It follows the live
+  round and updates from the poll, so background tabs show it too.
 
 **Notes, pins and hotkeys** (chrome polish; the engine owns all of it):
 - **Wording**: "Notiz"/"Notizen" (en "note(s)") for every note surface — never
@@ -250,6 +254,11 @@ signal Claude monitors.
   start page on overview concepts, scroll top on plain pages). Reduced motion
   turns all of it off. The final report has no journey row, so nothing builds
   up there.
+- **Tips once**: a tip shown once is not shown again (dismissed 30 days); the
+  tip lines are one short line each ("Space opens your notes").
+- **Dock focus**: opening the notes dock puts the cursor in its first field.
+- **Wording**: user-visible text says "note"/"Notiz" for what an own marker on
+  the design holds — never "Pin" (internal term only).
 
 ## File naming and iteration tabs
 

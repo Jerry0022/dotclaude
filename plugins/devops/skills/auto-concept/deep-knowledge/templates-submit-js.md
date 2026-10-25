@@ -48,16 +48,14 @@ async function submitWithAction(action) {
 
   // Empty-submit guard: if the user clicks submit without having modified
   // any field in the active iteration, ask before sending. Avoids burning
-  // a Claude turn on accidental clicks. Implement ALWAYS confirms — it is the
-  // one action that writes code — but never twice: the empty-submit wording
-  // already says so when nothing was changed.
+  // a Claude turn on accidental clicks. A changed page implements without a
+  // dialog: the implement button already sits behind its own second step
+  // (the journey's 🔒 unlock, the split button's caret menu).
   if (!_userInteracted) {
     const msg = (action === 'implement')
       ? '{{panel.empty_implement_confirm}}'
       : '{{panel.empty_iterate_confirm}}';
     if (!window.confirm(msg)) return;
-  } else if (action === 'implement') {
-    if (!window.confirm('{{panel.submit_implement_confirm}}')) return;
   }
 
   _submitInFlight = true;

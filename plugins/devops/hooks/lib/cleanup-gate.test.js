@@ -443,7 +443,8 @@ describe("hooks end to end — post arms and records, pre refuses", () => {
   });
 
   const run = (hook, payload) => {
-    const env = { ...process.env, TEMP: tmp, TMP: tmp, TMPDIR: tmp };
+    // A loaded machine (parallel sessions' suites) can outrun the 5 s git timeout.
+    const env = { ...process.env, TEMP: tmp, TMP: tmp, TMPDIR: tmp, DEVOPS_GIT_TIMEOUT_MS: "30000" };
     delete env.CLAUDE_PLUGIN_ROOT;
     return spawnSync(process.execPath, [hook], {
       cwd: w.repo, input: JSON.stringify({ cwd: w.repo, ...payload }), encoding: "utf8", env,

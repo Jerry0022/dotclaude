@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { isShipIntent, parseShipRequest, SHIP_KEYWORDS, SHIP_SLASH, KEYWORD_MAX_CHARS } from "./ship-intent.js";
+import { isShipIntent, isDeferredShip, parseShipRequest, SHIP_KEYWORDS, SHIP_SLASH, KEYWORD_MAX_CHARS } from "./ship-intent.js";
 
 // One classifier for both hooks: prompt.ship.detect turns the intent into a
 // Skill('do-ship') instruction, prompt.flow.title-work marks the sidebar with
@@ -209,5 +209,22 @@ describe("parseShipRequest — target channel", () => {
     expect(isShipIntent("promote stable")).toBe(true);
     expect(isShipIntent("auf beta heben")).toBe(true);
     expect(isShipIntent("promote the idea to the team")).toBe(false);
+  });
+});
+
+// A red card's Fix button and the user's own style: the work first, the ship
+// last (2026-10-25).
+describe("isDeferredShip", () => {
+  test.each([
+    "Behebe zuerst die roten Befunde der letzten Card (rote Tests bzw. unerfüllte Anforderungen), dann ship.",
+    "Debug the blocker from the last card, fix it, then ship again.",
+    "fix den error und dann ship",
+    "lint und fix, dann ship",
+  ])("%j is a ship after work", (p) => {
+    expect(isShipIntent(p)).toBe(true);
+    expect(isDeferredShip(p)).toBe(true);
+  });
+  test.each(["ship", "ship it", "und dann ship!", "dann ship", "promote stable", "fix den error"])("%j is not deferred", (p) => {
+    expect(isDeferredShip(p)).toBe(false);
   });
 });

@@ -110,7 +110,12 @@
          updated top-edge partition comment. `hidden` by default; JS
          (updateAnnoUI(), § Layout JS) reveals it only when the ACTIVE screen
          has ≥1 annotation, and keeps the count live across screen/iteration
-         switches. aria-pressed / aria-label reflect body.anno-hidden. -->
+         switches. aria-pressed / aria-label reflect body.anno-hidden.
+         Whenever the overview header card (#design-header) is on screen the
+         eye lives INSIDE it (.design-header-eye: placeEye() in
+         wireDesignOverview, plus the adopt safety net in § Panel Chrome JS)
+         — the floating spot below is only the fallback for rounds without
+         that header. Keep id and class stable: both movers key on them. -->
     <button id="anno-toggle" class="anno-toggle-fab" type="button" hidden
             aria-pressed="true"
             aria-label="{{anno.toggle_hide}}"

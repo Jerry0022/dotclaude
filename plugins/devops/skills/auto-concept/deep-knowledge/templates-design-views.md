@@ -139,7 +139,9 @@ Reuses the decision template's proven bi-state mechanics wholesale — no new
 markup vocabulary. A `data-view-kind="decision"` view is a fullscreen frame
 (heading + free prose authored above/between the alternatives) around one
 or more `[data-decision]` groups, each with the same bi-state
-(`Miteinbeziehen` / `Verwerfen`, default include) and the same mandatory
+(`Miteinbeziehen` / `Verwerfen`; pre-selection per § Bi-State Variant
+Evaluation — exclusive alternatives: only the recommended one included,
+independent topics: included) and the same mandatory
 adjacent `textarea[data-comment="{decisionId}-note"]` as § Bi-State Variant
 Evaluation. `ensureCommentSlots()` (§ Comment Slot Injection) already runs
 page-wide on `DOMContentLoaded` and reaches every `[data-decision]` group
@@ -443,6 +445,7 @@ four attributes; the engine (templates-design-overview.md § Variant overview JS
 | `data-design-color` | Optional. A hex colour for the design's slide ring, header line and icon background. Never the accent blue: the icons themselves are drawn in one uniform accent tint, and the background must stay distinguishable. Without it the engine assigns a palette colour by position. |
 | `data-design-overlay` | Optional. Where the overlay (kicker, motto, traits) sits on the preview: `tl`, `tr`, `bl`, `br`, `tc` or `bc`; default `bl`. Claude picks the corner that covers the least important part of THAT design's first screen (titles and key figures usually sit top → `bl`/`bc`). |
 | `data-design-overlay-tone` | Optional. `warm` switches the overlay from the semi-transparent bluish tint to a warm graphite — set it when the preview itself is bluish and the default tint would sink into it. No auto-detection. |
+| `data-design-improved` | Optional. A short phrase (max ~40 chars, e.g. "Wochenansicht per Tab") naming what got better since the last round. The overview card shows it as "Verbessert: …" under the top-3 points. Absent → nothing is shown. Pure meta lives here and in the card, never as text inside or under the design itself. |
 
 **Authoring attribute on the iteration** (`section[data-iteration]` of a
 ≥2-design round): `data-design-set="alternatives"` when the designs are

@@ -273,6 +273,14 @@ describe("prompt.ship.detect — a bare affirmation ships only after a ship-aski
 // Skill restructure PR 2: promote folded into do-ship. The hook parses the
 // target channel (lib/ship-intent.js) and passes it as the skill argument;
 // do-ship ships anything unshipped to alpha, then promotes.
+describe("prompt.ship.detect — work first, then ship", () => {
+  test("a Fix button prompt mandates the fix first, the ship last", () => {
+    const r = runHook({ prompt: "Fix the red findings of the last card first (red tests or unmet requirements), then ship." });
+    expect(r.stdout).toContain("in this order: first do the work");
+    expect(r.stdout).toContain('then use Skill("devops:do-ship")');
+  });
+});
+
 describe("prompt.ship.detect — target channel", () => {
   test("a plain ship carries no argument (alpha is the default)", () => {
     const r = runHook({ prompt: "ship it" });

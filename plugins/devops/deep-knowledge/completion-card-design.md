@@ -214,8 +214,8 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   session that had just shipped, and ship again.
 - **Buttons** (Desktop widget only, hidden in the terminal): the two verbs
   of the variant, primary first; each has a tooltip explaining what it
-  triggers (`Fix` → "Ich repariere die zwei Tests zuerst, dann kommt die
-  Card neu."; `Trotzdem shippen` → "Ship mit skipChecks — die roten Tests
+  triggers (`Fix` → "…, dann wird geshippt." — a deferred ship, `isDeferredShip`;
+  `Trotzdem shippen` → "Ship mit skipChecks — die roten Tests
   landen als Issue."). Equal height, 13px; only border/text colour differs.
 - **`Web-Guide starten` button** (#506/#519): when `hooks/lib/guide-handoff.js`
   `detectCardHandoff` finds a manual web hand-off in `open`/`userFinalTest`

@@ -1,7 +1,9 @@
 /**
  * @module ask-title
- * @version 0.1.0
- * @description The session title while an AskUserQuestion waits: the card
+ * @version 0.2.0
+ * @description The session title while a call waits for the user — an
+ *   AskUserQuestion, an ExitPlanMode plan approval, or a start_session that
+ *   asks the user ("offer", "user_asked": the app's approval card): the card
  *   sets `👉 ➜ ❓ Question ┃ ` only when a TURN ends on a question — a question
  *   asked mid-turn blocked with the ⏳ still on the title, so the sidebar said
  *   "Claude works" while the session waited for the user (2026-10-25).
@@ -23,6 +25,21 @@ const { WORK_PREFIX, stripPrefixes, classify, leadingPrefix } = S;
 const MARKER = '[ask-title]';
 const QUESTION_PREFIX = S.prefixOf('question');
 const SET_TOOL = 'mcp__ccd_session_mgmt__set_session_title';
+const START_TOOL = 'mcp__ccd_session__start_session';
+
+/**
+ * True when this tool call blocks until the user answers. start_session with
+ * "own_initiative" only drops a proposal card and returns at once; every other
+ * start waits on the user ("offer" asks, "user_asked" shows the app's
+ * approval card even under bypass permissions — Backlog run, 2026-10-25).
+ */
+function isBlockingCall(name, input) {
+  if (name === 'AskUserQuestion' || name === 'ExitPlanMode') return true;
+  if (name !== START_TOOL) return false;
+  // A follow-up start by proposal_id is the user's own click — no prompt.
+  if (input && input.proposal_id && !input.initiation) return false;
+  return !(input && input.initiation === 'own_initiative');
+}
 
 /** True when `title` already says the session waits on a question. */
 function isQuestionTitle(title) {
@@ -103,7 +120,7 @@ function turnState(text, toolUseId) {
       if (!b) continue;
       if (e.type === 'assistant' && b.type === 'tool_use') {
         if (b.name === SET_TOOL && isQuestionTitle(b.input && b.input.title)) titleSet = true;
-        else if (b.name === 'AskUserQuestion' && b.id !== toolUseId) titleSet = false;
+        else if (isBlockingCall(b.name, b.input) && b.id !== toolUseId) titleSet = false;
       }
       if (e.type === 'user' && b.type === 'tool_result' && resultText(b).includes(MARKER)) refused = true;
     }
@@ -129,15 +146,15 @@ function setCall(title) {
 
 /** The refusal: set the title, then repeat the question — one message. */
 function refusalText(title) {
-  return `${MARKER} The sidebar still shows ⏳ while this question waits for the user. ` +
-    `Send ${setCall(title)} and this exact AskUserQuestion again in ONE message, the title call first. ` +
+  return `${MARKER} The sidebar still shows ⏳ while this call waits for the user. ` +
+    `Send ${setCall(title)} and this exact call again in ONE message, the title call first. ` +
     'Only deferred → load it with ToolSearch "select:' + SET_TOOL + '" first. ' +
     'For later questions put the set call in the same message right away. Do not mention this to the user.';
 }
 
 /** After the answer: restore the ⏳ head with the next tool call. */
 function restoreText(title) {
-  return `${MARKER} The question is answered — Desktop app only: ${setCall(title)} in the SAME message as your next ` +
+  return `${MARKER} The user answered — Desktop app only: ${setCall(title)} in the SAME message as your next ` +
     'tool call (parallel, no message of its own). The turn ends with a completion card instead → skip it, the card sets the title. ' +
     'Fails or unavailable: skip silently. Do not mention this to the user.';
 }
@@ -145,6 +162,7 @@ function restoreText(title) {
 module.exports = {
   MARKER,
   QUESTION_PREFIX,
+  isBlockingCall,
   isQuestionTitle,
   questionTitle,
   restoredTitle,
