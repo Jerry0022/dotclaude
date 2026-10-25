@@ -57,6 +57,10 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
   // left open under a screen the user has since navigated away from would
   // otherwise reappear open on return.
   function openBubble(id) {
+    // Opened once = seen: the eye's counter drops it (see updateAnnoUI()).
+    document.querySelectorAll('[data-anno]').forEach(a => {
+      if (a.dataset.anno === id && a.dataset.annoSeen !== 'true') { a.dataset.annoSeen = 'true'; paintEyeCount(); }
+    });
     document.querySelectorAll('[data-anno-bubble]').forEach(b => {
       b.dataset.open = String(b.dataset.annoBubble === id);
     });
@@ -358,24 +362,36 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     const onOverview = document.body.dataset.overviewActive === 'true';
     const it = document.querySelector('section[data-iteration]:not([hidden])');
     const hidden = document.body.classList.contains('anno-hidden');
-    // Counter = open (unanswered) notes of the page; the eye itself is hidden
-    // only when the page has nothing to hide (no notes, no own pins, no
-    // overview box) — and never while the layer is off, or it could not be
-    // switched back on.
+    // The eye itself is hidden only when the page has nothing to hide (no
+    // notes, no own pins, no overview box) — and never while the layer is
+    // off, or it could not be switched back on.
     const scope = onOverview ? (it ? [...it.querySelectorAll('section[data-design] [data-anno]')] : []) : all;
-    const openCount = scope.filter(a => {
-      const p = a.querySelector('[data-anno-pin]');
-      return !(p && p.dataset.answered === 'true');
-    }).length;
     const hideable = scope.length > 0 || !!document.querySelector('.upin')
       || (onOverview && !!document.querySelector('.design-ov'));
     toggle.hidden = !hideable && !hidden;
-    const badge = document.getElementById('anno-eye-count');
-    if (badge) { badge.textContent = String(openCount); badge.hidden = openCount === 0; }
+    paintEyeCount();
     const label = (hidden ? toggle.dataset.labelShow : toggle.dataset.labelHide) || '';
     if (label) { toggle.setAttribute('aria-label', label); toggle.setAttribute('data-tip', label); }
     toggle.setAttribute('aria-pressed', String(!hidden));
   }
+  // Counter = the automatic notes of the CURRENT page only that are still
+  // open: neither answered nor opened yet. The overview and a question view
+  // own no notes, so they count 0 — summing every design's notes on the
+  // overview showed e.g. "4" on a page with nothing to look at.
+  function paintEyeCount() {
+    const badge = document.getElementById('anno-eye-count');
+    if (!badge) return;
+    const own = document.body.dataset.viewActive === 'true' || document.body.dataset.overviewActive === 'true'
+      ? [] : annotationsInScreen(activeScreen());
+    const openCount = own.filter(a => {
+      if (a.dataset.annoSeen === 'true') return false;
+      const p = a.querySelector('[data-anno-pin]');
+      return !(p && p.dataset.answered === 'true');
+    }).length;
+    badge.textContent = String(openCount);
+    badge.hidden = openCount === 0;
+  }
+  window.paintAnnoEyeCount = paintEyeCount;
   // Called from § State Persistence's DOMContentLoaded handler AFTER
   // restoreState() has applied the persisted body.anno-hidden class — see
   // the note there. Exposed the same way updateNoteMarkers() is.
