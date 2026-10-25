@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.318.1] — 2026-10-25
+
+The plugin's own safety nets (parked, salvage, rescue, backup copies) are now cleaned up once their content has landed, and a crashed git's leftover lock files no longer block pruning without a word. An audit found about 276 unmerged refs across 8 repos, most of them landed safety copies, plus 578 stale lock files that had made every `git fetch --prune` fail for 6 days.
+
+### Fixed
+- **Landed safety copies on origin expire.** `salvage/*`, `salvage-land/*`, `parked/*` and `wip/*` on origin now expire 14 days after their content landed, like `backup/*` and `rescue/*` already did. The delete stays lease-guarded. Unlanded copies are never deleted automatically: they wait for a user decision.
+- **`orphan-scan --clean-landed` removes landed parked, autosave, wip, backup and salvage branches.** Before, it spared them even when their content was on the default branch. Long-lived branches and branches with an upstream on origin are still spared.
+- **Stale git lock files are cleared before prune and auto-clean.** Ref locks and `packed-refs.lock` older than 1 h and an `objects/maintenance.lock` older than 24 h are removed from the common git dir before orphan-scan's `fetch --prune` and at the start of the post-ship auto-clean. A worktree's `index.lock` is never touched.
+
 ## [0.318.0] — 2026-10-25
 
 The plugin now answers only to the tool names of its single `dotclaude` MCP server, as announced in v0.313.0.
