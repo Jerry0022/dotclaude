@@ -293,8 +293,8 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
 - **Frozen rounds** read `userPins` from `data-frozen-feedback`
   (`concept-build.js bake` writes it) and render the pins read-only in that
   round's section; entries without an `anchor` (design pins) are ignored.
-- **Eye + Alt.** `#dpin-eye` (shown once any pin exists) toggles
-  `body.anno-hidden` like the design eye and persists with it. Holding Alt
+- **Eye + ?.** `#dpin-eye` (shown once any pin exists) toggles
+  `body.anno-hidden` like the design eye and persists with it. `?`
   shows the same badge overlay as everywhere, plus the example pin
   "Ctrl + click" (`wireChromeHotkeys()`, via `window.documentPinsActive()`).
   While Ctrl is held a hint pill names the gesture.

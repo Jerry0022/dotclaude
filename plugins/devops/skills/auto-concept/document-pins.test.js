@@ -11,7 +11,7 @@ import { readTemplates } from "./templates-source.js";
 // (templates-free.md § Document pins). Booted from the real assembled
 // fixture, like chrome-islands-notes.test.js. jsdom has no layout, so
 // positions are not asserted — the store, the anchor, the payload, the
-// frozen render, the eye and the Alt overlay are.
+// frozen render, the eye and the ? overlay are.
 
 const require = createRequire(import.meta.url);
 const md = readTemplates();
@@ -136,7 +136,7 @@ describe("document pins · set, save, payload", () => {
   }, BOOT_TIMEOUT);
 });
 
-describe("document pins · eye, Alt, frozen, design regression", () => {
+describe("document pins · eye, ? badges, frozen, design regression", () => {
   test("the eye shows once a pin exists and toggles body.anno-hidden", async () => {
     const { window, document } = await boot(fixture("decision"));
     const eye = document.getElementById("dpin-eye");
@@ -152,12 +152,12 @@ describe("document pins · eye, Alt, frozen, design regression", () => {
     expect(md).toMatch(/body\.anno-hidden \.dpin-layer, body\.anno-hidden \.dpin-hint \{ display: none !important; \}/);
   }, BOOT_TIMEOUT);
 
-  test("Alt shows the badge overlay plus the Ctrl + click example pin on a document page", async () => {
+  test("? shows the badge overlay plus the Ctrl + click example pin on a document page; ? again removes it", async () => {
     const { window, document } = await boot(fixture("decision"));
-    key(window, document.body, { key: "Alt", code: "AltLeft", altKey: true });
+    key(window, document.body, { key: "?", code: "Minus", shiftKey: true });
     expect(document.getElementById("hk-overlay")).not.toBeNull();
     expect(document.querySelector("#hk-overlay .hk-pin-example").textContent).toMatch(/Strg/);
-    key(window, document.body, { key: "Alt", code: "AltLeft" }, "keyup");
+    key(window, document.body, { key: "?", code: "Minus", shiftKey: true });
     expect(document.getElementById("hk-overlay")).toBeNull();
   }, BOOT_TIMEOUT);
 
