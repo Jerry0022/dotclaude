@@ -473,7 +473,7 @@ body:has(.draft-offline-strip:not([hidden])) .submitted-toast { bottom: 4.75rem;
 /* The hint paragraph does not render in the foot (#341): at panel width it
    wraps to three lines (67px) and pushes the frozen block to 157px — past the
    120px cap, with the back button clipped below it. The same sentence is
-   already on screen twice: the status line ("🕘 Iteration N · nur lesen") and
+   already on screen twice: the status line ("🕘 Runde N · nur lesen") and
    the frozen bar over the content. The markup stays (screen readers, older
    pages) — the foot is indicator + back button, ≈85px. */
 #panel-frozen .hint { display: none; font-size: 0.78rem; line-height: 1.35; margin: 0; }
@@ -659,7 +659,7 @@ body:has(.draft-offline-strip:not([hidden])) .submitted-toast { bottom: 4.75rem;
    hint are `flex: none` — a live check found `flex: 0 1 auto; min-height:
    0` on a foot element let it collapse to 7px (invisible) exactly when
    space was tight; a fixed pixel floor on `.closeout-rows` (above) pushed
-   the foot AND the "Iterationen ansehen" link below the viewport instead,
+   the foot AND the "Runden ansehen" link below the viewport instead,
    clipped by `.panel-cta`'s own `overflow: hidden`. `min-height: 0` on the
    rows region (this time paired with sticky heads, not a floor) is what
    lets the rows region give ground to this pinned foot rather than the
@@ -1182,6 +1182,256 @@ section[data-open-questions] .oq-issue-link {
 }
 section[data-open-questions] .oq-issue-link:hover {
   background: color-mix(in srgb, var(--success-color, #3fb950) 15%, transparent);
+}
+
+/* ── Journey row (§ Submit → Journey row) ──────────────────────────────────
+   One row replaces the old split button, the progress dots, the green
+   "übermittelt" box and its hint: round toggle — wire — lock — wire — 🤖
+   Umsetzung — wire — 🏁 Abschluss. mountJourney() builds it and adopts
+   #submit-iterate-btn / #submit-implement-btn as the toggles' fill halves;
+   renderJourney() writes .journey[data-phase] = you | rethinking | unlock |
+   implementing. Unlock never transform-scales anything: the two toggles trade
+   flex-grow (the sum stays 1, so 🏁 and its wire do not move) while their
+   faces cross-fade — the outgoing face is gone before the width moves, the
+   incoming one fades in once the width has arrived, so no frame shows a
+   squeezed or half-clipped glyph. */
+.journey {
+  --jr-track: color-mix(in srgb, var(--text-color, #c9d1d9) 7%, var(--panel-bg, #161b22));
+  --jr-you: var(--accent-color, #388bfd);
+  --jr-ai: var(--success-color, #3fb950);
+  --jr-gold: #e3b341;
+  --jr-ease: cubic-bezier(.4, 0, .2, 1);
+  display: flex; align-items: center;
+  padding: 0.15rem 0 0.4rem;
+}
+body.viewing-frozen .journey, body.viewing-final .journey { display: none; }
+.journey [hidden] { display: none !important; }
+#panel-submitted { display: none !important; }
+.submit-split[hidden], #submit-menu.jr-retired { display: none !important; }
+.jr-wire {
+  flex: none; display: block; width: 6px; height: 2px; border-radius: 2px;
+  background: color-mix(in srgb, var(--text-color, #c9d1d9) 14%, transparent);
+  transition: width .38s var(--jr-ease) .06s, opacity .15s, background .3s;
+}
+.jr-wire[data-ok] { background: color-mix(in srgb, var(--jr-ai) 55%, transparent); }
+.jr-node {
+  width: 28px; height: 28px; flex: none; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; line-height: 1; color: var(--text-secondary, #8b949e);
+  background: var(--jr-track);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .05);
+  overflow: hidden;
+  transition: width .38s var(--jr-ease) .06s, opacity .15s;
+}
+/* The 🤖 Umsetzung node and its wire fold into the implement toggle. */
+.journey[data-phase="unlock"] .jr-fold,
+.journey[data-phase="implementing"] .jr-fold { width: 0; opacity: 0; }
+.jr-toggle {
+  position: relative; box-sizing: border-box; min-width: 0;
+  display: grid; grid-template-areas: "f"; grid-template-columns: minmax(0, 1fr); align-items: center;
+  height: 44px; padding: 3px; border-radius: 999px;
+  background: var(--jr-track);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .04);
+  transition: flex-grow .38s var(--jr-ease) .06s, flex-basis .38s var(--jr-ease) .06s,
+              height .2s, padding .2s, background .2s, box-shadow .2s;
+}
+.jr-round { flex: 1 1 0; }
+.jr-impl  { flex: 0 1 38px; background: transparent; box-shadow: none; padding: 0; height: 38px; }
+.journey[data-phase="unlock"] .jr-round,
+.journey[data-phase="implementing"] .jr-round { flex: 0 0 62px; }
+.journey[data-phase="unlock"] .jr-impl,
+.journey[data-phase="implementing"] .jr-impl {
+  flex: 1 1 0; height: 44px; padding: 3px;
+  background: var(--jr-track);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+/* Faces: stacked in one grid cell; exactly one per toggle carries [data-on]. */
+.jr-face {
+  grid-area: f; min-width: 0; height: 100%;
+  display: flex; align-items: center; gap: 3px;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .12s, visibility 0s linear .12s;
+}
+.jr-face[data-on] {
+  opacity: 1; visibility: visible; pointer-events: auto;
+  transition: opacity .2s .34s, visibility 0s;
+}
+/* The lock is the implement toggle's seed: it stays while the track grows,
+   then hands over to the 🔓 face at the same spot. */
+.jr-face-lock { transition: opacity .15s .3s, visibility 0s linear .45s; }
+.jr-face-lock[data-on] { transition: opacity .2s .3s, visibility 0s; }
+.jr-other, .jr-dot {
+  flex: none; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1; color: var(--text-secondary, #8b949e);
+}
+.jr-other { width: 30px; height: 30px; font-size: 14px; }
+.jr-other[data-ok] { color: var(--jr-ai); background: color-mix(in srgb, var(--jr-ai) 14%, transparent); }
+.jr-chk { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
+.journey .jr-fill, .journey .submit-btn.jr-fill, .journey .implement-btn.jr-fill {
+  flex: 1 1 auto; min-width: 0; width: auto; height: 38px; margin: 0; padding: 0 8px;
+  border: 0; border-radius: 999px;
+  display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 8px;
+  font: inherit; font-size: 13px; font-weight: 600; line-height: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: #fff; cursor: pointer;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--jr-you) 88%, #fff), var(--jr-you));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--jr-you) 40%, transparent), inset 0 1px 0 rgba(255, 255, 255, .22);
+}
+.journey .jr-fill:hover:not(:disabled) { filter: brightness(1.08); }
+.journey .jr-fill:focus-visible, .jr-lock:focus-visible, .jr-mini:focus-visible {
+  outline: 2px solid var(--jr-you); outline-offset: 2px;
+}
+.journey .jr-fill:disabled { opacity: .55; cursor: not-allowed; }
+.journey .hint-cache, .journey .warn-icon { display: none; }
+.journey .submit-label { overflow: hidden; text-overflow: ellipsis; }
+.journey .implement-btn.jr-fill {
+  justify-content: flex-start; padding: 0 10px 0 4px; color: #1f1500;
+  background: linear-gradient(100deg, #c6901a, var(--jr-gold));
+  box-shadow: 0 6px 18px rgba(227, 179, 65, .35), inset 0 1px 0 rgba(255, 255, 255, .35);
+}
+.journey .implement-btn.jr-fill:hover:not(:disabled) { background: linear-gradient(100deg, #c6901a, var(--jr-gold)); }
+.jr-ul-ico {
+  width: 30px; height: 30px; flex: none; border-radius: 50%;
+  background: rgba(31, 21, 0, .18);
+  display: flex; align-items: center; justify-content: center; font-size: 14px; line-height: 1;
+}
+.jr-ul-txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; text-align: left; }
+.jr-ul-txt b { font-size: 13.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.jr-ul-txt small { font-size: 10.5px; font-weight: 500; opacity: .72; overflow: hidden; text-overflow: ellipsis; }
+.jr-lock {
+  width: 38px; height: 38px; flex: none; border: 0; border-radius: 50%; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; line-height: 1; cursor: pointer;
+  background: linear-gradient(180deg, var(--jr-gold), #c6901a);
+  box-shadow: 0 0 16px rgba(227, 179, 65, .35), 0 2px 8px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .35);
+  transition: transform .2s, box-shadow .2s, filter .2s;
+}
+.jr-lock:hover:not(:disabled) { transform: scale(1.07); box-shadow: 0 0 24px rgba(227, 179, 65, .55), 0 2px 8px rgba(0, 0, 0, .35); }
+.jr-lock:disabled { filter: grayscale(.7) brightness(.8); cursor: default; box-shadow: none; }
+/* Mini toggle (↩ | 🤖): the shrunk round toggle after unlock. */
+.jr-mini {
+  display: flex; align-items: center; gap: 3px; height: 100%; padding: 0; margin: 0;
+  border: 0; background: transparent; color: inherit; cursor: pointer; border-radius: 999px;
+}
+.jr-mini:disabled { cursor: default; }
+.jr-dot { width: 26px; height: 26px; font-size: 12px; }
+.jr-dot[data-on] { background: linear-gradient(180deg, color-mix(in srgb, var(--jr-you) 88%, #fff), var(--jr-you)); color: #fff; font-weight: 700; }
+.jr-dot .jr-chk { width: 15px; height: 15px; display: none; }
+.journey[data-phase="implementing"] .jr-dot { color: var(--jr-ai); background: color-mix(in srgb, var(--jr-ai) 14%, transparent); }
+.journey[data-phase="implementing"] .jr-dot > span { display: none; }
+.journey[data-phase="implementing"] .jr-dot .jr-chk { display: block; }
+/* Run bar — the filled AI half. Shared 1:1 with the toast (renderSubmittedToast). */
+.jr-run {
+  position: relative; flex: 1 1 auto; min-width: 0; height: 38px; box-sizing: border-box;
+  display: flex; align-items: center; gap: 8px; padding: 0 14px 0 4px;
+  border-radius: 999px; overflow: hidden; white-space: nowrap;
+  font-size: 14px; font-weight: 600; line-height: 1; color: #fff;
+  background: color-mix(in srgb, var(--jr-ai) 9%, #0c1410);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--jr-ai) 45%, transparent), 0 4px 14px color-mix(in srgb, var(--jr-ai) 25%, transparent);
+}
+.jr-run-done {
+  position: absolute; top: 0; bottom: 0; left: 0; overflow: hidden; border-radius: 999px;
+  background: color-mix(in srgb, var(--jr-ai) 42%, transparent);
+  transition: width .5s var(--jr-ease);
+}
+.jr-shine {
+  position: absolute; top: 0; bottom: 0; width: 45%; left: -45%;
+  background: linear-gradient(90deg, transparent, rgba(170, 255, 180, .35), transparent);
+  animation: jr-shine 1.6s linear infinite;
+}
+.jr-run[data-indeterminate] .jr-run-done { width: 38% !important; animation: jr-sweep 1.8s var(--jr-ease) infinite; }
+.jr-bot {
+  position: relative; width: 30px; height: 30px; flex: none; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 15px; line-height: 1;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--jr-ai) 85%, #fff), color-mix(in srgb, var(--jr-ai) 75%, #000));
+  animation: jr-breathe 2.4s ease-in-out infinite;
+}
+.jr-run b { position: relative; font-weight: 650; overflow: hidden; text-overflow: ellipsis; }
+.jr-count { position: relative; margin-left: auto; font-style: normal; font-size: 13px; font-weight: 700; color: color-mix(in srgb, var(--jr-ai) 70%, #fff); cursor: help; }
+.jr-count:empty { display: none; }
+.jr-run[data-paused] { filter: saturate(.45) brightness(.85); }
+.jr-run[data-paused] .jr-shine, .jr-run[data-paused] .jr-bot, .jr-run[data-paused] .jr-run-done { animation-play-state: paused; }
+@keyframes jr-shine { to { left: 100%; } }
+@keyframes jr-sweep { 0% { left: -38%; } 100% { left: 100%; } }
+@keyframes jr-breathe { 50% { transform: scale(.9); } }
+/* Build-up: once per round, the row assembles left → right. */
+.journey.jr-build > * { animation: jr-in .42s ease-out both; }
+.journey.jr-build > :nth-child(2) { animation-delay: .12s; }
+.journey.jr-build > :nth-child(3) { animation-delay: .24s; }
+.journey.jr-build > :nth-child(4) { animation-delay: .36s; }
+.journey.jr-build > :nth-child(5) { animation-delay: .48s; }
+.journey.jr-build > :nth-child(6) { animation-delay: .6s; }
+.journey.jr-build > :nth-child(7) { animation-delay: .72s; }
+@keyframes jr-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+
+/* Status line under the row: "👉 Du bist dran · gespeichert". */
+.panel-status { --jr-you: var(--accent-color, #388bfd); --jr-ai: var(--success-color, #3fb950); }
+.panel-status .status-line { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; min-width: 0; white-space: nowrap; }
+.panel-status .status-line .conn-label { overflow: hidden; text-overflow: ellipsis; }
+.status-turn { font-weight: 650; }
+.status-turn:empty { display: none; }
+.status-turn:not(:empty)::after { content: " ·"; font-weight: 400; color: var(--text-secondary, #8b949e); }
+.panel-status[data-turn="you"] .status-line { color: var(--text-secondary, #8b949e); }
+.panel-status[data-turn="you"] .status-turn { color: color-mix(in srgb, var(--jr-you) 70%, #fff); }
+.panel-status[data-turn="rethinking"] .status-line,
+.panel-status[data-turn="implementing"] .status-line { color: color-mix(in srgb, var(--jr-ai) 75%, #fff); }
+/* The steps list stays the data model of the counter (x/y + tooltip); its
+   own dots/disclosure are no longer drawn. */
+.panel-status .status-detail { display: none !important; }
+
+/* Round chip in the panel head — coloured like whose turn it is. */
+.panel-head .panel-here-round:not(:empty) {
+  flex: 0 1 auto; padding: 3px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; color: #fff;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-color, #388bfd) 88%, #fff), var(--accent-color, #388bfd));
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-color, #388bfd) 35%, transparent);
+}
+body[data-journey="rethinking"] .panel-head .panel-here-round:not(:empty),
+body[data-journey="implementing"] .panel-head .panel-here-round:not(:empty) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--success-color, #3fb950) 85%, #fff), color-mix(in srgb, var(--success-color, #3fb950) 75%, #000));
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--success-color, #3fb950) 35%, transparent);
+}
+body.viewing-frozen .panel-head .panel-here-round:not(:empty) {
+  background: color-mix(in srgb, var(--text-color, #c9d1d9) 10%, transparent);
+  color: var(--text-secondary, #8b949e); box-shadow: none;
+}
+
+/* ── Status toast — the same pill as the panel (renderSubmittedToast) ── */
+.jr-toast {
+  position: fixed; left: 50%; bottom: 2rem; transform: translateX(-50%);
+  z-index: 97; width: min(340px, calc(100vw - 184px));
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  --jr-you: var(--accent-color, #388bfd); --jr-ai: var(--success-color, #3fb950); --jr-gold: #e3b341;
+  cursor: pointer; animation: jr-toast-in .25s ease;
+}
+.jr-toast[hidden], body.panel-open .jr-toast, body.viewing-frozen .jr-toast { display: none; }
+.jr-toast-cap { font-size: 10.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--text-secondary, #8b949e); }
+.jr-toast .jr-run { width: 100%; height: 42px; flex: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--jr-ai) 50%, transparent), 0 10px 26px rgba(0, 0, 0, .45); }
+.jr-toast-you {
+  box-sizing: border-box; width: 100%; height: 42px; flex: none; border-radius: 999px; padding: 0 16px;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--jr-you) 88%, #fff), var(--jr-you));
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--jr-you) 40%, transparent), inset 0 1px 0 rgba(255, 255, 255, .22);
+}
+.jr-toast-you[hidden], .jr-toast .jr-run[hidden] { display: none; }
+.jr-toast-you span { opacity: .85; }
+.jr-float { font-size: 11.5px; font-weight: 600; letter-spacing: .02em; color: var(--jr-gold); animation: jr-float 2.4s ease-in-out infinite; }
+.jr-float[hidden] { display: none; }
+.jr-float i { font-style: normal; animation: jr-dot 1.2s infinite; }
+.jr-float i:nth-child(2) { animation-delay: .2s; }
+.jr-float i:nth-child(3) { animation-delay: .4s; }
+@keyframes jr-dot { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+@keyframes jr-float { 50% { transform: translateY(-2px); } }
+@keyframes jr-toast-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+body:has(.draft-offline-strip:not([hidden])) .jr-toast { bottom: 4.75rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .jr-toggle, .jr-face, .jr-face[data-on], .jr-face-lock, .jr-face-lock[data-on], .jr-wire, .jr-node, .jr-run-done { transition: none !important; }
+  .jr-shine, .jr-bot, .journey.jr-build > *, .jr-toast, .jr-float, .jr-float i { animation: none !important; }
+  .jr-run[data-indeterminate] .jr-run-done { animation: none !important; width: 100% !important; opacity: .45; }
+  .jr-lock:hover:not(:disabled) { transform: none; }
 }
 ```
 

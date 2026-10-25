@@ -57,33 +57,33 @@ must see their own language. The locale hint is authoritative.
 |---|---|---|
 | `panel.heading`                | Decisions                      | Entscheidungen |
 | `panel.submit`                 | Submit decisions               | Entscheidungen abschicken |
-| `panel.submit_hint`            | Your selection goes straight to Claude. | Deine Auswahl wird direkt an Claude übermittelt. |
-| `panel.submit_iterate`         | Next iteration                 | Zur nächsten Iteration |
-| `panel.submit_iterate_hint`    | Your selection goes to Claude for the next iteration. No code changes. | Deine Auswahl geht an Claude für die nächste Iteration. Es wird kein Code geschrieben. |
-| `panel.submit_implement`       | Implement with feedback       | Mit Feedback implementieren |
-| `panel.submit_implement_hint`  | Claude applies the selection as real changes now. | Claude setzt die Auswahl jetzt in echte Änderungen um. |
-| `panel.submit_implement_confirm` | Implement with feedback now? Claude will write code changes. | Mit Feedback jetzt implementieren? Claude schreibt jetzt Code-Änderungen. |
-| `panel.submitted`              | Decisions submitted            | Entscheidungen übermittelt |
-| `panel.submitted_hint`         | Claude is processing your selection. Switch to the Claude chat to follow progress. | Claude verarbeitet deine Auswahl. Wechsle zum Claude-Chat, um den Fortschritt zu sehen. |
+| `panel.submit_hint` | Your selection is sent straight away. | Deine Auswahl wird direkt übermittelt. |
+| `panel.submit_iterate` | 👉 Next round | 👉 Zur nächsten Runde |
+| `panel.submit_iterate_hint` | Your selection goes into the next round. No code changes. | Deine Auswahl geht in die nächste Runde. Es wird kein Code geschrieben. |
+| `panel.submit_implement` | Implement now | Jetzt umsetzen |
+| `panel.submit_implement_hint` | You approve the scope — it is turned into real changes now. | Du gibst den Umfang frei — er wird jetzt in echte Änderungen umgesetzt. |
+| `panel.submit_implement_confirm` | Implement now? Real code changes will be written. | Jetzt umsetzen? Es werden echte Code-Änderungen geschrieben. |
+| `panel.submitted` | Submitted | Übermittelt |
+| `panel.submitted_hint` | Your selection is on its way into the next round. | Deine Auswahl ist unterwegs in die nächste Runde. |
 | `panel.step_submitted`         | Submitted                      | Übermittelt |
-| `panel.step_received`          | Claude is processing           | Claude verarbeitet |
+| `panel.step_received` | In progress | In Arbeit |
 | `panel.step_implemented`       | Implementation complete        | Implementierung abgeschlossen |
 | `panel.step_implemented_active`| Implementation in progress     | Implementierung läuft |
 | `panel.step_waiting`           | Waiting…                       | Warten… |
 | `panel.step_ready`             | Ready to ship                  | Bereit zum Shippen |
 | `panel.step_reality_check`     | Reality check                  | Realitäts-Check |
 | `panel.step_reality_check_active` | Checking against the default branch… | Prüfe gegen den Default-Branch… |
-| `panel.frozen`                 | Frozen iteration               | Eingefrorene Iteration |
+| `panel.frozen` | Frozen round | Eingefrorene Runde |
 | `panel.frozen_hint`            | You are reading an earlier round. It is read-only — its decisions were already submitted. | Du liest eine frühere Runde. Sie ist schreibgeschützt — ihre Entscheidungen wurden bereits übermittelt. |
 | `panel.frozen_back`            | Back to the current round      | Zurück zur aktuellen Runde |
 | `frozen.bar_hint`              | · earlier round, read-only     | · frühere Runde, schreibgeschützt |
 | `frozen.bar_back`              | Go to current round            | Zur aktuellen Runde |
-| `panel.connecting_title`       | Claude is connecting           | Claude verbindet sich |
-| `panel.connected_title`        | Claude connected               | Claude verbunden |
-| `panel.disconnected_title`     | Claude not connected           | Claude nicht verbunden |
+| `panel.connecting_title` | Connecting to the bridge | Verbindung wird aufgebaut |
+| `panel.connected_title` | Connected — every change is saved | Verbunden — jede Änderung ist gespeichert |
+| `panel.disconnected_title` | Not connected — your input stays saved and is sent on reconnect | Nicht verbunden — deine Eingaben bleiben gespeichert und gehen beim Verbinden raus |
 | `panel.btn_cache_hint`         | cached — sent on reconnect     | gecached — wird beim Verbinden gesendet |
-| `panel.empty_iterate_confirm`  | Nothing was changed. Submit "Next iteration" anyway? | Du hast nichts geändert. Trotzdem "Zur nächsten Iteration" absenden? |
-| `panel.empty_implement_confirm`| Nothing was changed. Implement with feedback anyway? Claude will still write code. | Du hast nichts geändert. Trotzdem mit Feedback implementieren? Claude schreibt dann Code. |
+| `panel.empty_iterate_confirm` | Nothing was changed. Submit "Next round" anyway? | Du hast nichts geändert. Trotzdem "Zur nächsten Runde" absenden? |
+| `panel.empty_implement_confirm` | Nothing was changed. Implement with feedback anyway? Code will still be written. | Du hast nichts geändert. Trotzdem mit Feedback implementieren? Dann wird Code geschrieben. |
 | `panel.toggle_open`            | Open decisions                 | Entscheidungen öffnen |
 | `panel.toggle_close`           | Close decisions                | Entscheidungen schliessen |
 | `panel.close`                  | Close                          | Schliessen |
@@ -91,15 +91,32 @@ must see their own language. The locale hint is authoritative.
 | `theme.to_light`               | Switch to the light theme      | Zum hellen Theme wechseln |
 | `theme.to_dark`                | Switch to the dark theme       | Zum dunklen Theme wechseln |
 | `panel.dim_dismiss`            | Dismiss overlay                | Schimmer entfernen |
-| `panel.status_saved`           | Saved · connected              | Gespeichert · verbunden |
-| `panel.status_saving`          | Saving…                        | Speichert… |
-| `panel.status_connecting`      | Saved · connecting…            | Gespeichert · verbinde… |
-| `panel.status_local_only`      | Saved locally only · disconnected | Nur lokal gespeichert · getrennt |
-| `panel.status_local_only_connected` | Saved locally only       | Nur lokal gespeichert |
-| `panel.status_working`         | Submitted · Claude is working  | Übermittelt · Claude arbeitet |
-| `panel.toast_working`          | Claude is working              | Claude arbeitet |
-| `panel.toast_open`             | Show progress                  | Fortschritt anzeigen |
+| `panel.status_saved` | saved | gespeichert |
+| `panel.status_saving` | saving… | speichert… |
+| `panel.status_connecting` | connecting… | verbindet… |
+| `panel.status_local_only` | all saved · reconnecting… | alles gespeichert · verbinde… |
+| `panel.status_local_only_connected` | saved in this browser only | nur in diesem Browser gespeichert |
+| `panel.status_working` | saved | gespeichert |
+| `panel.toast_open` | Open the panel | Panel öffnen |
 | `panel.status_frozen`          | read-only                      | nur lesen |
+| `panel.submit_implement_sub` | no further round | keine weitere Runde |
+| `panel.turn_you` | Your turn | Du bist dran |
+| `panel.turn_rethinking` | rethinking | überdenkt |
+| `panel.turn_implementing` | implementing | setzt um |
+| `panel.status_reconnecting` | reconnecting… | verbinde… |
+| `panel.journey_label` | Round progress | Rundenverlauf |
+| `panel.journey_rethinking` | Rethinking | Rethinking |
+| `panel.journey_implement` | Implementation | Umsetzung |
+| `panel.journey_finish` | Close-out | Abschluss |
+| `panel.journey_lock` | Enough rounds? Implement now | Genug Runden? Jetzt umsetzen |
+| `panel.journey_back` | Back — one more round | Zurück — doch noch eine Runde |
+| `panel.journey_done` | Approved | Freigegeben |
+| `panel.journey_step` | Step {n} of {m}: {label} | Schritt {n} von {m}: {label} |
+| `panel.journey_req` | Requirement {n} of {m} | Anforderung {n} von {m} |
+| `panel.toast_round` | Round {n} | Runde {n} |
+| `panel.toast_new_round` | New round | Neue Runde |
+| `panel.toast_all_saved` | all saved | alles gespeichert |
+| `panel.toast_reconnecting` | reconnecting | verbinde |
 | `panel.status_detail`          | Progress                       | Fortschritt |
 | `panel.submit_menu`            | More submit options            | Weitere Absende-Optionen |
 | `panel.submit_menu_hint`       | The primary button never writes code. | Kein Code beim Primär-Button. |
@@ -108,7 +125,7 @@ must see their own language. The locale hint is authoritative.
 | `panel.submit_collect_failed`  | Could not collect your decisions — nothing was sent. Reload the page and try again | Entscheidungen konnten nicht eingesammelt werden — nichts wurde gesendet. Seite neu laden und erneut versuchen |
 | `panel.submit_queued_offline` | Bridge unreachable — it is sent automatically on reconnect. Your input is saved locally. | Bridge nicht erreichbar — wird bei Reconnect automatisch nachgeholt. Deine Eingaben sind lokal gesichert. |
 | `panel.submit_not_durable`    | The bridge could not save the submission (storage problem). Nothing is lost — your input is stored locally. Please submit again. | Die Bridge konnte die Übermittlung nicht sichern (Speicherproblem). Nichts ist verloren — deine Eingaben liegen lokal. Bitte erneut absenden. |
-| `panel.processed_no_round`    | Claude finished without a new round — your answers are still here. Submit again if they were not addressed. | Claude hat ohne neue Runde abgeschlossen — deine Eingaben sind erhalten. Bitte erneut absenden, falls sie nicht beantwortet wurden. |
+| `panel.processed_no_round` | Finished without a new round — your answers are still here. Submit again if they were not addressed. | Ohne neue Runde abgeschlossen — deine Eingaben sind erhalten. Bitte erneut absenden, falls sie nicht beantwortet wurden. |
 | `panel.attachments_not_synced` | An image is still only stored locally and will be sent automatically. | Ein Bild liegt noch nur lokal vor und wird automatisch nachgereicht. |
 | `nav.summary_entries`          | entries                        | Einträge |
 | `nav.summary_discarded`        | discarded                      | verworfen |
@@ -122,7 +139,8 @@ must see their own language. The locale hint is authoritative.
 | `variant.discard`              | Discard                        | Verwerfen |
 | `decision.comment_label`       | Note / override (optional)     | Notiz / Override (optional) |
 | `decision.comment_placeholder` | e.g. “only for X”, “with variant Y”… | z.B. „nur für X“, „mit Variante Y“… |
-| `iteration.label`              | Iterations                     | Iterationen |
+| `iteration.label` | Rounds | Runden |
+| `iteration.tab`                | Round                          | Runde |
 | `iteration.active_suffix`      | · active                       | · aktiv |
 | `iteration.final_tab`          | Final report                   | Abschlussbericht |
 | `iteration.reality_tab`        | Reality check                  | Realitäts-Check |
@@ -170,38 +188,37 @@ must see their own language. The locale hint is authoritative.
 | `final.closeout_label_files`   | This page                      | Diese Seite |
 | `final.closeout_summary_ship_yes` | ship                        | shippen |
 | `final.closeout_summary_ship_no` | no release                   | nicht releasen |
-| `final.closeout_running`       | Claude is working through it … | Claude arbeitet es ab … |
+| `final.closeout_running` | Working through it … | Wird abgearbeitet … |
 | `final.closeout_done`          | Concept closed.                | Concept abgeschlossen. |
-| `final.closeout_stalled`       | Delivered, but Claude stopped answering. Nothing more can be sent from this page — check the chat. | Übermittelt, aber Claude antwortet nicht mehr. Von dieser Seite kann nichts mehr gesendet werden — schau in den Chat. |
-| `final.closeout_stalled_short` | Delivered · Claude stopped answering | Übermittelt · Claude antwortet nicht |
+| `final.closeout_stalled` | Delivered, but nothing is answering any more. Nothing more can be sent from this page — check the chat. | Übermittelt, aber es kommt keine Antwort mehr. Von dieser Seite kann nichts mehr gesendet werden — schau in den Chat. |
+| `final.closeout_stalled_short` | Delivered · no answer any more | Übermittelt · keine Antwort mehr |
 | `final.handoffs`               | By hand, afterwards            | Danach von Hand |
-| `final.handoffs_hint`          | Claude cannot do these — they stay with you once this is through. | Das kann Claude nicht übernehmen — das bleibt bei dir, sobald das hier durch ist. |
-| `proto.feedback_title`         | Feedback                       | Feedback |
-| `proto.feedback_toggle`        | Open feedback                  | Feedback öffnen |
-| `proto.feedback_general`       | General notes on this concept  | Allgemeine Anmerkungen zum Konzept |
+| `final.handoffs_hint` | These cannot be done for you — they stay with you once this is through. | Das lässt sich nicht für dich erledigen — das bleibt bei dir, sobald das hier durch ist. |
+| `proto.feedback_title` | Notes | Notizen |
+| `proto.feedback_toggle` | Open notes | Notizen öffnen |
+| `proto.feedback_general`       | General notes on this concept  | Allgemeine Notizen zum Konzept |
 | `proto.feedback_general_hint`  | Persists across all screens    | Screen-übergreifend persistent |
-| `proto.feedback_current`       | This page only                 | Nur diese Seite |
+| `proto.feedback_current`       | this page                      | diese Seite |
 | `proto.feedback_placeholder`   | A note on just this page…      | Notiz nur zu dieser Seite… |
-| `design.feedback_in`           | in                             | in |
 | `proto.screen_counter`         | Screen {n} / {total}           | Screen {n} / {total} |
-| `design.feedback_design`       | The whole design, all pages    | Das ganze Design, alle Seiten |
-| `design.feedback_design_placeholder` | A note on the design as a whole… | Notiz zum Design als Ganzes… |
+| `design.feedback_design` | whole variant | ganze Variante |
+| `design.feedback_design_placeholder` | A note on the variant as a whole… | Notiz zur Variante als Ganzes… |
 | `design.switch_label`          | Switch design                  | Design wechseln |
-| `design.position_iteration`    | Iteration                      | Iteration |
+| `design.position_iteration` | Round | Runde |
 | `design.position_page`         | Page                           | Seite |
-| `anno.toggle_show`             | Show annotations                | Anmerkungen einblenden |
-| `anno.toggle_hide`             | Hide annotations                | Anmerkungen ausblenden |
+| `anno.toggle_show` | Show notes | Notizen einblenden |
+| `anno.toggle_hide` | Hide notes | Notizen ausblenden |
 | `anno.answer_placeholder`      | Your answer…                    | Deine Antwort… |
 | `anno.pin_label`                | Question {n}                    | Frage {n} |
 | `design.nav_views_heading`     | Questions                       | Fragen |
-| `design.feedback_view`         | Notes on this view               | Anmerkungen zu dieser Ansicht |
-| `design.feedback_view_placeholder` | Write a note on this view…  | Notiz zu dieser Ansicht… |
+| `design.feedback_view` | this view | diese Ansicht |
+| `design.feedback_view_placeholder` | Write a note on this view… | Notiz zu dieser Ansicht… |
 | `design.overview`              | Overview                        | Übersicht |
 | `design.overview_back`         | Back to the overview            | Zurück zur Übersicht |
-| `design.overview_count`        | {n} designs · pick a favourite or just comment | {n} Designs · Favorit wählen oder einfach kommentieren |
+| `design.overview_count` | {n} designs · pick a favourite or just add notes | {n} Designs · Favorit wählen oder einfach Notizen machen |
 | `design.overview_open`         | Open this design                | Design öffnen |
 | `design.overview_notes`        | Notes on this design            | Notizen zu diesem Design |
-| `design.overview_count_plain`  | {n} designs · just comment      | {n} Designs · einfach kommentieren |
+| `design.overview_count_plain` | {n} designs · just add notes | {n} Designs · einfach Notizen machen |
 | `design.overview_prev`         | Previous                        | Vorherige |
 | `design.overview_next`         | Next                            | Nächste |
 | `design.overview_overlay`      | Show or hide the overlay        | Overlay ein- oder ausblenden |
@@ -212,13 +229,23 @@ must see their own language. The locale hint is authoritative.
 | `design.favorite_badge`        | FAVOURITE                       | FAVORIT |
 | `design.favorite_set`          | Mark as favourite               | Als Favorit markieren |
 | `design.favorite_unset`        | Remove the favourite            | Favorit entfernen |
-| `design.favorite_hint_set`     | The favourite is the starting point; comments on every design still count. | Der Favorit ist der Startpunkt; Kommentare zu allen Designs fließen ein. |
+| `design.favorite_hint_set` | The favourite is the starting point; notes on every design still count. | Der Favorit ist der Startpunkt; Notizen zu allen Designs fließen ein. |
 | `design.next_screen`           | Next page                       | Nächste Seite |
 | `design.change_new`            | New this round                  | Neu in dieser Runde |
 | `design.change_changed`        | Changed                         | Geändert |
 | `design.change_same`           | Unchanged                       | Unverändert |
 | `design.change_preview`        | Preview: {page}                 | Vorschau: {page} |
 | `design.change_dot`            | New since the last round        | Neu seit der letzten Runde |
+| `design.change_rethought` | Rethought | Neugedacht |
+| `design.change_improved` | Improved | Verbessert |
+| `design.keys_dock` | Notes dock open / closed | Notiz-Dock auf / zu |
+| `design.keys_level` | Level up / down (overview, variant) | Ebene hoch / runter (Übersicht, Variante) |
+| `nudge.alt` | Hold Alt for all hotkeys | Halte Alt für alle Hotkeys |
+| `nudge.variants` | Hotkeys 1–{n} switch the variant | Hotkeys 1–{n} wechseln die Variante |
+| `nudge.pages` | Hotkeys ←/→ page through the screens | Hotkeys ←/→ blättern durch die Seiten |
+| `nudge.dock` | Hotkey Space opens your notes | Hotkey Leertaste öffnet deine Notizen |
+| `nudge.submit` | Hotkey Ctrl + Enter starts the next round | Hotkey Strg + Enter startet die nächste Runde |
+| `nudge.dismiss` | Hide this tip for 30 days | Tipp 30 Tage ausblenden |
 | `design.questions`             | Questions                       | Fragen |
 | `design.questions_open`        | {n} questions still open        | {n} Fragen noch offen |
 | `design.questions_progress`    | {done} of {n} answered          | {done} von {n} beantwortet |
@@ -232,19 +259,23 @@ must see their own language. The locale hint is authoritative.
 | `design.keys_design`           | Design 1–9                      | Design 1–9 |
 | `design.keys_view`             | Question 1–9                    | Frage 1–9 |
 | `design.keys_next`             | Next page of this design        | Nächste Seite dieses Designs |
-| `design.keys_round`            | Iteration tab 1–9               | Iterations-Tab 1–9 |
+| `design.keys_round` | Round tab 1–9 | Runden-Tab 1–9 |
 | `design.keys_notes`            | Open or close the notes         | Notizen öffnen oder schließen |
-| `design.keys_pin`              | Your own comment on a spot      | Eigener Kommentar an einer Stelle |
+| `design.keys_pin` | Your own note on a spot | Eigene Notiz an einer Stelle |
 | `design.keys_click`            | click                           | Klick |
 | `design.keys_close`            | Close                           | Schließen |
 | `design.key_ctrl`              | Ctrl                            | Strg |
-| `design.upin_hint`             | + click places your own comment here | + Klick setzt hier einen eigenen Kommentar |
-| `design.upin_arm`              | Place a comment pin             | Kommentar-Pin setzen |
-| `design.upin_tap_hint`         | Tap the spot for your comment · Esc cancels | Tippe auf die Stelle für deinen Kommentar · Esc bricht ab |
-| `design.upin_placeholder`      | Your comment on this spot…      | Dein Kommentar zu dieser Stelle… |
+| `design.upin_hint` | + click places your own note here | + Klick setzt hier eine eigene Notiz |
+| `design.upin_arm` | Place a note pin | Notiz-Pin setzen |
+| `design.upin_tap_hint` | Tap the spot for your note · Esc cancels | Tippe auf die Stelle für deine Notiz · Esc bricht ab |
+| `design.upin_placeholder` | Your note on this spot… | Deine Notiz zu dieser Stelle… |
 | `design.upin_keys`             | Enter saves · Esc discards      | Enter speichert · Esc verwirft |
-| `design.upin_delete`           | Delete comment                  | Kommentar löschen |
-| `design.upin_label`            | Your comment {n}                | Dein Kommentar {n} |
+| `design.upin_delete` | Delete note | Notiz löschen |
+| `design.upin_label` | Your note {n} | Deine Notiz {n} |
+| `dock.crumb_concept`           | Concept                         | Concept |
+| `dock.tag_general`             | general                         | allgemein |
+| `dock.tip_title`               | Did you know?                   | Wusstest du schon? |
+| `anno.open_count`              | {n} open notes                  | {n} offene Notizen |
 | `view.compare_favourite`       | Favourite                       | Favorit |
 | `view.compare_no_preference`   | No preference                   | Keine Präferenz |
 | `view.compare_criteria`        | Criteria                        | Kriterien |
@@ -270,7 +301,7 @@ must see their own language. The locale hint is authoritative.
 | `state.recovered_dismiss`      | Dismiss                          | Ausblenden |
 | `state.draft_local_only`       | Notes are saved in this browser only — the bridge is unreachable. | Notizen liegen nur in diesem Browser — die Bridge ist nicht erreichbar. |
 | `state.draft_save_failed`      | Notes are saved in this browser only — the bridge did not store them. | Notizen liegen nur in diesem Browser — die Bridge hat sie nicht gespeichert. |
-| `state.dock_submitted`         | Sent to Claude — read-only until the next round. | An Claude gesendet — schreibgeschützt bis zur nächsten Runde. |
+| `state.dock_submitted` | Sent — read-only until the next round. | Gesendet — schreibgeschützt bis zur nächsten Runde. |
 | `design.viewport_switch`       | View                           | Ansicht |
 | `design.viewport_desktop`      | Desktop                        | Desktop |
 | `design.viewport_tablet`       | Tablet                         | Tablet |
@@ -288,7 +319,7 @@ must see their own language. The locale hint is authoritative.
 | `map.filter_multiple`          | Multiple                       | Mehrfach |
 | `map.filter_changed`           | Changed                        | Geändert |
 | `map.reset`                    | Reset to proposal              | Auf Vorschlag zurücksetzen |
-| `map.reset_confirm`            | Reset this matrix to the proposal? | Diese Matrix auf Claudes Vorschlag zurücksetzen? |
+| `map.reset_confirm` | Reset this matrix to the proposal? | Diese Matrix auf den Vorschlag zurücksetzen? |
 | `map.copy`                     | Copy {from} → {to}             | {from} → {to} kopieren |
 | `map.copy_confirm`             | Overwrite {to} with {from}?    | {to} mit {from} überschreiben? |
 | `map.add_item`                 | item                           | Eintrag |
@@ -308,7 +339,7 @@ must see their own language. The locale hint is authoritative.
 | `map.context`                  | Context                        | Kontext |
 | `map.axis`                     | Axis                           | Achse |
 | `map.tab_open`                 | {n} open                       | {n} offen |
-| `map.frozen_missing`           | Submitted state missing — showing the proposal | Übermittelter Stand fehlt — zeigt Claudes Vorschlag |
+| `map.frozen_missing` | Submitted state missing — showing the proposal | Übermittelter Stand fehlt — zeigt den Vorschlag |
 | `map.spec_error`               | Mapping spec could not be read: {error} | Mapping-Spezifikation nicht lesbar: {error} |
 
 **`map.*` strings are rendered by the mapping engine** (§ Information
@@ -446,7 +477,7 @@ the `[ui-locale: ...]` hint produced.
            CSS, "Panel anatomy"):
              .panel-here        pinned   "› TOC entry" sub-line + the 🕘 rounds list
              .panel-nav-scroll  flex 1   iteration tabs (hidden) + live TOC
-             .panel-status      pinned   ONE status line (+ progress dots after submit)
+             .panel-status      pinned   journey row (#journey, built by mountJourney) + ONE status line
              .panel-cta         pinned   #panel-ready | #panel-submitted | #panel-frozen | #panel-final-report
            The pin is structural (flex split), never position:sticky inside the
            scroll box: the call to action is reachable without scrolling the
@@ -474,8 +505,8 @@ the `[ui-locale: ...]` hint produced.
              (iteration-rules.md § Iteration append checklist). -->
         <nav class="iteration-tabs" role="tablist" aria-label="{{iteration.label}}">
           <!--
-          <button class="iteration-tab" role="tab" data-iteration="1" aria-selected="false">Iteration 1</button>
-          <button class="iteration-tab" role="tab" data-iteration="2" aria-selected="true">Iteration 2</button>
+          <button class="iteration-tab" role="tab" data-iteration="1" aria-selected="false">{{iteration.tab}} 1</button>
+          <button class="iteration-tab" role="tab" data-iteration="2" aria-selected="true">{{iteration.tab}} 2</button>
           -->
         </nav>
 
@@ -598,16 +629,11 @@ the `[ui-locale: ...]` hint produced.
         </div>
       </div>
 
-      <!-- Post-submit state: the status line above now reads "Übermittelt ·
-           Claude arbeitet" and carries the progress dots; this block only
-           tells the user where to look next. -->
-      <div id="panel-submitted" style="display: none;">
-        <div class="submitted-indicator">
-          <span class="check-icon">✓</span>
-          <strong>{{panel.submitted}}</strong>
-        </div>
-        <p class="submitted-hint">{{panel.submitted_hint}}</p>
-      </div>
+      <!-- Post-submit state marker. Empty on purpose: the journey row's run
+           bar and the status line ("🤖 überdenkt · gespeichert") above carry
+           the submitted state (§ Submit → Journey row); the old green box and
+           its hint are gone. JS still flips its display as the state flag. -->
+      <div id="panel-submitted" style="display: none;" aria-hidden="true"></div>
 
       <!-- Frozen state: shown while the user reviews a PAST iteration tab.
            showIteration() flips this on for every non-live tab (and sets
@@ -923,7 +949,7 @@ the `[ui-locale: ...]` hint produced.
         <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.minimize}}" data-tip="{{panel.minimize}}">−</button>
       </div>
       <div class="feedback-section">
-        <label>{{proto.feedback_general}}</label>
+        <label class="dock-crumb"><strong class="dock-crumb-last">{{dock.crumb_concept}}</strong><span class="dock-tag">{{dock.tag_general}}</span></label>
         <textarea id="design-general-feedback" data-comment="general" data-attachable
                   placeholder="{{proto.feedback_general}}"></textarea>
         <div class="attach-slot" data-attach-slot="general"></div>
@@ -957,7 +983,7 @@ the `[ui-locale: ...]` hint produced.
        live chip is not always the last one. Its button is the second way back
        to the live round (#back-to-live-btn in #panel-frozen is the first). -->
   <div class="frozen-bar" id="frozen-bar" role="status" hidden>
-    <span class="frozen-bar-text">🕘 <strong data-frozen-bar-title>Iteration 1</strong> {{frozen.bar_hint}}</span>
+    <span class="frozen-bar-text">🕘 <strong data-frozen-bar-title>{{iteration.tab}} 1</strong> {{frozen.bar_hint}}</span>
     <button type="button" id="frozen-bar-back">{{frozen.bar_back}}</button>
   </div>
 

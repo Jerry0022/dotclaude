@@ -25,7 +25,7 @@ and every switch.
 ### Tab Bar HTML
 
 ```html
-<nav class="iteration-tabs" role="tablist" aria-label="Iterationen">
+<nav class="iteration-tabs" role="tablist" aria-label="{{iteration.label}}">
   <button class="iteration-tab" role="tab"
           data-iteration="1" aria-selected="false" aria-controls="iter-1">
     Iteration 1
@@ -199,7 +199,7 @@ both guarantee. When appending iteration N+1, the previous section is frozen:
 3. On every `textarea`, `input[type="text"]`: set `readonly`.
 4. For bi-state buttons: keep the `aria-pressed`/selected class exactly as
    the user submitted it — do NOT clear selections.
-5. Add a small "Eingefroren — Iteration N" banner at the top (optional).
+5. Add a small "Eingefroren — Runde N" banner at the top (optional).
 
 ### Tab Switch JS
 
@@ -350,6 +350,30 @@ function showIteration(n) {
 document.querySelectorAll('.iteration-tab').forEach(tab => {
   tab.addEventListener('click', () => showIteration(tab.dataset.iteration));
 });
+
+// A NEW live round opens at the top / first page on plain pages too (the
+// design overview does the same with its own concept-last-round key and skips
+// this one: body[data-overview]). Per viewer: localStorage remembers the last
+// live round this page showed; the first ever visit restores as usual.
+(function openNewRoundAtTop() {
+  const KEY = 'rounds-last-live:' + location.pathname;
+  document.addEventListener('iteration:changed', () => {
+    setTimeout(() => {
+      if (document.body.dataset.overview === 'true') return;
+      const live = document.querySelector('section[data-iteration][data-active]');
+      const vis = document.querySelector('section[data-iteration]:not([hidden])');
+      if (!live || vis !== live) return;
+      const now = String(live.dataset.iteration);
+      let last = null;
+      try { last = localStorage.getItem(KEY); } catch (e) { /* private mode */ }
+      if (typeof _guardedSetItem === 'function') _guardedSetItem(KEY, now);
+      if (last && last !== now) {
+        if (typeof window.showScreen === 'function') { const s = live.querySelector('.screen'); if (s && s.id) try { window.showScreen(s.id); } catch (e) { /* no design layout */ } }
+        window.scrollTo(0, 0);
+      }
+    }, 0);
+  });
+})();
 
 // The way back to the live round. Without it the only exit from a past tab is
 // to spot which chip is the live one — and the live tab is not always the last

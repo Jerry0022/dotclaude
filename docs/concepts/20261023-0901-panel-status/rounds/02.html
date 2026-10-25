@@ -1,0 +1,282 @@
+<section data-iteration="2" data-iteration-template="design" data-baked>
+  <script type="application/json" data-frozen-feedback>{"general":{"text":"Btw, wenn mannur eine fragen seite hat sollte es kein sub menü in der schnellnavigation oben geben sondern der buzttone ihnfach direkt (als wäre er eingeklappt) zu der seite leiten!","attachments":[{"id":"50cf6e60ced9e3671ba97294125dec5619129518e4f700d89206902f36a70d21.png","name":"image.png","mime":"image/png","size":18006,"path":".claude/concepts/20261023-0901-panel-status/attachments/50cf6e60ced9e3671ba97294125dec5619129518e4f700d89206902f36a70d21.png"}]},"designs":{"head":"ne, so auf gar keinen fall"},"screens":{},"views":{},"userPins":[{"id":"up-mvko6axd2tik","design":"loop","screen":"d1-s2","x":81.4,"y":89.1,"target":"button.mock-menu \"▾\"","text":"sollten wir nicht auch an den button ran hmmm...."},{"id":"up-mvko7ph5rw7n","design":"loop","screen":"d1-s2","x":69.4,"y":94,"target":"div.mock-save.mock-amber \"Nur lokal gespeichert · getrennt\"","text":"getrennt unklar => zudem eher so ein Getrennt - aber einfach weitermachen, es wird lokal gespeichert (oder so was...)"},{"id":"up-mvkoae6icl84","design":"loop","screen":"d1-s5","x":70.9,"y":87.6,"target":"button.mock-link \"← Zur aktuellen Runde 3\"","text":"Sehr gut"},{"id":"up-mvkocrb69npu","design":"ticks","screen":"d3-s2","x":60.6,"y":81.2,"target":"span.mock-tlater \"› Umsetzung › Abschluss\"","text":"ich mag das mit den pfeilen und der klaren das kommt danach"}]}</script>
+<style>
+.mock-stage{display:flex;gap:32px;align-items:center;justify-content:center;max-width:1100px;margin:0 auto;padding:16px;box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+.mock-note{max-width:340px;color:#c9d1d9;font-size:14px;line-height:1.55}
+.mock-note h4{margin:0 0 8px;font-size:17px;color:#f0f6fc}
+.mock-note p{margin:0}
+.mock-meter{display:inline-block;margin-top:12px;padding:3px 9px;border-radius:6px;background:#21262d;font-size:12px;color:#8b949e}
+.mock-panel{width:360px;height:560px;flex:none;background:#161b22;border:1px solid #30363d;border-radius:12px;display:flex;flex-direction:column;overflow:hidden;color:#c9d1d9;box-shadow:0 10px 40px rgba(0,0,0,.45)}
+.mock-head{display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid #30363d;font-weight:600;font-size:15px;min-height:22px}
+.mock-x{margin-left:auto;color:#8b949e}
+.mock-toc{list-style:none;margin:0;padding:12px;display:flex;flex-direction:column;gap:6px;flex:1 1 auto}
+.mock-toc li{padding:9px 12px;border:1px solid #30363d;border-radius:8px;font-size:14px}
+.mock-toc li.mock-cur{border-color:#58a6ff;background:rgba(88,166,255,.1)}
+.mock-toc b{color:#58a6ff;margin-right:6px}
+.mock-foot{border-top:1px solid #30363d;padding:10px 12px 10px;display:flex;flex-direction:column;gap:7px}
+.mock-split{display:flex;height:42px}
+.mock-btn{flex:1;border:0;border-radius:8px 0 0 8px;background:#1f6feb;color:#fff;font:600 14px system-ui,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+.mock-btn small{font-weight:500;opacity:.85;font-size:11px}
+.mock-menu{width:40px;border:0;border-left:1px solid rgba(255,255,255,.25);border-radius:0 8px 8px 0;background:#1f6feb;color:#fff}
+.mock-prog{position:relative;height:42px;box-sizing:border-box;border-radius:8px;background:#21262d;border:1px solid #30363d;overflow:hidden;display:flex;align-items:center;padding:0 12px;font-size:13.5px;font-weight:600;cursor:pointer}
+.mock-prog i{position:absolute;top:0;bottom:0;left:0;background:rgba(63,185,80,.28);border-right:2px solid #3fb950}
+.mock-prog > span{position:relative;display:flex;gap:8px;width:100%;align-items:center}
+.mock-prog em{margin-left:auto;font-style:normal;color:#8b949e;font-size:12px}
+.mock-bot{font-size:15px}
+.mock-pchip{font-size:11px;padding:2px 7px;border-radius:999px;background:rgba(63,185,80,.2);color:#3fb950}
+.mock-save{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#8b949e;padding:0 2px}
+.mock-dot{width:7px;height:7px;border-radius:50%;background:#3fb950;flex:none}
+.mock-save.mock-amber{color:#d29922}
+.mock-save.mock-amber .mock-dot{background:#d29922}
+.mock-link{background:transparent;border:1px solid #30363d;color:#58a6ff;border-radius:8px;height:42px;font:600 14px system-ui,sans-serif;cursor:pointer;width:100%}
+.mock-loop{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600}
+.mock-cycle{display:flex;align-items:center;gap:4px;padding:3px;border:1px dashed #3d444d;border-radius:8px}
+.mock-lr{padding:4px 9px;border-radius:5px;background:#21262d;color:#8b949e}
+.mock-lr.mock-on{background:#1f6feb;color:#fff}
+.mock-lr.mock-onai{background:#238636}
+.mock-lr.mock-done,.mock-lr.mock-was{background:rgba(63,185,80,.16);color:#3fb950}
+.mock-arrow{color:#6e7681;font-size:12px}
+.mock-sep{width:1px;align-self:stretch;background:#30363d;margin:0 4px}
+.mock-ls{padding:4px 6px;border-radius:5px;color:#6e7681}
+.mock-ls.mock-on{background:#1f6feb;color:#fff}
+.mock-ls.mock-onai{background:#238636}
+.mock-trail{display:flex;align-items:center;gap:4px;font-size:12px;font-weight:600}
+.mock-tr{padding:3px 8px;border-radius:999px;background:#21262d;color:#8b949e}
+.mock-tr.mock-on{background:#1f6feb;color:#fff}
+.mock-tr.mock-onai{background:#238636}
+.mock-tr.mock-was{background:rgba(63,185,80,.16);color:#3fb950}
+.mock-tr.mock-later{background:transparent;color:#6e7681;padding:3px 2px}
+.mock-tr.mock-later.mock-on{background:#238636;color:#fff;padding:3px 8px}
+.mock-tloop{color:#6e7681}
+.mock-tgap{color:#484f58;font-weight:500}
+.mock-ticks{display:flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:#c9d1d9}
+.mock-ticks i{width:14px;height:5px;border-radius:3px;background:#30363d}
+.mock-ticks i.mock-d{background:#3fb950}
+.mock-ticks i.mock-c{background:#58a6ff}
+.mock-ticks span{margin-left:4px}
+.mock-tlater{color:#6e7681;font-weight:500}
+.mock-tlater b{color:#3fb950}
+.mock-page{width:100%;max-width:920px;height:540px;margin:0 auto;border-radius:12px;border:1px solid #30363d;background:#0d1117;position:relative;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+.mock-page-body{padding:40px 60px;display:flex;flex-direction:column;gap:16px;opacity:.45}
+.mock-page-body i{display:block;height:14px;border-radius:7px;background:#21262d}
+.mock-toasts{position:absolute;left:0;right:0;bottom:22px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.mock-trow{display:flex;align-items:center;gap:14px}
+.mock-toast-tag{width:100px;text-align:right;font-size:11.5px;color:#6e7681}
+.mock-toast{display:flex;align-items:center;gap:10px;width:380px;box-sizing:border-box;padding:7px 14px 7px 7px;border-radius:999px;background:#1c2128;border:1px solid #30363d;font-size:13px;color:#c9d1d9;box-shadow:0 8px 24px rgba(0,0,0,.5);cursor:pointer}
+.mock-tbot{width:26px;height:26px;border-radius:50%;background:#21262d;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+.mock-tmain{flex:1;white-space:nowrap}
+.mock-tmain b{font-weight:600;color:#f0f6fc}
+.mock-toast em{font-style:normal;color:#8b949e;font-size:12px;font-weight:600}
+.mock-mini{position:relative;width:52px;height:5px;border-radius:3px;background:#30363d;overflow:hidden;flex:none}
+.mock-mini i{position:absolute;top:0;bottom:0;left:0;background:#3fb950}
+.mock-toast.mock-tgreen{border-color:rgba(63,185,80,.6);background:#122117}
+.mock-toast.mock-tgreen .mock-tbot{background:#238636;color:#fff}
+.mock-toast.mock-tgreen b,.mock-toast.mock-tgreen em{color:#3fb950}
+.mock-toast.mock-tamber{border-color:rgba(210,153,34,.6);background:#221a0c}
+.mock-toast.mock-tamber .mock-tbot{background:#9e6a03;color:#fff}
+.mock-toast.mock-tamber b{color:#d29922}
+</style>
+<header class="iteration-intro">
+  <h2>Runde 2 · Fortschritts-Button + sichtbare Schleife</h2>
+  <p>Kein Favorit gesetzt — deine Notizen zeigen aber klar die Richtung, deshalb drei Hybride statt drei neuer Richtungen. Überall gleich: der Button wird zum Fortschritt (aus „Button ist Status“), die Toasts aus Runde 1 sind poliert und in allen drei Varianten identisch, 🤖 statt „Claude“, „Runde“ statt „Iteration“, Speicherzeile ganz unten, kein Hinweistext, ein Haken statt zwei. Die drei unterscheiden sich nur darin, <b>wo und wie die Reise</b> (Runde ⇄ 🤖, danach Umsetzung, Abschluss) gezeigt wird.</p>
+</header>
+<section data-design="loop" data-nav-label="Loop-Schiene" data-design-motto="Die Schleife im Blick" data-design-traits="Schleife Runde ⇄ 🤖 als eigene Zeile im Fuß|Umsetzung/Abschluss abgesetzt rechts|Höchster Fuß der drei (≈104 px)" data-design-icon="compass" data-design-color="#d29922" data-design-active="true">
+<section id="d1-s1" data-nav-label="Bereit" data-screen data-screen-active="true">
+<div class="mock-stage"><div class="mock-note"><h4>Bereit · du bist dran</h4><p>Oben im Fuß die Reise: links die <b>Schleife</b> „Runde 3 ⇄ 🤖“ — die läuft so lange, wie du iterierst. Rechts, abgesetzt und grau, was erst <b>nach</b> der Schleife kommt. Darunter der Button, ganz unten die Speicherzeile.</p><span class="mock-meter">Fußhöhe ≈ 104 px · heute ≈ 150 px</span></div><div class="mock-panel"><div class="mock-head">Runde 3<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1.</b>Variante Ruhig</li><li class=""><b>2.</b>Variante Bunt ★</li><li class=""><b>3.</b>Variante Kompakt</li><li class=""><b>4.</b>Fragen</li><li class=""><b>5.</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-loop"><span class="mock-cycle"><span class="mock-lr mock-on">Runde 3</span><span class="mock-arrow">⇄</span><span class="mock-lr mock-lai ">🤖</span></span><span class="mock-sep"></span><span class="mock-ls ">Umsetzung</span><span class="mock-ls ">Abschluss</span></div><div class="mock-split"><button class="mock-btn" data-screen-link="d1-s3">Zur nächsten Runde</button><button class="mock-menu">▾</button></div><div class="mock-save "><span class="mock-dot"></span>Gespeichert · du entscheidest</div></div></div></div>
+<div class="anno-layer" data-anno-layer><div class="anno" data-anno="r2-d1-s1-a1" data-anno-side="left" data-anno-target=".mock-cycle" style="--anno-x:60%;--anno-y:80%">
+  <button class="anno-pin" type="button" data-anno-pin="r2-d1-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r2-d1-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+  <div class="anno-bubble" id="anno-bubble-r2-d1-s1-a1" data-anno-bubble="r2-d1-s1-a1" data-open="false">
+    <button type="button" class="anno-bubble-summary" data-anno-summary="r2-d1-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r2-d1-s1-a1"><span class="anno-bubble-question">Liest sich die Schleife „Runde 3 ⇄ 🤖“ als „wir drehen gerade Runden“?</span><span class="anno-chevron" aria-hidden="true">›</span></button>
+    <div class="anno-bubble-body"><textarea class="anno-answer" data-comment="anno-r2-d1-s1-a1" data-annotation="r2-d1-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}">Ja sehr gut! </textarea><div class="attach-slot" data-attach-slot="anno-r2-d1-s1-a1"></div></div>
+  </div>
+</div><div class="anno" data-anno="r2-d1-s1-a2" data-anno-side="top" data-anno-target=".mock-sep" style="--anno-x:60%;--anno-y:80%">
+  <button class="anno-pin" type="button" data-anno-pin="r2-d1-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r2-d1-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+  <div class="anno-bubble" id="anno-bubble-r2-d1-s1-a2" data-anno-bubble="r2-d1-s1-a2" data-open="false">
+    <button type="button" class="anno-bubble-summary" data-anno-summary="r2-d1-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r2-d1-s1-a2"><span class="anno-bubble-question">Umsetzung/Abschluss rechts abgesetzt und grau — klar genug, dass das erst nach der Schleife kommt?</span><span class="anno-chevron" aria-hidden="true">›</span></button>
+    <div class="anno-bubble-body"><textarea class="anno-answer" data-comment="anno-r2-d1-s1-a2" data-annotation="r2-d1-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}">Sehr gut aber nicht klar, dass es eine folge von der loop davor ist und abschluss eijne folgge von umsetzung, wirkt so wie eins von drei themen, was es nicht ist. Gern mit etwas andeuten. </textarea><div class="attach-slot" data-attach-slot="anno-r2-d1-s1-a2"></div></div>
+  </div>
+</div></div>
+</section>
+<section id="d1-s2" data-nav-label="Getrennt" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Getrennt · nur lokal</h4><p>Nur die unterste Zeile ändert sich: gelber Punkt, Text sagt warum. Der Button sagt, dass der Klick nachgereicht wird.</p><span class="mock-meter">Fußhöhe ≈ 104 px · heute ≈ 150 px</span></div><div class="mock-panel"><div class="mock-head">Runde 3<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1.</b>Variante Ruhig</li><li class=""><b>2.</b>Variante Bunt ★</li><li class=""><b>3.</b>Variante Kompakt</li><li class=""><b>4.</b>Fragen</li><li class=""><b>5.</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-loop"><span class="mock-cycle"><span class="mock-lr mock-on">Runde 3</span><span class="mock-arrow">⇄</span><span class="mock-lr mock-lai ">🤖</span></span><span class="mock-sep"></span><span class="mock-ls ">Umsetzung</span><span class="mock-ls ">Abschluss</span></div><div class="mock-split"><button class="mock-btn" data-screen-link="d1-s3">Zur nächsten Runde <small>· wird nachgereicht</small></button><button class="mock-menu">▾</button></div><div class="mock-save mock-amber"><span class="mock-dot"></span>Nur lokal gespeichert · getrennt</div></div></div></div>
+
+</section>
+<section id="d1-s3" data-nav-label="Rethinking" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Rethinking · 🤖 ist dran</h4><p>In der Schleife leuchtet jetzt 🤖. Der Button wird zum Fortschritt (Liebling aus Runde 1): Text = was die AI gerade tut, Zähler = wo es steht.</p><span class="mock-meter">Fußhöhe ≈ 104 px · heute ≈ 150 px</span></div><div class="mock-panel"><div class="mock-head">Runde 3<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1.</b>Variante Ruhig</li><li class=""><b>2.</b>Variante Bunt ★</li><li class=""><b>3.</b>Variante Kompakt</li><li class=""><b>4.</b>Fragen</li><li class=""><b>5.</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-loop"><span class="mock-cycle"><span class="mock-lr mock-done">Runde 3</span><span class="mock-arrow">⇄</span><span class="mock-lr mock-lai mock-on mock-onai">🤖</span></span><span class="mock-sep"></span><span class="mock-ls ">Umsetzung</span><span class="mock-ls ">Abschluss</span></div><div class="mock-prog " data-screen-link="d1-s4"><i style="width:50%"></i><span><span class="mock-bot">🤖</span>liest deine Auswahl<em>2/4 ▸</em></span></div><div class="mock-save "><span class="mock-dot"></span>Gespeichert · 🤖 arbeitet</div></div></div></div>
+<div class="anno-layer" data-anno-layer><div class="anno" data-anno="r2-d1-s3-a1" data-anno-side="left" data-anno-target=".mock-prog" style="--anno-x:60%;--anno-y:80%">
+  <button class="anno-pin" type="button" data-anno-pin="r2-d1-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r2-d1-s3-a1" aria-label="{{anno.pin_label}}">1</button>
+  <div class="anno-bubble" id="anno-bubble-r2-d1-s3-a1" data-anno-bubble="r2-d1-s3-a1" data-open="false">
+    <button type="button" class="anno-bubble-summary" data-anno-summary="r2-d1-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r2-d1-s3-a1"><span class="anno-bubble-question">Schritte der Schleife: liest Auswahl → überdenkt → baut Runde 4 → lädt neu. Passen die vier?</span><span class="anno-chevron" aria-hidden="true">›</span></button>
+    <div class="anno-bubble-body"><textarea class="anno-answer" data-comment="anno-r2-d1-s3-a1" data-annotation="r2-d1-s3-a1" data-attachable placeholder="{{anno.answer_placeholder}}">finde ich gut aber unsexy dargestellt.</textarea><div class="attach-slot" data-attach-slot="anno-r2-d1-s3-a1"></div></div>
+  </div>
+</div></div>
+</section>
+<section id="d1-s4" data-nav-label="Umsetzung" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Umsetzung · 🤖 ist dran</h4><p>Die Schleife ist zu (Runde 3 abgehakt), die Etappe „Umsetzung“ rechts leuchtet. Gleicher Balken, andere Schritte.</p><span class="mock-meter">Fußhöhe ≈ 104 px · heute ≈ 150 px</span></div><div class="mock-panel"><div class="mock-head">Umsetzung<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1.</b>Variante Ruhig</li><li class=""><b>2.</b>Variante Bunt ★</li><li class=""><b>3.</b>Variante Kompakt</li><li class=""><b>4.</b>Fragen</li><li class=""><b>5.</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-loop"><span class="mock-cycle"><span class="mock-lr mock-done">Runde 3</span><span class="mock-arrow">⇄</span><span class="mock-lr mock-lai ">🤖</span></span><span class="mock-sep"></span><span class="mock-ls mock-on mock-onai">Umsetzung</span><span class="mock-ls ">Abschluss</span></div><div class="mock-prog " data-screen-link="d1-s5"><i style="width:75%"></i><span><span class="mock-bot">🤖</span>setzt um<em>3/4 ▸</em></span></div><div class="mock-save "><span class="mock-dot"></span>Gespeichert · 🤖 arbeitet</div></div></div></div>
+
+</section>
+<section id="d1-s5" data-nav-label="Alte Runde" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Alte Runde · nur lesen</h4><p>Ein Haken, nicht zwei. Schleife zeigt Runde 2 als erledigt, darunter der Rückweg (aus Runde 1 übernommen).</p><span class="mock-meter">Fußhöhe ≈ 104 px · heute ≈ 150 px</span></div><div class="mock-panel"><div class="mock-head">Runde 2<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1.</b>Variante Ruhig</li><li class=""><b>2.</b>Variante Bunt ★</li><li class=""><b>3.</b>Variante Kompakt</li><li class=""><b>4.</b>Fragen</li><li class=""><b>5.</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-loop"><span class="mock-cycle"><span class="mock-lr mock-was">✓ Runde 2</span><span class="mock-arrow">⇄</span><span class="mock-lr mock-lai ">🤖</span></span><span class="mock-sep"></span><span class="mock-ls ">Umsetzung</span><span class="mock-ls ">Abschluss</span></div><button class="mock-link" data-screen-link="d1-s1">← Zur aktuellen Runde 3</button><div class="mock-save mock-amber"><span class="mock-dot"></span>Runde 2 · nur lesen</div></div></div></div>
+
+</section>
+<section id="d1-s6" data-nav-label="Toasts (Panel zu)" data-screen hidden>
+<div class="mock-page">
+  <div class="mock-page-body"><i style="width:60%"></i><i style="width:85%"></i><i style="width:72%"></i><i style="width:40%"></i></div>
+  <div class="mock-toasts"><div class="mock-trow"><span class="mock-toast-tag">Übermittelt</span><span class="mock-toast"><span class="mock-tbot">🤖</span><span class="mock-tmain"><b>Runde 3</b> · liest deine Auswahl</span><span class="mock-mini"><i style="width:25%"></i></span><em>1/4</em></span></div><div class="mock-trow"><span class="mock-toast-tag">Rethinking</span><span class="mock-toast"><span class="mock-tbot">🤖</span><span class="mock-tmain"><b>Runde 3</b> · baut Runde 4</span><span class="mock-mini"><i style="width:75%"></i></span><em>3/4</em></span></div><div class="mock-trow"><span class="mock-toast-tag">Umsetzung</span><span class="mock-toast"><span class="mock-tbot">🤖</span><span class="mock-tmain"><b>Umsetzung</b> · setzt um</span><span class="mock-mini"><i style="width:75%"></i></span><em>3/4</em></span></div><div class="mock-trow"><span class="mock-toast-tag">Neue Runde da</span><span class="mock-toast mock-tgreen"><span class="mock-tbot">✓</span><span class="mock-tmain"><b>Runde 4 ist da</b> · du bist dran</span><em>Öffnen ›</em></span></div><div class="mock-trow"><span class="mock-toast-tag">Abschluss</span><span class="mock-toast mock-tgreen"><span class="mock-tbot">✓</span><span class="mock-tmain"><b>Umgesetzt</b> · Abschluss wartet auf dich</span><em>Öffnen ›</em></span></div><div class="mock-trow"><span class="mock-toast-tag">Getrennt</span><span class="mock-toast mock-tamber"><span class="mock-tbot">⚠</span><span class="mock-tmain"><b>Nur lokal gespeichert</b> · wird nachgereicht</span></span></div></div>
+</div>
+<div class="anno-layer" data-anno-layer><div class="anno" data-anno="r2-d1-s6-a1" data-anno-side="top" data-anno-target=".mock-tgreen" style="--anno-x:60%;--anno-y:80%">
+  <button class="anno-pin" type="button" data-anno-pin="r2-d1-s6-a1" aria-expanded="false" aria-controls="anno-bubble-r2-d1-s6-a1" aria-label="{{anno.pin_label}}">1</button>
+  <div class="anno-bubble" id="anno-bubble-r2-d1-s6-a1" data-anno-bubble="r2-d1-s6-a1" data-open="false">
+    <button type="button" class="anno-bubble-summary" data-anno-summary="r2-d1-s6-a1" aria-expanded="false" aria-controls="anno-bubble-r2-d1-s6-a1"><span class="anno-bubble-question">Grüne Toasts („Runde 4 ist da“) nach ein paar Sekunden ausblenden — oder bis zum Klick stehen lassen?</span><span class="anno-chevron" aria-hidden="true">›</span></button>
+    <div class="anno-bubble-body"><textarea class="anno-answer" data-comment="anno-r2-d1-s6-a1" data-annotation="r2-d1-s6-a1" data-attachable placeholder="{{anno.answer_placeholder}}">Naja die website sollte ja ohhne nutzer aktionen automatisch  neuladen. Dann aber gern das ein paar sekunden länger anzeigen sobald es fokus hat also man weiß der nutzer guckt aujf jeden fall dann ausbelnden, aber öffnnen braucht man nicht. Gleiches für Abschluss.</textarea><div class="attach-slot" data-attach-slot="anno-r2-d1-s6-a1"></div></div>
+  </div>
+</div></div>
+</section>
+</section>
+<section data-design="head" data-nav-label="Reise im Kopf" data-design-motto="Null Pixel extra" data-design-traits="Reise ersetzt „Iteration 3“ im Panel-Kopf|Fuß nur Button + Speicherzeile|Schleife als ↻ zwischen Runde und 🤖" data-design-icon="map" data-design-color="#8957e5" hidden>
+<section id="d2-s1" data-nav-label="Bereit" data-screen data-screen-active="true">
+<div class="mock-stage"><div class="mock-note"><h4>Bereit · Reise im Kopf</h4><p>Die Reise wandert in den Panel-Kopf, wo heute nur „Iteration 3“ steht — <b>0 px</b> zusätzlich. Der Fuß ist nur noch Button + Speicherzeile.</p><span class="mock-meter">Fußhöhe ≈ 72 px · heute ≈ 150 px</span></div><div class="mock-panel"><div class="mock-head"><span class="mock-trail">
+  <span class="mock-tr mock-on">Runde 3</span><span class="mock-tloop">↻</span><span class="mock-tr ">🤖</span>
+  <span class="mock-tgap">›</span><span class="mock-tr mock-later ">Umsetzung</span><span class="mock-tgap">›</span><span class="mock-tr mock-later">Abschluss</span></span><span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1.</b>Variante Ruhig</li><li class=""><b>2.</b>Variante Bunt ★</li><li class=""><b>3.</b>Variante Kompakt</li><li class=""><b>4.</b>Fragen</li><li class=""><b>5.</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-split"><button class="mock-btn" data-screen-link="d2-s3">Zur nächsten Runde</button><button class="mock-menu">▾</button></div><div class="mock-save "><span class="mock-dot"></span>Gespeichert · du entscheidest</div></div></div></div>
+<div class="anno-layer" data-anno-layer><div class="anno" data-anno="r2-d2-s1-a1" data-anno-side="bottom" data-anno-target=".mock-trail" style="--anno-x:60%;--anno-y:80%">
+  <button class="anno-pin" type="button" data-anno-pin="r2-d2-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r2-d2-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+  <div class="anno-bubble" id="anno-bubble-r2-d2-s1-a1" data-anno-bubble="r2-d2-s1-a1" data-open="false">
+    <button type="button" class="anno-bubble-summary" data-anno-summary="r2-d2-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r2-d2-s1-a1"><span class="anno-bubble-question">Reise im Kopf statt im Fuß — gut auffindbar, oder zu weit weg vom Button?</span><span class="anno-chevron" aria-hidden="true">›</span></button>
+    <div class="anno-bubble-body"><textarea class="anno-answer" data-comment="anno-r2-d2-s1-a1" data-annotation="r2-d2-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea><div class="attach-slot" data-attach-slot="anno-r2-d2-s1-a1"></div></div>
+  </div>
+</div><div class="anno" data-anno="r2-d2-s1-a2" data-anno-side="bottom" data-anno-target=".mock-tloop" style="--anno-x:60%;--anno-y:80%">
+  <button class="anno-pin" type="button" data-anno-pin="r2-d2-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r2-d2-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+  <div class="anno-bubble" id="anno-bubble-r2-d2-s1-a2" data-anno-bubble="r2-d2-s1-a2" data-open="false">
+    <button type="button" class="anno-bubble-summary" data-anno-summary="r2-d2-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r2-d2-s1-a2"><span class="anno-bubble-question">„↻“ als Zeichen für die Schleife — verständlich?</span><span class="anno-chevron" aria-hidden="true">›</span></button>
+    <div class="anno-bubble-body"><textarea class="anno-answer" data-comment="anno-r2-d2-s1-a2" data-annotation="r2-d2-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea><div class="attach-slot" data-attach-slot="anno-r2-d2-s1-a2"></div></div>
+  </div>
+</div></div>
+</section>
+<section id="d2-s2" data-nav-label="Getrennt" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Getrennt · nur lokal</h4><p>Kopf unverändert, unten gelb.</p><span class="mock-meter">Fußhöhe ≈ 72 px · heute ≈ 150 px</span></div><div class="mock-panel"><div class="mock-head"><span class="mock-trail">
+  <span class="mock-tr mock-on">Runde 3</span><span class="mock-tloop">↻</span><span class="mock-tr ">🤖</span>
+  <span class="mock-tgap">›</span><span class="mock-tr mock-later ">Umsetzung</span><span class="mock-tgap">›</span><span class="mock-tr mock-later">Abschluss</span></span><span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1.</b>Variante Ruhig</li><li class=""><b>2.</b>Variante Bunt ★</li><li class=""><b>3.</b>Variante Kompakt</li><li class=""><b>4.</b>Fragen</li><li class=""><b>5.</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-split"><button class="mock-btn" data-screen-link="d2-s3">Zur nächsten Runde <small>· wird nachgereicht</small></button><button class="mock-menu">▾</button></div><div class="mock-save mock-amber"><span class="mock-dot"></span>Nur lokal gespeichert · getrennt</div></div></div></div>
+
+</section>
+<section id="d2-s3" data-nav-label="Rethinking" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Rethinking · 🤖 ist dran</h4><p>Im Kopf springt die Markierung auf 🤖. Der Button unten ist der Fortschritt.</p><span class="mock-meter">Fußhöhe ≈ 72 px · heute ≈ 150 px</span></div><div class="mock-panel"><div class="mock-head"><span class="mock-trail">
+  <span class="mock-tr ">Runde 3</span><span class="mock-tloop">↻</span><span class="mock-tr mock-on mock-onai">🤖</span>
+  <span class="mock-tgap">›</span><span class="mock-tr mock-later ">Umsetzung</span><span class="mock-tgap">›</span><span class="mock-tr mock-later">Abschluss</span></span><span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1.</b>Variante Ruhig</li><li class=""><b>2.</b>Variante Bunt ★</li><li class=""><b>3.</b>Variante Kompakt</li><li class=""><b>4.</b>Fragen</li><li class=""><b>5.</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-prog " data-screen-link="d2-s4"><i style="width:50%"></i><span><span class="mock-bot">🤖</span>überdenkt deine Auswahl<em>2/4 ▸</em></span></div><div class="mock-save "><span class="mock-dot"></span>Gespeichert · 🤖 arbeitet</div></div></div></div>
+<div class="anno-layer" data-anno-layer><div class="anno" data-anno="r2-d2-s3-a1" data-anno-side="left" data-anno-target=".mock-prog" style="--anno-x:60%;--anno-y:80%">
+  <button class="anno-pin" type="button" data-anno-pin="r2-d2-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r2-d2-s3-a1" aria-label="{{anno.pin_label}}">1</button>
+  <div class="anno-bubble" id="anno-bubble-r2-d2-s3-a1" data-anno-bubble="r2-d2-s3-a1" data-open="false">
+    <button type="button" class="anno-bubble-summary" data-anno-summary="r2-d2-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r2-d2-s3-a1"><span class="anno-bubble-question">Reicht der Balken unten allein, wenn die Etappe nur oben im Kopf steht?</span><span class="anno-chevron" aria-hidden="true">›</span></button>
+    <div class="anno-bubble-body"><textarea class="anno-answer" data-comment="anno-r2-d2-s3-a1" data-annotation="r2-d2-s3-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea><div class="attach-slot" data-attach-slot="anno-r2-d2-s3-a1"></div></div>
+  </div>
+</div></div>
+</section>
+<section id="d2-s4" data-nav-label="Umsetzung" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Umsetzung</h4><p>Kopf: „Umsetzung“ markiert, Schleife verblasst.</p><span class="mock-meter">Fußhöhe ≈ 72 px · heute ≈ 150 px</span></div><div class="mock-panel"><div class="mock-head"><span class="mock-trail">
+  <span class="mock-tr mock-was">✓ Runde 3</span><span class="mock-tloop">↻</span><span class="mock-tr ">🤖</span>
+  <span class="mock-tgap">›</span><span class="mock-tr mock-later mock-on mock-onai">Umsetzung</span><span class="mock-tgap">›</span><span class="mock-tr mock-later">Abschluss</span></span><span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1.</b>Variante Ruhig</li><li class=""><b>2.</b>Variante Bunt ★</li><li class=""><b>3.</b>Variante Kompakt</li><li class=""><b>4.</b>Fragen</li><li class=""><b>5.</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-prog " data-screen-link="d2-s5"><i style="width:75%"></i><span><span class="mock-bot">🤖</span>setzt um<em>3/4 ▸</em></span></div><div class="mock-save "><span class="mock-dot"></span>Gespeichert · 🤖 arbeitet</div></div></div></div>
+
+</section>
+<section id="d2-s5" data-nav-label="Alte Runde" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Alte Runde · nur lesen</h4><p>Kopf zeigt die alte Runde, unten der Rückweg.</p><span class="mock-meter">Fußhöhe ≈ 72 px · heute ≈ 150 px</span></div><div class="mock-panel"><div class="mock-head"><span class="mock-trail"><span class="mock-tr mock-was">✓ Runde 2</span><span class="mock-tgap">· nur lesen</span></span><span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1.</b>Variante Ruhig</li><li class=""><b>2.</b>Variante Bunt ★</li><li class=""><b>3.</b>Variante Kompakt</li><li class=""><b>4.</b>Fragen</li><li class=""><b>5.</b>Übersicht</li></ol><div class="mock-foot"><button class="mock-link" data-screen-link="d2-s1">← Zur aktuellen Runde 3</button><div class="mock-save mock-amber"><span class="mock-dot"></span>Runde 2 · nur lesen</div></div></div></div>
+
+</section>
+<section id="d2-s6" data-nav-label="Toasts (Panel zu)" data-screen hidden>
+<div class="mock-page">
+  <div class="mock-page-body"><i style="width:60%"></i><i style="width:85%"></i><i style="width:72%"></i><i style="width:40%"></i></div>
+  <div class="mock-toasts"><div class="mock-trow"><span class="mock-toast-tag">Übermittelt</span><span class="mock-toast"><span class="mock-tbot">🤖</span><span class="mock-tmain"><b>Runde 3</b> · liest deine Auswahl</span><span class="mock-mini"><i style="width:25%"></i></span><em>1/4</em></span></div><div class="mock-trow"><span class="mock-toast-tag">Rethinking</span><span class="mock-toast"><span class="mock-tbot">🤖</span><span class="mock-tmain"><b>Runde 3</b> · baut Runde 4</span><span class="mock-mini"><i style="width:75%"></i></span><em>3/4</em></span></div><div class="mock-trow"><span class="mock-toast-tag">Umsetzung</span><span class="mock-toast"><span class="mock-tbot">🤖</span><span class="mock-tmain"><b>Umsetzung</b> · setzt um</span><span class="mock-mini"><i style="width:75%"></i></span><em>3/4</em></span></div><div class="mock-trow"><span class="mock-toast-tag">Neue Runde da</span><span class="mock-toast mock-tgreen"><span class="mock-tbot">✓</span><span class="mock-tmain"><b>Runde 4 ist da</b> · du bist dran</span><em>Öffnen ›</em></span></div><div class="mock-trow"><span class="mock-toast-tag">Abschluss</span><span class="mock-toast mock-tgreen"><span class="mock-tbot">✓</span><span class="mock-tmain"><b>Umgesetzt</b> · Abschluss wartet auf dich</span><em>Öffnen ›</em></span></div><div class="mock-trow"><span class="mock-toast-tag">Getrennt</span><span class="mock-toast mock-tamber"><span class="mock-tbot">⚠</span><span class="mock-tmain"><b>Nur lokal gespeichert</b> · wird nachgereicht</span></span></div></div>
+</div>
+
+</section>
+</section>
+<section data-design="ticks" data-nav-label="Runden-Striche" data-design-motto="Wie oft schon?" data-design-traits="Ein Strich je bisheriger Runde|Etappen-Chip im Fortschritts-Button|Keine eigene Schleifen-Grafik" data-design-icon="list" data-design-color="#1f883d" hidden>
+<section id="d3-s1" data-nav-label="Bereit" data-screen data-screen-active="true">
+<div class="mock-stage"><div class="mock-note"><h4>Bereit · minimal</h4><p>Keine eigene Reise-Leiste. Eine Zeile mit Runden-Strichen (je Runde ein Strich) über dem Button. Danach grau: was noch kommt.</p><span class="mock-meter">Fußhöhe ≈ 92 px · heute ≈ 150 px</span></div><div class="mock-panel"><div class="mock-head">Runde 3<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1.</b>Variante Ruhig</li><li class=""><b>2.</b>Variante Bunt ★</li><li class=""><b>3.</b>Variante Kompakt</li><li class=""><b>4.</b>Fragen</li><li class=""><b>5.</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-ticks"><i class="mock-d"></i><i class="mock-d"></i><i class="mock-c"></i><span>Runde 3</span><span class="mock-tlater">› Umsetzung › Abschluss</span></div><div class="mock-split"><button class="mock-btn" data-screen-link="d3-s3">Zur nächsten Runde</button><button class="mock-menu">▾</button></div><div class="mock-save "><span class="mock-dot"></span>Gespeichert · du entscheidest</div></div></div></div>
+<div class="anno-layer" data-anno-layer><div class="anno" data-anno="r2-d3-s1-a1" data-anno-side="left" data-anno-target=".mock-ticks" style="--anno-x:60%;--anno-y:80%">
+  <button class="anno-pin" type="button" data-anno-pin="r2-d3-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r2-d3-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+  <div class="anno-bubble" id="anno-bubble-r2-d3-s1-a1" data-anno-bubble="r2-d3-s1-a1" data-open="false">
+    <button type="button" class="anno-bubble-summary" data-anno-summary="r2-d3-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r2-d3-s1-a1"><span class="anno-bubble-question">Je Runde ein Strich — hilft das, oder reicht „Runde 3“?</span><span class="anno-chevron" aria-hidden="true">›</span></button>
+    <div class="anno-bubble-body"><textarea class="anno-answer" data-comment="anno-r2-d3-s1-a1" data-annotation="r2-d3-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea><div class="attach-slot" data-attach-slot="anno-r2-d3-s1-a1"></div></div>
+  </div>
+</div></div>
+</section>
+<section id="d3-s2" data-nav-label="Getrennt" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Getrennt · nur lokal</h4><p>Unten gelb, sonst gleich.</p><span class="mock-meter">Fußhöhe ≈ 92 px · heute ≈ 150 px</span></div><div class="mock-panel"><div class="mock-head">Runde 3<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1.</b>Variante Ruhig</li><li class=""><b>2.</b>Variante Bunt ★</li><li class=""><b>3.</b>Variante Kompakt</li><li class=""><b>4.</b>Fragen</li><li class=""><b>5.</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-ticks"><i class="mock-d"></i><i class="mock-d"></i><i class="mock-c"></i><span>Runde 3</span><span class="mock-tlater">› Umsetzung › Abschluss</span></div><div class="mock-split"><button class="mock-btn" data-screen-link="d3-s3">Zur nächsten Runde <small>· wird nachgereicht</small></button><button class="mock-menu">▾</button></div><div class="mock-save mock-amber"><span class="mock-dot"></span>Nur lokal gespeichert · getrennt</div></div></div></div>
+
+</section>
+<section id="d3-s3" data-nav-label="Rethinking" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Rethinking · alles im Button</h4><p>Der Button trägt Etappe (Chip „R3 ↻“), Tätigkeit und Zähler — die Striche-Zeile bleibt.</p><span class="mock-meter">Fußhöhe ≈ 92 px · heute ≈ 150 px</span></div><div class="mock-panel"><div class="mock-head">Runde 3<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1.</b>Variante Ruhig</li><li class=""><b>2.</b>Variante Bunt ★</li><li class=""><b>3.</b>Variante Kompakt</li><li class=""><b>4.</b>Fragen</li><li class=""><b>5.</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-ticks"><i class="mock-d"></i><i class="mock-d"></i><i class="mock-c"></i><span>Runde 3</span><span class="mock-tlater">› Umsetzung › Abschluss</span></div><div class="mock-prog mock-tall" data-screen-link="d3-s4"><i style="width:50%"></i><span><span class="mock-pchip">R3 ↻</span><span class="mock-bot">🤖</span>überdenkt<em>2/4 ▸</em></span></div><div class="mock-save "><span class="mock-dot"></span>Gespeichert · 🤖 arbeitet</div></div></div></div>
+<div class="anno-layer" data-anno-layer><div class="anno" data-anno="r2-d3-s3-a1" data-anno-side="left" data-anno-target=".mock-pchip" style="--anno-x:60%;--anno-y:80%">
+  <button class="anno-pin" type="button" data-anno-pin="r2-d3-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r2-d3-s3-a1" aria-label="{{anno.pin_label}}">1</button>
+  <div class="anno-bubble" id="anno-bubble-r2-d3-s3-a1" data-anno-bubble="r2-d3-s3-a1" data-open="false">
+    <button type="button" class="anno-bubble-summary" data-anno-summary="r2-d3-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r2-d3-s3-a1"><span class="anno-bubble-question">Etappen-Chip im Button („R3 ↻“, „Umsetzung“) — zu viel in einem Element?</span><span class="anno-chevron" aria-hidden="true">›</span></button>
+    <div class="anno-bubble-body"><textarea class="anno-answer" data-comment="anno-r2-d3-s3-a1" data-annotation="r2-d3-s3-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea><div class="attach-slot" data-attach-slot="anno-r2-d3-s3-a1"></div></div>
+  </div>
+</div></div>
+</section>
+<section id="d3-s4" data-nav-label="Umsetzung" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Umsetzung</h4><p>Chip wechselt auf „Umsetzung“, Striche-Zeile hebt „Umsetzung“ hervor.</p><span class="mock-meter">Fußhöhe ≈ 92 px · heute ≈ 150 px</span></div><div class="mock-panel"><div class="mock-head">Umsetzung<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1.</b>Variante Ruhig</li><li class=""><b>2.</b>Variante Bunt ★</li><li class=""><b>3.</b>Variante Kompakt</li><li class=""><b>4.</b>Fragen</li><li class=""><b>5.</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-ticks"><i class="mock-d"></i><i class="mock-d"></i><i class="mock-d"></i><span>✓ 3 Runden</span><span class="mock-tlater"><b>› Umsetzung</b> › Abschluss</span></div><div class="mock-prog mock-tall" data-screen-link="d3-s5"><i style="width:75%"></i><span><span class="mock-pchip">Umsetzung</span><span class="mock-bot">🤖</span>setzt um<em>3/4 ▸</em></span></div><div class="mock-save "><span class="mock-dot"></span>Gespeichert · 🤖 arbeitet</div></div></div></div>
+
+</section>
+<section id="d3-s5" data-nav-label="Alte Runde" data-screen hidden>
+<div class="mock-stage"><div class="mock-note"><h4>Alte Runde · nur lesen</h4><p>Striche-Zeile markiert Runde 2, darunter der Rückweg.</p><span class="mock-meter">Fußhöhe ≈ 92 px · heute ≈ 150 px</span></div><div class="mock-panel"><div class="mock-head">Runde 2<span class="mock-x">✕</span></div><ol class="mock-toc"><li class="mock-cur"><b>1.</b>Variante Ruhig</li><li class=""><b>2.</b>Variante Bunt ★</li><li class=""><b>3.</b>Variante Kompakt</li><li class=""><b>4.</b>Fragen</li><li class=""><b>5.</b>Übersicht</li></ol><div class="mock-foot"><div class="mock-ticks"><i class="mock-d"></i><i class="mock-c"></i><i class=""></i><span>Runde 2</span><span class="mock-tlater">› Umsetzung › Abschluss</span></div><button class="mock-link" data-screen-link="d3-s1">← Zur aktuellen Runde 3</button><div class="mock-save mock-amber"><span class="mock-dot"></span>Runde 2 · nur lesen</div></div></div></div>
+
+</section>
+<section id="d3-s6" data-nav-label="Toasts (Panel zu)" data-screen hidden>
+<div class="mock-page">
+  <div class="mock-page-body"><i style="width:60%"></i><i style="width:85%"></i><i style="width:72%"></i><i style="width:40%"></i></div>
+  <div class="mock-toasts"><div class="mock-trow"><span class="mock-toast-tag">Übermittelt</span><span class="mock-toast"><span class="mock-tbot">🤖</span><span class="mock-tmain"><b>Runde 3</b> · liest deine Auswahl</span><span class="mock-mini"><i style="width:25%"></i></span><em>1/4</em></span></div><div class="mock-trow"><span class="mock-toast-tag">Rethinking</span><span class="mock-toast"><span class="mock-tbot">🤖</span><span class="mock-tmain"><b>Runde 3</b> · baut Runde 4</span><span class="mock-mini"><i style="width:75%"></i></span><em>3/4</em></span></div><div class="mock-trow"><span class="mock-toast-tag">Umsetzung</span><span class="mock-toast"><span class="mock-tbot">🤖</span><span class="mock-tmain"><b>Umsetzung</b> · setzt um</span><span class="mock-mini"><i style="width:75%"></i></span><em>3/4</em></span></div><div class="mock-trow"><span class="mock-toast-tag">Neue Runde da</span><span class="mock-toast mock-tgreen"><span class="mock-tbot">✓</span><span class="mock-tmain"><b>Runde 4 ist da</b> · du bist dran</span><em>Öffnen ›</em></span></div><div class="mock-trow"><span class="mock-toast-tag">Abschluss</span><span class="mock-toast mock-tgreen"><span class="mock-tbot">✓</span><span class="mock-tmain"><b>Umgesetzt</b> · Abschluss wartet auf dich</span><em>Öffnen ›</em></span></div><div class="mock-trow"><span class="mock-toast-tag">Getrennt</span><span class="mock-toast mock-tamber"><span class="mock-tbot">⚠</span><span class="mock-tmain"><b>Nur lokal gespeichert</b> · wird nachgereicht</span></span></div></div>
+</div>
+
+</section>
+</section>
+<section data-view="ai-name" data-view-kind="decision" data-nav-label="AI-Etappe benennen" hidden>
+  <div class="view-frame">
+    <h2>Wie heißt der Teil, in dem die AI arbeitet?</h2>
+    <p>Aus Runde 1 übernommen: „wer ist dran“ als Leitidee, aber neutral statt „Claude“; Zähler an die Tätigkeit gekoppelt; „Runde“ statt „Iteration“ (wird in devops-Concept auf Deutsch generell umgestellt); Hinweistext entfällt. Offen ist nur noch der Name — mehrere dürfen kombiniert werden.</p>
+    <div class="variant-evaluation" data-decision="n-rethink" data-label="„Rethinking“">
+      <h3>„Rethinking“</h3><p>„🤖 Rethinking“ als Name der Schleifen-Etappe. Englisch, kurz, dein Vorschlag.</p>
+      <div class="eval-group">
+        <label class="eval-option"><input type="radio" name="eval-n-rethink" value="discard"><span class="eval-label">Verwerfen</span></label>
+        <label class="eval-option"><input type="radio" name="eval-n-rethink" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+      </div>
+      <div class="field-row decision-comment-row">
+        <label for="n-rethink-note">{{decision.comment_label}}</label>
+        <textarea id="n-rethink-note" data-comment="n-rethink-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+      </div>
+    </div>
+<div class="variant-evaluation" data-decision="n-ueberdenken" data-label="„überdenkt“">
+      <h3>„überdenkt“</h3><p>„🤖 überdenkt deine Auswahl“ — deutsch, als Tätigkeit statt als Etappenname.</p>
+      <div class="eval-group">
+        <label class="eval-option"><input type="radio" name="eval-n-ueberdenken" value="discard"><span class="eval-label">Verwerfen</span></label>
+        <label class="eval-option"><input type="radio" name="eval-n-ueberdenken" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+      </div>
+      <div class="field-row decision-comment-row">
+        <label for="n-ueberdenken-note">{{decision.comment_label}}</label>
+        <textarea id="n-ueberdenken-note" data-comment="n-ueberdenken-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+      </div>
+    </div>
+<div class="variant-evaluation" data-decision="n-icononly" data-label="Nur 🤖, kein Name">
+      <h3>Nur 🤖, kein Name</h3><p>Die Etappe heißt gar nicht; nur der Roboter. Der Balken-Text sagt, was passiert.</p>
+      <div class="eval-group">
+        <label class="eval-option"><input type="radio" name="eval-n-icononly" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+        <label class="eval-option"><input type="radio" name="eval-n-icononly" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+      </div>
+      <div class="field-row decision-comment-row">
+        <label for="n-icononly-note">{{decision.comment_label}}</label>
+        <textarea id="n-icononly-note" data-comment="n-icononly-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+      </div>
+    </div>
+<div class="variant-evaluation" data-decision="n-steps" data-label="Schritt-Texte">
+      <h3>Schritt-Texte</h3><p>„liest deine Auswahl · 1/4“ → „überdenkt · 2/4“ → „baut Runde 4 · 3/4“ → „lädt neu · 4/4“; Umsetzung: „prüft gegen main“ → „setzt um“ → „testet“ → „fertig“.</p>
+      <div class="eval-group">
+        <label class="eval-option"><input type="radio" name="eval-n-steps" value="discard"><span class="eval-label">Verwerfen</span></label>
+        <label class="eval-option"><input type="radio" name="eval-n-steps" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+      </div>
+      <div class="field-row decision-comment-row">
+        <label for="n-steps-note">{{decision.comment_label}}</label>
+        <textarea id="n-steps-note" data-comment="n-steps-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">gern wobei setzt um ggf. auch sehr lange dauert / breit ist, ggff. das noch in schritte  x/y anzeigen wobei der y wert je nach thematik bestimmt werden sollte am besten anhand der anforderungen? oder was meinst du? sonst steht setzt um dort  80% der zeit... </textarea>
+      </div>
+    </div>
+  </div>
+</section>
+</section>

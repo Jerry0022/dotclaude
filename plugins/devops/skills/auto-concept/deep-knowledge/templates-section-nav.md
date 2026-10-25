@@ -785,7 +785,7 @@ function setActiveNavItem(item) {
   revealNavItem(item);
 }
 
-// Head line reads "Iteration N (Variante)": the parenthesis names the
+// Head line reads "{{iteration.tab}} N (Variante)": the parenthesis names the
 // variant under the reading line, and ONLY when that section carries a
 // variant bi-state — general/context sections never get one.
 function updateHereRoundParenthesis(item) {

@@ -234,7 +234,7 @@ sheet. Branch on it:
 
 **Before executing this step, Re-Read `deep-knowledge/step5-process.md` § 5b · Checkpoint duty completely on every round — even if read earlier in this session** — the `/progress` checkpoints, the namespaced finalize actions and verify-never-trust on resume.
 
-**`action: "iterate"` (default — "Zur nächsten Iteration" button):**
+**`action: "iterate"` (default — "Zur nächsten Runde" button):**
 1. **Summarize** what was selected/rejected/commented
 2. **Do NOT modify code, files, or external systems** — iterate ONLY updates
    the concept page

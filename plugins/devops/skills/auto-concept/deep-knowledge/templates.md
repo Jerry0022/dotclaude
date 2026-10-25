@@ -13,7 +13,7 @@ Index of the concept engine reference: the three templates (decision, design, fr
 | 05 | [templates-design-css.md](templates-design-css.md) | 940 | Layout CSS |
 | 06 | [templates-design-js.md](templates-design-js.md) | 1345 | Layout JS — single-screen navigation + context-sensitive feedback |
 | 07 | [templates-design-wiring.md](templates-design-wiring.md) | 951 | Annotation Layer JS — `wireAnnotationLayer()` · Click-through Handler · Screen-pattern markup · Decision schema · collectDecisions (design branch) |
-| 08 | [templates-design-overview.md](templates-design-overview.md) | 1230 | Variant overview JS — `wireDesignOverview()` · Variant overview CSS (≥2 designs) |
+| 08 | [templates-design-overview.md](templates-design-overview.md) | 1230 | Variant overview JS — `wireDesignOverview()` · Variant overview CSS (≥2 designs) · Hotkey overlay, Space and nudges — `wireChromeHotkeys()` |
 | 09 | [templates-free.md](templates-free.md) | 233 | Template: free · Layout — Document, freeform body · Mapping block (optional) · Optional bi-state auto-detection · Decision schema · collectDecisions (free branch) |
 | 10 | [templates-section-nav.md](templates-section-nav.md) | 924 | Shared Systems (all templates) · Section Navigation (Decision Panel as TOC) |
 | 11 | [templates-panel-state.md](templates-panel-state.md) | 1144 | Decision Panel State CSS |
