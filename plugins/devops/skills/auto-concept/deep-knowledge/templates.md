@@ -9,7 +9,7 @@ Index of the concept engine reference: the three templates (decision, design, fr
 | 01 | [templates-common.md](templates-common.md) | 373 | The three templates (overview) · UI Locale |
 | 02 | [templates-common-structure.md](templates-common-structure.md) | 626 | Common Structure (all templates) |
 | 03 | [templates-panel.md](templates-panel.md) | 585 | Panel Chrome (all templates) — markup and CSS |
-| 04 | [templates-panel-chrome-js.md](templates-panel-chrome-js.md) | 97 | Panel Chrome JS (page-level wiring) |
+| 04 | [templates-panel-chrome-js.md](templates-panel-chrome-js.md) | 368 | Panel Chrome JS (page-level wiring, dock focus/auto-grow) + shared tip/field tokens CSS |
 | 05 | [templates-panel-feedback-dock.md](templates-panel-feedback-dock.md) | 576 | Feedback dock (all templates) |
 | 06 | [templates-panel-iteration.md](templates-panel-iteration.md) | 45 | Per-Iteration Templates |
 | 07 | [templates-decision.md](templates-decision.md) | 443 | Template: decision · Layout — Document rounds (decision / free) · Bi-State Variant Evaluation · Content Variants (within the decision template) |

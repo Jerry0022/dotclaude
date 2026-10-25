@@ -109,7 +109,7 @@ describe("variant overview — quick nav pages and open questions", () => {
     qslide.querySelector(".design-quick-qitem").click();
     expect(document.body.dataset.viewActive).toBe("true");
     window.showOverview();
-    const hint = () => document.querySelector("#panel-ready .submit-open-questions");
+    const hint = () => document.querySelector(".submit-open-questions");
     expect(hint().hidden).toBe(false);
     const answer = (id, text) => {
       const ta = live(document).querySelector(`section[data-view="${id}"] textarea`);
@@ -174,12 +174,13 @@ describe("variant overview — generated only for ≥2 designs", () => {
     const overlay = cards[0].querySelector(".design-ov-overlay");
     expect(overlay.querySelector(".design-ov-motto").textContent).toBe("Weniger ist Ruhe.");
     expect([...overlay.querySelectorAll(".design-ov-traits li")].map((li) => li.textContent)).toEqual(["Ein Ziel pro Tag", "Pflanze", "Keine Pushes"]);
-    expect(overlay.querySelector(".design-ov-kicker .design-ov-num").textContent).toBe("1");
+    expect(overlay.querySelector(".design-ov-kicker .design-ov-num"), "icon + name, no number").toBeNull();
     expect(overlay.querySelector(".design-ov-kicker .design-ov-name").textContent).toBe("Design 2");
     expect(cards[0].style.getPropertyValue("--dz-color")).toBe("#5f8b6a");
     // No page chips, no notes row, no second navigation.
     expect(ov.querySelector(".design-ov-chip, .design-ov-chips, .design-ov-notes, .design-ov-foot, .design-ov-dots")).toBeNull();
-    expect(cards[0].querySelector(".design-ov-open").textContent).toContain("↗");
+    expect(cards[0].querySelector(".design-ov-open"), "no open button: the tile is the control").toBeNull();
+    expect(cards[0].querySelector(".design-ov-badge .dz-icon")).not.toBeNull();
     // The preview is an inert clone outside every collector.
     const clone = cards[0].querySelector(".design-ov-scale");
     expect(clone.hasAttribute("inert")).toBe(true);
@@ -342,23 +343,12 @@ describe("carousel — turns, overlay, no scrolling", () => {
     expect(css).toContain('.design-ov-overlay[data-tone="warm"]');
   }, BOOT_TIMEOUT);
 
-  test("the header button toggles the overlay (default on), remembered per viewer; Space is the notes dock", async () => {
+  test("no layers button next to the eye: the eye hides the info box; an old stored 'off' is ignored", async () => {
     const a = await boot(page(2));
-    const ov = () => a.document.querySelector("[data-design-overview]");
-    expect(ov().dataset.overlay).toBe("on");
-    a.document.querySelector("#design-header .design-header-overlay").click();
-    expect(ov().dataset.overlay).toBe("off");
-    const btn = a.document.querySelector("#design-header .design-header-overlay");
-    expect(btn.hidden).toBe(false);
-    expect(btn.getAttribute("aria-pressed")).toBe("false");
-    const k = Object.keys(a.window.localStorage).find((x) => x.startsWith("concept-ov-overlay:"));
-    expect(a.window.localStorage.getItem(k)).toBe("off");
-    const b = await boot(page(2), { key: k, blob: "off" });
-    expect(b.document.querySelector("[data-design-overview]").dataset.overlay, "persisted").toBe("off");
-    b.document.querySelector("#design-header .design-header-overlay").click();
-    expect(b.document.querySelector("[data-design-overview]").dataset.overlay, "the touch path").toBe("on");
-    b.window.showDesign("d2");
-    expect(b.document.querySelector("#design-header .design-header-overlay").hidden, "overview only").toBe(true);
+    expect(a.document.querySelector("#design-header .design-header-overlay")).toBeNull();
+    expect(a.document.querySelector("[data-design-overview]").dataset.overlay).toBe("on");
+    const b = await boot(page(2), { key: "concept-ov-overlay:/", blob: "off" });
+    expect(b.document.querySelector("[data-design-overview]").dataset.overlay, "no way back existed").toBe("on");
   }, BOOT_TIMEOUT);
 
   test("the overview never scrolls: no overflow-y, sized from the viewport", () => {

@@ -136,10 +136,24 @@ rules (`body[data-single-*]`, the view-mode swap).
   0%, 100% { box-shadow: 0 0 22px color-mix(in srgb, var(--accent-color, #58a6ff) 38%, transparent), 0 6px 16px rgba(0,0,0,0.4); }
   50%      { box-shadow: 0 0 44px color-mix(in srgb, var(--accent-color, #58a6ff) 70%, transparent), 0 6px 16px rgba(0,0,0,0.4); }
 }
-body.chrome-glow .panel-fab, body.chrome-glow .feedback-fab { animation: chromeGlow 1.4s ease-in-out 2; }
+body.chrome-glow .feedback-fab { animation: chromeGlow 1.4s ease-in-out 2; }
 @media (prefers-reduced-motion: reduce) {
-  body.chrome-glow .panel-fab, body.chrome-glow .feedback-fab { animation: none; }
+  body.chrome-glow .feedback-fab { animation: none; }
 }
+/* ☰ is NAVIGATION chrome, not a call to action: it wears the same surface
+   as the header card and the quick nav (dark translucent fill, 1px subtle
+   border, blur) instead of the bright accent tile the 💬 keeps. Two equally
+   loud accent tiles in opposite corners competed with the design for the
+   eye; the user asked for the menu to read like the navigation bars. Only
+   the surface differs — size, radius, padding and typography stay in the
+   shared rule above (box-sizing: border-box absorbs the 1px border). */
+.panel-fab:hover, .panel-fab:focus-visible {
+  color: var(--accent-color, #58a6ff);
+  border-color: color-mix(in srgb, var(--accent-color, #58a6ff) 45%, var(--border-color, #30363d));
+}
+
+/* --tip-color, --field-* and the global field base rule: § Panel chrome
+   page-level JS part (its CSS fence), kept there for this part's budget. */
 /* ☰ lives top-right (Wave 3). The three top-edge overlays partition the
    width by construction rather than by hope:
      screen indicator  1rem … 33vw - 0.5rem   (max-width cap + ellipsis)
@@ -152,7 +166,10 @@ body.chrome-glow .panel-fab, body.chrome-glow .feedback-fab { animation: chromeG
    by 21px at 768px and completely at 375px, where it also reached the ☰
    FAB. 💬 lives bottom-right, clear of the top edge entirely.
 
-   #anno-toggle (the optional annotation eye pill) does NOT compete for this
+   #anno-toggle (the optional annotation eye pill) sits INSIDE the header
+   card whenever #design-header is shown (§ Panel Chrome JS adopt + the
+   overview's placeEye()); only without that header does it fall back to
+   the spot below. Either way it does NOT compete for this
    horizontal partition at all — it sits on a SEPARATE row, left edge,
    directly below the screen indicator: `top: 3.75rem; left: 1rem`. That
    offset is fixed regardless of viewport width because the indicator's own
@@ -165,6 +182,14 @@ body.chrome-glow .panel-fab, body.chrome-glow .feedback-fab { animation: chromeG
    (28px), so unlike the indicator/switcher it needs no
    max-width cap — there is nothing else sharing its row. */
 .panel-fab { top: 2rem; right: 2rem; }
+/* ☰ wears the navigation bars' surface, not the 💬 accent tile. */
+.panel-fab:not(.hidden) {
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 82%, transparent);
+  border: 1px solid var(--border-color, #30363d);
+  color: var(--text-color, #c9d1d9);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
 .feedback-fab { bottom: 2rem; right: 2rem; }
 .panel-fab:hover,
 .feedback-fab:hover { transform: scale(1.08); }
@@ -321,9 +346,15 @@ body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
    ceiling is viewport − ☰ band (top 2rem + 60px + 0.75rem gap) − the
    dock's own bottom offset (2rem + 54px). Every max-height below is
    min(--dock-ceiling, its px cap): the cap still rules on tall viewports,
-   the ceiling only bites when the content would reach the ☰. */
+   the ceiling only bites when the content would reach the ☰.
+   box-sizing: border-box is load-bearing: without it max-height capped the
+   CONTENT box and the padding + border (~38px) were added on top, so a full
+   dock still reached ~22px into the ☰ band (seen at 1080px with three
+   fields and a long general note). 100dvh where supported, so a mobile URL
+   bar cannot push the top edge up either. */
 .feedback-dock {
   --dock-ceiling: calc(100vh - (2rem + 60px + 0.75rem) - (2rem + 60px + 14px));
+  box-sizing: border-box;
   position: fixed;
   left: auto;
   right: 2rem;
@@ -348,6 +379,9 @@ body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
   /* anchor: the 💬 FAB's centre (30px in from the right edge, 44px below
      the bottom edge) — the bubble grows out of the FAB, not out of a corner. */
   transform-origin: calc(100% - 30px) calc(100% + 44px);
+}
+@supports (height: 100dvh) {
+  .feedback-dock { --dock-ceiling: calc(100dvh - (2rem + 60px + 0.75rem) - (2rem + 60px + 14px)); }
 }
 .feedback-dock[data-size="wide"] {
   width: min(560px, calc(100vw - 4rem));
@@ -470,35 +504,8 @@ body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
   font-family: inherit; font-size: 0.95rem; line-height: 1.5; resize: vertical; min-height: 80px;
 }
 .feedback-section textarea:focus { outline: none; border-color: var(--accent-color); }
-
-/* ── Notes dock fields (R4 "Notiz-Dock"): breadcrumb header per field, soft
-   glow on the active one, 📎 inside the field, "Wusstest du schon?" tip. ── */
-.feedback-dock .feedback-section { padding: 10px; border-radius: 14px; background: rgba(255,255,255,0.025); }
-.feedback-dock .feedback-section:focus-within {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-color, #58a6ff) 12%, transparent), rgba(137,87,229,0.07));
-}
-.feedback-dock .feedback-section textarea:focus {
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent-color, #58a6ff) 45%, transparent), 0 0 18px color-mix(in srgb, var(--accent-color, #58a6ff) 25%, transparent);
-}
-.dock-crumb { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); font-weight: 500; }
-.dock-crumb i { font-style: normal; color: color-mix(in srgb, var(--text-secondary) 60%, transparent); }
-.dock-crumb .dock-scope { display: inline-flex; align-items: center; gap: 6px; }
-.dock-crumb strong, .dock-crumb .dock-crumb-last { color: var(--text-color, #f0f6fc); font-weight: 650; font-size: 13px; }
-.dock-crumb .dock-tag {
-  margin-left: auto; font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
-  color: var(--text-secondary); background: rgba(255,255,255,0.05); white-space: nowrap;
-}
-.feedback-dock .feedback-section:focus-within .dock-tag { color: var(--accent-color); background: color-mix(in srgb, var(--accent-color, #58a6ff) 15%, transparent); }
-/* The 📎 sits inside the field (bottom-right); thumbnails flow under it. */
-.feedback-dock .attach-slot { position: relative; }
-.feedback-dock .attach-slot .attach-btn { position: absolute; right: 10px; top: -34px; opacity: 0.7; }
-.feedback-dock .attach-slot .attach-btn:hover { opacity: 1; }
-.dock-tip {
-  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; padding: 8px 10px; border-radius: 12px;
-  background: color-mix(in srgb, var(--warning-color, #e3b341) 8%, transparent); font-size: 12px; color: var(--text-color, #c9d1d9);
-}
-.dock-tip b { color: var(--warning-color, #e3b341); }
-.dock-tip[hidden] { display: none; }
+/* The notes dock's field look (R4 breadcrumb, glow, 📎 slot, auto-grow,
+   "Wusstest du schon?"): § Panel chrome page-level part, CSS fence. */
 .feedback-divider { height: 1px; background: var(--border-color); margin: 0.2rem 0; }
 /* The attach bar's own margin-top (§ Attachments CSS) is meant for contexts
    with no flex-gap parent (decision notes, annotation bubbles). Inside the

@@ -31,18 +31,27 @@ returns — the single-design page is untouched.
 - **Carousel.** The overview is one slide per design plus a trailing
   questions slide (`section[data-view]`s). The current slide sits large in
   the centre; its neighbours peek in cut off at the edges (`data-pos`
-  `prev` / `next`, dimmed). A click on a neighbour or
-  `←` / `→` only turns the carousel (no ‹ › buttons); the centre preview opens its design
-  (click / `Enter`). Everything is sized from the viewport (CSS container
-  units on the stage), so the overview never scrolls.
-- **Overlay** on the current preview: kicker `icon · N · name` (+ ☆/★),
-  motto, the three traits. Anchor from `data-design-overlay`
-  (`tl|tr|bl|br|tc|bc`, default `bl`), tint from
-  `data-design-overlay-tone="warm"`. The header's layers button hides /
-  shows it (Space is the notes dock); the choice is a per-viewer
-  convenience in localStorage (`concept-ov-overlay:<path>`). A variant new
-  or changed this round carries ONE chip in this box ("Neugedacht" /
-  "Verbessert").
+  `prev` / `next`) as plain bordered tiles — no cut-off preview, just the
+  variant's icon badge. A click on a neighbour or
+  `←` / `→` only turns the carousel (no ‹ › buttons; a hover fades in one
+  tall glowing chevron on the neighbour); the centre preview opens its design
+  (click / `Enter` / `↓`) and glows on hover — it never scales. Every tile
+  carries the icon badge top-left (`.design-ov-badge`); the centre tile
+  shows the name next to it, a neighbour on hover. Everything is sized from
+  the viewport (CSS container units on the stage), so the overview never
+  scrolls.
+- **Overlay** on the current preview: kicker `icon name` (+ ☆/★) — the
+  same pairing as the quick nav, no number — motto, the three traits.
+  Semi-transparent at rest, opaque on hover / focus. Anchor from
+  `data-design-overlay` (`tl|tr|bl|br|tc|bc`, default `bl`), tint from
+  `data-design-overlay-tone="warm"`. The eye (`#anno-toggle`, inside the
+  header) hides it with every other annotation; there is no separate
+  overlay toggle. A NEW variant carries the "Neugedacht" chip; a variant
+  CHANGED this round shows one line under the traits — "Verbessert" + the
+  phrase from the optional `data-design-improved` attribute on its
+  `section[data-design]` (a few words, ≤ ~40 chars, e.g. "Größere
+  Tageskacheln"; longer text is cut at a word boundary). No attribute → no
+  line, no chip.
 - **Preview fit** is measured through no ancestor transform (`fitPreviews()`
   divides by the wrap's ancestor scale — a side card's rects read at its
   `scale(.74)` made the fit too large and cropped the real content).
@@ -253,8 +262,18 @@ returns — the single-design page is untouched.
       // Overlay anchor + tint, authored per design (§ Variant overview —
       // authoring); anything else falls back to bottom-left, bluish.
       anchor: OV_ANCHORS.has(d.dataset.designOverlay) ? d.dataset.designOverlay : 'bl',
-      tone: d.dataset.designOverlayTone === 'warm' ? 'warm' : ''
+      tone: d.dataset.designOverlayTone === 'warm' ? 'warm' : '',
+      improved: improvedPhrase(d.dataset.designImproved)
     };
+  }
+  // `data-design-improved`: a few words on what improved this round. Capped
+  // so the line never outgrows the info box — cut at a word boundary.
+  function improvedPhrase(raw) {
+    const t = String(raw || '').replace(/\s+/g, ' ').trim();
+    if (t.length <= 44) return t;
+    const cut = t.slice(0, 44);
+    const sp = cut.lastIndexOf(' ');
+    return (sp > 20 ? cut.slice(0, sp) : cut).replace(/[\s,;:.–-]+$/, '') + '…';
   }
   // A view's short nav title — the layout's viewNavTitle() (§ Views
   // (optional) → Nav title); the full question stays in the tooltip.
@@ -549,32 +568,28 @@ returns — the single-design page is untouched.
     }
     const open = () => (shown && shown !== screens[0] ? window.showDesign(m.id, shown.id) : window.showDesign(m.id));
     preview.appendChild(cloneScreen(shown, 'ov' + m.n + '-'));
-    // "Open ↗" shows on hover / focus only — at rest the preview is a still.
-    // The hotkey belongs to THIS button: shown on a long hover of it or while
-    // Alt is held (body.hk-alt), never as a tooltip over the centre nav.
-    const openBtn = el('span', 'design-ov-open', L.open + ' ↗');
-    openBtn.appendChild(el('kbd', 'app-kbd design-ov-open-key', String(m.n)));
-    preview.appendChild(openBtn);
-    // ONE chip, merged into the info box below: "Neugedacht" (new variant)
-    // or "Verbessert" (changed this round); an unchanged variant gets none.
+    // No "Open ↗" button: the centre preview itself is the control (click /
+    // Enter / ↓) and answers a hover with a glow, never with scaling.
     const kind = delta ? (delta.isNew ? 'new' : delta.screens.length ? 'changed' : 'same') : '';
     if (kind) slide.dataset.change = kind;
     preview.addEventListener('keydown', e => {
       if (e.key === 'Enter' && slide.dataset.pos === 'cur') { e.preventDefault(); open(); }
     });
     slide.appendChild(preview);
-    // Overlay: kicker (icon · N · name + ☆/★), motto, three traits — at the
-    // anchor the author picked, in the tint the author picked.
+    slide.appendChild(badgeOf(iconEl(m.icon, { color: m.color }), m.label));
+    // Overlay: kicker (icon name + ☆/★), motto, three traits, and for a
+    // changed variant the "Verbessert …" line — at the anchor the author
+    // picked, in the tint the author picked.
     const ov = el('div', 'design-ov-overlay');
     ov.dataset.anchor = m.anchor;
     if (m.tone) ov.dataset.tone = m.tone;
-    if (kind === 'new' || kind === 'changed') {
-      const chip = el('span', 'design-ov-change', kind === 'new' ? L.chRethought : L.chImproved);
+    if (kind === 'new') {
+      const chip = el('span', 'design-ov-change', L.chRethought);
       chip.dataset.kind = kind;
       ov.appendChild(chip);
     }
     const kick = el('div', 'design-ov-kicker');
-    kick.append(iconEl(m.icon, { color: m.color }), el('span', 'design-ov-num', String(m.n)), el('span', 'design-ov-name', m.label));
+    kick.append(iconEl(m.icon, { color: m.color }), el('span', 'design-ov-name', m.label));
     const star = el('button', 'design-ov-star');
     star.type = 'button';
     star.dataset.designId = m.id;
@@ -589,15 +604,29 @@ returns — the single-design page is untouched.
       m.traits.forEach(t => ul.appendChild(el('li', '', t)));
       ov.appendChild(ul);
     }
+    if (kind === 'changed' && m.improved) {
+      const line = el('p', 'design-ov-improved');
+      line.append(el('strong', '', L.chImproved), document.createTextNode(' ' + m.improved));
+      ov.appendChild(line);
+    }
     slide.appendChild(ov);
     wireSlide(slide, open);
     return slide;
+  }
+  // Icon badge, top-left on every tile: the centre tile shows the name too,
+  // a neighbour (a plain bordered tile) only on hover.
+  function badgeOf(icon, label) {
+    const b = el('span', 'design-ov-badge');
+    b.setAttribute('aria-hidden', 'true');
+    b.append(icon, el('span', 'design-ov-badge-name', label));
+    return b;
   }
   function buildQuestionsSlide() {
     const slide = el('article', 'design-ov-slide design-ov-qslide');
     slide.dataset.questions = 'true';
     slide.setAttribute('aria-label', L.qLabel);
     slide.appendChild(el('div', 'design-ov-qcard'));
+    slide.appendChild(badgeOf(iconEl('question', { kind: 'plain' }), L.qLabel));
     wireSlide(slide, null);
     return slide;
   }
@@ -647,19 +676,13 @@ returns — the single-design page is untouched.
     }
   });
 
-  // Overlay on / off (Space, header button). A per-viewer convenience like
-  // the seen pages: localStorage only, never persisted anywhere Claude reads.
-  const OVERLAY_KEY = 'concept-ov-overlay:' + location.pathname;
-  let overlayShown = (() => { try { return localStorage.getItem(OVERLAY_KEY) !== 'off'; } catch (e) { return true; } })();
+  // The info box has no toggle of its own any more: the header eye hides it
+  // with every other annotation (body.anno-hidden), so a second "layers"
+  // button next to it was redundant. data-overlay stays "on" — an older
+  // stored "off" (concept-ov-overlay:<path>) is ignored, it had no way back.
+  const overlayShown = true;
   function paintOverlay() {
-    document.querySelectorAll('.design-ov').forEach(o => { o.dataset.overlay = overlayShown ? 'on' : 'off'; });
-    if (H.overlay) H.overlay.setAttribute('aria-pressed', String(overlayShown));
-  }
-  function setOverlay(v) {
-    overlayShown = !!v;
-    const val = overlayShown ? 'on' : 'off';
-    if (typeof _guardedSetItem === 'function') _guardedSetItem(OVERLAY_KEY, val);
-    paintOverlay();
+    document.querySelectorAll('.design-ov').forEach(o => { o.dataset.overlay = 'on'; });
   }
 
   // ── Header ─────────────────────────────────────────────────────────────
@@ -695,20 +718,14 @@ returns — the single-design page is untouched.
     // No 📍 pin-hint in the header any more: Ctrl + click is taught by the Alt
     // example pin and the dock tips.
     H.pin = null;
-    // Overlay toggle: the touch path of Space, shown on the overview only.
-    H.overlay = el('button', 'design-header-overlay');
-    H.overlay.type = 'button';
-    H.overlay.setAttribute('aria-pressed', String(overlayShown));
-    H.overlay.setAttribute('aria-label', L.overlay);
-    H.overlay.appendChild(svgFromPaths(ICONS.layers));
-    setTip(H.overlay, L.overlay, L.space);
-    H.overlay.setAttribute('aria-keyshortcuts', 'Space');
-    H.overlay.addEventListener('click', () => setOverlay(!overlayShown));
-    // Icon + name sit in one pill, the same shape as the active quick-nav
-    // segment, so the header reads as "this variant", not as loose text.
+    // No overlay ("layers") button: the eye — moved INTO this row by
+    // placeEye() — already hides the info box with the other annotations.
+    // Icon + name: the current page, marked by the same dz-colour underline
+    // as the active quick-nav group, but flat — it is a label, not a control.
     H.pill = el('span', 'design-header-title');
+    H.pill.setAttribute('aria-current', 'page');
     H.pill.append(H.iconSlot, H.name);
-    H.main.append(H.back, H.sep, H.pill, H.star, H.eye, H.overlay);
+    H.main.append(H.back, H.sep, H.pill, H.star, H.eye);
     // One row only: pages live in the quick nav, the favourite on ★ — the
     // header never grows a second row over the content.
     header.append(H.main);
@@ -981,14 +998,17 @@ returns — the single-design page is untouched.
     const ready = document.getElementById('panel-ready');
     const split = ready && ready.querySelector('.submit-split');
     if (!split) return;
-    let hintEl = ready.querySelector('.submit-open-questions');
+    let hintEl = document.querySelector('.submit-open-questions');
     const open = on() && isLive(it) && !body.classList.contains('viewing-frozen')
       ? questionsOf(it).filter(q => !q.done) : [];
     if (!open.length) { if (hintEl) hintEl.hidden = true; return; }
-    if (!hintEl) {
-      hintEl = el('p', 'submit-open-questions');
-      ready.insertBefore(hintEl, split);
-    }
+    // ABOVE the call to action: the journey row (#journey, in .panel-status)
+    // carries the submit button, so the hint opens that block; without a
+    // journey row it sits right before the split button.
+    const journey = document.getElementById('journey');
+    const anchor = journey && journey.parentNode ? journey : split;
+    if (!hintEl) hintEl = el('p', 'submit-open-questions');
+    if (hintEl.nextSibling !== anchor || hintEl.parentNode !== anchor.parentNode) anchor.parentNode.insertBefore(hintEl, anchor);
     hintEl.hidden = false;
     hintEl.textContent = '';
     hintEl.appendChild(el('span', '', '⚠ ' + (open.length === 1 ? L.qSubmit1 : L.qSubmit.replace('{n}', String(open.length))) + ' '));
@@ -1056,7 +1076,7 @@ returns — the single-design page is untouched.
     sheet.appendChild(el('h2', '', L.keysTitle));
     const dl = el('dl');
     [['Esc', L.overview], ['1–9', L.keysDesign], ['⇧+1–9', L.keysView], ['Tab', L.keysNext],
-     ['←/→', L.keysCarousel], ['↑/↓', L.keysLevel], [L.space, L.keysDock], ['F', L.fav], ['Alt+1–9', L.keysRound], ['N', L.keysNotes], [L.ctrl + '+Enter', L.submit],
+     ['←/→', L.keysCarousel], ['↑/↓', L.keysLevel], ['Enter', L.open], [L.space, L.keysDock], ['F', L.fav], ['Alt+1–9', L.keysRound], ['N', L.keysNotes], [L.ctrl + '+Enter', L.submit],
      [L.ctrl + '+' + L.keysClick, L.keysPin], ['?', L.keysTitle]].forEach(([k, label]) => {
       const dt = el('dt');
       dt.appendChild(kbdNode(k));
@@ -1136,6 +1156,7 @@ returns — the single-design page is untouched.
       if (!(w > 0) || !wrap) return;
       wrap.style.setProperty('--dz-ov-scale', '1');
       wrap.style.setProperty('--dz-ov-x', '0px');
+      wrap.style.setProperty('--dz-ov-y', '0px');
       // Rects are measured through every ancestor transform: a side slide
       // sits at scale(.74), so its content read 26 % smaller and the preview
       // was fitted 26 % too large — cropped to a corner that no longer showed
@@ -1144,27 +1165,63 @@ returns — the single-design page is untouched.
       const k = wrap.offsetWidth && box0.width ? box0.width / wrap.offsetWidth : 1;
       const origin = box0.left;
       const originTop = box0.top;
-      let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
-      wrap.querySelectorAll(':scope > *, :scope > * > *').forEach(n => {
+      // Two unions: everything down to three levels, and the same without
+      // full-width CONTAINERS (the screen section, a centring wrapper) — a
+      // 520px widget inside a 1000px section was fitted as if it were 1000px
+      // wide and sat small in a sea of empty tile. The tight union wins when
+      // it found anything.
+      const all = { l: Infinity, r: -Infinity, t: Infinity, b: -Infinity };
+      const tight = { l: Infinity, r: -Infinity, t: Infinity, b: -Infinity };
+      const add = (u, r) => {
+        u.l = Math.min(u.l, (r.left - origin) / k); u.r = Math.max(u.r, (r.right - origin) / k);
+        u.t = Math.min(u.t, (r.top - originTop) / k); u.b = Math.max(u.b, (r.bottom - originTop) / k);
+      };
+      wrap.querySelectorAll(':scope > *, :scope > * > *, :scope > * > * > *').forEach(n => {
         const r = n.getBoundingClientRect();
         if (!r.width || !r.height) return;
-        left = Math.min(left, (r.left - origin) / k);
-        right = Math.max(right, (r.right - origin) / k);
-        top = Math.min(top, (r.top - originTop) / k);
-        bottom = Math.max(bottom, (r.bottom - originTop) / k);
+        add(all, r);
+        if (!(n.firstElementChild && r.width / k >= 0.9 * (wrap.offsetWidth || 1000))) add(tight, r);
       });
+      const u = tight.r > tight.l ? tight : all;
       const PAD = 24;
-      const content = right > left ? Math.min(1000, right - left + 2 * PAD) : 1000;
-      const from = right > left ? Math.max(0, left - PAD) : 0;
-      // The carousel preview is large: a desktop mock may grow past 1:1; a
-      // narrow (phone) mock is fitted by height too, so it is seen whole.
-      let scale = Math.min(2, w / content);
+      const content = u.r > u.l ? Math.min(1000, u.r - u.l + 2 * PAD) : 1000;
+      const from = u.r > u.l ? Math.max(0, u.l - PAD) : 0;
+      const tall = u.b > u.t ? u.b - u.t + 2 * PAD : 0;
+      const fromY = u.b > u.t ? Math.max(0, u.t - PAD) : 0;
+      // Fill the tile: as large as the width allows (up to 2.5×); content
+      // that would then overflow the height is fitted by height — a phone
+      // mock fully, a long desktop page only down to 70 % of the width fit
+      // (its bottom may crop). Centred on both axes when it fits.
       const h = p.clientHeight;
-      if (content < 700 && h > 0 && bottom > top) scale = Math.min(scale, h / (bottom + PAD));
+      const fitIn = (aw, ah) => {
+        let s = Math.min(2.5, aw / content);
+        if (ah > 0 && tall && tall * s > ah) s = Math.max(ah / tall, content < 700 ? 0 : s * 0.7);
+        return Math.max(0, s);
+      };
+      // The info card sits in one corner of the tile; a design blown up to
+      // the full tile ran underneath it. Reserve the card's band — beside it
+      // or above/below it, whichever leaves the larger design.
+      let region = { x: 0, y: 0, w, h };
+      const card = p.closest('.design-ov-slide')?.querySelector('.design-ov-overlay');
+      const pr = p.getBoundingClientRect();
+      const cr = card && !card.hidden ? card.getBoundingClientRect() : null;
+      if (cr && cr.width && cr.height && pr.width) {
+        const G = 16;
+        const o = { l: (cr.left - pr.left) / k, r: (cr.right - pr.left) / k, t: (cr.top - pr.top) / k, b: (cr.bottom - pr.top) / k };
+        const left = (o.l + o.r) / 2 < w / 2, bottom = (o.t + o.b) / 2 > h / 2;
+        const side = left ? { x: o.r + G, y: 0, w: w - o.r - G, h } : { x: 0, y: 0, w: o.l - G, h };
+        const band = bottom ? { x: 0, y: 0, w, h: o.t - G } : { x: 0, y: o.b + G, w, h: h - o.b - G };
+        const cands = [side, band].filter(c => c.w > 0 && c.h > 0);
+        if (cands.length) region = cands.reduce((a, c) => (fitIn(c.w, c.h) > fitIn(a.w, a.h) ? c : a));
+      }
+      const scale = fitIn(region.w, region.h);
+      const y = region.h > 0 && tall ? region.y + Math.max(0, (region.h - tall * scale) / 2) - fromY * scale : 0;
       wrap.style.removeProperty('--dz-ov-scale');
       wrap.style.removeProperty('--dz-ov-x');
+      wrap.style.removeProperty('--dz-ov-y');
       p.style.setProperty('--dz-ov-scale', String(scale));
-      p.style.setProperty('--dz-ov-x', ((w - content * scale) / 2 - from * scale).toFixed(1) + 'px');
+      p.style.setProperty('--dz-ov-x', (region.x + (region.w - content * scale) / 2 - from * scale).toFixed(1) + 'px');
+      p.style.setProperty('--dz-ov-y', y.toFixed(1) + 'px');
     });
   }
   window.addEventListener('resize', () => requestAnimationFrame(fitPreviews));
@@ -1228,8 +1285,6 @@ returns — the single-design page is untouched.
       // The motto is the name's tooltip, not a line of its own.
       if (motto) setTip(H.name, motto);
       else { delete H.name.dataset.tip; delete H.name.dataset.tipTier; }
-      H.overlay.hidden = !(md === 'overview' && hasOverview);
-      H.overlay.setAttribute('aria-pressed', String(overlayShown));
     }
     renderQuick(it);
     renderQuestionsCard(it);
@@ -1502,11 +1557,13 @@ returns — the single-design page is untouched.
     ta.readOnly = !live;
     ta.setAttribute('aria-label', label);
     ed.appendChild(ta);
+    // The 📎 lives in the foot row (keys hint · 📎 · delete), never inside
+    // the textarea, where it sat on the typed text and the resize grip.
     const slot = el('div', 'attach-slot');
     slot.dataset.attachSlot = upinSlot(pin.id);
-    ed.appendChild(slot);
     const foot = el('div', 'upin-editor-foot');
-    foot.appendChild(el('span', '', live ? L.upinKeys : ''));
+    foot.appendChild(el('span', 'upin-editor-keys', live ? L.upinKeys : ''));
+    foot.appendChild(slot);
     if (live && !isDraft) {
       const del = el('button', 'upin-delete', L.upinDelete);
       del.type = 'button';
@@ -1665,8 +1722,28 @@ returns — the single-design page is untouched.
       window.showOverview();
       return;
     }
+    // Variant pages: ← / → step through the variant's pages even while a
+    // chrome control (quick nav, header) holds the focus — the screen
+    // handler of § Design JS bails on any focused button. Focus on the page
+    // itself stays that handler's case, so a press never steps twice.
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && mode() === 'design'
+        && e.target && e.target.closest && e.target.closest('#design-quick, #design-header')) {
+      const d = activeDesignOf(it);
+      const screens = d ? [...d.querySelectorAll('section[data-screen][id]')] : [];
+      const cur = screens.indexOf(activeScreenOf(d));
+      const next = cur + (e.key === 'ArrowLeft' ? -1 : 1);
+      if (cur < 0 || next < 0 || next >= screens.length) return;
+      e.preventDefault();
+      window.showScreen(screens[next].id);
+      return;
+    }
     if (mode() === 'overview' && overviewOf(it)) {
-      if (e.key === 'ArrowDown') {
+      // Enter opens the centre tile like ↓ — unless a control has the focus
+      // (it answers Enter itself) — the preview's own handler covers focus on it.
+      const fa = document.activeElement;
+      const onPage = !fa || fa === body || fa === document.documentElement
+        || (fa.tagName !== 'BUTTON' && !!fa.closest('.design-ov-slide[data-pos="cur"]'));
+      if (e.key === 'ArrowDown' || (e.key === 'Enter' && onPage)) {
         const cur = overviewOf(it).querySelector('.design-ov-slide[data-pos="cur"]');
         if (!cur) return;
         e.preventDefault();

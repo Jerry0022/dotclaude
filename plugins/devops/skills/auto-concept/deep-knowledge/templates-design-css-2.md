@@ -365,6 +365,22 @@ body.panel-open .viewport-toggle { opacity: 0; pointer-events: none; }
    as a new text style. */
 .device-caption { font-size: 0.8rem; color: var(--text-secondary, #8b949e); text-align: center; }
 .device-caption strong { color: var(--text, #c9d1d9); font-weight: 600; }
+/* Whole-app screens (data-screen-fit="full", on the screen or its design):
+   the mock IS the page, so it fills the content area edge to edge — no chrome
+   padding, no stage wash, no device caption. FABs and the navigation overlap
+   the app instead of pushing it. Element-level screens keep the padded,
+   captioned look. */
+[data-template="design"] section[data-screen][data-screen-fit="full"],
+[data-template="design"] [data-design][data-screen-fit="full"] section[data-screen] {
+  padding: 0; align-items: stretch; justify-content: stretch;
+}
+[data-template="design"] section[data-screen][data-screen-fit="full"] > :not([data-anno-layer]):not(.device-stage),
+[data-template="design"] [data-design][data-screen-fit="full"] section[data-screen] > :not([data-anno-layer]):not(.device-stage) {
+  max-width: none; min-height: 100%; border-radius: 0;
+}
+[data-template="design"] section[data-screen][data-screen-fit="full"] .device-stage,
+[data-template="design"] [data-design][data-screen-fit="full"] .device-stage { background: none; border-radius: 0; }
+[data-screen-fit="full"] .device-caption { display: none; }
 @media (prefers-reduced-motion: reduce) {
   /* The pill still expands — it has to, or the label is unreachable — it
      just snaps rather than animating. */

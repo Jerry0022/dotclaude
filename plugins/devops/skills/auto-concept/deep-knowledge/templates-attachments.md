@@ -208,6 +208,11 @@ belongs, and the drop target itself stays advertised by the dashed
   border: none; border-radius: 50%; cursor: pointer; font-size: .65rem; line-height: 1;
   background: var(--danger-color, #f85149); color: #fff;
 }
+/* A 📎 that sits INSIDE its field (the notes dock, § Panel chrome) gets a
+   reserved right gutter: the button is ~30px wide at right: 14px, so ~2.9rem
+   of padding keeps every typed line — wrapped or scrolled — clear of it.
+   `html` + attribute out-weighs the dock's own field padding rule. */
+html .feedback-dock .feedback-section textarea[data-attachable] { padding-right: 2.9rem; }
 /* Drop affordance on the textarea itself. */
 textarea[data-attachable].attach-dragover { outline: 2px dashed var(--accent-color); outline-offset: 2px; }
 ```
