@@ -242,6 +242,11 @@ sheet. Branch on it:
 
 **`action: "implement"` ("Mit Feedback implementieren" button):**
 
+**Channel extras.** Started with a `--from=<name>` other than `do-batch` →
+before step 0 run `node "{PLUGIN_ROOT}/scripts/run-extras.js" from <name> --skill auto-concept`.
+Exit 126 or `"known":false` → nothing changes. `known:true` → read the `doc`
+§ `section` it names and do what it says before step 0.
+
 0. **Reality check — run this BEFORE writing anything.** The default branch may
    have moved since this concept was written, which would make the approved plan
    produce wrong, dead or duplicate code. Full procedure, force classes and

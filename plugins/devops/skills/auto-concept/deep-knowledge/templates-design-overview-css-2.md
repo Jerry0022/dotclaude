@@ -23,6 +23,15 @@
 }
 .design-ov-improved strong { margin-right: 0.35rem; color: var(--warning-color, #d29922); }
 
+/* Improved line inside an annotation bubble (rounds 2+): same look as the
+   overview line; one ellipsised line collapsed, wrapped when open. */
+.anno-bubble-improved {
+  margin: 0 0 0.35rem; font-size: 0.82rem; line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.anno-bubble[data-open="true"] .anno-bubble-improved { white-space: normal; }
+.anno-bubble-improved strong { margin-right: 0.35rem; color: var(--warning-color, #d29922); }
+
 /* ── User pins (Ctrl + click) ── */
 .upin-hint {
   position: fixed; left: 50%; bottom: 2rem; transform: translateX(-50%); z-index: 99;

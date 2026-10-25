@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.317.0] — 2026-10-25
+
+On a concept page the eye now hides everything the page adds to the design. From round 2 the pins say what improved.
+
+### Added
+- **"Improved" line in pin bubbles.** From round 2 an annotation bubble on an element that already existed can start with a short `Verbessert: …` line, before the question and the answer field. A pin may also carry only the improvement, with no question, so it can still be commented on. The submit payload carries the phrase as an optional `improved` field in `annotations[]`.
+
+### Changed
+- **The eye now hides all concept chrome.** It also hides the bottom status toasts, hotkey tips, pin hints, the screen indicator and the recovered-notes strip. No new tip appears while the eye is off. The eye, the device switch and the draft-offline warning stay visible.
+- **Fewer pins in later rounds.** From round 2 only screens that changed get pins, at most 3 each, never on the overview. Round 1 keeps 3 to 7 per design.
+
+## [0.316.0] — 2026-10-25
+
+Frustrated Mode (alpha) now carries an approved plan through auto-agents, auto-concept and do-learn, so nothing asks twice for what the plan already approved.
+
+### Added
+- **Plan hand-off to the receiving skills (alpha only).** `scripts/run-extras.js from <name> --skill <skill>` returns the receiving skill's section of the gated `deep-knowledge/frustrated-mode.md`; the ungated skill files name no feature.
+  - **auto-agents:** `--via` together with a `--plan` that `run-extras.js handoff` confirms counts as the go (no second confirmation); the plan card is still shown. A bare `--via`, or any channel but alpha, asks as before.
+  - **auto-concept:** the implement click becomes plan v+1 under the same id, recorded and approved before the implement path runs, with the step's closed scope written into the auto-agents task. A plan with no implement step after the concept first asks "Neue Umsetzung — Plan v… freigeben?".
+  - **do-learn:** the payload is the rule; no "richtig?" line when it matches the approved plan's rule text.
+- Every receiving hand-off verifies the plan first (`handoff --plan`; invalid or expired → stop or confirm as usual). do-run skips implement steps a concept step already built and resumes with the new plan hash.
+
 ## [0.315.1] — 2026-10-25
 
 The agent card no longer gets stuck when it was written as narrated text.

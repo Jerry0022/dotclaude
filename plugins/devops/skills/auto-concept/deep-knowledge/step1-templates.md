@@ -55,7 +55,10 @@ Claude may deviate when the content genuinely demands it.
   a later iteration's job, not designs 4 to 7.
 - **Mixed concepts** combine both: 7 on the decision side, 3 on the design
   side.
-- **Annotations: top 3 to top 7 per design.** Component-level questions
+- **Annotations: round 1 top 3 to top 7 per design; rounds 2+ at most 3 per
+  changed screen** (unchanged screens and the overview get none; improved
+  elements add an `.anno-bubble-improved` line, see templates-design-screens.md).
+  Component-level questions
   are pinned onto the mock (Step 1a → Annotation layer); a view or a
   `decision` round never carries them.
 
@@ -143,9 +146,11 @@ with an overview table carrying a recommendation column and jump links
    about a *part* of a design (this list, that header, the empty state, the
    badge) is pinned onto that element as an annotation — pin, leader line,
    answer field — never lifted out into a view or a `decision` round. Per
-   design pin the **top 3 at least, top 7 at most**, ranked by how much the
-   answer changes the design; below three the design is not being
-   questioned enough, above seven the mock is wallpapered. See
+   design pin in round 1 the **top 3 at least, top 7 at most**, ranked by how
+   much the answer changes the design; below three the design is not being
+   questioned enough, above seven the mock is wallpapered. From round 2 only
+   the screens that changed get pins, **at most 3 each** (no floor — a small
+   change may need one), never the overview; unchanged screens get none. See
    `step2-feedback.md` § Annotation Layer (optional). Skip the layer only when a design
    genuinely has nothing element-level to ask — a rare case, not the
    default.

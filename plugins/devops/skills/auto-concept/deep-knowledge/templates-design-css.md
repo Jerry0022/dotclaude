@@ -336,15 +336,29 @@ body.anno-hidden .upin-layer, body.anno-hidden .design-ov-overlay, body.anno-hid
    both FABs (☰, 💬) away, so the concept can be looked at undisturbed. The
    eye itself (and the device switch beside it) stays, dimmed. visibility
    keeps the hidden controls out of the tab order; their hotkeys still work.
-   !important beats the intro keyframes, which animate opacity too. */
+   !important beats the intro keyframes, which animate opacity too.
+   It takes every other engine-owned bit of chrome along too — the bottom
+   status messages and tips (.jr-toast, .submitted-toast, .hk-nudge, the
+   .upin-hint / .dpin-hint pin hints) and the corner indicators
+   (.screen-indicator, .recovered-notes-strip) — so the design itself is all
+   that is left. Kept on purpose: the eye, the device switch beside it
+   (.viewport-toggle) and the draft-offline strip (a data-loss warning). */
 body.anno-hidden #design-quick, body.anno-hidden .design-switcher,
-body.anno-hidden .panel-fab, body.anno-hidden .feedback-fab {
+body.anno-hidden .panel-fab, body.anno-hidden .feedback-fab,
+body.anno-hidden .jr-toast, body.anno-hidden .submitted-toast,
+body.anno-hidden .hk-nudge, body.anno-hidden .upin-hint,
+body.anno-hidden .dpin-hint, body.anno-hidden .screen-indicator,
+body.anno-hidden .recovered-notes-strip {
   opacity: 0 !important; visibility: hidden; pointer-events: none;
   transition: opacity 0.18s ease, visibility 0s linear 0.18s;
 }
 @media (prefers-reduced-motion: reduce) {
   body.anno-hidden #design-quick, body.anno-hidden .design-switcher,
-  body.anno-hidden .panel-fab, body.anno-hidden .feedback-fab { transition: none; }
+  body.anno-hidden .panel-fab, body.anno-hidden .feedback-fab,
+  body.anno-hidden .jr-toast, body.anno-hidden .submitted-toast,
+  body.anno-hidden .hk-nudge, body.anno-hidden .upin-hint,
+  body.anno-hidden .dpin-hint, body.anno-hidden .screen-indicator,
+  body.anno-hidden .recovered-notes-strip { transition: none; }
 }
 /* Eye = island control: filled, glow, no ring. The counter is the number of
    OPEN (unanswered) notes of the page; it hides at 0, the eye itself stays. */

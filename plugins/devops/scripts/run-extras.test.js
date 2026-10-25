@@ -76,6 +76,33 @@ describe("fromPreset", () => {
     expect(extras.fromPreset("do-batch", on)).toEqual({ known: false });
     expect(extras.fromPreset("__proto__", on)).toEqual({ known: false });
   });
+  test("each receiving skill gets its own section; unknown skills and stable get none", () => {
+    const doc = "deep-knowledge/frustrated-mode.md";
+    expect(extras.fromPreset("frustrated", on, "auto-agents")).toEqual({ known: false });
+    expect(extras.fromPreset("frustrated", on, "auto-concept")).toEqual({ known: true, doc, section: "Hand-off in auto-concept" });
+    expect(extras.fromPreset("frustrated", on, "do-learn")).toEqual({ known: true, doc, section: "Hand-off in do-learn" });
+    expect(extras.fromPreset("frustrated", on, "auto-fix")).toEqual({ known: false });
+    expect(extras.fromPreset("frustrated", on, "constructor")).toEqual({ known: false });
+    expect(extras.fromPreset("frustrated", off, "do-learn")).toEqual({ known: false });
+  });
+  test("every receiving hand-off verifies the plan before acting", () => {
+    const root = path.join(path.dirname(SCRIPT), "..");
+    const md = fs.readFileSync(path.join(root, "deep-knowledge", "frustrated-mode.md"), "utf8");
+    for (const sec of ["Hand-off in auto-concept", "Hand-off in do-learn"]) {
+      const body = md.split(`\n## ${sec}\n`)[1].split("\n## ")[0];
+      expect(body, sec).toMatch(/Verify first[^\n]*run-extras\.js" handoff --plan/);
+    }
+    // auto-agents skips its confirmation only for a --via plan the helper confirms.
+    const agents = fs.readFileSync(path.join(root, "skills", "auto-agents", "SKILL.md"), "utf8");
+    expect(agents).toMatch(/`--via`\+`--plan=<ref>` that `node "\{PLUGIN_ROOT\}\/scripts\/run-extras\.js" handoff --plan <ref>` confirms/);
+  });
+  test("every section the helper names exists in the feature doc", () => {
+    const md = fs.readFileSync(path.join(path.dirname(SCRIPT), "..", "deep-knowledge", "frustrated-mode.md"), "utf8");
+    for (const skill of ["do-run", "auto-concept", "do-learn"]) {
+      const { section } = extras.fromPreset("frustrated", on, skill);
+      expect(md, skill).toContain(`\n## ${section}\n`);
+    }
+  });
 });
 
 describe("parsePlanRef", () => {
