@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.314.0] — 2026-10-25
+
+A finished ship no longer asks whether you want to continue.
+
+### Fixed
+- **Completion card after a kept ship.** A finished ship no longer asks "weiter in `<branch>`?" with a Continue button that only sent a generic "what's next?". The question and the button now need the announced follow-up (`nextStep`), and the button sends exactly that step. A kept ship without one renders like any finished ship.
+- **Keep-mode rules.** do-ship, its cleanup rules and the delegated-ship brief use `--keep` only for announced follow-up work and name it as `nextStep`. "fertig", "final" and a concept close-out after the merge are no keep signal, but they never cancel an explicit "ship und weiter".
+
 ## [0.313.0] — 2026-10-25
 
 Hooks start one process per event instead of one per hook, and the plugin runs one MCP server instead of three. Session start no longer waits for the plugin update. Wave 2 of the hooks audit.

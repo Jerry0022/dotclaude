@@ -1683,6 +1683,11 @@ function evidenceHasDeviation(input) {
   return tests.some(t => classifyGate(t) === 'test' && glyphForResult(t.result) !== '✓');
 }
 
+/** The follow-up a kept ship names (`nextStep`), trimmed; '' when none. */
+function keptNextStep(input) {
+  return String((input && input.nextStep) || '').trim();
+}
+
 /** A ship that is one item of an orchestrated queue: do-ship's `(Queue n/N)` summary suffix. */
 function isQueuedShip(input) {
   return typeof input.summary === 'string' && /\(Queue \d+\s*\/\s*\d+\)/i.test(input.summary);
@@ -1711,7 +1716,11 @@ function resolveCardKey(input) {
     // keeps its worktree for the orchestrator, not for the user: "weiter in
     // <branch>?" + a Continue button made the user type "weiter" for a run
     // that goes on by itself. It gets the plain merge heading.
-    if (state.kept && !isQueuedShip(input)) return 'ship-successful-kept';
+    // "weiter in <branch>?" also needs the follow-up itself (`nextStep`): a
+    // kept worktree with nothing named left a finished user with a question
+    // and a Continue button whose prompt only asked "what's next?". Without
+    // it the card reads like any finished ship (promote, or the plain merge).
+    if (state.kept && keptNextStep(input) && !isQueuedShip(input)) return 'ship-successful-kept';
     return 'ship-successful';
   }
   if (variant === 'released') {
@@ -2014,7 +2023,7 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // made after it (prompt.ship.detect: a named version is promotion-only).
   return {
     heading, context, points: iconizePoints(shown, input), buttonsKey, version: ctx.version || null, replies, noShip, guideHandoff, appStart,
-    nextStep: key === 'analysis' ? String(input.nextStep || '').trim() : '',
+    nextStep: key === 'analysis' || key === 'ship-successful-kept' ? keptNextStep(input) : '',
   };
 }
 
@@ -2983,7 +2992,7 @@ server.registerTool(
           activity: z.enum(["ship", "promote", "test", "concept", "batch", "analysis", "agents"]).optional().describe("aborted only: the named process that was aborted. The title and the heading keep its activity ('🟥 ➜ 🚀 Ship ┃ …'); omit for a generic abort ('🟥 ➜ 📦 Aborted ┃ …')."),
         }).optional(),
       ).describe("CTA template placeholders — an OBJECT, e.g. { reason } for aborted, { version } for ship cards, { description } for test-minimal. A plain string is accepted as { info }."),
-      nextStep: z.string().optional().describe("analysis variant: the ONE step you recommend Claude does next, written as the user's instruction ('Bau im Governor eine Summen-Drossel für viele kleine Claude-Prozesse ein.'). The Desktop primary button becomes 'Empfehlung umsetzen' and sends exactly this text — without it the button says only 'Umsetzen' and the user cannot tell what it starts. Steps the user must do themselves belong in the answer text, not here."),
+      nextStep: z.string().optional().describe("analysis variant: the ONE step you recommend Claude does next, written as the user's instruction ('Bau im Governor eine Summen-Drossel für viele kleine Claude-Prozesse ein.'). The Desktop primary button becomes 'Empfehlung umsetzen' and sends exactly this text — without it the button says only 'Umsetzen' and the user cannot tell what it starts. Steps the user must do themselves belong in the answer text, not here. ship-successful with state.kept: the announced follow-up work on the kept branch, as the user's instruction — the 'Weiter' button sends it; without it a kept ship reads like any finished ship (no 'weiter in <branch>?', no Weiter button)."),
       userTest: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.string()).optional(),
