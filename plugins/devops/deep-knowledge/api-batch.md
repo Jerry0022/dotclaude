@@ -16,12 +16,12 @@ A cheaper path for LARGE, unattended, read-only jobs on the API credit: the Mess
 
 ## Qualifying jobs
 
-| Job | Notes |
+| Job | How it decides |
 |---|---|
-| Month-end audit | `api-credit-audit.js --batch`: one request per module pack, shared 1 h-cached system prefix |
-| Backlog triage | unattended do-run runs with >= 5 issues, one request per issue |
-| Plugin audit | one request per skill/hook group |
-| Overnight web-only research | server tools (web search/fetch) work inside a batch; client tool loops do not |
+| Month-end audit | automatic: `api-credit-audit.js` asks the policy on its own (no flag); one request per module pack, shared 1 h-cached system prefix. `--no-batch` skips the attempt |
+| Any other big unattended read-only job (plugin audit, overnight web-only research) | ask the policy first with the CLI above; exit 0 → `runBatch()`, else the normal path. Server tools (web search/fetch) work inside a batch; client tool loops do not |
+
+Not a batch job: do-run's backlog triage. It runs in the Präsenz phase with the user present (fails R3) and its agents are what the run contract counts.
 
 ## Fallback guarantee
 

@@ -11,10 +11,12 @@
  *   repo — the report is input for a later in-session fix pass.
  *   Runbook: deep-knowledge/api-credits.md § Month-end audit.
  *
- * Usage: api-credit-audit.js [--root DIR] [--max-usd X] [--model M] [--focus "<text>"] [--batch]
- *   --batch (alpha): one-shot requests per module pack via the Message Batches API
- *   when batch-policy.js agrees; otherwise (or for unfinished packs) the normal
- *   agent-loop audit runs exactly as without the flag.
+ * Usage: api-credit-audit.js [--root DIR] [--max-usd X] [--model M] [--focus "<text>"] [--batch|--no-batch]
+ *   Where the channel allows the batch feature (alpha), the audit tries it on
+ *   its own: one-shot requests per module pack via the Message Batches API when
+ *   batch-policy.js agrees; otherwise (or for unfinished packs) the normal
+ *   agent-loop audit runs exactly as before. --no-batch skips the attempt,
+ *   --batch forces the policy check where the channel would not try it.
  * Exit codes: those of claude-api-agent.js.
  */
 
@@ -25,17 +27,19 @@ const agent = require('./claude-api-agent');
 const safe = require('./claude-api-safe');
 const policy = require('./batch-policy');
 const batch = require('./claude-api-batch');
+const features = require('../hooks/lib/features');
 
 const DEFAULT_MAX_USD = 5;
 
 function parseArgs(argv) {
-  const o = { root: null, maxUsd: DEFAULT_MAX_USD, model: null, focus: null, batch: false };
+  const o = { root: null, maxUsd: DEFAULT_MAX_USD, model: null, focus: null, batch: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--root') o.root = argv[++i];
     else if (argv[i] === '--max-usd') o.maxUsd = Number(argv[++i]);
     else if (argv[i] === '--model') o.model = argv[++i];
     else if (argv[i] === '--focus') o.focus = argv[++i];
     else if (argv[i] === '--batch') o.batch = true;
+    else if (argv[i] === '--no-batch') o.batch = false;
   }
   return o;
 }
@@ -134,7 +138,10 @@ async function run(argv, opts = {}) {
   let batchText = '';
   let focus = o.focus;
 
-  if (o.batch) {
+  // No flag: try the batch path wherever the channel allows the feature — the
+  // policy still decides; a stable install never gets here and prints nothing.
+  const tryBatch = o.batch === null ? features.featureAllowed('batch', opts.featureOpts) : o.batch;
+  if (tryBatch) {
     const model = o.model || agent.MODEL_BY_TAG.audit || safe.DEFAULT_MODEL;
     const packs = buildPacks(root);
     const bytes = packs.reduce((s, p) => s + p.bytes, 0);

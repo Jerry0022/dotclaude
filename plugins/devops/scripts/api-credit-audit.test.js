@@ -40,7 +40,7 @@ test("success → report under ~/.claude/devops-audits/<repo>-<day>.md; budget a
   };
   const out = [];
   const rc = await audit.run(["--focus", "auth", "--max-usd", "3"], {
-    env: {}, home, cwd: proj, now: Date.parse("2026-10-31T12:00:00Z"), fetchImpl, err: () => {}, out: (s) => out.push(s),
+    env: {}, home, cwd: proj, now: Date.parse("2026-10-31T12:00:00Z"), fetchImpl, featureOpts: { channel: "stable" }, err: () => {}, out: (s) => out.push(s),
   });
   expect(rc).toBe(0);
   const file = path.join(home, ".claude", "devops-audits", "myrepo-2026-10-31.md");
@@ -108,5 +108,25 @@ test("--batch with all rules true: packs go through the batch, no agent loop", a
 });
 
 test("parseArgs keeps the defaults", () => {
-  expect(audit.parseArgs([])).toEqual({ root: null, maxUsd: 5, model: null, focus: null, batch: false });
+  expect(audit.parseArgs([])).toEqual({ root: null, maxUsd: 5, model: null, focus: null, batch: null });
+  expect(audit.parseArgs(["--no-batch"]).batch).toBe(false);
+});
+
+test("no flag: alpha asks the policy on its own, stable never does and prints nothing about it", async () => {
+  enable();
+  const policy = require("./batch-policy.js");
+  const orig = policy.decide;
+  let asked = 0;
+  policy.decide = () => { asked++; return { useBatch: false, reason: "R4 test", estUsd: 0, estSavingUsd: 0 }; };
+  const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ content: [{ type: "text", text: "- low · a.js:1 · x" }], stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 } }) });
+  try {
+    const errsStable = [];
+    expect(await audit.run([], { env: {}, home, cwd: proj, now: Date.parse("2026-11-03T12:00:00Z"), fetchImpl, featureOpts: { channel: "stable" }, err: (x) => errsStable.push(x), out: () => {} })).toBe(0);
+    expect(asked).toBe(0);
+    expect(errsStable.join("")).not.toMatch(/batch/i);
+    expect(await audit.run([], { env: {}, home, cwd: proj, now: Date.parse("2026-11-04T12:00:00Z"), fetchImpl, featureOpts: { channel: "alpha" }, err: () => {}, out: () => {} })).toBe(0);
+    expect(asked).toBe(1);
+    expect(await audit.run(["--no-batch"], { env: {}, home, cwd: proj, now: Date.parse("2026-11-05T12:00:00Z"), fetchImpl, featureOpts: { channel: "alpha" }, err: () => {}, out: () => {} })).toBe(0);
+    expect(asked).toBe(1);
+  } finally { policy.decide = orig; }
 });
