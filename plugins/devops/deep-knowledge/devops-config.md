@@ -140,6 +140,7 @@ the committed ship extension (`deployParity:` block in the project's
 |---|---|---|
 | `enabled` | `false` | Read-only side work (sweeps, research, reviews, audits) runs on the Claude API credit of the linked Console org first — `scripts/claude-api-agent.js`, `claude-api-safe.js` when Codex is skipped, `api-credit-audit.js`, evals from the user's terminal — with the plan as the fallback. Claude Code itself always stays on the plan. |
 | `webGuide` | `false` | With `enabled` on and no key stored, offer the one-time auto-guide through the Console (workspace, spend limit, key). |
+| `contextEditing` | `true` | The API agent loop clears old tool results once the prompt passes 100k tokens (keeps the last 3, frees at least 60k) to cut cache cost. Env `DEVOPS_API_CONTEXT_EDITING=0` disables. |
 
 "Nutze mein API-Guthaben" → the two questions and the `--global` writes in
 `deep-knowledge/api-credits.md` § Activation — never set these silently.
