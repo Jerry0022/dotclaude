@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.knowledge.index
- * @version 0.8.0
+ * @version 0.9.0
  * @event SessionStart
  * @plugin devops
  * @description Inject the always-on policy docs in full (ALWAYS_ON below)
@@ -26,6 +26,12 @@
  *   (lib/plugin-root): the placeholder is never substituted and
  *   $CLAUDE_PLUGIN_ROOT is unset in the Bash tool, so without it the model
  *   searched `/` for plugin docs (2026-09-24).
+ *   Channel feature flags (lib/features.js, 0.9.0): a doc of a feature the
+ *   consumer's channel may not use is neither injected (ALWAYS_ON) nor
+ *   listed; docs of allowed gated features are appended to the index list
+ *   with the feature summary (they are never in INDEX.md, which every
+ *   channel reads). Any failure of the flag probe gates nothing extra but
+ *   never breaks the index.
  */
 
 const { runOnce } = require('../lib/run-once');
@@ -33,6 +39,7 @@ const { readBudget, maybeRefreshUsage, budgetLine } = require('../lib/budget');
 const { readDelegation, delegationLine } = require('../lib/delegation');
 const { pluginRootLine } = require('../lib/plugin-root');
 const { fits } = require('../lib/context-cap');
+const features = require('../lib/features');
 const fs = require('fs');
 const path = require('path');
 
@@ -75,10 +82,23 @@ function buildContext(pluginRoot, sessionId = null, cwd = process.cwd()) {
     if (apiLine) head.push(apiLine);
   } catch { /* never let the API-credit probe break the index injection */ }
 
+  // Channel feature flags: docs of features this channel may not use stay out.
+  const featureOpts = { pluginRoot };
+  let gated = new Set();
+  let extraRows = [];
+  try {
+    gated = features.gatedDocs(featureOpts);
+    extraRows = features.allowedFeatureDocs(featureOpts)
+      .filter(d => d.file.startsWith('deep-knowledge/'))
+      .map(d => ({ file: d.file.slice('deep-knowledge/'.length).replace(/\.md$/, ''), topic: d.summary || d.feature }));
+  } catch { /* the flag probe never breaks the index */ }
+  const isGated = (file) => gated.has(`deep-knowledge/${file.endsWith('.md') ? file : `${file}.md`}`);
+
   const blocks = [...head];
   let bytes = 0;
   for (const file of ALWAYS_ON) {
     if (delegation.mode === 'off') break; // the switch line above replaces the policy
+    if (isGated(file)) continue;
     const filePath = path.join(dkDir, file);
     let content;
     try { content = fs.readFileSync(filePath, 'utf8').trim(); }
@@ -97,7 +117,8 @@ function buildContext(pluginRoot, sessionId = null, cwd = process.cwd()) {
   // The index last, in the richest form that still fits: file + topic, then
   // file names only, then the pointer alone. The one-line summaries stay in
   // INDEX.md — prompt.knowledge.dispatch injects the matching doc per prompt.
-  const rows = indexRows(fs.readFileSync(indexPath, 'utf8'));
+  const rows = indexRows(fs.readFileSync(indexPath, 'utf8')).filter(r => !isGated(r.file));
+  for (const r of extraRows) if (!isGated(r.file) && !rows.some(x => x.file === r.file)) rows.push(r);
   const root = String(pluginRoot).replace(/\\/g, '/');
   // The root once, not twice: every char here is one the index list below cannot use.
   const pointer = `[deep-knowledge] Reference docs: ${root}/deep-knowledge/INDEX.md has a one-line summary of each — read one when its topic comes up.`;

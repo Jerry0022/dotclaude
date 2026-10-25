@@ -13,6 +13,7 @@ Directory structure: `.claude/project-map.md` — not auto-loaded; the token gua
 - Skills, hooks, agents, MCP server, templates, deep-knowledge, scheduled-tasks
 - Versioning: SemVer in `.claude-plugin/plugin.json`, tags `v0.x.y`
 - Conventions: `plugins/devops/CONVENTIONS.md` (hook naming, skill structure, etc.)
+- Channel feature flags (alpha/beta-only features): `docs/dev/feature-flags.md` — register in `plugins/devops/features.json`, gate all find-points
 
 ## Context: This is the plugin SOURCE repo
 - Changes here affect the plugin itself — not a consumer project
