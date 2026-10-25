@@ -91,8 +91,8 @@ describe("block reason — offline-first when the completion MCP is down (#371)"
     expect(r.indexOf(offlineLine)).toBeLessThan(r.indexOf(toolLine));
     // The offline rung keeps its payload contract in both orders.
     expect(r).toContain('(same field names, including "session_id")');
-    // The rest of the reason (variant table, verbatim rule) is unchanged.
-    expect(r).toContain("Variant decision (pick exactly one):");
+    // The static rules live in the tool description; the reason keeps the delivery order.
+    expect(r).toContain("render_completion_card tool description");
     expect(r).toContain("nothing after the closing ---");
   });
 
