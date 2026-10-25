@@ -63,7 +63,8 @@ describe("user-facing texts never tell the user to type a hidden skill's slash c
     for (const [label, text] of userFacing.slice(1)) {
       if (/update/i.test(text) && /auto-update/.test(text)) expect(text, label).toContain('"devops update"');
     }
-    expect(read(path.join(repoRoot, "INSTALL.md"))).toMatch(/```\r?\ndevops update\r?\n```/);
+    // #847 folded the update section into Claude → CLI → manual; the phrase is step 1.
+    expect(read(path.join(repoRoot, "INSTALL.md"))).toMatch(/\*\*Claude Code:\*\* say \*\*"devops update"\*\*/);
     expect(userFacing[2][1]).toContain("»devops update«");
   });
 
