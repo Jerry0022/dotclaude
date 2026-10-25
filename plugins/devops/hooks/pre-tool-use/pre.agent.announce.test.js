@@ -311,6 +311,23 @@ describe("pre.agent.announce under strict mode", () => {
 describe("announce text on progress-update models", () => {
   const mod = createRequire(import.meta.url)("./pre.agent.announce.js");
 
+  test("a narration block in the transcript means progress updates, whatever the opt-out env says", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "announce-narration-"));
+    try {
+      const sig = Buffer.concat([Buffer.from([0x08, 0x04, 0x42, 9]), Buffer.from("narration"), Buffer.from("rest")]).toString("base64");
+      const entry = { type: "assistant", message: { id: "m1", role: "assistant", model: "claude-opus-5-5",
+        content: [{ type: "thinking", thinking: "", signature: sig }, { type: "tool_use", id: "b1", name: "Bash", input: {} }] } };
+      const t = path.join(dir, "t.jsonl");
+      fs.writeFileSync(t, `${JSON.stringify(entry)}\n`);
+      expect(mod.progressUpdatesSession(t, { CLAUDE_CODE_THINKING_DISPLAY_UPDATES: "0" })).toBe(true);
+      fs.writeFileSync(t, `${JSON.stringify({ ...entry, message: { ...entry.message, content: [entry.message.content[1]] } })}\n`);
+      expect(mod.progressUpdatesSession(t, { CLAUDE_CODE_THINKING_DISPLAY_UPDATES: "0" })).toBe(false);
+      expect(mod.progressUpdatesSession(t, {})).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("a progress-update model is told to relay the card in the turn's final text", () => {
     expect(mod.progressUpdatesModel("claude-opus-5-5", {})).toBe(true);
     expect(mod.progressUpdatesModel("claude-opus-5-5", { CLAUDE_CODE_THINKING_DISPLAY_UPDATES: "0" })).toBe(false);
