@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.agent.announce
- * @version 0.3.0
+ * @version 0.4.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Agent
@@ -265,6 +265,19 @@ function progressUpdatesModel(model, env = process.env) {
 }
 
 /**
+ * Progress updates for this session: a narration block in the transcript is
+ * proof and outranks the opt-out env (lib/agent-card-relay.js
+ * `narrationSeen`); without one, the model and the env decide.
+ */
+function progressUpdatesSession(transcriptPath, env = process.env) {
+  try {
+    const relay = require('../lib/agent-card-relay');
+    if (relay.narrationSeen(relay.readTail(transcriptPath))) return true;
+  } catch { /* fall back to the model */ }
+  return progressUpdatesModel(sessionModel(transcriptPath), env);
+}
+
+/**
  * The instruction around the card. On a progress-update model, text written
  * between tool calls reaches the user only as a rephrased summary, so "the
  * next text you write" cannot carry the card verbatim — it goes into the
@@ -316,7 +329,7 @@ function main() {
       process.stdout.write(JSON.stringify({
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
-          additionalContext: announceText(card, progressUpdatesModel(sessionModel(hook.transcript_path))) + (marker ? `\n${marker}` : ''),
+          additionalContext: announceText(card, progressUpdatesSession(hook.transcript_path)) + (marker ? `\n${marker}` : ''),
         },
       }));
       process.exit(0);
@@ -328,4 +341,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { effectiveModel, modelMarker, readFrontmatter, findAgentFile, friendlyModel, sessionModel, resolve, buildLine, batchInputs, buildCard, strictWillBlock, modelGateWillRefuse, shipDelegateWillRefuse, progressUpdatesModel, announceText };
+module.exports = { effectiveModel, modelMarker, readFrontmatter, findAgentFile, friendlyModel, sessionModel, resolve, buildLine, batchInputs, buildCard, strictWillBlock, modelGateWillRefuse, shipDelegateWillRefuse, progressUpdatesModel, progressUpdatesSession, announceText };

@@ -43,6 +43,11 @@ const errResult = (id, msg = "PreToolUse:Agent hook error: [agent-card-relay] â€
 /** An assistant entry on `model` â€” a progress-update thinking block, the shape Opus 5.5 returns mid-turn text in. */
 const update = (msgId, model, t = "Ich habe einen Agenten gestartet.") =>
   ({ type: "assistant", message: { id: msgId, role: "assistant", model, content: [{ type: "thinking", thinking: t, signature: "s" }] } });
+/** A signature whose protobuf head names the block kind, like the API's (`B\tnarration` / `B\bthinking`). */
+const sig = (kind) => Buffer.concat([Buffer.from([0x08, 0x04, 0x42, kind.length]), Buffer.from(kind), Buffer.from("opaque-rest")]).toString("base64");
+/** The shape the Desktop app stored mid-turn text in on 2026-10-25: an empty thinking block tagged narration, then the call. */
+const narrated = (msgId, id, model = "claude-opus-5-5") => ({ type: "assistant", message: { id: msgId, role: "assistant", model,
+  content: [{ type: "thinking", thinking: "", signature: sig("narration") }, { type: "tool_use", id, name: "mcp__ccd_turn__update_plan", input: {} }] } });
 const modelUse = (msgId, id, model, name = "Bash") =>
   ({ type: "assistant", message: { id: msgId, role: "assistant", model, content: [{ type: "tool_use", id, name, input: {} }] } });
 const jsonl = (...entries) => entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
@@ -169,6 +174,22 @@ describe("agent-card-relay lib", () => {
     }
   });
 
+  test("isNarration tells narrated text from real reasoning by the signature", () => {
+    expect(relay.isNarration({ type: "thinking", thinking: "", signature: sig("narration") })).toBe(true);
+    expect(relay.isNarration({ type: "thinking", thinking: "", signature: sig("thinking") })).toBe(false);
+    expect(relay.isNarration({ type: "thinking", thinking: "x", signature: "s" })).toBe(false);
+    expect(relay.isNarration({ type: "text", text: "narration" })).toBe(false);
+  });
+
+  test("a narration block proves progress updates, even when the env opted out", () => {
+    const t = jsonl(prompt(), narrated("m1", "b1"));
+    expect(relay.narrationSeen(t)).toBe(true);
+    for (const v of ["0", "off", ""]) expect(relay.progressUpdates(t, { CLAUDE_CODE_THINKING_DISPLAY_UPDATES: v })).toBe(true);
+    // an earlier turn counts: the mode is session-wide
+    expect(relay.narrationSeen(jsonl(prompt(), narrated("m1", "b1"), prompt("next"), toolUse("m2", "b2")))).toBe(true);
+    expect(relay.narrationSeen(jsonl(prompt(), update("m1", "claude-opus-5-5")))).toBe(false);
+  });
+
   test("messageIdOf finds a tool_use's message in the turn", () => {
     const t = jsonl(prompt(), agentUse("m1", "a1"), toolUse("m2", "b1"));
     expect(relay.messageIdOf(t, "b1")).toBe("m2");
@@ -248,6 +269,16 @@ describe("pre.agent.relay hook", () => {
     const r = await runHook(PRE_HOOK, { session_id: sessionId(), cwd: dir, transcript_path: file, tool_name: "Bash", tool_use_id: "b1", tool_input: {} },
       { CLAUDE_CODE_THINKING_DISPLAY_UPDATES: "0" });
     expect(r.code).toBe(2);
+  }, 20000);
+
+  test("a card narrated in the gated call's own message passes, also with the opt-out env set", async () => {
+    // 2026-10-25: card written before update_plan, stored as an empty narration block; the hold was false.
+    const t = jsonl(prompt(), agentUse("m1", "a1"), hookCtx("a1", card(1)), result("a1"), narrated("m2", "b1"));
+    const { dir, file } = project(t);
+    const r = await runHook(PRE_HOOK, { session_id: sessionId(), cwd: dir, transcript_path: file, tool_name: "mcp__ccd_turn__update_plan", tool_use_id: "b1", tool_input: {} },
+      { CLAUDE_CODE_THINKING_DISPLAY_UPDATES: "0" });
+    expect(r.code).toBe(0);
+    expect(r.stderr).toBe("");
   }, 20000);
 
   test("passes once the card was shown", async () => {

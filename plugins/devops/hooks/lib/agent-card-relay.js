@@ -1,6 +1,6 @@
 /**
  * @module agent-card-relay
- * @version 0.2.0
+ * @version 0.3.0
  * @description Did the user actually see the agent card?
  *
  *   pre.agent.announce hands Claude the agent card on every spawn with "show
@@ -36,6 +36,12 @@
  *     whose every tool_result is an error never ran and is skipped.
  *   - A card relayed in the user's language ("1 Agent gestartet" for "1 agent
  *     started") missed the header match; its agent rows count as well.
+ *
+ *   A fourth, found 2026-10-25: progress updates ran although the session had
+ *   opted out (CLAUDE_CODE_THINKING_DISPLAY_UPDATES=0), so the env check said
+ *   "verbatim" and the card written before the next call was held as missing.
+ *   The transcript itself shows the mode — the text becomes a thinking block
+ *   whose signature names `narration` (`isNarration`) — and that evidence wins.
  */
 
 'use strict';
@@ -209,11 +215,46 @@ function updatesOptedOut(env = process.env) {
 }
 
 /**
- * Does the session's model turn mid-turn text into progress summaries? Read
- * from the newest assistant entry of the current turn. When it does, a card
- * the model writes before its next tool call never reaches the user verbatim.
+ * A thinking block that stands in for text the model wrote between tool
+ * calls: empty or a short rephrased summary, and its signature (base64 of a
+ * protobuf) names the kind `narration` near the start — real reasoning says
+ * `thinking` there.
+ */
+function isNarration(block) {
+  if (!block || block.type !== 'thinking' || typeof block.signature !== 'string') return false;
+  try {
+    return Buffer.from(block.signature.slice(0, 64), 'base64').toString('latin1').includes('narration');
+  } catch { return false; }
+}
+
+/**
+ * Does the transcript prove that mid-turn text comes back as narration? Any
+ * assistant entry of the tail with a narration block — the session-wide
+ * mode, so an earlier turn counts too.
+ */
+function narrationSeen(transcriptText) {
+  for (const line of String(transcriptText || '').split('\n')) {
+    if (!line.includes('"thinking"')) continue;
+    let e;
+    try { e = JSON.parse(line); } catch { continue; }
+    if (e.isSidechain || e.type !== 'assistant') continue;
+    const c = e.message && e.message.content;
+    if (Array.isArray(c) && c.some(isNarration)) return true;
+  }
+  return false;
+}
+
+/**
+ * Does the session's model turn mid-turn text into progress summaries? A
+ * narration block in the transcript is proof and outranks the opt-out env:
+ * on 2026-10-25 the Desktop app narrated with
+ * CLAUDE_CODE_THINKING_DISPLAY_UPDATES=0 set, and every hold was false.
+ * Without one, read the newest assistant entry's model of the current turn.
+ * When it does, a card the model writes before its next tool call never
+ * reaches the user verbatim.
  */
 function progressUpdates(transcriptText, env = process.env) {
+  if (narrationSeen(transcriptText)) return true;
   if (updatesOptedOut(env)) return false;
   const turn = currentTurn(transcriptText);
   for (let i = turn.length - 1; i >= 0; i--) {
@@ -301,6 +342,8 @@ module.exports = {
   cardHeader,
   cardRows,
   cardShownIn,
+  isNarration,
+  narrationSeen,
   progressUpdates,
   updatesOptedOut,
   currentTurn,

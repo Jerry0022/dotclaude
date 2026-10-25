@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.agent.relay
- * @version 0.2.0
+ * @version 0.3.0
  * @event PreToolUse
  * @plugin devops
  * @matcher (all tools)
