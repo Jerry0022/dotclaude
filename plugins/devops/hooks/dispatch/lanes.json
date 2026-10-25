@@ -104,6 +104,9 @@
         "pre.edit.branch"
       ],
       [
+        "pre.frustrated.readonly"
+      ],
+      [
         "pre.readme.standards"
       ],
       [
@@ -261,6 +264,9 @@
       ],
       [
         "prompt.skill.overrides"
+      ],
+      [
+        "prompt.frustrated.detect"
       ],
       [
         "prompt.strict.enforce"

@@ -89,6 +89,19 @@ It never reorders the options that remain.
 | literal `burn` (`/do-run burn`, `/run-burn`) | Budget verbrennen is on; the option leaves Q4 whatever the usage. |
 | strict already armed for this branch (`node "{PLUGIN_ROOT}/hooks/lib/strict-state.js" status` → `active: true, reason: "on"`) | Q3 dropped → Strikt (`strict off` lifts it, not this question). |
 
+**Channel extras.** Where a channel feature adds to this router, a gated
+helper decides in code, not you. Run it only when `$ARGUMENTS` carries a
+`--from=<name>` other than `do-batch` (`node "{PLUGIN_ROOT}/scripts/run-extras.js"
+from <name>`), and once before Step 3 (`… run-extras.js q4 --session <this session's id>`,
+the id the plugin's hooks name in context, e.g. the completion card's
+`session_id`). Exit 126, empty
+output, `"known":false` or `"extra":null` → nothing changes and nothing is
+said about it. `known:true` → read the `doc` § `section` it names before
+anything else; that text replaces the presets and questions it names.
+`extra` set → add it to Q4 as the last option before "Nichts davon"; if
+ticked it wins (the other ticks are dropped and named in one line) and its
+doc says what runs.
+
 The remaining tokens of `$ARGUMENTS` (or the prompt itself) are the task,
 the backlog filter or the audit target. A preset reads its signal from the
 user's own words, never from a constraint inside the task ("kein

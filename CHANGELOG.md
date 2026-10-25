@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.315.0] — 2026-10-25
+
+Frustrated Mode for the alpha channel: after several frustrated rounds Claude offers a read-only analysis once, with an approved plan handed on to `/do-run`. Stable and beta see nothing of it.
+
+### Added
+- **Frustrated Mode (alpha only, feature flag `frustrated-mode`).** A UserPromptSubmit detector (`prompt.frustrated.detect`) scores frustration; at score ≥ 6 after ≥ 3 rounds Claude judges the situation and offers a read-only analysis once (opt-out: `frustratedMode.suggest`). During the analysis `pre.frustrated.readonly` allows tests, snapshots and caches and blocks source/config edits, git writes and ship — for subagents too. Both run through the event dispatcher. Skill `auto-frustrated` reuses the po/redteam/research/rethinker roles, no new agents.
+- **Plan record and approval.** The run contract gains `plan record|approve|status|clear` (hash, 2-h expiry, ship steps rejected). `/do-run --from=frustrated` takes the approved plan over, and the do-run question set shows an "Erst analysieren" option while a session is flagged. Frustrated Mode never ships.
+- **Specs** for backlog #857–#864 under `docs/superpowers/specs/2026-10-25-*` (trigger detection, analysis skill, plan approval / hand-off, integration, umbrella, web-guide skill capture — not built, hook agents — not used).
+
+### Changed
+- **Channel gating.** The separate `channel-gate.js` is gone; the skill router uses `features.gatedSkills()`. The README generator skips gated hooks, skills and docs (the deep-knowledge count drops by the gated `api-batch.md`).
+- **Backlog runs with open decisions** end on an `/auto-concept` page built from the specs, and concept cards must be readable without their sources.
+
+### Known gaps
+- `--plan` / `--step` pass-through to auto-agents, auto-concept and do-learn is not built yet; the hand-off works via do-run / auto-fix.
+- The name `auto-frustrated` shows in the slash menu on every channel (it stops at once off alpha).
+
 ## [0.314.0] — 2026-10-25
 
 A finished ship no longer asks whether you want to continue.

@@ -3,8 +3,32 @@
     "batch": {
       "minChannel": "alpha",
       "summary": "Message Batches API for large, unattended read-only jobs on the API credit",
-      "docs": ["deep-knowledge/api-batch.md"],
-      "scripts": ["scripts/claude-api-batch.js", "scripts/batch-policy.js"]
+      "docs": [
+        "deep-knowledge/api-batch.md"
+      ],
+      "scripts": [
+        "scripts/claude-api-batch.js",
+        "scripts/batch-policy.js"
+      ]
+    },
+    "frustrated-mode": {
+      "minChannel": "alpha",
+      "summary": "Detects a stuck session, offers a read-only analysis and a plan, hands off only after approval",
+      "docs": [
+        "deep-knowledge/frustrated-mode.md"
+      ],
+      "scripts": [
+        "scripts/frustration-replay.js",
+        "scripts/frustrated-guard.js",
+        "scripts/frustrated-brief.js",
+        "hooks/lib/frustrated-guard.js",
+        "hooks/pre-tool-use/pre.frustrated.readonly.js",
+        "hooks/user-prompt-submit/prompt.frustrated.detect.js",
+        "scripts/run-extras.js"
+      ],
+      "skills": [
+        "skills/auto-frustrated"
+      ]
     }
   }
 }
