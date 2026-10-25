@@ -30,14 +30,14 @@ describe("ss.orphan.nudge", () => {
   });
 
   test("silent: nothing at risk anywhere, stale or missing report; an unknown repo only names the machine total", () => {
-    expect(buildNudge({ cwd: "C:/r/other", report: report(repos), now: NOW })).toMatch(/^ℹ Hier nichts offen · Rechner gesamt: 5 ungelandet in 1 Repo/);
+    expect(buildNudge({ cwd: "C:/r/other", report: report(repos), now: NOW })).toMatch(/^ℹ Rechner gesamt: 5 offen in 1 Repo/);
     expect(buildNudge({ cwd: "C:/r/app", report: report([{ path: "C:/r/app", atRisk: [] }]), now: NOW })).toBeNull();
     expect(buildNudge({ cwd: "C:/r/app", report: report(repos, "2026-10-01T00:00:00Z"), now: NOW })).toBeNull();
     expect(buildNudge({ cwd: "C:/r/app", report: null, now: NOW })).toBeNull();
   });
 
   test("a prefix that is only a name prefix does not match (app vs app2)", () => {
-    expect(buildNudge({ cwd: "C:/r/app2", report: report(repos), now: NOW })).toMatch(/^ℹ Hier nichts offen/);
+    expect(buildNudge({ cwd: "C:/r/app2", report: report(repos), now: NOW })).toMatch(/^ℹ Rechner gesamt/);
   });
 
   describe("safety copies without a decision", () => {
@@ -69,9 +69,9 @@ describe("ss.orphan.nudge", () => {
       const clean = { path: "C:/r/app", atRisk: [], parked: [parked("parked/autosave/fresh", 0)] };
       const other = { path: "C:/r/other", atRisk: [risk()] };
       expect(buildNudge({ cwd: "C:/r/app", report: report([clean, other]), now: NOW }))
-        .toBe("ℹ Hier nichts offen · Rechner gesamt: 1 ungelandet in 1 Repo (Stand vor 6 h) → /auto-cleanup");
+        .toBe("ℹ Hier nichts offen · Rechner gesamt: 1 offen in 1 Repo (Stand vor 6 h) → /auto-cleanup");
       expect(buildNudge({ cwd: "C:/r/new", lang: "en", report: report([clean, other]), now: NOW }))
-        .toBe("ℹ Nothing open here · whole machine: 1 unlanded in 1 repo (as of 6 h ago) → /auto-cleanup");
+        .toBe("ℹ whole machine: 1 open in 1 repo (as of 6 h ago) → /auto-cleanup");
       expect(buildNudge({ cwd: "C:/r/app", report: report([clean]), now: NOW })).toBeNull();
     });
   });

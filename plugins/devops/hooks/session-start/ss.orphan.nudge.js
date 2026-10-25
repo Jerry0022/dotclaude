@@ -8,8 +8,8 @@
  *   worktrees with uncommitted changes, or safety copies nobody decided on
  *   (autosave snapshots and salvage/rescue/backup/wip copies older than 3
  *   days — park-register isUndecided). When other repos have such work too,
- *   the line adds the machine-wide total, so work in repos nobody opens no
- *   longer stays invisible. Reads ~/.claude/orphan-report.json
+ *   the line adds the machine-wide total; a clean or unknown repo still gets
+ *   the total alone, so work in repos nobody opens no longer stays invisible. Reads ~/.claude/orphan-report.json
  *   (written daily by scripts/orphan-scan.js) — no git calls, no network, so
  *   it is boot-window safe. Silent without a report, with a report older than
  *   24 h (the line names the report age otherwise), for an unknown repo, or when nothing is at risk. The report entry
@@ -66,9 +66,11 @@ function buildNudge({ cwd, lang = 'de', report, now = Date.now() }) {
   if (unlanded + dirty + undecided === 0) {
     // nothing here (or a repo the scan does not know): still name what waits elsewhere
     if (total === 0) return null;
+    // a repo the scan does not know gets no "nothing open here" claim
+    const lead = entry ? (en ? 'Nothing open here · ' : 'Hier nichts offen · ') : '';
     return en
-      ? `ℹ Nothing open here · whole machine: ${total} unlanded in ${repos} ${repos === 1 ? 'repo' : 'repos'} (as of ${age} ago) → /auto-cleanup`
-      : `ℹ Hier nichts offen · Rechner gesamt: ${total} ungelandet in ${repos} ${repos === 1 ? 'Repo' : 'Repos'} (Stand vor ${age}) → /auto-cleanup`;
+      ? `ℹ ${lead}whole machine: ${total} open in ${repos} ${repos === 1 ? 'repo' : 'repos'} (as of ${age} ago) → /auto-cleanup`
+      : `ℹ ${lead}Rechner gesamt: ${total} offen in ${repos} ${repos === 1 ? 'Repo' : 'Repos'} (Stand vor ${age}) → /auto-cleanup`;
   }
   const parts = [];
   if (unlanded + dirty > 0) {

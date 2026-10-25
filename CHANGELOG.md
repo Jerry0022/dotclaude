@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.319.0] — 2026-10-26
+
+Unlanded work can no longer pile up unnoticed. Nothing forced a decision before: the autosave Stop hook silently snapshotted unlanded session work to `parked/autosave/*`, and the 2026-10-19 cleanup pushed rescue and salvage copies. The SessionStart nudge only counted at-risk branches and left out every parked entry, autosave included. `rescue/` and `salvage-land/` were not recognized as parked at all. So about 150 safety copies were invisible, and work in repos the user rarely opens never surfaced.
+
+### Added
+- **Session start counts safety copies without a decision.** Next to unlanded branches and dirty worktrees, the nudge counts autosave snapshots and `wip/`/`backup/`/`salvage/`/`salvage-land/`/`rescue/` copies older than 3 days, plus deliberate parks older than 30 days, as "Sicherungskopien ohne Entscheidung". Branches whose tip subject says `ARCHIVED` count as decided.
+- **Machine-wide total on every start.** When other repos have such work, the line adds "Rechner gesamt: X in Y Repos". A clean repo, or one the scan does not know, still gets "ℹ Rechner gesamt: X offen in Y Repos → /auto-cleanup". Only a clean machine stays silent.
+- **The autosave Stop line asks for a decision.** On the turn it saves a snapshot it asks to ship, park with a reason, or discard. A turn whose card was ship-successful or released is not asked.
+
+### Changed
+- **Park register:** `rescue/` and `salvage-land/` count as legacy parked copies. The new `isUndecided(entry)` marks what still waits for a decision.
+
 ## [0.318.1] — 2026-10-25
 
 The plugin's own safety nets (parked, salvage, rescue, backup copies) are now cleaned up once their content has landed, and a crashed git's leftover lock files no longer block pruning without a word. An audit found about 276 unmerged refs across 8 repos, most of them landed safety copies, plus 578 stale lock files that had made every `git fetch --prune` fail for 6 days.

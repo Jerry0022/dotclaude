@@ -265,7 +265,10 @@ carries a `parked/` name.
 of the main checkout and writes `~/.claude/orphan-report.json`; the hook then
 shows `⚠ N ungelandete Branches / M Worktrees mit uncommitteter Arbeit / K
 Sicherungskopien ohne Entscheidung → /auto-cleanup · Rechner gesamt: X in Y
-Repos` for the current repo. A safety copy (autosave snapshot, legacy
+Repos` for the current repo. A clean repo (or one the scan does not know)
+still gets `ℹ Rechner gesamt: X offen in Y Repos → /auto-cleanup` while any
+repo on the machine has such work; only a clean machine stays silent. A
+branch whose tip subject says `ARCHIVED` counts as decided. A safety copy (autosave snapshot, legacy
 `wip/`/`backup/`/`salvage/`/`salvage-land/`/`rescue/` ref) is a crash net,
 never a decision: after 3 days it counts until someone ships, parks it with a
 reason (`parked/<topic>`) or discards it. The autosave Stop line asks for that
