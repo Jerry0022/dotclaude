@@ -120,6 +120,10 @@ const SCHEMA = Object.freeze({
       type: 'boolean', default: false,
       doc: 'Opt-in: when apiCredit.enabled is on and no API key is stored, offer the one-time auto-guide through the Claude Console (workspace, spend limit, key).',
     }),
+    contextEditing: Object.freeze({
+      type: 'boolean', default: true,
+      doc: 'Context editing in the API agent loop: clears old tool results beyond 100k prompt tokens (keep 3, clear at least 60k); falls back to off if the API rejects the beta. Env DEVOPS_API_CONTEXT_EDITING=0 disables.',
+    }),
   }),
   // Machine-level opt-ins: a scheduled pure-node job, no model tokens. Global
   // only — a per-project value would mean nothing to a job that runs once per
