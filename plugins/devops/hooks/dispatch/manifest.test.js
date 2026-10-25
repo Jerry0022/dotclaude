@@ -42,7 +42,7 @@ describe("hooks.json is generated from the dispatcher manifest", () => {
   test("the dispatcher matcher is a superset of every module matcher", () => {
     const names = new Set(["Bash", "PowerShell", "Read", "Write", "Edit", "NotebookEdit", "Glob", "Grep", "Agent", "Task", "Skill",
       "AskUserQuestion", "ExitPlanMode", "EnterWorktree", "BashOutput", "WebFetch", "mcp__github__issue_write", "mcp__x__merge_pull_request",
-      "mcp__plugin_devops_dotclaude-ship__ship_release", "mcp__ccd_session_mgmt__archive_session", "mcp__ccd_session__start_session",
+      "mcp__plugin_devops_dotclaude__ship_release", "mcp__ccd_session_mgmt__archive_session", "mcp__ccd_session__start_session",
       "startup", "resume", "clear", "compact"]);
     for (const groups of Object.values(manifest.hooks)) for (const g of groups) for (const n of String(g.matcher || "").split("|")) if (/^\w+$/.test(n)) names.add(n);
     for (const event of Object.keys(manifest.hooks)) {
