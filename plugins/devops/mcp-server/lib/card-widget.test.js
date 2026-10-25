@@ -216,6 +216,16 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     }
   });
 
+  test("a red Fix ends in ship — the intent of the row's other button", () => {
+    for (const v of ["ready-red", "ship-blocked"]) {
+      for (const lang of ["de", "en"]) {
+        const fix = buttonsFor(v, lang).find((b) => b.label === "Fix");
+        expect(fix.prompt).toMatch(/ship/);
+        expect(fix.prompt).not.toMatch(/Card neu|card again/);
+      }
+    }
+  });
+
   test("ship-blocked offers Fix and Skip", () => {
     expect(buttonsFor("ship-blocked", "de").map((a) => a.label)).toEqual(["Fix", "Skip"]);
   });

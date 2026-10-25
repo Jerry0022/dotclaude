@@ -35,8 +35,13 @@
  *   gitLines(root, args, {timeout, budget}) → non-empty trimmed lines (throws)
  */
 
-/** The single git subprocess timeout (ms) — see the module header. */
-const GIT_TIMEOUT_MS = 5000;
+/**
+ * The single git subprocess timeout (ms) — see the module header.
+ * DEVOPS_GIT_TIMEOUT_MS raises it for spawned-hook tests on a loaded machine
+ * (a full suite at 20x its usual time let a 5 s `merge-base` expire and the
+ * cleanup gate refuse a landed branch, 2026-10-25); never lowered below 5000.
+ */
+const GIT_TIMEOUT_MS = Math.max(5000, Number(process.env.DEVOPS_GIT_TIMEOUT_MS) || 0);
 
 /**
  * H8: the short shared budget for a call site that only ever chains one or
