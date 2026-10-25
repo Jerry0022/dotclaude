@@ -570,7 +570,7 @@ function assemble({ page, head, fragments, slug = 'concept', md = readTemplates(
     html = skel.code
       .replace(/<!-- The remaining two panel states[\s\S]*?-->/, () => restStates)
       .replace(/^<html data-template="design">/m, () =>
-        `<!DOCTYPE html>\n<html lang="${esc(page.locale || 'en')}" data-theme="dark" data-page-version="${esc(version)}" data-template="${liveTemplate}">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>Concept — ${esc(title)}</title>\n${headExtra}\n<style>\n${css}\n</style>\n</head>`)
+        `<!DOCTYPE html>\n<html lang="${esc(page.locale || 'en')}" data-theme="dark" data-page-version="${esc(version)}" data-template="${liveTemplate}">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>${esc(title)}</title>\n${headExtra}\n<style>\n${css}\n</style>\n</head>`)
       .replace(/<body style="overflow: hidden">/, () => `<body${liveTemplate === 'design' ? ' style="overflow: hidden"' : ''}>`)
       .replace(/<main>[\s\S]*?<\/main>/, () => `<main>\n${sectionsHtml}\n</main>`)
       .replace(/<\/body>\s*<\/html>\s*$/, () => `<script type="application/json" id="concept-decisions">\n{"submitted": false, "decisions": [], "comments": {"general": {"text": "", "attachments": []}, "items": []}}\n</script>\n<script>\n${js}\n</script>\n</body>\n</html>\n`);
@@ -580,7 +580,7 @@ function assemble({ page, head, fragments, slug = 'concept', md = readTemplates(
     const sub = page.subtitle ? `<p class="subtitle">${esc(page.subtitle)}</p>` : '';
     html = skel.code
       .replace(/<html lang="en"[^>]*>/, () => `<html lang="${esc(page.locale || 'en')}" data-theme="dark" data-page-version="${esc(version)}" data-template="${liveTemplate}">`)
-      .replace(/<title>[^<]*<\/title>/, () => `<title>Concept — ${esc(title)}</title>\n  ${headExtra}`)
+      .replace(/<title>[^<]*<\/title>/, () => `<title>${esc(title)}</title>\n  ${headExtra}`)
       .replace(/<style>\/\* all CSS inline \*\/<\/style>/, () => `<style>\n${css}\n</style>`)
       .replace(/<h1>\{title\}<\/h1>\s*<p class="subtitle">[^<]*<\/p>/, () => `<h1>${esc(title)}</h1>\n        ${sub}`)
       .replace(/<main>[\s\S]*?<\/main>/, () => `<main>\n${sectionsHtml}\n</main>`)
@@ -695,7 +695,9 @@ function importPage(htmlPath, dir, opts = {}) {
   const afterHead = html.slice(masked.search(/<\/head>/i));
   const h1 = (/<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(afterHead) || [])[1];
   const clean = s => decode(String(s || '').replace(/<[^>]+>/g, '')).trim();
-  const title = clean(titleTag).replace(/^Concept\s+[—-]\s+/, '') || clean(h1) || 'Concept';
+  // Older pages carry "Concept — " in <title>; a page opened in a browser
+  // and saved may carry the live status glyph (renderTabTitle) — strip both.
+  const title = clean(titleTag).replace(/^(?:Concept\s+[—-]\s+|(?:👉|⏳|🛠️|🛠|🏁|✅)️?\s+)/u, '') || clean(h1) || 'Concept';
   const subtitle = clean((/<p class="subtitle">([\s\S]*?)<\/p>/i.exec(afterHead) || [])[1]);
   const htmlTag = (/<html\b([^>]*)>/i.exec(html) || [])[1] || '';
   const locale = getAttr(htmlTag, 'lang') || 'en';

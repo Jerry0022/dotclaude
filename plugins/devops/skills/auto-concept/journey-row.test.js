@@ -259,6 +259,38 @@ describe("journey strings — both locales, final wording", () => {
   });
 });
 
+describe("browser tab title carries the live status", () => {
+  function tabPage(sectionAttrs, js) {
+    const dom = new JSDOM(`<!doctype html><head><title>Wetter-Widget</title></head><body>
+      <section data-iteration="2" ${sectionAttrs}></section></body>`, { runScripts: "outside-only", url: "http://localhost/" });
+    dom.window.eval([
+      "var _submittedAt = 0, _submittedAction = null;",
+      constLine("TAB_GLYPHS"),
+      "let _baseTabTitle = null;",
+      fnSource("renderTabTitle"),
+      js,
+    ].join("\n"));
+    return dom.window.document.title;
+  }
+  test("👉 your turn, ⏳ rethinking, 🛠️ implementing — no 'Concept —' prefix", () => {
+    expect(tabPage("data-active", "renderTabTitle();")).toBe("👉 Wetter-Widget");
+    expect(tabPage("data-active", "_submittedAt = 1; _submittedAction = 'iterate'; renderTabTitle();")).toBe("⏳ Wetter-Widget");
+    expect(tabPage("data-active", "_submittedAt = 1; _submittedAction = 'implement'; renderTabTitle();")).toBe("🛠️ Wetter-Widget");
+  });
+  test("🏁 on an open final report, ✅ once it is closed", () => {
+    expect(tabPage("data-active data-final-report", "renderTabTitle();")).toBe("🏁 Wetter-Widget");
+    expect(tabPage("data-active data-final-report data-closed", "renderTabTitle();")).toBe("✅ Wetter-Widget");
+  });
+  test("re-rendering never stacks glyphs, and an old 'Concept —' title is cleaned", () => {
+    expect(tabPage("data-active", "renderTabTitle(); _submittedAt = 1; renderTabTitle(); _submittedAt = 0; renderTabTitle();"))
+      .toBe("👉 Wetter-Widget");
+    expect(tabPage("data-active", "document.title = 'Concept — Wetter-Widget'; renderTabTitle();")).toBe("👉 Wetter-Widget");
+  });
+  test("renderPanelStatus drives it, so a background tab follows the poll", () => {
+    expect(fnSource("renderPanelStatus")).toContain("renderTabTitle()");
+  });
+});
+
 describe("old rounds and the final report", () => {
   test("a frozen round says its state once: the status line, not a second 🕘 indicator", () => {
     expect(cssSource).toMatch(/#panel-frozen \.frozen-indicator \{ display: none; \}/);

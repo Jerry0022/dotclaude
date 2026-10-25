@@ -67,7 +67,8 @@ describe("app tooltips — no native title", () => {
 
   test("the templates emit no title attribute and set none from script", () => {
     expect(md).not.toMatch(/\stitle="/);
-    expect(md).not.toMatch(/\b[A-Za-z_$][\w$]*\.title\s*=(?!=)/);
+    // document.title is the browser tab's status line (renderTabTitle), not an element tooltip.
+    expect(md).not.toMatch(/\b(?!document\.)[A-Za-z_$][\w$]*\.title\s*=(?!=)/);
     expect(md).not.toMatch(/setAttribute\('title'/);
   });
 });

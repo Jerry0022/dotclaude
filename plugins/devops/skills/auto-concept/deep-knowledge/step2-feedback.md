@@ -220,6 +220,10 @@ signal Claude monitors.
 - **Frozen** (any non-live tab): `#panel-frozen` with the back-link; the
   journey row is hidden, the status line reads "🕘 Runde N · nur lesen"
 - After Claude processes and resets the page → back to **Ready**
+- **Browser tab title** (`renderTabTitle()`): one status glyph + the concept
+  title, no "Concept —" prefix — 👉 your turn · ⏳ rethinking · 🛠️
+  implementing · 🏁 final report waiting · ✅ closed. It follows the live
+  round and updates from the poll, so background tabs show it too.
 
 **Notes, pins and hotkeys** (chrome polish; the engine owns all of it):
 - **Wording**: "Notiz"/"Notizen" (en "note(s)") for every note surface — never
