@@ -386,7 +386,7 @@ Skip this step entirely when `$WORKTREE_PATH` was empty in Substep 1. Otherwise 
 Harness-created worktree: run `git status --porcelain` afterwards. Anything listed blocks the Desktop archive — settle it per Step 1a (*Dirty tree from untracked files*) before the card, never by restoring a parked copy. A `remoteBranchWarning` in the release result → one `open` item, nothing else: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/cleanup.md` § Keep-mode: the remote branch (Step 5c).
 
 In Step 6:
-- **Deliberate keep** (follow-up work expected): pass `state.kept: true` and `state.branch: "<feature-branch>"` so the decision heading asks `<version> — weiter in <branch>?` instead of the plain merge heading.
+- **Deliberate keep** (follow-up work expected): pass `state.kept: true`, `state.branch: "<feature-branch>"` and `nextStep` — the announced follow-up as the user's instruction — so the decision heading asks `<version> — weiter in <branch>?` and its Weiter button sends exactly that step. Without `nextStep` the card renders the finished-ship heading and no Weiter button: a kept worktree is not a reason to ask "weiter?". Wrapping up this session after the ship (a concept close-out, the card itself) is no follow-up work.
 - **Harness-created worktree** (keep only because the app owns the teardown): render the **normal** merge heading — no `state.kept`, no cleanup note.
 
 ## Step 5d — Promote (beta / stable requested)
