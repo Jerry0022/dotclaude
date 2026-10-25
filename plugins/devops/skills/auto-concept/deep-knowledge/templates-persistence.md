@@ -1,4 +1,4 @@
-# Concept templates, part 26 of 41: Shared systems — state persistence
+# Concept templates, part 27 of 42: Shared systems — state persistence
 
 ## State Persistence (localStorage + TTL)
 

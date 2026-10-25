@@ -1,4 +1,4 @@
-# Concept templates, part 03 of 41: Panel chrome — markup and CSS
+# Concept templates, part 03 of 42: Panel chrome — markup and CSS
 
 ## Panel Chrome (all templates)
 

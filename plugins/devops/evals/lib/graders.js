@@ -18,7 +18,9 @@ const path = require("path");
 
 const COMPLETION_TOOL_PREFIX = "mcp__plugin_devops_dotclaude__";
 // One devops server since v0.309 carries every tool, so the prefix alone no
-// longer means "card". Older refs (A/B --a-ref) still use dotclaude-completion.
+// longer means "card". The grader also reads runs of older refs (A/B --a-ref
+// before v0.309), which still call dotclaude-completion — hooks no longer
+// accept that name, the grader keeps reading it.
 const CARD_TOOL_RE = /^mcp__plugin_devops_dotclaude(?:-completion)?__render_/;
 
 function toRegex(p) {

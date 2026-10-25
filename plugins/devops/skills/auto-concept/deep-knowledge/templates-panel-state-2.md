@@ -1,4 +1,4 @@
-# Concept templates, part 24 of 41: Shared systems — decision panel state CSS (continued 2)
+# Concept templates, part 25 of 42: Shared systems — decision panel state CSS (continued 2)
 
 ```css
 /* Close-out sheet. Every question at once inside one bounded box — the box

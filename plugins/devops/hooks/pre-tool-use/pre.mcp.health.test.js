@@ -108,13 +108,12 @@ describe("pre.mcp.health — per-process heartbeats", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test("a pre-merge tool prefix (still-running old session) maps to its own legacy server", () => {
+  test("a pre-merge tool prefix is no longer mapped to a legacy server", () => {
     const dir = project();
     const tmp = path.join(dir, ".tmp");
-    // The new server is dead, the old ship server is alive — the old tool must pass.
+    // The old tool prefix has no server mapping any more: the hook has nothing to check and passes.
     fs.writeFileSync(path.join(tmp, "dotclaude-mcp-dotclaude.pid"), String(deadPid()));
     fs.mkdirSync(path.join(tmp, "dotclaude-mcp-heartbeats"), { recursive: true });
-    fs.writeFileSync(path.join(tmp, "dotclaude-mcp-heartbeats", `dotclaude-ship-${process.pid}.pid`), String(process.pid));
     const res = run(dir, "mcp__plugin_devops_dotclaude-ship__ship_build");
     expect(res.status).toBe(0);
     fs.rmSync(dir, { recursive: true, force: true });

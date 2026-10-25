@@ -9,7 +9,7 @@
  *   diagnostic when one is missing.
  *
  *   Closes the visibility gap from issue #198: the then-separate ship server was
- *   silently absent (an incomplete cache sync dropped mcp-server/ship/index.js)
+ *   silently absent (an incomplete cache sync dropped mcp-server/index.js)
  *   while its sibling card server was fine, so /do-ship deadlocked
  *   with no signal that the server never registered.
  *
