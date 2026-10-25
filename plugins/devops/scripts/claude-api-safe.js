@@ -210,9 +210,19 @@ function roundParts(p) {
   return o;
 }
 
+function halve(p) {
+  if (!p) return p;
+  const o = {};
+  for (const k of COST_TYPES) o[k] = (p[k] || 0) / 2;
+  return o;
+}
+
 /** Append one call to the usage log. Best effort — logging never fails a call. */
-function logUsage({ home, now = Date.now(), tool, tag = null, cwd, model, usage, usd = 0, rc, turns = null, parts = null, ctx = null }) {
+function logUsage({ home, now = Date.now(), tool, tag = null, cwd, model, usage, usd = 0, rc, turns = null, parts = null, ctx = null, batch = false, extra = null }) {
   const u = usage || {};
+  // batch: Message Batches API bills 50 % of input and output (cache multipliers stack) —
+  // the caller passes the normal-path $, the line stores half and the saving.
+  if (batch) usd = usd / 2;
   try {
     fs.mkdirSync(claudeDir(home), { recursive: true });
     const row = {
@@ -221,7 +231,9 @@ function logUsage({ home, now = Date.now(), tool, tag = null, cwd, model, usage,
       cacheRead: u.cache_read_input_tokens || 0, cacheWrite: u.cache_creation_input_tokens || 0,
       usd: Math.round(usd * 1e6) / 1e6, // micro-dollars: many tiny calls must still add up
       rc, ...(turns ? { turns } : {}),
-      parts: roundParts(parts || (model ? costParts(model, u) : null)),
+      parts: roundParts(batch ? halve(parts || (model ? costParts(model, u) : null)) : (parts || (model ? costParts(model, u) : null))),
+      ...(batch ? { batch: true, savingUsd: Math.round(usd * 1e6) / 1e6 } : {}),
+      ...(extra || {}),
       ...((u.server_tool_use && u.server_tool_use.web_search_requests) ? { searches: u.server_tool_use.web_search_requests } : {}),
       ...(ctx ? { ctxClears: ctx.clears || 0, ctxClearedTokens: ctx.clearedTokens || 0 } : {}),
     };
