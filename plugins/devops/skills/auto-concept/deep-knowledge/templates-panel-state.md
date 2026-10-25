@@ -477,7 +477,12 @@ body:has(.draft-offline-strip:not([hidden])) .submitted-toast { bottom: 4.75rem;
    the frozen bar over the content. The markup stays (screen readers, older
    pages) — the foot is indicator + back button, ≈85px. */
 #panel-frozen .hint { display: none; font-size: 0.78rem; line-height: 1.35; margin: 0; }
-#panel-frozen .link-btn { margin-top: 0.3rem; }
+/* The status line already reads "🕘 Runde N · nur lesen" right above, so the
+   indicator would be the same state twice (the doubled mark on old rounds).
+   The foot is the back button alone; the indicator markup stays for older
+   pages and screen readers. */
+#panel-frozen .frozen-indicator { display: none; }
+#panel-frozen .link-btn { margin-top: 0; }
 
 /* Progress steps under the status line.
    Three states per <li>:
@@ -1204,7 +1209,26 @@ section[data-open-questions] .oq-issue-link:hover {
   display: flex; align-items: center;
   padding: 0.15rem 0 0.4rem;
 }
-body.viewing-frozen .journey, body.viewing-final .journey { display: none; }
+body.viewing-frozen .journey, body.viewing-final .journey:not(.journey-final) { display: none; }
+/* Finished row on the final report (mountFinalJourney): mini ✓✓, Umsetzung
+   bar full, 🏁 lit. Sits on top of #panel-final-report, never interactive. */
+.journey-final { flex: none; padding: 0 0 0.6rem; }
+.journey-final .jr-round { flex: 0 0 62px; }
+.journey-final .jr-impl {
+  flex: 1 1 0; height: 44px; padding: 3px;
+  background: var(--jr-track);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+.journey-final .jr-mini { cursor: default; }
+.journey-final .jr-dot { color: var(--jr-ai); background: color-mix(in srgb, var(--jr-ai) 14%, transparent); }
+.journey-final .jr-dot .jr-chk { display: block; }
+.journey-final .jr-run .jr-other { position: relative; z-index: 1; color: var(--jr-ai); }
+.journey-final .jr-run b { position: relative; z-index: 1; }
+.journey-final .jr-finish {
+  width: 34px; height: 34px; font-size: 15px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--jr-gold) 92%, #fff), #c6901a);
+  box-shadow: 0 0 18px rgba(227, 179, 65, .45), 0 2px 8px rgba(0, 0, 0, .35);
+}
 .journey [hidden] { display: none !important; }
 #panel-submitted { display: none !important; }
 .submit-split[hidden], #submit-menu.jr-retired { display: none !important; }
