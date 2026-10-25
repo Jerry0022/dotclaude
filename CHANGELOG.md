@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.318.0] — 2026-10-25
+
+The plugin now answers only to the tool names of its single `dotclaude` MCP server, as announced in v0.313.0.
+
+### Changed
+- **Only the single `dotclaude` MCP server's tool names work now.** The old `mcp__plugin_devops_dotclaude-completion/-ship/-issues__*` names and their entry stubs (`mcp-server/ship/index.js`, `mcp-server/issues/index.js`) are gone. Run-contract hooks, `pre.mcp.health`, the MCP heartbeat, `post.flow.completion` and the dispatch manifest accept only `mcp__plugin_devops_dotclaude__*`. Anything that still calls an old name must switch to the new prefix. The eval grader still reads card calls of older refs in A/B runs.
+- **Concept template: document pins live in their own engine part.** The document-pin engine moved from `templates-free.md` into `templates-free-pins.md` (part 21 of 42), so `templates-free.md` is back under its size budget. The built concept engine is byte-identical.
+
+### Removed
+- The hooks-audit concept page (`docs/concepts/2026-10-25-hooks-audit*`), discarded at its close-out.
+
 ## [0.317.0] — 2026-10-25
 
 On a concept page the eye now hides everything the page adds to the design. From round 2 the pins say what improved.
