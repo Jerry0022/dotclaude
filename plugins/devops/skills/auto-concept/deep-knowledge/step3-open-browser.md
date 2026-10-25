@@ -127,10 +127,10 @@ cross-session registry (`node scripts/concept-port-registry.js pick "<project-ro
 — skips ports owned by another live concept session; see bridge-server.md
 § port selection), do NOT arm a polling cron (the pulser backs up the waker), write
 `.claude/concept-active.json` — in the **session cwd**, with a fresh `owner`
-token (`deep-knowledge/bridge-server.md` § step 4; two sessions in sibling
+token (`deep-knowledge/bridge-server-state.md` § step 4; two sessions in sibling
 worktrees must never share one file, #417) — so a future SessionStart can
 rediscover this concept, **send the first heartbeat AND verify it round-trips with a
-non-zero `claude_ts`** (see `deep-knowledge/bridge-server.md` § Step 5 —
+non-zero `claude_ts`** (see `deep-knowledge/bridge-server-state.md` § Step 5 —
 the read-back is mandatory; a naked POST leaves a dead-bridge failure
 mode invisible until the user submits and gets no response), then open
 the page in the user's existing Edge window using the exact command above.

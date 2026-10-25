@@ -1,4 +1,4 @@
-# Concept templates, part 26 of 33: Information Mapping JS
+# Concept templates, part 26 of 33: Shared systems — information mapping engine JS
 
 ### JS
 

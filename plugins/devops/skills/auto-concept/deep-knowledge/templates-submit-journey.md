@@ -1,4 +1,4 @@
-# Concept templates, part 29 of 33: Journey row, Panel State Reset, Submit Progress Steps
+# Concept templates, part 29 of 33: Shared systems — journey row, panel state reset, submit progress
 
 ## Journey row
 

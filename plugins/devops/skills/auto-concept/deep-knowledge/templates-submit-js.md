@@ -1,4 +1,4 @@
-# Concept templates, part 28 of 33: Two-Button Submit JS
+# Concept templates, part 28 of 33: Shared systems — two-button submit JS
 
 ### JS
 

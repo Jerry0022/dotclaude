@@ -1,4 +1,4 @@
-# Concept templates, part 25 of 33: Shared systems — information mapping engine
+# Concept templates, part 25 of 33: Shared systems — information mapping engine (spec, DOM contract, CSS)
 
 ## Information Mapping (engine)
 

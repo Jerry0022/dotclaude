@@ -1,4 +1,4 @@
-# Concept templates, part 32 of 33: Shared systems — iteration tabs, final report, design system
+# Concept templates, part 32 of 33: Shared systems — iteration tabs
 
 ## Iteration Tabs
 

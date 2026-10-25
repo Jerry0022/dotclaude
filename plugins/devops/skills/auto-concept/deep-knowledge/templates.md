@@ -43,5 +43,5 @@ Index of the concept engine reference: the three templates (decision, design, fr
 ## Using the parts
 
 - **Generating a page:** `scripts/concept-build.js` copies the engine (`step2-build.md`) — Claude reads a part only for the markup its round authors. The build copies it verbatim from the parts of the plugin running this session: all of them, in the order above (SKILL.md Step 2 § Engine source). A later round may switch template, so a page carries every part’s code, whatever its first round uses.
-- **Looking up a section:** a reference like `templates.md § Section Navigation` means that section in the part that lists it above. References written before the split name `templates.md`; newer ones name the part directly.
+- **Looking up a section:** a reference like `templates.md § Section Navigation` means that section in the part that lists it above; a section that spans several rows (its markup and CSS, then its JS) continues in the rows right below it. References written before the split name `templates.md`; newer ones name the part directly.
 - **Editing:** change the part and keep its first two lines, the part header. Tests, the concept gate’s drift checks and `scripts/build-concept-fixture.js` read the joined text through `skills/auto-concept/templates-source.js`. It follows this table’s order, so a new part is listed here and nowhere else.

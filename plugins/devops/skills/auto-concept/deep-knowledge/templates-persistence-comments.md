@@ -1,4 +1,4 @@
-# Concept templates, part 22 of 33: Persist Warning Banner CSS, Comment Slot Injection
+# Concept templates, part 22 of 33: Shared systems — persist warning banner, comment slots
 
 ### Persist Warning Banner CSS
 

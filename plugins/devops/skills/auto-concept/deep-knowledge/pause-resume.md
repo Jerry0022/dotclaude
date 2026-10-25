@@ -35,7 +35,7 @@ Concept", "Concept fortsetzen", an answer about its open decisions). Any
 other prompt leaves the pause alone — the hint is information, not a mandate.
 
 1. Relaunch the bridge on the **same** port with the recorded `--html`
-   (bridge-server.md step 4 — the command `buildDeadBridgeRelaunch` prints),
+   (bridge-server-state.md step 4 — the command `buildDeadBridgeRelaunch` prints),
    verify the heartbeat round-trips, and re-arm the pulser, the waker and the
    no cron.
 2. Rewrite the state file: delete `paused_at` and any legacy `cron_id`, set

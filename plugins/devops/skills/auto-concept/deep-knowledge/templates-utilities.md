@@ -1,4 +1,4 @@
-# Concept templates, part 30 of 33: Shared systems — tooltips, theme toggle, connection heartbeat
+# Concept templates, part 30 of 33: Shared systems — tooltips, theme toggle
 
 ## App Tooltips
 

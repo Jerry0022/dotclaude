@@ -4,7 +4,7 @@ import { JSDOM, VirtualConsole } from "jsdom";
 import { build } from "../../scripts/build-concept-fixture.js";
 import { readTemplates } from "./templates-source.js";
 
-// The variant overview (templates-design.md § Variant overview (≥2 designs)):
+// The variant overview (templates-design-views.md § Variant overview (≥2 designs)):
 // a design round with two or more designs gets an engine-built overview
 // carousel as its first top-level item, a header (top left) and a quick nav (top centre)
 // in place of the screen indicator and the design switcher, a favourite that

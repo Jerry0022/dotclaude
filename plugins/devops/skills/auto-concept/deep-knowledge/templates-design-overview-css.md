@@ -1,4 +1,4 @@
-# Concept templates, part 16 of 33: Variant overview CSS (≥2 designs)
+# Concept templates, part 16 of 33: Template: design — variant overview CSS (≥2 designs)
 
 ## Variant overview CSS (≥2 designs)
 

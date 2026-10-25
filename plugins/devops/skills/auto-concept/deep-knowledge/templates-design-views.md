@@ -1,4 +1,4 @@
-# Concept templates, part 09 of 33: Views and variant overview
+# Concept templates, part 09 of 33: Template: design — views, variant overview
 
 ## Views (optional)
 

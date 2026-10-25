@@ -1,4 +1,4 @@
-# Concept templates, part 23 of 33: Shared systems — attachments
+# Concept templates, part 23 of 33: Shared systems — attachments (HTML, CSS)
 
 ## Attachments
 

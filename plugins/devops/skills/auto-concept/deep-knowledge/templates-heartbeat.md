@@ -1,4 +1,4 @@
-# Concept templates, part 31 of 33: Claude Connection Heartbeat (HTTP Bridge)
+# Concept templates, part 31 of 33: Shared systems — connection heartbeat (HTTP bridge)
 
 ## Claude Connection Heartbeat (HTTP Bridge)
 

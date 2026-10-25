@@ -1,4 +1,4 @@
-# Concept templates, part 06 of 33: Per-Iteration Templates
+# Concept templates, part 06 of 33: Per-iteration templates
 
 ## Per-Iteration Templates
 

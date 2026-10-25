@@ -1,4 +1,4 @@
-# Concept templates, part 02 of 33: Common Structure (all templates)
+# Concept templates, part 02 of 33: Shared systems — common structure (all templates)
 
 ## Common Structure (all templates)
 

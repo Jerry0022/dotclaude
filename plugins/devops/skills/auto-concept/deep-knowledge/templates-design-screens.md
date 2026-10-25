@@ -1,4 +1,4 @@
-# Concept templates, part 14 of 33: Screen patterns, decision schema, collectDecisions (design)
+# Concept templates, part 14 of 33: Template: design — screen patterns, decision schema, collectDecisions
 
 ## Screen-pattern markup
 
