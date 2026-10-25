@@ -6,8 +6,7 @@ description: >-
   current issue — root-cause analysis first. Use when something is broken or
   behaving unexpectedly. Triggers on: "debug", "this is broken", "doesn't work",
   "error", "crash", "blank screen", "warum geht das nicht", "funktioniert nicht".
-  Also triggers on pasted error/stack traces
-  or when post.flow.debug hook detects repeated Bash failures.
+  Also triggers on pasted error/stack traces.
   Do NOT trigger for general code questions.
 layer: 2
 invokes: [auto-agents]
