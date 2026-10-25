@@ -10,25 +10,35 @@ the same hotkeys and tips as a design round. Three jobs:
   not on a native button / link (which keep their own Space); it calls
   `preventDefault()`, so the page never scrolls. Space no longer advances
   screens or the overview overlay — that moved to the arrow keys.
-- **Alt held** = `body.hk-alt` plus `#hk-overlay`: one `kbd.hk-badge` at the
+- **`?`** = `body.hk-keys` plus `#hk-overlay`: one `kbd.hk-badge` at the
   top-right of every `[data-tip-key]` control that is on screen, and — on a
-  design page — an example own pin labelled "Ctrl + click". Alt up, window
-  blur or a tab switch removes it. The "Design öffnen" button of the overview
-  shows its key from the same class.
+  design page — an example own pin labelled "Ctrl + click". On a page with
+  the shortcut sheet (`#design-keys`) the badges open and close together
+  with it (`window.conceptKeyBadges(on)`), so one key shows every hotkey. A
+  second `?`, Esc, a click, a scroll, window blur or a tab switch removes
+  them. Never Alt: a bare Alt press hands the focus to the browser's own
+  menu (Edge, Chrome), so the page loses its keys. The "Design öffnen"
+  button of the overview shows its key from the same class.
+- **Chrome keys** — every chrome control a user reaches often has a bare
+  key, named in its tooltip as a keycap (`data-tip-key`) and in
+  `aria-keyshortcuts`: `M` the ☰ menu (open / close), `H` hide / show the
+  notes and navigation (the eye), `T` light / dark, `V` the device view (its
+  handler lives in § Design JS), `Esc` the menu's ✕, `Ctrl + Enter` the
+  submit button. Never while typing in a field, never with a modifier.
 - **Nudges** — a quiet tip tab (`#hk-nudge.hk-nudge`) sitting on top of the
   status toast: key caps, a text that names the word "Hotkey(s)", a 1.5px
   timer line, ✕. It appears only when the engine sees the user doing by mouse
   what a hotkey does faster: switching variants (2 mouse clicks on the quick
   nav in 90 s), clicking through pages (3), opening the dock by click (2),
   submitting the round by mouse, and — once — on the first visit
-  ("Halte Alt für alle Hotkeys"). It auto-expires after 9 s; ✕ silences that
+  ("? zeigt alle Hotkeys"). It auto-expires after 9 s; ✕ silences that
   one nudge for 30 days (`localStorage` `concept-nudge:<id>` = timestamp,
   every access in try / catch). Never two nudges within 60 s.
   **Tip rules** (shared with the dock's "Wusstest du schon?", § Panel chrome):
   a nudge is shown at most ONCE per page session; at most twice ever
-  (`hint-nudge-shown:<id>`, the Alt tip once); and never again once the
+  (`hint-nudge-shown:<id>`, the `?` tip once); and never again once the
   user has used that hotkey (`hint-hotkey-used:<id>`, recorded on the
-  first real use — Space, Alt, 1–9, arrows, Ctrl + Enter, F, V, Esc,
+  first real use — Space, ?, 1–9, arrows, Ctrl + Enter, F, V, Esc,
   Ctrl + click on the design). Every nudge is one line (`nowrap` +
   ellipsis) in the calm `--tip-color`, never the amber of open questions.
   `window.conceptHotkeyUsed(id)` reads the used state for the dock tips.
@@ -41,7 +51,7 @@ the same hotkeys and tips as a design round. Three jobs:
 ```javascript
 (function wireChromeHotkeys() {
   const T = {
-    alt: '{{nudge.alt}}', variants: '{{nudge.variants}}', pages: '{{nudge.pages}}',
+    keys: '{{nudge.keys}}', variants: '{{nudge.variants}}', pages: '{{nudge.pages}}',
     dock: '{{nudge.dock}}', submit: '{{nudge.submit}}', dismiss: '{{nudge.dismiss}}',
     space: '{{design.key_space}}', ctrl: '{{design.key_ctrl}}', click: '{{design.keys_click}}'
   };
@@ -60,6 +70,31 @@ the same hotkeys and tips as a design round. Three jobs:
   // The dock FAB names its hotkey like every other hotkey-bound control.
   const fab = document.getElementById('feedback-toggle');
   if (fab && !fab.dataset.tipKey) fab.dataset.tipKey = T.space;
+  // Chrome controls name their keys too; the ✕ is icon-only, so its name
+  // (the aria-label) is its tooltip text.
+  const CHROME_KEYS = [['panel-toggle', 'M'], ['anno-toggle', 'H'], ['theme-toggle', 'T'],
+    ['viewport-toggle', 'V'], ['panel-close', 'Esc'], ['submit-iterate-btn', T.ctrl + '+Enter']];
+  CHROME_KEYS.forEach(([id, k]) => {
+    const n = document.getElementById(id);
+    if (!n || n.dataset.tipKey) return;
+    if (!n.dataset.tip && n.getAttribute('aria-label')) n.dataset.tip = n.getAttribute('aria-label');
+    n.dataset.tipKey = k;
+    n.setAttribute('aria-keyshortcuts', k.replace(T.ctrl, 'Control'));
+  });
+  document.addEventListener('keydown', e => {
+    if (e.defaultPrevented || e.repeat || e.ctrlKey || e.metaKey || e.altKey || fieldIn(e.target)) return;
+    const k = (e.key || '').toLowerCase();
+    if (k === 'm') {
+      if (typeof window.openPanel !== 'function') return;
+      e.preventDefault();
+      if (body.classList.contains('panel-open')) window.closePanel(); else window.openPanel();
+    } else if (k === 'h' || k === 't') {
+      const btn = document.getElementById(k === 'h' ? 'anno-toggle' : 'theme-toggle');
+      if (!btn || btn.hidden) return;
+      e.preventDefault();
+      btn.click();
+    }
+  });
 
   // ── Space → notes dock ──────────────────────────────────────────────
   document.addEventListener('keydown', e => {
@@ -75,7 +110,7 @@ the same hotkeys and tips as a design round. Three jobs:
     toggle.click();
   });
 
-  // ── Alt held → every hotkey badge ───────────────────────────────────
+  // ── ? → every hotkey badge ──────────────────────────────────────────
   let layer = null;
   const visible = n => {
     const r = n.getBoundingClientRect();
@@ -83,13 +118,18 @@ the same hotkeys and tips as a design round. Three jobs:
   };
   function showKeys() {
     if (layer) return;
-    body.classList.add('hk-alt');
+    body.classList.add('hk-keys');
     layer = mk('div', 'hk-overlay');
     layer.id = 'hk-overlay';
     layer.setAttribute('aria-hidden', 'true');
     document.querySelectorAll('[data-tip-key]').forEach(n => {
       if (!visible(n)) return;
       const r = n.getBoundingClientRect();
+      // Only what the user can see: a control under the shortcut sheet (or
+      // any other layer) gets no badge floating on top of that layer.
+      const top = document.elementFromPoint
+        ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+      if (top && !n.contains(top) && !top.contains(n)) return;
       const badge = mk('kbd', 'app-kbd hk-badge', n.dataset.tipKey);
       badge.style.left = Math.round(r.right) + 'px';
       badge.style.top = Math.round(r.top) + 'px';
@@ -108,11 +148,29 @@ the same hotkeys and tips as a design round. Three jobs:
     body.appendChild(layer);
   }
   function hideKeys() {
-    body.classList.remove('hk-alt');
+    body.classList.remove('hk-keys');
     if (layer) { layer.remove(); layer = null; }
   }
-  document.addEventListener('keydown', e => { if (e.key === 'Alt' && !e.repeat) showKeys(); });
-  document.addEventListener('keyup', e => { if (e.key === 'Alt') hideKeys(); });
+  // A page with the shortcut sheet drives the badges from the sheet
+  // (window.conceptKeySheet, § Shortcut sheet); every other page toggles
+  // them here. Any other key, a click or a scroll closes them.
+  window.conceptKeyBadges = on => (on ? showKeys() : hideKeys());
+  document.addEventListener('keydown', e => {
+    if (e.key === '?' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !fieldIn(e.target)) {
+      if (typeof window.conceptKeySheet === 'function') return;
+      e.preventDefault();
+      if (layer) hideKeys(); else showKeys();
+      return;
+    }
+    if (layer && e.key !== 'Shift' && typeof window.conceptKeySheet !== 'function') hideKeys();
+  });
+  document.addEventListener('pointerdown', e => {
+    if (layer && !(e.target && e.target.closest && e.target.closest('#design-keys'))) {
+      if (typeof window.conceptKeySheet === 'function') window.conceptKeySheet(false);
+      else hideKeys();
+    }
+  }, true);
+  window.addEventListener('scroll', () => { if (layer && typeof window.conceptKeySheet !== 'function') hideKeys(); }, true);
   window.addEventListener('blur', hideKeys);
   document.addEventListener('visibilitychange', () => { if (document.hidden) hideKeys(); });
 
@@ -185,7 +243,7 @@ the same hotkeys and tips as a design round. Three jobs:
     const k = e.key;
     const mod = e.ctrlKey || e.metaKey;
     if (mod && k === 'Enter') { markUsed('submit'); return; }
-    if (k === 'Alt') { markUsed('alt'); return; }
+    if (k === '?') { markUsed('keys'); return; }
     if (k === 'Escape' && e.target && e.target.closest && e.target.closest('#feedback-dock')) { markUsed('dock-esc'); return; }
     if (fieldIn(e.target) || mod || e.altKey) return;
     if (k === ' ') markUsed('dock');
@@ -225,7 +283,7 @@ the same hotkeys and tips as a design round. Three jobs:
     }
   }, true);
   // First visit: once, a few seconds after the page settled.
-  setTimeout(() => { nudge('alt', ['Alt'], T.alt); }, 7000);
+  setTimeout(() => { nudge('keys', ['?'], T.keys); }, 7000);
 })();
 ```
 

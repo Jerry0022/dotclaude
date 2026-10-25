@@ -84,7 +84,7 @@
   // the plugin's internals), understandable on a first visit, one line.
   const DOCK_TIPS = {
     de: [
-      "Alt halten zeigt alle Hotkeys der Seite.",
+      "? zeigt alle Hotkeys der Seite.",
       "Strg + Klick ins Design setzt eine Notiz.",
       "Leertaste öffnet und schließt die Notizen.",
       "Tasten 1–9 springen direkt zur Variante.",
@@ -115,7 +115,7 @@
       "Jeder Hotkey steht im Tooltip seines Knopfs."
     ],
     en: [
-      "Hold Alt to see every hotkey on the page.",
+      "Press ? to see every hotkey on the page.",
       "Ctrl + click on the design adds a note.",
       "Space opens and closes these notes.",
       "Keys 1–9 jump straight to a variant.",
@@ -149,7 +149,7 @@
   // Index → hotkey id (same ids as § Hotkey overlay's conceptHotkeyUsed):
   // a hotkey tip is dropped for good once the user has used that hotkey.
   // de[i] and en[i] are the same fact, so one map serves both locales.
-  const DOCK_TIP_HOTKEY = { 0: 'alt', 1: 'upin', 2: 'dock', 3: 'variants', 4: 'fav', 5: 'view', 6: 'pages', 7: 'esc', 8: 'dock-esc', 9: 'submit' };
+  const DOCK_TIP_HOTKEY = { 0: 'keys', 1: 'upin', 2: 'dock', 3: 'variants', 4: 'fav', 5: 'view', 6: 'pages', 7: 'esc', 8: 'dock-esc', 9: 'submit' };
   window.DOCK_TIP_HOTKEY = DOCK_TIP_HOTKEY;
   window.DOCK_TIPS = DOCK_TIPS;
   window.nextDockTipIndex = function(n, last, rand) {

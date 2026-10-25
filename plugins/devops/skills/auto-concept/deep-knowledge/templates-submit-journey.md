@@ -247,8 +247,9 @@ function renderJourney() {
 }
 
 // Browser tab title: one status glyph + the concept title, so a row of
-// concept tabs reads at a glance — 👉 your turn · ⏳ rethinking · 🛠️
-// implementing · 🏁 close-out waiting · ✅ closed. It follows the LIVE round
+// concept tabs reads at a glance — 👉 your turn · ⏳ Claude works (next
+// round or implementation: the hourglass is the one "Claude is busy" sign,
+// as in the session title) · 🏁 close-out waiting · ✅ closed. It follows the LIVE round
 // (not the tab being viewed) and is written from renderPanelStatus(), which
 // the /decisions poll and the heartbeat call — so it updates in a background
 // tab too (browsers throttle hidden-tab timers to about once a minute).
@@ -270,13 +271,11 @@ function renderTabTitle() {
   const submitted = (typeof _submittedAt === 'number' && _submittedAt > 0)
     || document.body.classList.contains('concept-submitted')
     || !!srv;
-  const action = (typeof _submittedAction === 'string') ? _submittedAction
-    : (srv && (srv.phase === 'implementing' || srv.phase === 'implemented' ? 'implement' : srv.action));
   let glyph = '👉';
   if (live && live.hasAttribute('data-final-report')) {
     glyph = live.hasAttribute('data-closed') ? '✅' : (submitted ? '⏳' : '🏁');
   } else if (submitted) {
-    glyph = action === 'implement' ? '🛠️' : '⏳';
+    glyph = '⏳';
   }
   const next = glyph + ' ' + _baseTabTitle;
   if (document.title !== next) document.title = next;

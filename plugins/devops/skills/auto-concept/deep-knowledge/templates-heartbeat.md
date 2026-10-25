@@ -205,7 +205,7 @@ const PROCESSED_SAFETY_MS = 5 * 60 * 1000;
 async function pollProcessedState() {
   if (!_submittedAt) {
     // Not submitted from this tab — still follow the server so the tab-title
-    // glyph of a second open tab flips to ⏳ / 🛠️ without a reload.
+    // glyph of a second open tab flips to ⏳ without a reload.
     if (typeof noteServerRound !== 'function') return;
     try {
       const r = await fetch('/decisions', { cache: 'no-store' });

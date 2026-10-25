@@ -204,16 +204,16 @@ describe("5 · no Ctrl-pin hint while the ☰ panel is open", () => {
     expect(css()).toMatch(/body\.panel-open \.upin-hint, body\.panel-open \.hk-pin-example \{ display: none !important; \}/);
   });
 
-  test("Alt with the panel open shows the key badges but no pin example", async () => {
+  test("the key badges with the panel open show no pin example", async () => {
     const { window, document } = await boot();
     window.showDesign("d2");
     window.openPanel();
-    key(window, document.body, { key: "Alt", code: "AltLeft", altKey: true });
+    window.conceptKeyBadges(true);
     expect(document.getElementById("hk-overlay")).not.toBeNull();
     expect(document.querySelector(".hk-pin-example")).toBeNull();
-    key(window, document.body, { key: "Alt", code: "AltLeft" }, "keyup");
+    window.conceptKeyBadges(false);
     window.closePanel();
-    key(window, document.body, { key: "Alt", code: "AltLeft", altKey: true });
+    window.conceptKeyBadges(true);
     expect(document.querySelector(".hk-pin-example")).not.toBeNull();
   }, BOOT_TIMEOUT);
 });

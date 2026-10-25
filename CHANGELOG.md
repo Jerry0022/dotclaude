@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.311.0] — 2026-10-25
+
+Concept pages show every hotkey on `?` instead of a held Alt, and every chrome control names its key.
+
+### Changed
+- **Hotkeys.** `?` opens the shortcut sheet and the key badges on the page together; Alt no longer does (a bare Alt hands the focus to the browser menu). New keys: `M` menu, `H` hide notes and navigation, `T` light / dark. Menu, eye, theme, device view, ✕ and submit name their key in the tooltip.
+- **Quick navigation.** Every page shows its key (`↑` the one on screen, `Tab` next, `←` previous), every question entry `⇧+n`.
+- **Overview.** Side tiles show only the variant icon, no name.
+- **Browser tab.** ⏳ while Claude works, also while implementing (no more 🛠️).
+
+### Fixed
+- The ☰ menu stays open after a click on a question, also when the page switch closes it late.
+
 ## [0.310.0] — 2026-10-25
 
 Design concept pages hide all chrome with one click, move between pages without flicker, and keep old notes out of fresh pages.
