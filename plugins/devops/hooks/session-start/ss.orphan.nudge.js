@@ -52,11 +52,24 @@ function buildNudge({ cwd, lang = 'de', report, now = Date.now() }) {
   const entry = report.repos
     .filter((r) => r && r.path && (here === norm(r.path) || here.startsWith(`${norm(r.path)}/`)))
     .sort((a, b) => norm(b.path).length - norm(a.path).length)[0];
-  if (!entry) return null;
-  const { unlanded, dirty, undecided } = counts(entry);
-  if (unlanded + dirty + undecided === 0) return null;
   const age = formatAge(now - t);
   const en = lang === 'en';
+  // the whole machine: work piles up in repos nobody opens, so every start names the total
+  let total = 0;
+  let repos = 0;
+  for (const r of report.repos) {
+    const c = r && r.path ? counts(r) : null;
+    const n = c ? c.unlanded + c.dirty + c.undecided : 0;
+    if (n > 0) { total += n; repos++; }
+  }
+  const { unlanded, dirty, undecided } = entry ? counts(entry) : { unlanded: 0, dirty: 0, undecided: 0 };
+  if (unlanded + dirty + undecided === 0) {
+    // nothing here (or a repo the scan does not know): still name what waits elsewhere
+    if (total === 0) return null;
+    return en
+      ? `ℹ Nothing open here · whole machine: ${total} unlanded in ${repos} ${repos === 1 ? 'repo' : 'repos'} (as of ${age} ago) → /auto-cleanup`
+      : `ℹ Hier nichts offen · Rechner gesamt: ${total} ungelandet in ${repos} ${repos === 1 ? 'Repo' : 'Repos'} (Stand vor ${age}) → /auto-cleanup`;
+  }
   const parts = [];
   if (unlanded + dirty > 0) {
     parts.push(en
@@ -71,14 +84,6 @@ function buildNudge({ cwd, lang = 'de', report, now = Date.now() }) {
   let line = en
     ? `⚠ ${parts.join(' / ')} (as of ${age} ago) → /auto-cleanup`
     : `⚠ ${parts.join(' / ')} (Stand vor ${age}) → /auto-cleanup`;
-  // the whole machine: work piles up in repos nobody opens, so every start names the total
-  let total = 0;
-  let repos = 0;
-  for (const r of report.repos) {
-    const c = r && r.path ? counts(r) : null;
-    const n = c ? c.unlanded + c.dirty + c.undecided : 0;
-    if (n > 0) { total += n; repos++; }
-  }
   if (repos > 1) line += en ? ` · whole machine: ${total} in ${repos} repos` : ` · Rechner gesamt: ${total} in ${repos} Repos`;
   return line;
 }

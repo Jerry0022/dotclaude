@@ -99,5 +99,8 @@ describe("park-register listParked / listStashes", () => {
     expect(isUndecided({ branch: "feat/x", coveredBy: "origin/salvage/x" })).toBe(true);
     expect(isUndecided({ branch: "parked/idea", nudge: "behalten, integrieren oder verwerfen" })).toBe(true);
     expect(isUndecided({ branch: "parked/idea", legacy: false })).toBe(false);
+    // an ARCHIVED tip is a decision — until it goes stale like any park
+    expect(isUndecided({ branch: "feat/old", legacy: true, reason: "chore(branch): ARCHIVED — salvage source only" })).toBe(false);
+    expect(isUndecided({ branch: "feat/old", legacy: true, reason: "ARCHIVED", nudge: "behalten, integrieren oder verwerfen" })).toBe(true);
   });
 });

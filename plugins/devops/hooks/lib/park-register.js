@@ -58,7 +58,10 @@ function classify(name, subject = '') {
  */
 function isUndecided(entry) {
   const name = String((entry && entry.branch) || '').replace(/^origin\//, '');
-  return name.startsWith(AUTOSAVE_PREFIX) || Boolean(entry && (entry.legacy || entry.coveredBy || entry.nudge));
+  if (name.startsWith(AUTOSAVE_PREFIX)) return true;
+  // an "ARCHIVED" tip is somebody's explicit decision, not a pending one
+  if (/ARCHIVED/.test(String((entry && entry.reason) || '')) && !(entry && entry.nudge)) return false;
+  return Boolean(entry && (entry.legacy || entry.coveredBy || entry.nudge));
 }
 
 function isParked(name, subject = '') {
