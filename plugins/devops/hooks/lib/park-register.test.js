@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { coveringRef, classify, isParked, listParked, listStashes, STALE_DAYS } from "./park-register.js";
+import { coveringRef, classify, isParked, isUndecided, listParked, listStashes, STALE_DAYS } from "./park-register.js";
 
 const DAY = 86_400_000;
 const dirs = [];
@@ -85,5 +85,22 @@ describe("park-register listParked / listStashes", () => {
     dirs.push(d);
     expect(listParked(d)).toEqual([]);
     expect(listStashes(d)).toEqual([]);
+  });
+
+  test("rescue/ and salvage-land/ copies count as (legacy) parked", () => {
+    expect(classify("rescue/2026-10-19/wt-x")).toMatchObject({ parked: true, legacy: true });
+    expect(classify("salvage-land/dev-config")).toMatchObject({ parked: true, legacy: true });
+  });
+
+  test("isUndecided: autosave, legacy copies, covered work and stale parks wait for a decision; a fresh deliberate park does not", () => {
+    expect(isUndecided({ branch: "parked/autosave/s1" })).toBe(true);
+    expect(isUndecided({ branch: "origin/parked/autosave/s1" })).toBe(true);
+    expect(isUndecided({ branch: "origin/rescue/x", legacy: true })).toBe(true);
+    expect(isUndecided({ branch: "feat/x", coveredBy: "origin/salvage/x" })).toBe(true);
+    expect(isUndecided({ branch: "parked/idea", nudge: "behalten, integrieren oder verwerfen" })).toBe(true);
+    expect(isUndecided({ branch: "parked/idea", legacy: false })).toBe(false);
+    // an ARCHIVED tip is a decision — until it goes stale like any park
+    expect(isUndecided({ branch: "feat/old", legacy: true, reason: "chore(branch): ARCHIVED — salvage source only" })).toBe(false);
+    expect(isUndecided({ branch: "feat/old", legacy: true, reason: "ARCHIVED", nudge: "behalten, integrieren oder verwerfen" })).toBe(true);
   });
 });
