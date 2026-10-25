@@ -265,6 +265,7 @@ must see their own language. The locale hint is authoritative.
 | `design.keys_close`            | Close                           | Schließen |
 | `design.key_ctrl`              | Ctrl                            | Strg |
 | `design.upin_hint` | + click places a note on the design here | + Klick platziert hier eine Notiz auf dem Design |
+| `doc.pin_hint` | + click places a note on this passage | + Klick platziert eine Notiz an dieser Stelle |
 | `design.upin_arm` | Place a note on the design | Notiz auf dem Design platzieren |
 | `design.upin_tap_hint` | Tap the spot for your note · Esc cancels | Tippe auf die Stelle für deine Notiz · Esc bricht ab |
 | `design.upin_placeholder` | Your note on this spot… | Deine Notiz zu dieser Stelle… |
