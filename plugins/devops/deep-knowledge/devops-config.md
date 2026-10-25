@@ -35,6 +35,23 @@ Run them from the project's directory (or pass `--cwd <dir>`). The script
 validates key and value and refuses anything else — never edit the JSON by
 hand. Confirm the change in one line with the new effective value.
 
+## Channel features
+
+Every release ships to all channels, but some features are marked for a
+channel: an **alpha** feature is offered only when the plugin's marketplace is
+pinned to `alpha`, a **beta** feature to `alpha` and `beta`. A `stable` pin
+(the default — also when the pin is missing or unreadable) gets none of them:
+their docs are not loaded and their scripts exit 126. The pin lives in
+`~/.claude/plugins/.channels.json` (`{"<marketplace>": "alpha"|"beta"|"stable"}`).
+Which features exist and which are on for this machine:
+
+```bash
+node "{PLUGIN_ROOT}/scripts/feature-flag.js" list          # JSON: channel + each feature's allowed flag
+node "{PLUGIN_ROOT}/scripts/feature-flag.js" check <name>  # exit 0 allowed, 126 not on this channel
+```
+
+Never offer or describe a feature that `list` reports as not allowed.
+
 ## Settings
 
 ### `cleanup` — branch/worktree hygiene after a ship

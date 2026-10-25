@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.knowledge.dispatch
- * @version 0.10.0
+ * @version 0.11.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description On-demand deep-knowledge injection based on prompt keywords.
@@ -14,6 +14,11 @@
  *   strict, project-setup) and plain topic docs such as devops-config —
  *   lib/knowledge-pointers.js — get a one-line pointer instead of their
  *   body, also once per session.
+ *   Channel feature flags (lib/features.js, 0.11.0): a doc of a feature the
+ *   consumer's channel may not use is never injected or pointed to, whatever
+ *   TOPIC_MAP or knowledge-pointers say, and a gated skill's trigger aliases
+ *   stay out of the glossary. A failed flag probe gates every doc
+ *   (fail closed) — the prompt itself still goes through.
  */
 
 require('../lib/plugin-guard');
@@ -27,6 +32,7 @@ const { readDelegation } = require('../lib/delegation');
 const { matchPointers, legacyOverrides, pointerLine } = require('../lib/knowledge-pointers');
 const { SAFE_CONTEXT_CHARS } = require('../lib/context-cap');
 const { runOnce } = require('../lib/run-once');
+const features = require('../lib/features');
 
 /**
  * Topic-to-file keyword map.
@@ -204,7 +210,7 @@ const MAX_TRIGGER_GLOSSARY_BYTES = 1024;
  * alias glossary. Returns the formatted string or '' when nothing is found.
  * Format: `[skill-aliases/<lang>] skill-a: phrase1, phrase2 | skill-b: …`
  */
-function loadTriggerGlossary(pluginRoot, lang) {
+function loadTriggerGlossary(pluginRoot, lang, gatedSkills = new Set()) {
   const skillsDir = path.join(pluginRoot, 'skills');
   let entries;
   try { entries = fs.readdirSync(skillsDir, { withFileTypes: true }); }
@@ -213,6 +219,7 @@ function loadTriggerGlossary(pluginRoot, lang) {
   const aliases = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
+    if (gatedSkills.has(`skills/${entry.name}`)) continue;
     const triggerFile = path.join(skillsDir, entry.name, `triggers.${lang}.txt`);
     let raw;
     try { raw = fs.readFileSync(triggerFile, 'utf8'); }
@@ -265,8 +272,19 @@ process.stdin.on('end', () => {
     || path.resolve(__dirname, '..', '..');
   const dkDir = path.join(pluginRoot, 'deep-knowledge');
 
+  // Channel feature flags: a doc this channel may not use is invisible here.
+  // A probe failure gates every doc (fail closed).
+  let docGated;
+  let gatedSkillSet = new Set();
+  try {
+    const gated = features.gatedDocs({ pluginRoot });
+    gatedSkillSet = features.gatedSkills({ pluginRoot });
+    docGated = (file) => gated.has(`deep-knowledge/${file}`);
+  } catch { docGated = () => true; }
+
   // Find matching topics, sort by specificity (higher = more relevant)
   const matched = TOPIC_MAP
+    .filter(t => !docGated(t.file))
     .filter(t => t.patterns.some(re => re.test(userMessage)))
     .sort((a, b) => b.specificity - a.specificity);
 
@@ -298,7 +316,7 @@ process.stdin.on('end', () => {
   try {
     const home = process.env.HOME || process.env.USERPROFILE || '';
     for (const hit of matchPointers(rawMessage)) {
-      if (injected.has(hit.file)) continue;
+      if (injected.has(hit.file) || docGated(hit.file)) continue;
       const overrides = hit.extension ? legacyOverrides(hit.legacy, { cwd: hook.cwd, home }) : [];
       pointers.push(pointerLine(hit, dkDir, overrides));
       injected.add(hit.file);
@@ -367,7 +385,7 @@ process.stdin.on('end', () => {
   const blocks = [`[ui-locale: ${lang}]`, ...announce, ...nudge];
 
   if (isFresh) {
-    const glossary = loadTriggerGlossary(pluginRoot, lang);
+    const glossary = loadTriggerGlossary(pluginRoot, lang, gatedSkillSet);
     if (glossary) {
       blocks.push(
         glossary,
