@@ -367,3 +367,33 @@ describe("prompt.knowledge.dispatch — the payload stays under the harness limi
     expect(second).not.toMatch(/tool-selection\.md/);
   });
 });
+
+describe("prompt.knowledge.dispatch - deferred SessionStart results", () => {
+  const dr = createRequire(import.meta.url)("../lib/deferred-results.js");
+  function runSid(prompt, sid, home) {
+    const cwd = emptyProject();
+    const env = { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT, TMP: TMP_ROOT, TEMP: TMP_ROOT, TMPDIR: TMP_ROOT, HOME: home, USERPROFILE: home };
+    const r = spawnSync(process.execPath, [HOOK], { input: JSON.stringify({ session_id: sid, prompt, cwd }), cwd, env, encoding: "utf8" });
+    return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.additionalContext : "";
+  }
+  const notification = (text) => `<task-notification>
+<result>${text}</result>
+</task-notification>`;
+
+  test("delivers a ready result once, on a real user prompt only", () => {
+    const h = proHome();
+    const sid = `vitest-deferred-${process.pid}-${Date.now()}`;
+    dr.write(sid, "team-changelog", "TEAM-CHANGES-MARKER", TMP_ROOT);
+    expect(runSid(notification("something finished here, nothing else"), sid, h)).not.toContain("TEAM-CHANGES-MARKER");
+    expect(runSid("Bitte prüfe das mal und mach es dann fertig, danke dir", sid, h)).toContain("TEAM-CHANGES-MARKER");
+    expect(runSid("Und jetzt noch etwas anderes bitte, danke dir", sid, h)).not.toContain("TEAM-CHANGES-MARKER");
+  });
+
+  test("a result that is not ready yet arrives with a later prompt", () => {
+    const h = proHome();
+    const sid = `vitest-deferred-late-${process.pid}-${Date.now()}`;
+    expect(runSid("Bitte prüfe das mal und mach es dann fertig, danke dir", sid, h)).not.toContain("LATE-MARKER");
+    dr.write(sid, "plugin-update", "LATE-MARKER", TMP_ROOT);
+    expect(runSid("Und jetzt noch etwas anderes bitte, danke dir", sid, h)).toContain("LATE-MARKER");
+  });
+});
