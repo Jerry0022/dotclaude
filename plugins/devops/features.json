@@ -19,7 +19,7 @@
       ],
       "scripts": [
         "scripts/frustration-replay.js",
-        "hooks/lib/run-contract-plan.js"
+        "scripts/run-extras.js"
       ],
       "skills": [
         "skills/auto-frustrated"
