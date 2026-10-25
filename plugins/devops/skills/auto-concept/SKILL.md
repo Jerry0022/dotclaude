@@ -18,7 +18,7 @@ user-invocable: false
 triggers:
   en: ["concept", "concept page", "interactive plan", "show me this as a page", "visualize this"]
 argument-hint: "[topic, analysis result, plan, or concept to visualize]"
-allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), Bash(python *), Bash(curl *), Bash(kill *), Bash(node *), AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Browser__*, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude-completion__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
+allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), Bash(python *), Bash(curl *), Bash(kill *), Bash(node *), AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Browser__*, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude__health_check, mcp__plugin_devops_dotclaude__get_usage, mcp__plugin_devops_dotclaude__render_completion_card, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---
 
 # Concept
@@ -407,7 +407,7 @@ the user never saw a result for, which a default `discard` would silently lose.
 
 ### 6b. Render the completion card
 
-Call `mcp__plugin_devops_dotclaude-completion__render_completion_card`:
+Call `mcp__plugin_devops_dotclaude__render_completion_card`:
 
 **Before executing this step, Read `deep-knowledge/step6-closeout.md` § 6b · Variant and card fields completely** — variant `analysis` (read-only result), `ready` (code changed in Step 5b) or `aborted` (discarded / aborted), the fields to pass, and never a `concept` field.
 

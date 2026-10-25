@@ -15,7 +15,7 @@ triggers:
   en: ["debug", "this is broken", "doesn't work", "error", "crash", "blank screen"]
   de: ["warum geht das nicht", "funktioniert nicht"]
 argument-hint: "[optional: describe the symptom or paste error]"
-allowed-tools: Read, Grep, Glob, Bash(git log *), Bash(git diff *), Bash(git bisect *), Bash(npm *), Bash(node *), AskUserQuestion, mcp__plugin_devops_dotclaude-issues__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
+allowed-tools: Read, Grep, Glob, Bash(git log *), Bash(git diff *), Bash(git bisect *), Bash(npm *), Bash(node *), AskUserQuestion, mcp__plugin_devops_dotclaude__health_check, mcp__plugin_devops_dotclaude__match_issues, mcp__plugin_devops_dotclaude__render_completion_card
 ---
 
 # Fix
@@ -122,7 +122,7 @@ it because the card's `changes` names the same fix. Always report:
 
 ## Step 9 — Completion Card
 
-Only once the Step 8 report is written, call `mcp__plugin_devops_dotclaude-completion__render_completion_card` with the
+Only once the Step 8 report is written, call `mcp__plugin_devops_dotclaude__render_completion_card` with the
 variant that matches the outcome — variant is NOT fixed for this skill:
 
 | Outcome | Variant |

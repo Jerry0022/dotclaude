@@ -402,7 +402,7 @@ describe("post.flow.completion — reaches the model, and only when it changes s
     expect(out.hookSpecificOutput.hookEventName).toBe("PostToolUse");
     return out.hookSpecificOutput.additionalContext;
   };
-  const RENDER = "mcp__plugin_devops_dotclaude-completion__render_completion_card";
+  const RENDER = "mcp__plugin_devops_dotclaude__render_completion_card";
 
   test("stdout is one additionalContext envelope, never plain text", () => {
     const dir = project();
@@ -820,7 +820,7 @@ describe("post.flow.completion — a background test run verifies only by its re
 // one (do-batch activation, 2026-09-24: two identical cards in one turn).
 describe("post.flow.completion — card flags follow the real session id", () => {
   const flag = (dir, name, sid) => path.join(dir, ".tmp", `dotclaude-devops-${name}-${sid}`);
-  const RENDER = "mcp__plugin_devops_dotclaude-completion__render_completion_card";
+  const RENDER = "mcp__plugin_devops_dotclaude__render_completion_card";
 
   test('a card rendered with session_id "self" lands on the real id', () => {
     const dir = project();
@@ -899,7 +899,7 @@ describe("post.flow.completion — card flags follow the real session id", () =>
 describe("post.flow.completion — quiet after the card itself", () => {
   const flag = (dir, name, sid) => path.join(dir, ".tmp", `dotclaude-devops-${name}-${sid}`);
   const WIDGET = "mcp__visualize__show_widget";
-  const RENDER = "mcp__plugin_devops_dotclaude-completion__render_completion_card";
+  const RENDER = "mcp__plugin_devops_dotclaude__render_completion_card";
 
   test("after the card widget: end of turn, empty reply to the nudge, no card reminder", () => {
     const dir = project();
@@ -1382,8 +1382,8 @@ describe("post.flow.completion — the card widget ends the turn", () => {
   // clean tree (lib/session-archive-gate.js).
   describe("the archive hand-over after a ship card", () => {
     const ARCHIVE = "mcp__ccd_session_mgmt__archive_session";
-    const RENDER = "mcp__plugin_devops_dotclaude-completion__render_completion_card";
-    const RELEASE = "mcp__plugin_devops_dotclaude-ship__ship_release";
+    const RENDER = "mcp__plugin_devops_dotclaude__render_completion_card";
+    const RELEASE = "mcp__plugin_devops_dotclaude__ship_release";
     const tmpFile = (dir, prefix, sid) => path.join(dir, ".tmp", `${prefix}-${sid}`);
     const flagOf = (dir, sid) => tmpFile(dir, "dotclaude-devops-card-archive", sid);
     const releasedOf = (dir, sid) => tmpFile(dir, "dotclaude-devops-card-archive-released", sid);

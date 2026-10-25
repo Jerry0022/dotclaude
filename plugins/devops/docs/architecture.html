@@ -145,8 +145,8 @@
 
   <h2>MCP Servers</h2>
   <a href="#mcp">MCP Servers (2)</a>
-  <a href="#mcp-completion">dotclaude-completion</a>
-  <a href="#mcp-ship">dotclaude-ship (5 tools)</a>
+  <a href="#mcp-completion">dotclaude — card + usage tools</a>
+  <a href="#mcp-ship">dotclaude — ship tools</a>
 
   <h2>Agents</h2>
   <a href="#agents">Agents (11)</a>
@@ -197,7 +197,7 @@
   </div>
   <div class="card">
     <h4>2 MCP Servers</h4>
-    <p style="color:var(--text2);font-size:.85rem">dotclaude-completion (usage + cards) &amp; dotclaude-ship (5-tool pipeline)</p>
+    <p style="color:var(--text2);font-size:.85rem">one dotclaude server per session: usage + cards, ship pipeline, issue matching</p>
   </div>
 </div>
 </section>
@@ -222,9 +222,9 @@
 │   ├── post-tool-use/         <span style="color:var(--purple)"># <!--devops:count:hooks:post-->15<!--/devops:count:hooks:post--> hooks (post.*)</span>
 │   └── stop/                  <span style="color:var(--purple)"># <!--devops:count:hooks:stop-->8<!--/devops:count:hooks:stop--> hooks (stop.*)</span>
 ├── mcp-server/
-│   ├── index.js               <span style="color:var(--orange)"># dotclaude-completion MCP</span>
+│   ├── index.js               <span style="color:var(--orange)"># dotclaude MCP</span>
 │   └── ship/
-│       ├── index.js           <span style="color:var(--orange)"># dotclaude-ship MCP</span>
+│       ├── server.js          <span style="color:var(--orange)"># ship tool group</span>
 │       ├── lib/               <span style="color:var(--text2)"># git.js, version.js, github.js</span>
 │       └── tools/             <span style="color:var(--orange)"># 5 tool implementations</span>
 ├── scheduled-tasks/
@@ -648,7 +648,7 @@
 </section>
 
 <section id="mcp-completion">
-<h3>dotclaude-completion</h3>
+<h3>dotclaude — card + usage tools</h3>
 <p><span class="badge b-mcp">MCP</span> <code>mcp-server/index.js</code></p>
 
 <details>
@@ -665,7 +665,7 @@
 </section>
 
 <section id="mcp-ship">
-<h3>dotclaude-ship (5 Tools)</h3>
+<h3>dotclaude — ship tools (run out of process via ship/cli.js)</h3>
 <p><span class="badge b-mcp">MCP</span> <code>mcp-server/ship/index.js</code></p>
 
 <details>

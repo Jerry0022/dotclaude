@@ -41,11 +41,9 @@ function depsAvailable() {
 const HAVE_DEPS = depsAvailable();
 
 describe("mcp-boot-probe helpers", () => {
-  test("covers all three plugin servers", () => {
+  test("covers the one plugin server", () => {
     expect(probe.SERVERS.map((s) => s.name).sort()).toEqual([
-      "dotclaude-completion",
-      "dotclaude-issues",
-      "dotclaude-ship",
+      "dotclaude",
     ]);
   });
 

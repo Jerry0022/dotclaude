@@ -219,7 +219,7 @@ process.stdin.on('end', () => {
   // Both probes are only needed on the paths that read them: the tree check
   // shells out to git, the heartbeat stats a PID file — skip both on silent ticks.
   const treeClean = (!silent && (scheduledTask || notificationTurn)) ? isTreeClean(hook.cwd, sessionId) : null;
-  const completionMcpDown = silent ? false : !isMcpServerAlive('dotclaude-completion');
+  const completionMcpDown = silent ? false : !isMcpServerAlive('dotclaude');
   // #526: a fresh <project>/.claude/auto-guide-active.json marker means an
   // /auto-guide run is mid-loop — never force the card that would end it.
   const guideActive = silent ? false : isGuideActive(hook.cwd);

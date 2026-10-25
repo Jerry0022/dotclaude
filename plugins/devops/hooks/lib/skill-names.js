@@ -112,7 +112,7 @@ const RETIRED = Object.freeze({
   }),
   'auto-usage': Object.freeze({
     doc: 'usage.md',
-    home: 'MCP get_usage (dotclaude-completion) + prompt.knowledge.dispatch pointer',
+    home: 'MCP get_usage (dotclaude) + prompt.knowledge.dispatch pointer',
   }),
   'claude-strict': Object.freeze({
     doc: 'strict.md',

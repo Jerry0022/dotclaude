@@ -9,6 +9,6 @@ module.exports = (g) => ({
   "ignore-block": g.fileMatches(".gitignore", /# >>> claude \(managed\) >>>/),
   // MCP card, or the offline renderer's payload when the server is not up.
   "card-with-cwd": (ctx) =>
-    g.toolUsed("mcp__plugin_devops_dotclaude-completion__render_completion_card", { inputMatch: /"cwd"/ })(ctx) ||
+    g.toolUsed("mcp__plugin_devops_dotclaude__render_completion_card", { inputMatch: /"cwd"/ })(ctx) ||
     g.toolUsed(/^(Bash|Write)$/, { inputMatch: /variant[^,]{0,12}analysis[\s\S]*cwd|cwd[\s\S]*variant[^,]{0,12}analysis/ })(ctx),
 });

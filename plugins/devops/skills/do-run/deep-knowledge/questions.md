@@ -27,7 +27,7 @@ Apply to the base call, the resume and the follow-up questions alike:
   `gh issue list --state open --limit 1 --json number --jq length`.
   Output `1` → show it. `0`, a non-zero exit, no `gh`, no remote, no auth →
   omit it silently (Q1 then has two options). Skipped when Q1 is preset.
-- **Budget verbrennen** — call `mcp__plugin_devops_dotclaude-completion__get_usage`
+- **Budget verbrennen** — call `mcp__plugin_devops_dotclaude__get_usage`
   once (it freshens `~/.claude/usage-live.json`), then
   `node "{PLUGIN_ROOT}/scripts/burn-plan.js" offer --no-refresh`.
   Show the option only when it prints `"offer": true`: at the user's own

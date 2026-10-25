@@ -153,7 +153,7 @@ own hooks can starve its own servers: on 2026-09-03 all three plugin servers
 although each boots in < 2.5 s standalone — a `git fetch` storm, `npm install`,
 a 10k-file `cpSync` of `node_modules` into the servers' own `cwd` under
 `plugins/cache/`, a recursive repo scan and a process sweep all ran in that
-window (#324). A session that loses `dotclaude-ship` cannot ship at all.
+window (#324). A session that loses `dotclaude` cannot ship at all.
 
 - **SessionStart hooks do no heavy work in the connect window.** Network
   (`git fetch`, `gh`, `npm install`), bulk file copies, recursive scans and

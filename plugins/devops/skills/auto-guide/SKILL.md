@@ -22,7 +22,7 @@ triggers:
   en: ["guide me through", "web guide", "walk me through the site", "help me set up on <site>"]
   de: ["führe mich durch", "Führ mich per Web-Guide durch", "per Web-Guide", "zeig mir auf der Website", "ich muss das auf der Website machen", "API key anlegen"]
 argument-hint: "[what the user has to achieve on which website, and what must come back]"
-allowed-tools: Read, Glob, Bash(node *), AskUserQuestion, mcp__claude-in-chrome__tabs_context_mcp, mcp__claude-in-chrome__tabs_create_mcp, mcp__claude-in-chrome__navigate, mcp__claude-in-chrome__javascript_tool, mcp__plugin_devops_dotclaude-completion__*
+allowed-tools: Read, Glob, Bash(node *), AskUserQuestion, mcp__claude-in-chrome__tabs_context_mcp, mcp__claude-in-chrome__tabs_create_mcp, mcp__claude-in-chrome__navigate, mcp__claude-in-chrome__javascript_tool, mcp__plugin_devops_dotclaude__health_check, mcp__plugin_devops_dotclaude__get_usage, mcp__plugin_devops_dotclaude__render_completion_card
 ---
 
 # Web Guide

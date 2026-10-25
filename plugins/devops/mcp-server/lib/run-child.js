@@ -27,17 +27,24 @@ export function activeChildCount() {
   return active.size;
 }
 
-/** Kill a child and everything it started. Async on Windows (taskkill), never throws. */
+/**
+ * Kill a child and everything it started. Resolves once the kill is done
+ * (on Windows when taskkill exits — the tree is gone then), never rejects.
+ */
 export function killTree(child) {
-  if (!child || !child.pid || child.exitCode !== null) return;
-  try {
-    if (IS_WIN) {
-      const k = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
-      k.on("error", () => { try { child.kill(); } catch { /* gone */ } });
-    } else {
-      try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
-    }
-  } catch { /* already gone */ }
+  if (!child || !child.pid || child.exitCode !== null) return Promise.resolve();
+  return new Promise((resolve) => {
+    try {
+      if (IS_WIN) {
+        const k = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
+        k.on("error", () => { try { child.kill(); } catch { /* gone */ } resolve(); });
+        k.on("close", () => resolve());
+      } else {
+        try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
+        resolve();
+      }
+    } catch { resolve(); /* already gone */ }
+  });
 }
 
 /** Sync tree-kill of every tracked child — safe inside a process 'exit' handler. */
@@ -99,7 +106,8 @@ export function runChild(cmd, args, opts = {}) {
     let timedOut = false;
     let spawnError = null;
     let settled = false;
-    const timer = setTimeout(() => { timedOut = true; killTree(child); }, timeoutMs);
+    let killing = null;
+    const timer = setTimeout(() => { timedOut = true; killing = killTree(child); }, timeoutMs);
     timer.unref();
     child.stdout.on("data", (b) => out.push(b));
     child.stderr.on("data", (b) => err.push(b));
@@ -109,10 +117,13 @@ export function runChild(cmd, args, opts = {}) {
       settled = true;
       clearTimeout(timer);
       active.delete(child);
-      resolve({
+      // After a timeout, resolve only once the whole tree is gone (no orphan
+      // can still be writing when the caller reports the step as killed).
+      const done = () => resolve({
         code, signal, stdout: out.text(), stderr: err.text(), timedOut,
         truncated: out.truncated || err.truncated, durationMs: Date.now() - started, error: spawnError,
       });
+      if (killing) killing.then(done); else done();
     };
     child.on("error", (e) => { spawnError = e.message; finish(null, null); });
     child.on("close", finish);
