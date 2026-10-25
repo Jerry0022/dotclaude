@@ -244,8 +244,8 @@ its changes (an integration branch collecting sub-agent branches); commits on
 the integration branch after its PR merged keep it unlanded. Origin safety copies
 (`backup/*`, `rescue/*`, `salvage/*`, `salvage-land/*`, `parked/*`, `wip/*`)
 expire 14 days after their content landed (the auto-clean deletes them, log
-trigger `backup-expiry`). Stale ref/maintenance lock files older than 1 h (a
-crashed git) are removed before any removal or prune — one leftover
+trigger `backup-expiry`). Stale ref lock files older than 1 h and a
+`maintenance.lock` older than 24 h (a crashed git) are removed before any removal or prune — one leftover
 `refs/**.lock` otherwise fails every `fetch --prune` without a word. A registered worktree
 under the OS temp dir, idle over 1 h and not locked by a live pid (a dead pid
 or a stale "initializing" lock counts as dead), is pruned once clean. Desktop

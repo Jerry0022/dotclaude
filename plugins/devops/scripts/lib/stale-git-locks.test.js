@@ -52,6 +52,15 @@ describe("clearStaleLocks", () => {
     expect(fs.existsSync(index)).toBe(true);
   });
 
+  test("a maintenance.lock survives a long gc (kept under 24 h), a missing repo clears nothing", () => {
+    const d = repo();
+    const m = path.join(d, ".git", "objects", "maintenance.lock");
+    lockAt(m, 3 * HOUR);
+    expect(clearStaleLocks(d)).toEqual([]);
+    expect(fs.existsSync(m)).toBe(true);
+    expect(clearStaleLocks(undefined)).toEqual([]);
+  });
+
   test("a stale ref lock no longer blocks deleting that ref", () => {
     const d = repo();
     lockAt(path.join(d, ".git", "refs", "remotes", "origin", "pr", "1.lock"), 2 * HOUR);
