@@ -14,7 +14,7 @@ invokes: [do-run, auto-concept]
 triggers:
   en: ["/do-batch", "collect mode", "batch mode"]
   de: ["sammelmodus", "erstmal sammeln", "nicht sofort umsetzen"]
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Skill, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Skill, AskUserQuestion, mcp__plugin_devops_dotclaude__health_check, mcp__plugin_devops_dotclaude__get_usage, mcp__plugin_devops_dotclaude__render_completion_card, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---
 
 # do-batch — Collect Prompts, Merge Once

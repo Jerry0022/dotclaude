@@ -781,20 +781,20 @@ function renderLadderLines(pluginRoot, { completionMcpDown } = {}) {
   ];
   if (completionMcpDown) {
     return [
-      'The dotclaude-completion MCP server is NOT running (heartbeat dead) — do not',
+      'The dotclaude MCP server is NOT running (heartbeat dead) — do not',
       'try the tool first. Render the card offline through the same renderer, via',
       'Bash, as the FIRST action:',
       ...offline,
       '',
       'Only if that node call itself fails, try the tool',
-      '`mcp__plugin_devops_dotclaude-completion__render_completion_card` directly,',
-      'then ToolSearch (select:mcp__plugin_devops_dotclaude-completion__render_completion_card).',
+      '`mcp__plugin_devops_dotclaude__render_completion_card` directly,',
+      'then ToolSearch (select:mcp__plugin_devops_dotclaude__render_completion_card).',
     ];
   }
   return [
-    'Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` NOW as the FIRST action.',
+    'Call `mcp__plugin_devops_dotclaude__render_completion_card` NOW as the FIRST action.',
     'If the direct call fails with "tool not found", fall back to ToolSearch:',
-    '  select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
+    '  select:mcp__plugin_devops_dotclaude__render_completion_card',
     '',
     'If ToolSearch ALSO cannot find it because the MCP server never connected this',
     'session (CONNECT_TIMEOUT / "failed to connect"), the card is still required —',
@@ -920,7 +920,7 @@ function buildValidationReason() {
     'report it: map each requirement / acceptance criterion to how this change',
     'meets it and how you confirmed it.',
     '',
-    'Re-render `mcp__plugin_devops_dotclaude-completion__render_completion_card` NOW',
+    'Re-render `mcp__plugin_devops_dotclaude__render_completion_card` NOW',
     'with the `validation` field populated, then relay the card VERBATIM as the LAST',
     'output. Each item: { requirement, status: "met" | "partial" | "unmet", evidence }.',
     'status = delivered: implemented but only user-verifiable is "met" (the check',
@@ -943,7 +943,7 @@ function buildPendingReason(names) {
     'user to act ("SHIP or CHANGE?", "All DONE") on a result that does not exist',
     'yet — exactly the wrong call to action while agents are still working.',
     '',
-    'Re-render `mcp__plugin_devops_dotclaude-completion__render_completion_card` NOW',
+    'Re-render `mcp__plugin_devops_dotclaude__render_completion_card` NOW',
     'with `pending` populated, then relay the card VERBATIM as the LAST output:',
     '  pending: [{ name: "<agent type, workflow name or task label>",',
     '              kind: "agent" | "task" | "workflow",',
@@ -983,7 +983,7 @@ function buildTitleStatusWordReason(word) {
     'something was NOT achieved, say so in plain words ("… — Resume-Pfad noch offen"),',
     'never with a status word.',
     '',
-    'Re-render `mcp__plugin_devops_dotclaude-completion__render_completion_card` NOW',
+    'Re-render `mcp__plugin_devops_dotclaude__render_completion_card` NOW',
     'with a corrected title, then relay the card VERBATIM as the LAST output.',
   ].join('\n');
 }
@@ -994,7 +994,7 @@ function buildResultLinesReason(detail) {
     '',
     detail,
     '',
-    'Re-render `mcp__plugin_devops_dotclaude-completion__render_completion_card` NOW',
+    'Re-render `mcp__plugin_devops_dotclaude__render_completion_card` NOW',
     'with the `›` result lines fixed, then relay the card VERBATIM as the LAST output.',
   ].join('\n');
 }
@@ -1005,7 +1005,7 @@ function buildPointsReason(detail) {
     '',
     detail,
     '',
-    'Re-render `mcp__plugin_devops_dotclaude-completion__render_completion_card` NOW',
+    'Re-render `mcp__plugin_devops_dotclaude__render_completion_card` NOW',
     'with the points list fixed, then relay the card VERBATIM as the LAST output.',
   ].join('\n');
 }
@@ -1041,7 +1041,7 @@ function buildDuplicateCardReason() {
     'not a repeated card.',
     '',
     'If something DID in fact change since the last card, re-render',
-    '`mcp__plugin_devops_dotclaude-completion__render_completion_card` with the new',
+    '`mcp__plugin_devops_dotclaude__render_completion_card` with the new',
     'state and relay it VERBATIM. Otherwise end the turn with no output.',
   ].join('\n');
 }

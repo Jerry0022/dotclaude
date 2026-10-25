@@ -222,7 +222,7 @@ describe("stream-json parsing", () => {
     expect(parsed.sessionId).toBe("s-1");
     expect(parsed.plugins[0].name).toBe("devops");
     expect(parsed.parseErrors).toBe(1);
-    expect(parsed.toolCalls.map((c) => c.name)).toEqual(["Skill", "Agent", "WebFetch", "Agent", "mcp__plugin_devops_dotclaude-completion__render_card"]);
+    expect(parsed.toolCalls.map((c) => c.name)).toEqual(["Skill", "Agent", "WebFetch", "Agent", "mcp__plugin_devops_dotclaude__render_card"]);
     expect(parsed.toolCalls[2].subagent).toBe(true);
     expect(parsed.toolCalls[1].key).toEqual({ subagent_type: "devops:research", model: "sonnet", description: "look up docs" });
     expect(parsed.skills).toEqual([{ skill: "devops:auto-fix", subagent: false }]);

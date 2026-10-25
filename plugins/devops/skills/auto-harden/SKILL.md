@@ -20,7 +20,7 @@ triggers:
   en: ["harden", "stabilize", "bug pass", "consistency pass"]
   de: ["härten", "stabilisieren", "lint und fix"]
 argument-hint: "[--autonomous] [--strict] [--invoked-by=do-run|ship] [--base=<branch>] [--cwd=<path>] [optional scope: file/dir path]"
-allowed-tools: Agent, Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__render_completion_card
+allowed-tools: Agent, Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__plugin_devops_dotclaude__render_completion_card
 ---
 
 # Tune Harden — Stabilization Pass
@@ -288,7 +288,7 @@ For every Step 4 (#2) finding + every Score < 50 OR Hard-Floor item from Step 5:
      required" with score breakdown.
 
 4. For "Defer to issue" answers → call
-   `mcp__plugin_devops_dotclaude-issues__match_issues` to check for an
+   `mcp__plugin_devops_dotclaude__match_issues` to check for an
    existing issue; if none, suggest creating one via `/auto-issue`.
 
 ## Step 8 — Consistency Phase
@@ -358,7 +358,7 @@ Count actionable items resolved + outstanding.
 
 ### Completion Card
 
-Call `mcp__plugin_devops_dotclaude-completion__render_completion_card`:
+Call `mcp__plugin_devops_dotclaude__render_completion_card`:
 
 | Outcome | Variant |
 |---------|---------|

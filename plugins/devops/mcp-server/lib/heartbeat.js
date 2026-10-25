@@ -114,7 +114,7 @@ export function writeHeartbeat(name, pid = process.pid, dir = tmpdir()) {
  * Call once after server.connect() succeeds.
  *
  * @param {string} name  Server name matching .mcp.json key
- *                        (e.g. "dotclaude-completion", "dotclaude-ship", "dotclaude-issues")
+ *                        (e.g. "dotclaude")
  */
 export function register(name) {
   try {

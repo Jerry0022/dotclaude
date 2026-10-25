@@ -2,7 +2,7 @@
  * Claude Code's machine-wide MCP failure cache.
  *
  * Claude Code records a failed MCP connect in ~/.claude/mcp-needs-auth-cache.json,
- * keyed by server name ("plugin:devops:dotclaude-ship": { timestamp, id }), and
+ * keyed by server name ("plugin:devops:dotclaude": { timestamp, id }), and
  * skips that server in EVERY session that starts within the next 15 minutes
  * ("Skipping connection (recent failure cached …)"). One session's
  * CONNECT_TIMEOUT under start-up load therefore takes ship/completion/issues

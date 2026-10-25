@@ -15,7 +15,7 @@ const status = require("../../hooks/lib/mcp-status.js");
 // reported "heartbeat dead" while the other sessions' servers answered fine
 // (2026-09-24). These tests pin the per-process files and the reader over them.
 
-const NAME = "dotclaude-completion";
+const NAME = "dotclaude";
 
 // A second live process standing in for another session's server.
 const other = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], { stdio: "ignore" });
@@ -37,10 +37,10 @@ function registerAs(pid, dir) {
 }
 
 // The completion server lost its register call in #93 ("unused import"), so
-// every hook read it as dead and put the offline card path first. Each of the
-// three servers must register under its .mcp.json name after connecting.
+// every hook read it as dead and put the offline card path first.
+// The one devops server must register under its .mcp.json name after connecting.
 describe("heartbeat — every devops server registers itself", () => {
-  for (const [file, name] of [["../index.js", "dotclaude-completion"], ["../ship/server.js", "dotclaude-ship"], ["../issues/server.js", "dotclaude-issues"]]) {
+  for (const [file, name] of [["../index.js", "dotclaude"]]) {
     test(`${name} registers after server.connect`, () => {
       const src = fs.readFileSync(new URL(file, import.meta.url), "utf8");
       const mcpName = new RegExp(`const SERVER_NAME = "${name}"`);
@@ -104,7 +104,7 @@ describe("heartbeat — one file per server process", () => {
 
   test("another server's files never answer for this one", () => {
     withTmp((dir) => {
-      fs.writeFileSync(path.join(dir, `dotclaude-mcp-dotclaude-ship-${process.pid}.pid`), String(process.pid));
+      fs.writeFileSync(path.join(dir, `dotclaude-mcp-other-server-${process.pid}.pid`), String(process.pid));
       expect(reader.isMcpServerAlive(NAME)).toBe(false);
     });
   });
@@ -129,14 +129,14 @@ describe("heartbeat — subdir layout, pruning, cheap reads (AUD-C043)", () => {
       writeHeartbeat(NAME, other.pid, dir);
       fs.writeFileSync(flatPidFile(NAME, gone, dir), String(gone));
       fs.writeFileSync(flatPidFile(NAME, other.pid, dir), String(other.pid));
-      writeHeartbeat("dotclaude-ship", gone, dir);
+      writeHeartbeat("other-server", gone, dir);
       const alive = (pid) => pid === other.pid;
       expect(pruneDead(NAME, dir, alive)).toBe(2);
       expect(fs.existsSync(processPidFile(NAME, gone, dir))).toBe(false);
       expect(fs.existsSync(flatPidFile(NAME, gone, dir))).toBe(false);
       expect(fs.existsSync(processPidFile(NAME, other.pid, dir))).toBe(true);
       expect(fs.existsSync(flatPidFile(NAME, other.pid, dir))).toBe(true);
-      expect(fs.existsSync(processPidFile("dotclaude-ship", gone, dir))).toBe(true);
+      expect(fs.existsSync(processPidFile("other-server", gone, dir))).toBe(true);
     });
   });
 

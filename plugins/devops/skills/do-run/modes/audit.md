@@ -233,7 +233,7 @@ mockup go into a separate `design` iteration on the same page.
 
 ## Step 8 — Completion
 
-Render the card via `mcp__plugin_devops_dotclaude-completion__render_completion_card`:
+Render the card via `mcp__plugin_devops_dotclaude__render_completion_card`:
 
 | Outcome | Variant |
 |---|---|

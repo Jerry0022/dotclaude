@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.32.0
+ * @version 0.32.1
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -250,7 +250,9 @@ function contextOf(lines) {
   return text ? { context: text } : null;
 }
 
-const SHIP_RELEASE_TOOL = 'mcp__plugin_devops_dotclaude-ship__ship_release';
+const SHIP_RELEASE_TOOL = 'mcp__plugin_devops_dotclaude__ship_release';
+// One release of tolerance: a session still running the pre-merge dotclaude-ship server.
+const isShipReleaseTool = (name) => name === SHIP_RELEASE_TOOL || name === 'mcp__plugin_devops_dotclaude-ship__ship_release';
 
 /**
  * Did a ship_release response report a merge? MCP results arrive as
@@ -488,7 +490,7 @@ function isSilentTurn(hook) {
  * @returns {{ scheduledTask: boolean }}
  */
 function handleShipAndCardFlags(hook, toolName) {
-  if (toolName === SHIP_RELEASE_TOOL && shipReleaseMerged(hook.tool_response)) {
+  if (isShipReleaseTool(toolName) && shipReleaseMerged(hook.tool_response)) {
     try { writeSessionFile(sessionFile('dotclaude-devops-shipped', hook.session_id), '1'); } catch { /* best effort */ }
     archiveGate.recordShipped(hook.session_id);
   }
@@ -937,7 +939,7 @@ function cardContractLines(hook, scheduledTask) {
   const lines = [];
   // Offline-first when the completion MCP's heartbeat is dead (#371): each
   // failed rung of the ladder costs a turn, so name the working one first.
-  const completionDown = !isMcpServerAlive('dotclaude-completion');
+  const completionDown = !isMcpServerAlive('dotclaude');
   const offline = `node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim)`;
 
   if (scheduledTask) {
@@ -949,7 +951,7 @@ function cardContractLines(hook, scheduledTask) {
   }
 
   lines.push(
-    `COMPLETION CARD when ALL work is done: call mcp__plugin_devops_dotclaude-completion__render_completion_card (rules: its tool description; ToolSearch select: if not loaded) with session_id:"${hook.session_id || ''}", cwd:"${hook.cwd || ''}", lang.`,
+    `COMPLETION CARD when ALL work is done: call mcp__plugin_devops_dotclaude__render_completion_card (rules: its tool description; ToolSearch select: if not loaded) with session_id:"${hook.session_id || ''}", cwd:"${hook.cwd || ''}", lang.`,
     completionDown
       ? `The completion MCP server is NOT running (heartbeat dead) — render offline FIRST: ${offline}.`
       : `MCP server never connected: render offline instead, never skip the card: ${offline}.`,
@@ -1115,7 +1117,7 @@ function main(hook) {
     // subagent) still leaves the archive evidence for the PARENT session,
     // keyed by the parent's id the harness passes. Nothing else: the archive
     // release stays the main session's, after its own card widget.
-    if ((hook.tool_name || '') === SHIP_RELEASE_TOOL && shipReleaseMerged(hook.tool_response)) {
+    if (isShipReleaseTool(hook.tool_name || '') && shipReleaseMerged(hook.tool_response)) {
       archiveGate.recordShipped(hook.session_id);
     }
     return null;

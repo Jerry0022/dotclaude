@@ -14,8 +14,8 @@ const store = require("../lib/run-contract-store.js");
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK = path.join(__dirname, "post.run.contract.js");
-const SHIP = "mcp__plugin_devops_dotclaude-ship__ship_release";
-const CARD = "mcp__plugin_devops_dotclaude-completion__render_completion_card";
+const SHIP = "mcp__plugin_devops_dotclaude__ship_release";
+const CARD = "mcp__plugin_devops_dotclaude__render_completion_card";
 const ENV = { ...process.env };
 delete ENV.DOTCLAUDE_RUN_CONTRACT;
 

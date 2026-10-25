@@ -243,7 +243,7 @@ describe("isMcpIssueWriteTool (R10)", () => {
     "mcp__plugin_github_github__issue_read",
     "mcp__plugin_github_github__add_issue_comment",
     "mcp__plugin_github_github__sub_issue_write",
-    "mcp__plugin_devops_dotclaude-issues__issue_write",
+    "mcp__plugin_devops_dotclaude__issue_write",
     "Bash",
     undefined,
   ])("%s → not guarded", (name) => {

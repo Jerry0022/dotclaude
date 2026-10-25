@@ -20,8 +20,8 @@ const PRE = path.join(__dirname, "pre-tool-use", "pre.run.contract.js");
 const POST = path.join(__dirname, "post-tool-use", "post.run.contract.js");
 const ASK = path.join(__dirname, "post-tool-use", "post.ask.answers.js");
 const BATCH = path.join(__dirname, "user-prompt-submit", "prompt.batch.collect.js");
-const SHIP = "mcp__plugin_devops_dotclaude-ship__ship_release";
-const CARD = "mcp__plugin_devops_dotclaude-completion__render_completion_card";
+const SHIP = "mcp__plugin_devops_dotclaude__ship_release";
+const CARD = "mcp__plugin_devops_dotclaude__render_completion_card";
 
 const ENV = { ...process.env };
 delete ENV.DOTCLAUDE_RUN_CONTRACT;
