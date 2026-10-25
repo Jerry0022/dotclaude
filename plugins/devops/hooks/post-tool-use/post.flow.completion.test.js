@@ -86,61 +86,64 @@ function cleanup(dir) {
 // feature was built, merged, installed, and never seen. These tests pin the
 // instruction that closes that gap.
 describe("post.flow.completion — completion-card instruction completeness", () => {
-  test("names the `delivery` field, so the pipeline track survives outside /do-ship", () => {
+  // The static card rules moved out of the per-prompt context into the
+  // render_completion_card tool description (cached system prompt, present all
+  // session): the tests pin them THERE; the per-prompt hook text keeps only the
+  // dynamic parts.
+  const toolDescription = () => {
+    const src = fs.readFileSync(path.join(__dirname, "..", "..", "mcp-server", "index.js"), "utf8");
+    const start = src.indexOf('"render_completion_card",');
+    const end = src.indexOf("inputSchema:", start);
+    return src.slice(start, end).replace(/"\s*\+\s*"/g, "").replace(/\\"/g, '"');
+  };
+
+  test("the per-prompt contract keeps only the dynamic parts: session_id, cwd, lang, offline path", () => {
     const dir = project();
-    // The session id must not itself contain "delivery" — it is echoed into the
-    // instruction and would make this assertion pass for the wrong reason.
     const out = runHook(dir, "s-track");
     expect(out).toContain("COMPLETION CARD");
-    expect(out).toContain("delivery");
-    cleanup(dir);
-  });
-
-  // Same gap, same root cause: a card input the renderer honours but nothing
-  // ever asks for. `cwd` decides whether PR/commit/branch are clickable links
-  // or dead text; `userFinalTest` carries the manual last-mile steps.
-  test("names `cwd` and `userFinalTest`, the other renderer inputs nothing asked for", () => {
-    const dir = project();
-    const out = runHook(dir, "s-inputs");
+    expect(out).toContain('session_id:"s-track"');
     expect(out).toContain("cwd:");
-    expect(out).toContain("userFinalTest");
+    expect(out).toContain("--render-card");
+    expect(out).toContain("tool description");
+    expect(out.length).toBeLessThan(900);
     cleanup(dir);
   });
 
-  // #642: "text before the card only for side questions" read as "the main
-  // answer belongs on the card" — two Q&A turns ended with a bare analysis
-  // card and no answer at all. The rule must keep the answer as prose.
-  // #757: prose before the card was collapsed by the Desktop app — a user saw
-  // no explanation twice in a row. The answer goes into the card's `answer`.
-  test("keeps the answer to the user's question, routed into the card's answer field (#642, #757)", () => {
-    const dir = project();
-    const out = runHook(dir, "s-answer");
-    expect(out).toContain("The ANSWER to the user's question is no recap");
-    expect(out).toContain("pass it in full as `answer`");
-    expect(out).not.toContain("write it in full as text before the card");
-    expect(out).not.toContain("answers to side questions");
-    cleanup(dir);
+  test("the tool description names the `delivery` field, scoped to turns that reached a pipeline stage", () => {
+    const d = toolDescription();
+    expect(d).toContain("`delivery`");
+    // An unconditional instruction would render three empty nodes on routine cards.
+    expect(d).toMatch(/whenever the work reached a pipeline stage \(a PR exists/);
+    expect(d).toMatch(/omit it when none apply/);
   });
 
-  // auto-fix evals: runs fixed the bug and rendered the card without the Step 8
-  // report — "never restate what the card shows (changes …)" read as covering it.
-  test("keeps a skill-required report (auto-fix root cause file:line) out of the no-recap rule", () => {
-    const dir = project();
-    const out = runHook(dir, "s-report");
-    expect(out).toContain("A report the");
-    expect(out).toContain("running skill requires (e.g. auto-fix: root cause with file:line) is part of that answer");
-    cleanup(dir);
+  test("the tool description names `cwd` and the cta shape", () => {
+    const d = toolDescription();
+    expect(d).toContain("`cwd`");
+    expect(d).toContain("object of placeholders");
   });
 
-  test("scopes `delivery` to turns that reached a pipeline stage, not every card", () => {
-    const dir = project();
-    const out = runHook(dir, "s-track-scope");
-    // An unconditional instruction would render three empty ⚪ nodes on routine
-    // cards. The instruction must key off an actual PR / ship / promote.
-    const deliveryLine = out.split("\n").find(l => l.includes("delivery"));
-    expect(deliveryLine).toBeTruthy();
-    expect(deliveryLine.toLowerCase()).toMatch(/\bpr\b/);
-    cleanup(dir);
+  // #642 / #757: the answer goes into the card's `answer`, not into prose.
+  test("the tool description keeps the answer to the user's question routed into `answer` (#642, #757)", () => {
+    const d = toolDescription();
+    expect(d).toContain("put the FULL answer");
+    expect(d).toContain("`answer`");
+  });
+
+  // auto-fix evals: runs fixed the bug and rendered the card without the Step 8 report.
+  test("the tool description keeps a skill-required report (auto-fix root cause file:line) out of the no-recap rule", () => {
+    const d = toolDescription();
+    expect(d).toContain("A report the running skill requires (e.g. auto-fix: root cause with file:line) is part of that answer");
+  });
+
+  test("the tool description carries the validation, pending, concept and Desktop-widget rules", () => {
+    const d = toolDescription();
+    expect(d).toContain("VALIDATION (V&V gate)");
+    expect(d).toContain("PENDING:");
+    expect(d).toContain("CONCEPT (outranks pending)");
+    expect(d).toMatch(/show_widget call IS the card/);
+    expect(d).toMatch(/gets an empty reply/);
+    expect(d).toContain("VERBATIM");
   });
 
   // The private tmpdir above is the whole reason this suite is deterministic,
@@ -216,7 +219,7 @@ describe("post.flow.completion — pending reminder", () => {
     });
     expect(out).toContain("[pending]");
     expect(out).toContain("devops:frontend");
-    expect(out).toContain("pending:");
+    expect(out).toContain("`pending` field");
     cleanup(dir);
   });
 
@@ -238,7 +241,6 @@ describe("post.flow.completion — pending reminder", () => {
     });
     expect(out).toContain("[pending]");
     expect(out).toContain("Run the suite");
-    expect(out).toContain('kind: "task"');
     cleanup(dir);
   });
 
@@ -261,7 +263,6 @@ describe("post.flow.completion — pending reminder", () => {
     });
     expect(out).toContain("[pending]");
     expect(out).toContain("Build the bundle");
-    expect(out).toContain('kind: "task"');
     expect(out).not.toContain("bad36w5pu");
     cleanup(dir);
   });
@@ -352,7 +353,6 @@ describe("post.flow.completion — launches are read from the structured tool_re
       tool_response: ASYNC_AGENT,
     });
     expect(out).toContain("[pending] Background agent started: devops:qa");
-    expect(out).toContain('kind: "agent"');
     expect(out).not.toContain("a3a8dbef8ee890dbf");
     cleanup(dir);
   });
@@ -375,7 +375,6 @@ describe("post.flow.completion — launches are read from the structured tool_re
       tool_response: WORKFLOW,
     });
     expect(out).toContain("[pending] Background workflow started: verify-spec");
-    expect(out).toContain('kind: "workflow"');
     cleanup(dir);
   });
 
@@ -408,8 +407,8 @@ describe("post.flow.completion — reaches the model, and only when it changes s
   test("stdout is one additionalContext envelope, never plain text", () => {
     const dir = project();
     expect(envelope(runHookRaw(dir, "s-env"))).toContain("COMPLETION CARD");
-    expect(envelope(runHookRaw(dir, "s-env-render", RENDER, { tool_input: { variant: "ready" } })))
-      .toContain("Card rendered");
+    // The render's own result carries the delivery contract: the hook adds nothing.
+    expect(runHookRaw(dir, "s-env-render", RENDER, { tool_input: { variant: "ready" } })).toBe("");
     expect(envelope(runHookRaw(dir, "s-env-widget", "mcp__visualize__show_widget", {
       tool_input: { title: "completion_card_body" },
     }))).toContain("Card shown");
@@ -618,7 +617,13 @@ describe("post.flow.completion — concept bridge infrastructure is not pending"
       tool_response: BG,
     });
     expect(out).toContain("[concept]");
-    expect(out).toContain("concept: { phase:");
+    expect(out).toContain("`concept: { phase }`");
+    // One hint per concept: the pulser and waker launches after the server stay silent.
+    const again = runHook(dir, "s-concept-server", "Bash", {
+      tool_input: { command: "node concept-watch.js --mode pulse --port 8840", description: "pulse", run_in_background: true },
+      tool_response: BG,
+    });
+    expect(again).not.toContain("[concept]");
     expect(out).not.toContain("[pending]");
     cleanup(dir);
   });
@@ -916,8 +921,7 @@ describe("post.flow.completion — quiet after the card itself", () => {
   test("after the render: deliver it as its result says, no second render", () => {
     const dir = project();
     const out = runHook(dir, "s-render", RENDER, { tool_input: { variant: "ready", session_id: "s-render" } });
-    expect(out).toContain("Card rendered");
-    expect(out).not.toContain("COMPLETION CARD");
+    expect(out).toBe("");
     cleanup(dir);
   });
 
@@ -933,7 +937,7 @@ describe("post.flow.completion — quiet after the card itself", () => {
     fs.writeFileSync(flag(dir, "card-rendered", "s-after"), "t");
     const out = runHook(dir, "s-after", "mcp__ccd_session_mgmt__set_session_title");
     expect(out).toContain("already rendered this turn");
-    expect(out).toMatch(/never show the same card twice/);
+    expect(out).toMatch(/only if the outcome changed/);
     cleanup(dir);
   });
 
@@ -953,8 +957,8 @@ describe("post.flow.completion — quiet after the card itself", () => {
     const dir = project();
     const out = runHook(dir, "s-contract");
     expect(out).not.toMatch(/goes BEFORE the card/);
-    expect(out).toMatch(/show_widget call IS the card/);
-    expect(out).toMatch(/reply to it with nothing/);
+    // The widget-only contract sits in the tool description (see the completeness suite).
+    expect(out).toContain("render_completion_card");
     cleanup(dir);
   });
 });
@@ -1681,4 +1685,26 @@ describe("post.flow.completion — lib load failure leaves a trace", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   }, 60000);
+});
+
+// V3: only edits inside the git work tree of the cwd count as code edits.
+describe("post.flow.completion — edits outside the repo are no code edits", () => {
+  const flag = (dir, name, sid) => path.join(dir, ".tmp", `dotclaude-devops-${name}-${sid}`);
+
+  test("a Write into the scratchpad neither counts nor nudges; a repo edit does", () => {
+    const dir = project();
+    fs.mkdirSync(path.join(dir, ".git"));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "outside-"));
+    const sid = "s-outside";
+    fs.writeFileSync(flag(dir, "work-happened", sid), "Read");
+    const out = runHook(dir, sid, "Write", { tool_input: { file_path: path.join(outside, "analyse.js") } });
+    expect(out).not.toContain("[test-autonomy]");
+    expect(fs.existsSync(flag(dir, "edits", sid))).toBe(false);
+    expect(fs.existsSync(flag(dir, "validation-pending", sid))).toBe(false);
+    const inside = runHook(dir, sid, "Write", { tool_input: { file_path: path.join(dir, "src.js") } });
+    expect(inside).toContain("[test-autonomy]");
+    expect(fs.readFileSync(flag(dir, "edits", sid), "utf8")).toBe("1");
+    cleanup(outside);
+    cleanup(dir);
+  });
 });

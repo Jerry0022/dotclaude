@@ -1,6 +1,6 @@
 /**
  * @module card-pregate
- * @version 0.4.0
+ * @version 0.4.1
  * @plugin devops
  * @description stop.flow.guard's payload gates, checked by
  *   render_completion_card BEFORE it renders.
@@ -64,6 +64,7 @@ const {
 } = require('./browsertest-guard');
 const { BGRUN_FLAG } = require('./light-bgrun');
 const { isPromptEntry } = require('./skill-invocations');
+const { inRepoTree } = require('./repo-tree');
 
 const EXACT = { exact: true };
 const REFUSED_PREFIX = 'dotclaude-devops-card-pregate';
@@ -81,10 +82,14 @@ const SQL_WRITE_RE = /\b(insert|update|delete|drop|alter|truncate|create)\b/i;
 const SHELL_WRITE_RE = /(\brm\s|\bgit\s+push\b|\bDELETE\s+FROM\b|\bDROP\s+TABLE\b)/i;
 
 /** The write-type tool a tool_use block counts as, or null. */
-function writeToolLabel(block) {
+function writeToolLabel(block, cwd) {
   const name = String(block.name || '');
   const input = block.input && typeof block.input === 'object' ? block.input : {};
-  if (FILE_WRITE_TOOLS.has(name)) return name;
+  if (FILE_WRITE_TOOLS.has(name)) {
+    // A file outside the repo's work tree (scratchpad, %TEMP%, ~/.claude) changes nothing the card ships.
+    const target = input.file_path || input.notebook_path;
+    return target && !inRepoTree(target, cwd) ? null : name;
+  }
   if ((name === 'Agent' || name === 'Task') && IMPLEMENTING_AGENT_RE.test(String(input.subagent_type || ''))) {
     return `${name} ${input.subagent_type}`;
   }
@@ -104,7 +109,7 @@ function writeToolLabel(block) {
  * @param {string} transcript raw JSONL
  * @returns {string[]}
  */
-function writeToolsThisTurn(transcript) {
+function writeToolsThisTurn(transcript, cwd) {
   if (typeof transcript !== 'string' || !transcript) return [];
   const seen = new Set();
   const lines = transcript.split('\n');
@@ -123,7 +128,7 @@ function writeToolsThisTurn(transcript) {
     if (!Array.isArray(content)) continue;
     for (const block of content) {
       if (!block || block.type !== 'tool_use') continue;
-      const label = writeToolLabel(block);
+      const label = writeToolLabel(block, entry.cwd || cwd);
       if (label) seen.add(label);
     }
   }
@@ -295,7 +300,7 @@ function check(input, { home, tmp } = {}) {
     const transcript = transcriptPath ? safeReadTranscript(transcriptPath, PENDING_TAIL_BYTES) : '';
     const openTasks = transcript ? openTaskNames(scanOpenTasksInFile(transcriptPath, PENDING_TAIL_BYTES)) : null;
     const verificationOwed = readVerificationOwed(sessionId);
-    const writeTools = writeToolsThisTurn(transcript);
+    const writeTools = writeToolsThisTurn(transcript, input && input.cwd);
     // #617: no transcript → whether the guide ran is unknown, so no nudge.
     const guideHandoff = transcript ? detectCardHandoff(input) : null;
     const guideInvoked = guideHandoff ? webGuideInvokedThisTurn(transcript) : false;
