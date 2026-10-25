@@ -45,10 +45,20 @@ exactly two options.
 
 | State | Label | Behavior |
 |-------|-------|----------|
-| **Miteinbeziehen** | "Miteinbeziehen" (default) | Claude considers this variant in the next iteration or implementation |
+| **Miteinbeziehen** | "Miteinbeziehen" | Claude considers this variant in the next iteration or implementation |
 | **Verwerfen** | "Verwerfen" | Claude discards this variant and excludes it from all further steps |
 
-- Default state for all variants: **Miteinbeziehen**
+- **The pre-selected state is Claude's recommendation** — the user may flip
+  any of them, nothing is locked:
+  - **Mutually exclusive alternatives** (only one can be built — one
+    architecture, one library, one strategy): exactly ONE variant is
+    pre-selected **Miteinbeziehen** — the one Claude recommends — and every
+    other one **Verwerfen**. All-included reads as "take them all", which
+    an exclusive choice cannot mean and which left users unsure what to do.
+  - **Independent topics or findings** (each can be taken on its own):
+    **Miteinbeziehen** by default; **Verwerfen** only where Claude actually
+    advises against one.
+  - A page may mix both: decide per `[data-decision]` group.
 - No "Nur diese" / "only" option — the user implicitly picks a single
   variant by setting all others to "Verwerfen"
 - No "Claude setzt um" / "Feedback" hint labels — the action-vs-feedback

@@ -184,10 +184,14 @@ Variant/section evaluation uses a **bi-state selector** (not tri-state):
 
 | State | Label | Behavior |
 |-------|-------|----------|
-| **Miteinbeziehen** | "Miteinbeziehen" (default) | Claude considers this variant/finding in the next iteration or implementation |
+| **Miteinbeziehen** | "Miteinbeziehen" | Claude considers this variant/finding in the next iteration or implementation |
 | **Verwerfen** | "Verwerfen" | Claude discards this variant/finding and excludes it from all further steps |
 
-- Default: **Miteinbeziehen** for every variant/section
+- The pre-selection is Claude's recommendation; the user can flip any of it:
+  **mutually exclusive alternatives** → exactly one **Miteinbeziehen** (the
+  recommended one), all others **Verwerfen**; **independent topics or
+  findings** → **Miteinbeziehen**, **Verwerfen** only where Claude advises
+  against one (`templates-decision.md` § Bi-State Variant Evaluation)
 - No "Nur diese"/"only" option — the user implicitly picks a single option by
   setting all other variants to "Verwerfen"
 - No "Claude setzt um" / "Feedback" hint labels — bi-state makes the intent
