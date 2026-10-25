@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.orphan.nudge
- * @version 0.1.0
+ * @version 0.2.0
  * @event SessionStart
  * @plugin devops
  * @description One-line nudge when the current repo has unlanded work or
@@ -11,6 +11,8 @@
  *   24 h (the line names the report age otherwise), for an unknown repo, or when nothing is at risk. The report entry
  *   A missing or >24 h old report also starts orphan-scan.js detached (the
  *   daily refresh). The report entry is matched by path prefix (worktrees live under the main checkout).
+ *   Also (hook telemetry, lib/hook-telemetry.js): one line when a hook was
+ *   killed/timed out in more than 5 % of its last 200 runs, at most once a day.
  *   Output: additionalContext asking Claude to show the line, e.g.
  *   "⚠ 3 ungelandete Branches / 2 Worktrees mit uncommitteter Arbeit → /auto-cleanup".
  */
@@ -88,6 +90,27 @@ function refreshIfStale(file) {
   } catch { /* the nudge is best effort */ }
 }
 
+const KILL_RATE_LIMIT = 0.05;
+const KILL_MIN_RUNS = 20;
+const NUDGE_INTERVAL_MS = 24 * 3_600_000;
+
+/** "⚠ stop.flow.guard killed in 8 % of its last 200 runs (hook timeout) — ..." or null. */
+function telemetryLine({ lang = 'de', file, now = Date.now(), stamp } = {}) {
+  const tel = require('../lib/hook-telemetry');
+  const target = file || tel.filePath();
+  if (!target) return null;
+  try { if (now - fs.statSync(stamp).mtimeMs < NUDGE_INTERVAL_MS) return null; } catch { /* never nudged */ }
+  const bad = tel.killRates(target, { now })
+    .filter((r) => r.runs >= KILL_MIN_RUNS && r.rate > KILL_RATE_LIMIT)
+    .sort((a, b) => b.rate - a.rate)[0];
+  if (!bad) return null;
+  try { fs.writeFileSync(stamp, String(now)); } catch { /* best effort */ }
+  const rate = Math.round(bad.rate * 100);
+  return lang === 'en'
+    ? `⚠ Hook ${bad.hook} was killed/timed out in ${rate} % of its last ${bad.runs} runs (overloaded machine or a slow hook)`
+    : `⚠ Hook ${bad.hook} wurde in ${rate} % der letzten ${bad.runs} Läufe abgebrochen/Timeout (überlastete Maschine oder langsamer Hook)`;
+}
+
 function main() {
   let input = '';
   process.stdin.setEncoding('utf8');
@@ -96,10 +119,19 @@ function main() {
     try {
       const hook = input.trim() ? JSON.parse(input) : {};
       refreshIfStale(reportPath());
-      const report = JSON.parse(fs.readFileSync(reportPath(), 'utf8'));
       let lang = 'de';
       try { lang = require('../lib/locale').getLocale(hook.session_id); } catch { /* default */ }
-      const line = buildNudge({ cwd: hook.cwd || process.cwd(), lang, report });
+      const lines = [];
+      try {
+        const report = JSON.parse(fs.readFileSync(reportPath(), 'utf8'));
+        const orphan = buildNudge({ cwd: hook.cwd || process.cwd(), lang, report });
+        if (orphan) lines.push(orphan);
+      } catch { /* no report or unreadable */ }
+      try {
+        const tl = telemetryLine({ lang, stamp: path.join(os.tmpdir(), 'dotclaude-hook-telemetry-nudged') });
+        if (tl) lines.push(tl);
+      } catch { /* telemetry is optional */ }
+      const line = lines.join('\n');
       if (line) {
         process.stdout.write(JSON.stringify({
           hookSpecificOutput: {
@@ -115,4 +147,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { buildNudge, reportPath };
+module.exports = { buildNudge, reportPath, telemetryLine };
