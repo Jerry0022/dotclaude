@@ -125,7 +125,7 @@ pin → `stable`. A missing `features.json` means nothing is registered.
 
 | Name | minChannel | Since | Status |
 |---|---|---|---|
-| `batch` | alpha | unreleased (after 0.303.0) | in development — Message Batches API for unattended read-only jobs on the API credit |
+| `batch` | alpha | 0.304.0 | Message Batches API for unattended read-only jobs on the API credit |
 
 Keep this table in sync with `features.json`.
 
