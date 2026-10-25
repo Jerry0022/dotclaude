@@ -163,7 +163,7 @@ The content area is reserved for the actual concept.
   every Bi-State variant/finding card MUST carry an adjacent
   `<textarea data-comment="$decisionId-note">` so the user can attach a
   free-form override (e.g. "only for X", "with variant Y") to the include/
-  discard choice. See `deep-knowledge/templates-persistence.md` § Comment Slot Injection
+  discard choice. See `deep-knowledge/templates-persistence-comments.md` § Comment Slot Injection
   for the HTML pattern, the `ensureCommentSlots()` JS safety net, and the
   rationale. Skipping this is the most common interactive-element regression
   — the user has nowhere to caveat their selection.

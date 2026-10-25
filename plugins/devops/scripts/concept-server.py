@@ -81,7 +81,7 @@ Replaces `python -m http.server` with a custom server that adds:
   a legacy base64-in-JSON body (memory-bound, capped at 32 MiB decoded) and a
   streaming raw-body upload (Content-Type != application/json, metadata in
   `X-Attach-Name`/`X-Attach-Mime` headers) for large files — see
-  bridge-server.md § Attachment HTTP contract for the exact shapes.
+  bridge-server-state.md § Attachment HTTP contract for the exact shapes.
 - GET /attachments/<sha256>.<ext> — Read a blob back. The identifier is shape-
   validated before it touches the filesystem. Only the four raster image
   types (png/jpeg/gif/webp) are EVER candidates for inline serving, and even
@@ -1305,7 +1305,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             # to POST /reset for the optimistic-concurrency check to work.
             # `processed_at` is the ISO timestamp of the last /reset and lets
             # the browser detect "Claude finished processing" without a JS
-            # eval round-trip — see templates-submit.md § Panel State Reset.
+            # eval round-trip — see templates-submit-journey.md § Panel State Reset.
             # `picked_up_at` and `phase` drive the progress-list rendering
             # in the submit panel (§ Submit Progress Steps).
             #
@@ -2194,7 +2194,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
         duplicate a blob or corrupt one.
 
         Two request shapes share this endpoint, dispatched on Content-Type
-        (see bridge-server.md § Attachment HTTP contract for the exact wire
+        (see bridge-server-state.md § Attachment HTTP contract for the exact wire
         format of each):
           - `application/json` (or no Content-Type) — the legacy
             base64-in-JSON body. Memory-bound; capped at

@@ -22,7 +22,7 @@ import { pendingInstruction, cleanupInstruction } from "../../scripts/concept-ti
 // used to inline is pinned against the script that inherited it.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SKILLDIR = path.join(__dirname, "..", "..", "skills", "auto-concept");
-const BRIDGE = fs.readFileSync(path.join(SKILLDIR, "deep-knowledge", "bridge-server.md"), "utf8");
+const BRIDGE = ["bridge-server.md", "bridge-server-state.md"].map((f) => fs.readFileSync(path.join(SKILLDIR, "deep-knowledge", f), "utf8")).join("");
 
 const PORT = 8883;
 const STATE_PATH = "C:/proj/.claude/concept-active.json";
