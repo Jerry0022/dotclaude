@@ -26,7 +26,7 @@
 /* Improved line inside an annotation bubble (rounds 2+): same look as the
    overview line; one ellipsised line collapsed, wrapped when open. */
 .anno-bubble-improved {
-  margin: 0 0 0.35rem; font-size: 0.8rem; line-height: 1.3;
+  margin: 0 0 0.35rem; font-size: 0.82rem; line-height: 1.3;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .anno-bubble[data-open="true"] .anno-bubble-improved { white-space: normal; }
