@@ -68,9 +68,9 @@ Never skip past a surprise to a different, older one.
 Derive the rule from the pair *what Claude did* → *what the user expected*,
 then confirm it in one line before routing: "Learning: `<rule>` — richtig?"
 The user's yes/edit is the learning. No surprise found within the recent
-prompts → ask once: "Was soll ich langfristig lernen?" `--from=<name>` → first
-`node "{PLUGIN_ROOT}/scripts/run-extras.js" from <name> --skill do-learn`;
-`known:true` → its `doc` § `section` decides the confirmation line.
+prompts → ask once: "Was soll ich langfristig lernen?" `--from=<name>` → before the
+confirm line run `node "{PLUGIN_ROOT}/scripts/run-extras.js" from <name> --skill do-learn`;
+`known:true` → its `doc` § `section` decides it (rc 126 / `known:false` → confirm).
 
 The learning ends up a self-contained rule. Vague input ("die Farben waren
 falsch") → one clarifying question. Capture the **why** when the user gives it,

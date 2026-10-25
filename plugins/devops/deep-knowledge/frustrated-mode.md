@@ -137,16 +137,22 @@ auto-agents names no feature: its Step 3 treats any `--via` as an approved plan 
 
 Reached when auto-concept runs with `--from=frustrated --plan=<id>@<short> --step=<n>` (a `concept` step); found via `run-extras.js from frustrated --skill auto-concept`.
 
+- **Verify first**, before the page is built: `node "{PLUGIN_ROOT}/scripts/run-extras.js" handoff --plan <id>@<short>`. Exit 1 / `ok:false` -> stop, print its `error`, build nothing; the concept never mints an approval for a plan that is not approved.
 - The page is built and iterated as always; iterate clicks change nothing outside the page.
-- **The implement click is a re-approval of a new plan version** (spec § 4.2, G7). Before § 5b's implement path: fold the submitted decisions into the plan (the implement step's `objects` and `decisions` from the concept), then record it as v+1 under the **same id** — `node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" plan record --id <id> --file <plan.json>` — and approve it at once with the hash that call printed (`plan approve --id <id> --hash <hash>`); the click is the user's explicit yes. Only then run § 5b with `--via=frustrated --plan=<id>@<new short> --step=<n+1>` added to its auto-agents args.
-- A plan with **no implement step after this concept step**: the click adds a step (material). Do not run § 5b; show "Neue Umsetzung — Plan v<n+1> freigeben?" in chat and wait for an interpretable yes, then record + approve as above.
+- **The implement click is a re-approval of a new plan version** (spec § 4.2, G7). Before § 5b's implement path:
+  1. Run the `handoff` check again (the 2-h expiry may have passed while the page was open); `ok:false` -> stop as above.
+  2. Take the current plan from `node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" plan status` (its `plan` object), fold the submitted decisions into it — the target implement step's `objects` and `decisions` come from the concept — and write it with the Write tool to `plan-v<next>.json` in the session scratchpad.
+  3. Record it as v+1 under the **same id** (`plan record --id <id> --file <that file>`) and approve it at once with the hash that call printed (`plan approve --id <id> --hash <hash>`); the click is the user's explicit yes.
+  4. Run § 5b with `--via=frustrated --plan=<id>@<new short> --step=<m>` added to its auto-agents args, where `<m>` is the **first `implement` step after step `<n>`** in the new version.
+- A plan with **no implement step after this concept step**: the click adds a step (material). Do not run § 5b; show "Neue Umsetzung — Plan v<next> freigeben?" in chat. On an interpretable yes: steps 1–3 above with the new `implement` step appended (its `objects`/`decisions` from the concept), then step 4 with that step's number. On a no: leave the plan as it is and say the concept's decisions were not built.
 - Close-out: ship stays a separate choice on the sheet (the only place the hand-off may ship).
 
 ## Hand-off in do-learn
 
 Reached when do-learn runs with `--from=frustrated --plan=<id>@<short> --step=<n>` (a `learn` step, payload = the rule text); found via `run-extras.js from frustrated --skill do-learn`.
 
-- **No "richtig?" line** (spec G8) when the payload carries the rule text unchanged from the approved plan: the plan approval already confirmed it. Any edit to the rule text -> confirm as usual.
+- **Verify first**: `node "{PLUGIN_ROOT}/scripts/run-extras.js" handoff --plan <id>@<short>`. Exit 1 / `ok:false` -> keep the normal "richtig?" confirmation (the plan proves nothing), and say the plan was not valid.
+- **No "richtig?" line** (spec G8) only when that check passed **and** the payload equals step `<n>`'s rule text in the approved plan (`plan status` → `steps`). Any difference -> confirm as usual.
 - Routing (Step 2), the target-container grep and the report run unchanged.
 
 ## do-run option

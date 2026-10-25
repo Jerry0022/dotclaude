@@ -231,7 +231,7 @@ prompts will carry, so it is visible before anything is spawned.
 on a direct invocation (no `--from`) and on `--from=do-run --mode=interactive`
 without `--rethink`/`--via`. Every other caller's own gate was the confirmation —
 do-run's questions answered with "Autonom", the concept's implement click, a
-do-run rethink handoff (`--rethink`: its pick was the go), a `--via` plan approval, `--autonomous` —
+do-run rethink handoff (`--rethink`: its pick was the go), a `--via`+`--plan=<ref>` that `node "{PLUGIN_ROOT}/scripts/run-extras.js" handoff --plan <ref>` confirms (rc 0; else ask as usual), `--autonomous` —
 and the user may be away, so show the plan and continue; the plan card is
 then the one agent overview of the run — Step 5 does not show it twice.
 Accept:
