@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.304.0] — 2026-10-25
+
+The API credit route now picks the model per task, shows where the money goes and trims long agent runs. Alpha features can now ship to alpha pins only: the first one is batch mode for large unattended jobs.
+
+Why: in October the credit made 131 calls for $197 of $200. Scout loops on Opus alone cost $148, while the in-session scout runs on Haiku. Model choice is the big lever (about −$83 to −132 a month); batch saves only about $10–15 a month. The Console's 99.8 % cache-read ratio leaves out cache writes, which are 32 % of the cost.
+
+### Added
+- **Channel feature flags.** `features.json` registers a feature with `minChannel` alpha or beta. `hooks/lib/features.js` offers it only to pins at or above it (alpha → alpha pins, beta → alpha and beta pins) and fails closed: an unknown name or a corrupt registry → locked, a missing pin → stable. Gated docs never reach `INDEX.md`, the SessionStart index or the prompt dispatch on a channel that does not match. `scripts/feature-flag.js` lists and checks the flags. Developer rules: `docs/dev/feature-flags.md` (not shipped).
+- **Batch mode (alpha only).** `scripts/batch-policy.js` decides with 5 rules: R1 flag on; R2 credit, key, no limit marker, month budget and the per-run cap; R3 unattended; R4 at least 5 requests and at least $1 saving; R5 deadline at least 30 min. `scripts/claude-api-batch.js` never throws. At the deadline it cancels, waits for `ended` and salvages every request that has a result; the rest goes back to the normal path. The month-end audit (`api-credit-audit.js`) asks the policy on its own on alpha (`--no-batch` skips it); stable never asks. Docs: `deep-knowledge/api-batch.md` (gated).
+- **Context editing.** API agent runs clear old tool results (`clear_tool_uses`: trigger 100k, clear at least 60k, keep 3). The switch is `apiCredit.contextEditing` (default on), with a fallback when the beta is rejected. The thresholds come from replaying 494 real read-only agent traces: −30 %, and only 20 of 494 runs got costlier. A 10k clear-at-least made 140 runs costlier (cache rewrites).
+
+### Changed
+- **Model per task.** Scout and research use Sonnet, `--locate` uses Haiku, audit and review use Opus.
+- **Price table and cost view.** Sonnet cache read is $0.10/MTok, and Haiku has its >100k tier, judged per prompt. `--usage` shows $ per cost type, the top 3 calls, a warning when a call reads more than 10M cache tokens, and the context-editing totals.
+- **README: prompt cache TTL.** The section is now written as instructions. 1h only pays off in overage: the main chat at 1h is +25–57 % net against 5m and already the default within the plan. Subagents stay at 5m (1h would be −4…−11 % net).
+
+### Fixed
+- **Batch and audit review findings.**
+  - A cancelled batch no longer pays twice for requests that had already finished.
+  - The API key goes only to `api.anthropic.com`.
+  - `--max-usd` now caps the batch path too.
+  - More than 200 unfinished audit files are no longer cut silently.
+  - `gen-dk-index` fails closed on a corrupt `features.json`.
+  - Summed usage is priced per request.
+
+Not done yet: the live saving of context editing is unmeasured. The real API test stayed under 100k, so no clear happened. A local scheduled check measures it on 2026-10-30.
+
+Discarded: an advisor-tool A/B (the docs say it never lowered cost), a separate batch agent (batches cannot run client tool loops), a labs plugin and strip-on-promote.
+
 ## [0.303.2] — 2026-10-25
 
 Closes the three known limits of 0.303.0 on the auto-concept page.

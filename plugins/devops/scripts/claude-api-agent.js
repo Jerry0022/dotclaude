@@ -21,7 +21,7 @@
  *   shell — code-writing and test-running work stays in the session.
  *
  * Usage:
- *   claude-api-agent.js [--model M] [--effort low|medium|high|xhigh]
+ *   claude-api-agent.js [--model M] [--tag T | --locate] [--effort low|medium|high|xhigh]
  *                       [--root DIR] [--web] [--max-turns N] [--max-usd X] "<task>" | -
  *
  * Exit codes: 0 final answer on stdout · 75 credit exhausted (stored) ·
@@ -35,6 +35,23 @@ const safe = require('./claude-api-safe');
 
 const { RC } = safe;
 const DEFAULT_MODEL = 'claude-opus-5-5';
+// Default model follows the task (tag): pure locating is Haiku work, scouting
+// and web research Sonnet; audits, reviews and unknown tags stay on Opus.
+const MODEL_BY_TAG = { locate: 'claude-haiku-5-5', scout: 'claude-sonnet-5-5', research: 'claude-sonnet-5-5' };
+// Context editing: clears old tool results once the prompt passes 100k tokens,
+// but only if that frees >= 60k — replayed on 494 real traces this saved ~30 %
+// (only 20 runs dearer); a 10k minimum made 140 runs dearer, as every clear
+// forces a cache rewrite.
+const CONTEXT_BETA = 'context-management-2025-06-27';
+const CONTEXT_MANAGEMENT = Object.freeze({
+  edits: [{
+    type: 'clear_tool_uses_20250919',
+    trigger: { type: 'input_tokens', value: 100000 },
+    keep: { type: 'tool_uses', value: 3 },
+    clear_at_least: { type: 'input_tokens', value: 60000 },
+  }],
+});
+const CONTEXT_REJECT_RE = /context[_ -]?management|clear_tool_uses|anthropic-beta|beta/i;
 const DEFAULT_MAX_TURNS = 30;
 const DEFAULT_MAX_USD = 2;
 const DEFAULT_TIMEOUT_S = 900; // whole run
@@ -231,7 +248,7 @@ function runTool(root, name, input, deadline) {
 // ---------------------------------------------------------------------------
 
 function parseArgs(argv) {
-  const o = { model: null, effort: null, root: null, web: false, maxTurns: null, maxUsd: null, task: null, tag: null };
+  const o = { model: null, effort: null, root: null, web: false, maxTurns: null, maxUsd: null, task: null, tag: null, locate: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--model') o.model = argv[++i];
@@ -240,6 +257,7 @@ function parseArgs(argv) {
     else if (a === '--web') o.web = true;
     else if (a === '--max-turns') o.maxTurns = Number(argv[++i]);
     else if (a === '--max-usd') o.maxUsd = Number(argv[++i]);
+    else if (a === '--locate') o.locate = true;
     else if (a === '--tag') o.tag = argv[++i];
     else if (o.task === null) o.task = a;
   }
@@ -277,7 +295,10 @@ async function run(argv, {
   let root;
   try { root = fs.realpathSync(path.resolve(cwd, o.root || '.')); } catch { err(`claude-api-agent: root not found: ${o.root}\n`); return RC.ERROR; }
 
-  const model = o.model || env.CLAUDE_API_AGENT_MODEL || DEFAULT_MODEL;
+  const tag = o.tag || (o.locate ? 'locate' : (o.web ? 'research' : 'scout'));
+  const model = o.model || env.CLAUDE_API_AGENT_MODEL || MODEL_BY_TAG[tag] || DEFAULT_MODEL;
+  const ctxWanted = switches.contextEditing !== false && env.DEVOPS_API_CONTEXT_EDITING !== '0';
+  let contextEditing = ctxWanted;
   const maxTurns = Number.isInteger(o.maxTurns) && o.maxTurns > 0 ? o.maxTurns : DEFAULT_MAX_TURNS;
   const maxUsd = o.maxUsd > 0 ? o.maxUsd : DEFAULT_MAX_USD;
   const deadline = now + (Number(env.CLAUDE_API_AGENT_TIMEOUT) > 0 ? Number(env.CLAUDE_API_AGENT_TIMEOUT) : DEFAULT_TIMEOUT_S) * 1000;
@@ -286,13 +307,15 @@ async function run(argv, {
   const messages = [{ role: 'user', content: `Project root: ${root}\n\nTask:\n${task}` }];
   let spent = 0;
   let total = {};
+  let parts = {};
+  const ctx = { clears: 0, clearedTokens: 0 };
   let turns = 0;
   // Every exit after the first request is logged once — answer or not, the credit was spent.
   let rc = RC.ERROR;
   try {
     rc = await loop();
   } finally {
-    if (turns) safe.logUsage({ home, tool: 'agent', tag: o.tag || (o.web ? 'research' : 'scout'), cwd: root, model, usage: total, usd: spent, rc, turns });
+    if (turns) safe.logUsage({ home, tool: 'agent', tag, cwd: root, model, usage: total, usd: spent, rc, turns, parts, ...(ctxWanted ? { ctx } : {}) });
   }
   return rc;
 
@@ -309,7 +332,21 @@ async function run(argv, {
         cache_control: { type: 'ephemeral' }, // caches the growing prefix turn by turn
       };
       if (o.effort) body.output_config = { effort: o.effort };
-      const r = await safe.postMessages({ key: keyInfo.key, body, fetchImpl, timeoutMs: Math.min(left, REQUEST_TIMEOUT_S * 1000) });
+      const send = () => {
+        if (contextEditing) body.context_management = CONTEXT_MANAGEMENT;
+        else delete body.context_management;
+        return safe.postMessages({
+          key: keyInfo.key, body, fetchImpl, timeoutMs: Math.min(left, REQUEST_TIMEOUT_S * 1000),
+          headers: contextEditing ? { 'anthropic-beta': CONTEXT_BETA } : {},
+        });
+      };
+      let r = await send();
+      // The API may reject the beta (or the model may not support it): retry once
+      // without context editing and stay without it for the rest of the run.
+      if (contextEditing && r.rc === RC.ERROR && CONTEXT_REJECT_RE.test(r.message || '')) {
+        contextEditing = false;
+        r = await send();
+      }
       if (r.rc === RC.LIMIT) {
         const stored = safe.storeLimit({ home, reason: r.message });
         err(`claude-api-agent: API credit exhausted (${r.message}) — skipped until ${stored}.\n`);
@@ -320,6 +357,8 @@ async function run(argv, {
       const res = r.body;
       turns = turn;
       spent += costOf(model, res.usage);
+      parts = safe.addParts(parts, safe.costParts(model, res.usage));
+      noteContextEdits(res.context_management);
       total = safe.addUsage(total, res.usage);
       messages.push({ role: 'assistant', content: res.content || [] });
 
@@ -348,6 +387,15 @@ async function run(argv, {
     return RC.ERROR;
   }
 
+  function noteContextEdits(cm) {
+    const edits = cm && Array.isArray(cm.applied_edits) ? cm.applied_edits : [];
+    for (const e of edits) {
+      if (!e || typeof e !== 'object') continue;
+      ctx.clears += 1;
+      if (Number.isFinite(e.cleared_input_tokens)) ctx.clearedTokens += e.cleared_input_tokens;
+    }
+  }
+
   function finish(answer, cutShort) {
     if (!answer.trim()) { err(`claude-api-agent: no answer${cutShort ? ` (${cutShort})` : ''}\n`); return RC.ERROR; }
     out(answer.endsWith('\n') ? answer : `${answer}\n`);
@@ -356,7 +404,7 @@ async function run(argv, {
   }
 }
 
-module.exports = { RC, CLIENT_TOOLS, PRICES, webTools, costOf, runTool, parseArgs, run };
+module.exports = { SECRET_FILE, walk, MODEL_BY_TAG, CONTEXT_BETA, CONTEXT_MANAGEMENT, RC, CLIENT_TOOLS, PRICES, webTools, costOf, runTool, parseArgs, run };
 
 if (require.main === module) {
   run(process.argv.slice(2)).then((rc) => { process.exitCode = rc; });

@@ -35,6 +35,23 @@ Run them from the project's directory (or pass `--cwd <dir>`). The script
 validates key and value and refuses anything else — never edit the JSON by
 hand. Confirm the change in one line with the new effective value.
 
+## Channel features
+
+Every release ships to all channels, but some features are marked for a
+channel: an **alpha** feature is offered only when the plugin's marketplace is
+pinned to `alpha`, a **beta** feature to `alpha` and `beta`. A `stable` pin
+(the default — also when the pin is missing or unreadable) gets none of them:
+their docs are not loaded and their scripts exit 126. The pin lives in
+`~/.claude/plugins/.channels.json` (`{"<marketplace>": "alpha"|"beta"|"stable"}`).
+Which features exist and which are on for this machine:
+
+```bash
+node "{PLUGIN_ROOT}/scripts/feature-flag.js" list          # JSON: channel + each feature's allowed flag
+node "{PLUGIN_ROOT}/scripts/feature-flag.js" check <name>  # exit 0 allowed, 126 not on this channel
+```
+
+Never offer or describe a feature that `list` reports as not allowed.
+
 ## Settings
 
 ### `cleanup` — branch/worktree hygiene after a ship
@@ -123,6 +140,7 @@ the committed ship extension (`deployParity:` block in the project's
 |---|---|---|
 | `enabled` | `false` | Read-only side work (sweeps, research, reviews, audits) runs on the Claude API credit of the linked Console org first — `scripts/claude-api-agent.js`, `claude-api-safe.js` when Codex is skipped, `api-credit-audit.js`, evals from the user's terminal — with the plan as the fallback. Claude Code itself always stays on the plan. |
 | `webGuide` | `false` | With `enabled` on and no key stored, offer the one-time auto-guide through the Console (workspace, spend limit, key). |
+| `contextEditing` | `true` | The API agent loop clears old tool results once the prompt passes 100k tokens (keeps the last 3, frees at least 60k) to cut cache cost. Env `DEVOPS_API_CONTEXT_EDITING=0` disables. |
 
 "Nutze mein API-Guthaben" → the two questions and the `--global` writes in
 `deep-knowledge/api-credits.md` § Activation — never set these silently.
