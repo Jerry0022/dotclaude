@@ -4,8 +4,6 @@ node_modules/
 # Runtime & cache
 __pycache__/
 *.stackdump
-# graphify knowledge-graph output (generated, per-project, not distributable)
-graphify-out/
 
 # >>> secrets — see plugins/devops/deep-knowledge/project-setup.md >>>
 .env

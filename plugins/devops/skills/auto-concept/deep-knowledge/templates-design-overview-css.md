@@ -48,65 +48,75 @@ html:not([data-template="design"]) .upin-hint { display: none !important; }
 body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-ov-stage {
   position: absolute; left: 0; right: 0; top: var(--dz-ov-top); bottom: var(--dz-ov-bottom);
-  container-type: size; overflow: hidden;
+  /* Clip sideways only (the neighbours run off the edges); vertically the
+     centre tile's hover glow must spread freely. */
+  container-type: size; overflow-x: clip; overflow-y: visible;
 }
 .design-ov-track { position: absolute; inset: 0; }
 .design-ov-slide {
   --dz-color: var(--accent-color);
-  --dz-ov-w: min(78cqw, 160cqh);
+  /* Height-bound: 2 x --dz-ov-glow stays free above and below the tile, so
+     the hover glow (44px blur + 6px spread) is never cut vertically. */
+  --dz-ov-glow: 3rem;
+  --dz-ov-w: min(78cqw, calc((100cqh - 2 * var(--dz-ov-glow)) * 1.6));
   position: absolute; top: 50%; left: 50%; box-sizing: border-box;
   width: var(--dz-ov-w); aspect-ratio: 16 / 10;
-  /* Neighbours: 74 %, cut off by the stage edge, dimmed and desaturated; a
-     hover grows them ~8 % and lays a glowing arrow over them. */
+  /* Neighbours: 74 %, cut off by the stage edge, plain bordered tiles (no
+     preview, just the variant icon beside the chevron); a hover grows them
+     ~8 % and fades in one tall glowing chevron. */
   transform: translate(-50%, -50%) translateX(calc(var(--dz-off, 0) * (var(--dz-ov-w) * 0.86 + 1.5rem))) scale(var(--dz-s, 0.74));
-  opacity: 0.32; filter: saturate(0.55); cursor: pointer;
+  opacity: 0.5; filter: saturate(0.7); cursor: pointer;
   transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease, filter 0.25s ease;
 }
 .design-ov-slide[data-pos="cur"] { --dz-s: 1; transform: translate(-50%, -50%); opacity: 1; filter: none; cursor: default; z-index: 1; }
-.design-ov-slide[data-pos="prev"]:hover, .design-ov-slide[data-pos="next"]:hover { opacity: 0.7; --dz-s: 0.8; }
-/* No ‹ › buttons: the side card itself is the control. */
+.design-ov-slide[data-pos="prev"]:hover, .design-ov-slide[data-pos="next"]:hover { opacity: 0.85; --dz-s: 0.8; }
+/* No ‹ › buttons: the side card itself is the control. On hover one tall,
+   thin chevron fades in — no circle, just the glyph and its glow — in the
+   tile's visible strip, pointing at the variant icon (.design-ov-side). */
 .design-ov-slide[data-pos="prev"]::after, .design-ov-slide[data-pos="next"]::after {
-  content: "‹"; position: absolute; top: 50%; z-index: 3; width: 64px; height: 64px; margin-top: -32px;
-  display: grid; place-items: center; border-radius: 50%; pointer-events: none;
-  font-size: 2.4rem; line-height: 1; color: #fff; background: color-mix(in srgb, var(--dz-color) 55%, #0d1117);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55), 0 0 34px 8px var(--dz-color);
-  opacity: 0; transform: scale(0.85); transition: opacity 0.2s ease, transform 0.2s ease;
+  content: ""; position: absolute; top: 50%; z-index: 3; pointer-events: none;
+  width: 2.6rem; height: min(46%, 13rem); transform: translate(0, -50%) scaleY(0.8);
+  background: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 80' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 3L5 40l14 37'/%3E%3C/svg%3E");
+  filter: drop-shadow(0 0 6px var(--dz-color)) drop-shadow(0 0 18px var(--dz-color));
+  opacity: 0; transition: opacity 0.25s ease, transform 0.25s ease;
 }
-.design-ov-slide[data-pos="prev"]::after { right: 14%; }
-.design-ov-slide[data-pos="next"]::after { left: 14%; content: "›"; }
-.design-ov-slide[data-pos="prev"]:hover::after, .design-ov-slide[data-pos="next"]:hover::after { opacity: 1; transform: none; }
+.design-ov-slide[data-pos="prev"]::after { right: 7%; }
+.design-ov-slide[data-pos="next"]::after { left: 7%; transform: translate(0, -50%) scaleY(0.8) scaleX(-1); }
+.design-ov-slide[data-pos="prev"]:hover::after { opacity: 1; transform: translate(0, -50%); }
+.design-ov-slide[data-pos="next"]:hover::after { opacity: 1; transform: translate(0, -50%) scaleX(-1); }
 .design-ov-slide[data-pos="far"] { visibility: hidden; opacity: 0; }
 .design-ov-preview {
   position: absolute; inset: 0; display: block; overflow: hidden; border-radius: 22px;
   background: var(--bg-secondary, var(--panel-bg, #0d1117));
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5), 0 0 0 2px var(--dz-color);
+  transition: box-shadow 0.25s ease;
 }
 .design-ov-slide[data-pos="cur"] .design-ov-preview { cursor: pointer; }
+/* Hover / focus on the centre tile: a glow, never a scale. */
+.design-ov-slide[data-pos="cur"] .design-ov-preview:hover,
+.design-ov-slide[data-pos="cur"] .design-ov-preview:focus-visible {
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5), 0 0 0 2px var(--dz-color),
+              0 0 44px 6px color-mix(in srgb, var(--dz-color) 55%, transparent);
+}
+/* Neighbours are plain bordered tiles: no cut-off preview, no questions
+   list — the icon beside the chevron names them. */
+.design-ov-slide:is([data-pos="prev"], [data-pos="next"]) .design-ov-preview,
+.design-ov-slide:is([data-pos="prev"], [data-pos="next"]) .design-ov-qcard {
+  background: color-mix(in srgb, var(--dz-color) 8%, var(--panel-bg, #0d1117));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dz-color) 55%, var(--border-color, #30363d));
+}
+.design-ov-slide:is([data-pos="prev"], [data-pos="next"]) .design-ov-scale,
+.design-ov-slide:is([data-pos="prev"], [data-pos="next"]) .design-ov-qcard > * { visibility: hidden; }
 .design-ov-preview:focus-visible { outline: 3px solid var(--accent-color); outline-offset: 4px; }
 /* The scaled clone: laid out at a fixed 1000px virtual width, scaled to the box by
    fitPreviews() (--dz-ov-scale). pointer-events none + inert keep
    the mock's own controls out of reach — the preview is one still image. */
 .design-ov-scale {
   position: absolute; top: 0; left: 0; width: 1000px;
-  transform: translateX(var(--dz-ov-x, 0px)) scale(var(--dz-ov-scale, 0.28)); transform-origin: 0 0;
+  transform: translate(var(--dz-ov-x, 0px), var(--dz-ov-y, 0px)) scale(var(--dz-ov-scale, 0.28)); transform-origin: 0 0;
   pointer-events: none; padding: 1.5rem; box-sizing: border-box;
 }
 .design-ov-scale > * { width: 100%; }
-/* "Open ↗" — only on hover / keyboard focus of the centre preview. */
-.design-ov-open {
-  position: absolute; right: 1rem; bottom: 1rem; z-index: 1; display: inline-flex; align-items: center; gap: 0.5rem;
-  padding: 0.35rem 0.85rem; border-radius: 999px; font-size: 0.9rem; font-weight: 700;
-  background: color-mix(in srgb, var(--panel-bg, #0d1117) 88%, transparent);
-  color: var(--text, #e6edf3); border: 1px solid var(--dz-color);
-  opacity: 0; transition: opacity 0.15s ease;
-}
-.design-ov-slide[data-anchor="br"] .design-ov-open { right: auto; left: 1rem; }
-.design-ov-open-key { opacity: 0; transition: opacity 0.15s ease 0s; margin: 0; }
-.design-ov-open:hover .design-ov-open-key { opacity: 1; transition-delay: 0.8s; }
-body.hk-alt .design-ov-slide[data-pos="cur"] .design-ov-open,
-body.hk-alt .design-ov-slide[data-pos="cur"] .design-ov-open-key { opacity: 1; transition-delay: 0s; }
-.design-ov-slide[data-pos="cur"]:hover .design-ov-open,
-.design-ov-slide[data-pos="cur"] .design-ov-preview:focus-visible .design-ov-open { opacity: 1; }
 /* ── Overlay: kicker, motto, three traits — authored anchor and tint ── */
 .design-ov-overlay {
   position: absolute; z-index: 2; box-sizing: border-box; max-width: 40%;
@@ -115,6 +125,8 @@ body.hk-alt .design-ov-slide[data-pos="cur"] .design-ov-open-key { opacity: 1; t
   backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
   transition: opacity 0.2s ease, visibility 0.2s ease;
 }
+/* At rest the box lets the design show through; hover / focus make it whole. */
+.design-ov-slide[data-pos="cur"] .design-ov-overlay:not(:hover):not(:focus-within) { opacity: 0.5; }
 .design-ov-overlay[data-tone="warm"] { background: var(--dz-ov-warm); border-color: var(--dz-ov-warm-line); }
 .design-ov-overlay[data-anchor="tl"] { top: 1.4rem; left: 1.4rem; }
 .design-ov-overlay[data-anchor="tr"] { top: 1.4rem; right: 1.4rem; }
@@ -126,9 +138,8 @@ body.hk-alt .design-ov-slide[data-pos="cur"] .design-ov-open-key { opacity: 1; t
 .design-ov[data-overlay="off"] .design-ov-overlay { opacity: 0; visibility: hidden; }
 .design-ov-kicker {
   display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;
-  font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.9;
+  font-size: 0.85rem; font-weight: 600; opacity: 0.92;
 }
-.design-ov-num::before, .design-ov-name::before { content: "·"; margin-right: 0.5rem; opacity: 0.7; }
 .design-ov-motto { margin: 0 0 0.6rem; font-size: clamp(1.1rem, 1.5vw, 1.65rem); line-height: 1.15; font-weight: 800; letter-spacing: -0.01em; }
 .design-ov-traits { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.35rem; font-size: clamp(0.85rem, 0.95vw, 1rem); }
 .design-ov-traits li { display: flex; gap: 0.6rem; align-items: baseline; }
@@ -152,7 +163,7 @@ body.hk-alt .design-ov-slide[data-pos="cur"] .design-ov-open-key { opacity: 1; t
 
 /* ── Round changes: overlay on the preview, dots on menu entries ── */
 .design-ov, .design-header, .design-quick, .screen-nav { --dz-new-color: var(--success-color, #3fb950); }
-/* One chip in the top-3 info box: "Neugedacht" / "Verbessert". */
+/* "Neugedacht" chip of a NEW variant; a changed one gets .design-ov-improved. */
 .design-ov-change {
   display: inline-flex; align-items: center; gap: 0.4rem; margin: 0 0 0.55rem; box-sizing: border-box;
   padding: 0.2rem 0.65rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.02em;
@@ -169,7 +180,7 @@ body.hk-alt .design-ov-slide[data-pos="cur"] .design-ov-open-key { opacity: 1; t
 .design-ov[data-enter="true"] .design-ov-slide:not([data-pos="cur"]) .design-ov-preview { animation: dz-ov-fade 0.45s ease 0.7s both; }
 @media (prefers-reduced-motion: reduce) {
   .design-ov[data-enter="true"] .design-ov-preview, .design-ov[data-enter="true"] .design-ov-overlay { animation: none !important; }
-  .design-ov-slide, .design-ov-slide::after, .design-ov-open-key { transition: none !important; }
+  .design-ov-slide, .design-ov-slide::after, .design-ov-preview { transition: none !important; }
 }
 .dz-new-dot {
   display: inline-block; flex: none; width: 7px; height: 7px; margin-left: 0.4rem;
@@ -189,108 +200,40 @@ body.hk-alt .design-ov-slide[data-pos="cur"] .design-ov-open-key { opacity: 1; t
 .dz-icon[data-size="s"] { width: 18px; height: 18px; border-radius: 5px; font-size: 10px; }
 .dz-icon[data-kind="plain"] { background: transparent; color: var(--text-secondary, #8b949e); }
 
-/* ── Header — one compact row, never grows ── */
+/* ── Header — the eye only, no box ──
+   No breadcrumb, no title, no back item: the corner holds the annotation eye
+   and nothing else, bare and quiet until it is pointed at. The way back to
+   the overview is the ☰ menu's "Übersicht" entry. */
 .design-header {
   position: fixed; top: 1rem; left: 1rem; z-index: 99;
-  flex-direction: column; box-sizing: border-box;
-  --dz-head-cap: min(calc(33vw - 1.5rem), 30rem);
-  width: max-content; max-width: var(--dz-head-cap);
-  padding: 0.4rem 0.8rem 0.4rem 0.9rem; border-radius: 14px;
-  /* Island (variant C): filled inside, soft outer glow, accent edge as an
-     inset — no frame, no light-blue border. */
-  background: color-mix(in srgb, var(--panel-bg, #161b22) 94%, #fff);
-  border: 0;
-  box-shadow: inset 3px 0 0 var(--dz-color, var(--accent-color)), 0 0 22px color-mix(in srgb, var(--dz-color, var(--accent-color)) 18%, transparent), 0 4px 14px rgba(0, 0, 0, 0.35);
-  color: var(--text-secondary, #8b949e); font-size: 0.85rem;
-  transition: box-shadow 0.2s ease;
+  flex-direction: column; box-sizing: border-box; width: max-content;
+  padding: 0; border: 0; background: transparent; box-shadow: none;
 }
-.design-header:hover, .design-header:focus-within { box-shadow: inset 3px 0 0 var(--dz-color, var(--accent-color)), 0 0 30px color-mix(in srgb, var(--dz-color, var(--accent-color)) 30%, transparent), 0 4px 14px rgba(0, 0, 0, 0.35); }
-@keyframes chromeGlowIsland {
-  50% { box-shadow: inset 3px 0 0 var(--dz-color, var(--accent-color)), 0 0 42px color-mix(in srgb, var(--dz-color, var(--accent-color)) 45%, transparent), 0 4px 14px rgba(0, 0, 0, 0.35); }
+.design-header-main { display: flex; align-items: center; min-height: 28px; }
+/* The eye moves in here (wireDesignOverview) — same control, inline size.
+   inset: auto — the fixed pill's top: 3.75rem / left: 1rem otherwise apply as
+   RELATIVE offsets and push the eye 60px below the header. */
+.design-header-eye { display: inline-flex; flex: none; }
+.design-header-eye:empty { display: none; }
+.design-header .anno-toggle-fab {
+  position: relative; inset: auto; z-index: auto; flex: none; width: 28px; height: 28px;
+  border-width: 1px; border-color: transparent; background: transparent; box-shadow: none;
+  opacity: 0.45; transition: opacity 0.16s ease, border-color 0.16s ease, background 0.16s ease;
 }
-body.chrome-glow .design-header { animation: chromeGlowIsland 1.4s ease-in-out 2; }
-@media (prefers-reduced-motion: reduce) { body.chrome-glow .design-header { animation: none; } }
-.design-header-main { display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; min-width: 0; min-height: 28px; }
-/* The name carries its OWN cap: 17rem ≈ everything else on the row (back,
-   pill chrome, ★, eye, gaps, padding — the 📍 left the header), so the row
-   never exceeds the header's cap; the full name and motto live in its
-   tooltip. The 4.5rem floor keeps a short name like "Übersicht" whole. */
-.design-header-name {
-  color: var(--text, #e6edf3); font-weight: 600; min-width: 0;
-  max-width: max(4.5rem, min(12rem, calc(var(--dz-head-cap) - 17rem)));
-  overflow: hidden; text-overflow: ellipsis;
+.design-header .anno-toggle-fab:hover, .design-header .anno-toggle-fab:focus-visible {
+  opacity: 1; border-color: var(--border-color, #30363d);
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 85%, transparent);
 }
-.design-header-title {
-  display: inline-flex; align-items: center; gap: 0.4rem; min-width: 0;
-  padding: 0.15rem 0.65rem 0.15rem 0.2rem; border-radius: 999px;
-  background: color-mix(in srgb, var(--border-color, #30363d) 80%, transparent);
-  box-shadow: inset 0 -2px 0 var(--dz-color, var(--accent-color));
-}
-.design-header-icon:empty { display: none; }
-.design-header-title:has(.design-header-icon:empty) { padding-left: 0.65rem; }
-.design-header-star {
-  flex: none; border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer;
-  color: var(--warning-color, #d29922); white-space: nowrap;
-}
-.design-header-star[hidden] { display: none; }
-.design-header-star[data-kind="label"]:hover { text-decoration: underline; }
-/* Same round shape as the eye and the pin beside it, in the favourite colour. */
-.design-header-star[data-kind="icon"] {
-  width: 24px; height: 24px; border-radius: 50%; line-height: 1; font-size: 0.85rem;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--warning-color, #d29922);
-  background: var(--anno-bubble-bg, var(--panel-bg, #161b22));
-  transition: transform 0.15s;
-}
-.design-header-star[data-kind="icon"]:hover:not(:disabled) { transform: scale(1.08); }
-.design-header-star[data-kind="icon"][aria-pressed="true"] { background: var(--warning-color, #d29922); color: var(--panel-bg, #0d1117); }
-.design-header-star:disabled { opacity: 0.55; cursor: default; }
-.design-header-back {
-  display: inline-flex; align-items: center; gap: 0.3rem; flex: none;
-  border: 0; background: transparent; color: var(--text-secondary, #8b949e);
-  padding: 0.15rem 0.35rem; border-radius: 6px; font: inherit; font-size: 0.8rem; cursor: pointer;
-}
-.design-header-back:hover { color: var(--text, #e6edf3); background: color-mix(in srgb, var(--accent-color) 12%, transparent); }
-.design-header-back svg { width: 14px; height: 14px; display: block; flex: none; }
-.design-header-sep { width: 1px; height: 18px; background: var(--border-color, #30363d); flex: none; }
-/* The eye moves in here (wireDesignOverview) — same control, inline size. */
-.design-header .anno-toggle-fab { position: relative; flex: none; width: 24px; height: 24px; border-width: 1px; box-shadow: none; }
-.design-header .anno-toggle-fab svg { width: 13px; height: 13px; }
-.design-header-name[data-tip] { cursor: help; }
-/* Same shape as the header eye (.design-header .anno-toggle-fab). */
-.design-header-pin {
-  flex: none; width: 24px; height: 24px; padding: 0; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--anno-accent, var(--accent-color, #58a6ff));
-  background: var(--anno-bubble-bg, var(--panel-bg, #161b22));
-  color: var(--anno-accent, var(--accent-color, #58a6ff));
-  cursor: pointer; transition: transform 0.15s;
-}
-.design-header-pin:hover { transform: scale(1.08); }
-.design-header-pin[hidden] { display: none; }
-.design-header-pin svg { width: 13px; height: 13px; display: block; }
-.design-header-pin[aria-pressed="true"] { border-color: #f78166; background: #f78166; color: #fff; }
-/* Overlay toggle (overview only) — same round shape as the eye and the pin. */
-.design-header-overlay {
-  flex: none; width: 24px; height: 24px; padding: 0; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--border-color, #30363d);
-  background: var(--anno-bubble-bg, var(--panel-bg, #161b22));
-  color: var(--text-secondary, #8b949e); cursor: pointer; transition: transform 0.15s;
-}
-.design-header-overlay:hover { transform: scale(1.08); }
-.design-header-overlay[hidden] { display: none; }
-.design-header-overlay svg { width: 13px; height: 13px; display: block; }
-.design-header-overlay[aria-pressed="true"] { border-color: var(--accent-color, #58a6ff); color: var(--accent-color, #58a6ff); }
+.design-header .anno-toggle-fab svg { width: 15px; height: 15px; }
 
 /* ── Quick nav — top centre, one row ── */
 .design-quick {
   position: fixed; top: 0.75rem; left: 50%; transform: translateX(-50%); z-index: 95;
   flex-direction: column; align-items: center;
-  /* The band between the header (left) and the ☰ FAB (right). First-paint
-     value from the header's cap; fitQuickBand() replaces it with the
-     measured band on every render, so the two never overlap. */
-  max-width: calc(100vw - 2 * (1rem + min(33vw - 1.5rem, 30rem) + 0.75rem));
+  /* The band between the eye (left) and the ☰ FAB (right). First-paint
+     value; fitQuickBand() replaces it with the measured band on every
+     render, so the two never overlap. */
+  max-width: calc(100vw - 2 * (1rem + 4rem + 0.75rem));
   opacity: 0.8; transition: opacity 0.16s ease;
 }
 .design-quick:hover, .design-quick:focus-within { opacity: 1; z-index: 98; }
@@ -357,15 +300,17 @@ body.chrome-glow .design-header { animation: chromeGlowIsland 1.4s ease-in-out 2
 .design-quick-vitem { border-radius: 7px; }
 .design-quick-vitem[data-active="true"] { color: var(--text, #e6edf3); font-weight: 700; background: color-mix(in srgb, var(--dz-color, var(--accent-color)) 25%, transparent); }
 /* Questions: the last segment; their list hangs off it as one tab. */
-.design-quick-qwrap { --q: var(--warning-color, #d29922); position: relative; display: inline-flex; flex: none; margin-left: 2px; }
+/* Questions own a colour token, distinct from the dock's tips. */
+.design-quick-qwrap { --q: var(--question-color, var(--warning-color, #d29922)); position: relative; display: inline-flex; flex: none; margin-left: 2px; }
 .design-quick-qwrap:has(.design-quick-q[data-state="done"]) { --q: var(--success-color, #3fb950); }
 .design-quick-q {
   position: relative; display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer;
   padding: 0.15rem 0.5rem; border-radius: 999px; border: 1px solid var(--q);
   background: color-mix(in srgb, var(--q) 14%, transparent); color: var(--q);
   font: inherit; font-size: 0.78rem; font-weight: 700; white-space: nowrap;
-  transition: border-radius 0.15s ease, background 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
+.design-quick-q:hover { background: color-mix(in srgb, var(--q) 28%, transparent); box-shadow: 0 0 12px color-mix(in srgb, var(--q) 35%, transparent); }
 .design-quick-q[data-active="true"] { background: var(--q); color: var(--panel-bg, #0d1117); }
 .design-quick-qmark { font-weight: 900; }
 .design-quick-badge {
@@ -375,18 +320,10 @@ body.chrome-glow .design-header { animation: chromeGlowIsland 1.4s ease-in-out 2
 }
 .design-quick-q[data-active="true"] .design-quick-badge { background: var(--panel-bg, #0d1117); color: var(--q); }
 .design-quick-qok { font-weight: 900; }
-.design-quick-qwrap:hover .design-quick-q,
-.design-quick-qwrap[data-open="true"] .design-quick-q {
-  z-index: 4; border-radius: 12px 12px 0 0; border-bottom-color: transparent;
-  background: var(--panel-bg, #161b22); color: var(--q);
-}
-/* Covers the list's top border under the button: button and list read as
-   one surface, the tab growing out of the segment. */
-.design-quick-qwrap::after {
-  content: ""; display: none; position: absolute; left: 1px; right: 1px; bottom: -2px; height: 3px;
-  background: var(--panel-bg, #161b22); z-index: 5;
-}
-.design-quick-qwrap:hover::after, .design-quick-qwrap[data-open="true"]::after { display: block; }
+/* Several questions: their list hangs off the segment as a dropdown (hover,
+   focus, or the first tap on touch) — like a design's pages. One question:
+   no dropdown, the segment hovers like its siblings. */
+.design-quick-q .design-quick-caret { font-size: 0.62rem; opacity: 0.75; }
 .design-quick-qpop {
   display: none; position: absolute; top: calc(100% - 1px); right: 0; z-index: 3;
   width: max-content; min-width: 260px; max-width: min(360px, 80vw);
@@ -396,8 +333,12 @@ body.chrome-glow .design-header { animation: chromeGlowIsland 1.4s ease-in-out 2
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5), 0 0 0 4px color-mix(in srgb, var(--q) 10%, transparent);
   transform-origin: top right;
 }
-.design-quick-qwrap:hover .design-quick-qpop,
+.design-quick-qwrap[data-multi="true"]:hover .design-quick-qpop,
+.design-quick-qwrap[data-multi="true"]:focus-within .design-quick-qpop,
 .design-quick-qwrap[data-open="true"] .design-quick-qpop { display: flex; animation: dz-qpop-in 0.18s ease-out; }
+.design-quick-qwrap[data-multi="true"]:hover .design-quick-q,
+.design-quick-qwrap[data-multi="true"]:focus-within .design-quick-q,
+.design-quick-qwrap[data-open="true"] .design-quick-q { border-radius: 10px 10px 0 0; }
 @keyframes dz-qpop-in { from { opacity: 0; transform: scaleY(0.85); } }
 .design-quick-qhead {
   display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 0 6px 6px;
@@ -428,6 +369,22 @@ body.chrome-glow .design-header { animation: chromeGlowIsland 1.4s ease-in-out 2
   100% { box-shadow: 0 0 0 14px transparent; }
 }
 body.panel-open .design-quick, body.panel-open .design-header { opacity: 0; pointer-events: none; }
+/* Overview: the variant in the centre of the carousel, marked in the quick
+   nav like the active group (fill + dz underline) but without its pages; a
+   small caret hints that it opens onto them. Questions tile -> "Fragen". */
+.design-quick-seg[data-ov-focus="true"] {
+  color: var(--text, #e6edf3); font-weight: 700;
+  background: color-mix(in srgb, var(--dz-color, var(--accent-color)) 16%, var(--panel-bg, #161b22));
+  box-shadow: inset 0 -2px 0 var(--dz-color, var(--accent-color)),
+              inset 0 0 0 1px color-mix(in srgb, var(--dz-color, var(--accent-color)) 40%, transparent);
+}
+.design-quick-subcaret { display: none; margin-left: -0.15rem; font-size: 0.62rem; opacity: 0.6; }
+.design-quick-seg[data-ov-focus="true"] .design-quick-subcaret { display: inline; }
+.design-quick-seg[data-icon-only="true"] .design-quick-subcaret { display: none; }
+.design-quick-q[data-ov-focus="true"]:not([data-active="true"]) {
+  background: color-mix(in srgb, var(--q) 28%, transparent);
+  box-shadow: inset 0 -2px 0 var(--q);
+}
 @media (max-width: 900px) {
   /* Icons only — the tooltip still names each design. */
   .design-quick-seg .design-quick-name { display: none; }
@@ -436,7 +393,7 @@ body.panel-open .design-quick, body.panel-open .design-header { opacity: 0; poin
 
 /* ── Questions slide (last slide of the carousel) ── */
 .design-ov-qcard {
-  --q: var(--warning-color, #d29922);
+  --q: var(--question-color, var(--warning-color, #d29922));
   position: absolute; inset: 0; box-sizing: border-box; overflow: hidden auto;
   display: flex; flex-direction: column; gap: 0.6rem;
   padding: 5% 6%; border-radius: 22px;
@@ -460,8 +417,9 @@ body.panel-open .design-quick, body.panel-open .design-header { opacity: 0; poin
 /* ── Submit hint: open questions, never a blocker ── */
 .submit-open-questions {
   margin: 0 0 0.4rem; padding: 0.35rem 0.6rem; border-radius: 8px; font-size: 0.78rem; line-height: 1.35;
-  border: 1px solid var(--warning-color, #d29922); color: var(--warning-color, #d29922);
-  background: color-mix(in srgb, var(--warning-color, #d29922) 12%, transparent);
+  --q: var(--question-color, var(--warning-color, #d29922));
+  border: 1px solid var(--q); color: var(--q);
+  background: color-mix(in srgb, var(--q) 12%, transparent);
 }
 .submit-open-questions[hidden] { display: none; }
 .submit-open-questions .link-btn { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.governor.gate
- * @version 0.2.0
+ * @version 0.3.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Bash|PowerShell
@@ -54,9 +54,9 @@ function main(hook, deps = {}) {
   const tid = String(hook.tool_use_id || Date.now()).replace(/[^A-Za-z0-9_-]/g, '');
   const now = deps.now || Date.now();
   const fgFile = path.join(p.foreground, `${sid}-${tid}.json`);
-  if (!input.run_in_background) S.writeJson(fgFile, { sessionId: sid, startedAt: now, command: command.slice(0, 160), kind: P.commandKind(command) });
-
+  // Classify once (it parses the whole command); light commands stop after the cheap foreground record.
   const c = P.classifyCommand(command);
+  if (!input.run_in_background) S.writeJson(fgFile, { sessionId: sid, startedAt: now, command: command.slice(0, 160), kind: c.kind });
   if (!c.kind && !c.escape) return null;
   const state = S.readState(p);
   const res = P.admit({ command, now, state, kinds: (state && state.kinds) || {}, cfg });

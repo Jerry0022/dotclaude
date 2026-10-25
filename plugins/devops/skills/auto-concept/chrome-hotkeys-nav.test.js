@@ -106,7 +106,7 @@ describe("quick nav acts on pointerdown (two-click bug)", () => {
   test("the engine rebuilds the quick nav with nodes that act on pointerdown", () => {
     expect(md).toContain("function press(node, fn)");
     expect(md).toContain("press(seg,");
-    expect(md).toContain("press(btn, () => { const q = nextQuestion");
+    expect(md).toMatch(/press\(btn, e => \{[\s\S]{0,400}const q = nextQuestion/);
   });
 });
 
@@ -142,10 +142,12 @@ describe("questions segment", () => {
   const qBtn = (d) => d.querySelector("#design-quick .design-quick-q");
   const viewId = (d) => live(d).querySelector(":scope > section[data-view][data-view-active='true']")?.dataset.view;
 
-  test("no ? mark, no submenu; several questions: first open, then the next open", async () => {
+  test("no ? mark; several questions: a dropdown lists them, a click goes to the first open, then the next open", async () => {
     const { window, document, errors } = await boot(page(2, 2));
     expect(errors).toEqual([]);
-    expect(document.querySelector(".design-quick-qmark, .design-quick-qpop")).toBeNull();
+    expect(document.querySelector(".design-quick-qmark")).toBeNull();
+    expect(document.querySelectorAll("#design-quick .design-quick-qpop .design-quick-qitem").length).toBe(2);
+    expect(document.querySelector("#design-quick .design-quick-qwrap").dataset.multi).toBe("true");
     qBtn(document).click();
     expect(viewId(document)).toBe("q1");
     qBtn(document).click();
@@ -164,6 +166,7 @@ describe("questions segment", () => {
     qBtn(document).click();
     expect(viewId(document)).toBe("q1");
     expect(document.querySelectorAll("#design-quick .design-quick-qitem").length).toBe(0);
+    expect(document.querySelector("#design-quick .design-quick-qpop"), "one question: no dropdown").toBeNull();
   }, BOOT_TIMEOUT);
 
   test("a mere visit is not an answer; any interaction or scroll in the question is", async () => {
@@ -247,11 +250,12 @@ describe("overview chrome", () => {
     });
   }, BOOT_TIMEOUT);
 
-  test("the open hotkey hangs on the open button, not on a tooltip over the preview", async () => {
+  test("no open button and no tooltip over the preview: the centre tile itself opens", async () => {
     const { document } = await boot(page(2));
     const preview = document.querySelector(".design-ov-slide[data-pos='cur'] .design-ov-preview");
     expect(preview.dataset.tip).toBeUndefined();
-    expect(preview.querySelector(".design-ov-open .design-ov-open-key")).not.toBeNull();
+    expect(preview.querySelector(".design-ov-open")).toBeNull();
+    expect(preview.getAttribute("aria-keyshortcuts")).toBe("1");
   }, BOOT_TIMEOUT);
 
   test("a new round opens the overview start page", async () => {
@@ -272,7 +276,7 @@ describe("nudges", () => {
     const tip = document.getElementById("hk-nudge");
     expect(tip).not.toBeNull();
     expect(tip.dataset.nudge).toBe("variants");
-    expect(tip.textContent).toMatch(/Hotkeys/);
+    expect(tip.textContent).toMatch(/wechseln die Variante/);
     tip.querySelector(".hk-nudge-x").click();
     expect(document.getElementById("hk-nudge")).toBeNull();
     expect(window.conceptNudgeSilenced("variants")).toBe(true);

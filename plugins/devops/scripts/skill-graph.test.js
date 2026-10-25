@@ -301,7 +301,7 @@ const DK_DIR = path.join(PLUGIN_ROOT, "deep-knowledge");
 
 describe("retired skills (PR 3): gone from skills/, body in deep-knowledge", () => {
   test("exactly the spec names are retired (PR 3 + setup-project, spec § Addendum)", () => {
-    expect(Object.keys(RETIRED).sort()).toEqual(["auto-graph", "auto-usage", "claude-strict", "setup-project", "setup-readme"]);
+    expect(Object.keys(RETIRED).sort()).toEqual(["auto-usage", "claude-strict", "setup-project", "setup-readme"]);
   });
 
   test.each(Object.entries(RETIRED))("%s → deep-knowledge/%s", (name, entry) => {

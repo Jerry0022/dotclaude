@@ -93,5 +93,350 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 })();
+
+// --- Notes dock: focus on open, focus follows the page, auto-grow ---
+// Lives here (page chrome, every template), not in the dock block, because
+// it only reacts to the dock's own state: data-open flipping to "true" (a
+// click on 💬 and Space both end in openDock()) and the page-switch events.
+//   * Opening the dock puts the caret in the TOPMOST visible, editable field
+//     = the most specific one (this page / this view, then the variant note,
+//     then the general note — the dock's DOM order IS that order). Caret
+//     after the last character; a field whose text does not end in a newline
+//     gets ONE appended so the user starts a fresh paragraph. That newline is
+//     taken back on blur if nothing was typed: opening + closing never
+//     changes a note.
+//   * While the dock is open, a switch to another page / view / variant /
+//     round moves the caret to THAT page's field by the same rule — the user
+//     never has to click into a field again.
+//     Not when the user switched by KEYBOARD from outside the dock: then the
+//     focus stays put, so the next arrow / Enter keeps navigating.
+//   * Fields grow with their text while the whole dock still fits under its
+//     ceiling; past that the OTHER visible fields shrink (never below 3 lines
+//     or their CSS min-height) to make room for the active one; only then
+//     does the active field scroll. Redistribution runs on typing in the
+//     active field (incremental, monotonic, no height transition) and on
+//     open / page switch / resize — never on a mere focus change.
+//   * Esc inside the dock closes it (closeDock() returns focus to 💬).
+(() => {
+  const boot = () => {
+  const dock = document.getElementById('feedback-dock');
+  if (!dock) return;
+  const isOpen = () => dock.dataset.open === 'true';
+  const raf = f => (window.requestAnimationFrame || (g => setTimeout(g, 16)))(f);
+  // Visible = no hidden ancestor and no display:none up to the dock (the
+  // rows fold away by attribute AND by CSS, e.g. body[data-view-active]).
+  const shown = ta => {
+    if (ta.closest('[hidden]')) return false;
+    for (let n = ta; n && n !== dock; n = n.parentElement) {
+      if (getComputedStyle(n).display === 'none') return false;
+    }
+    return true;
+  };
+  const fields = () => [...dock.querySelectorAll('textarea')].filter(shown);
+  const primary = () => fields().find(ta => !ta.readOnly && !ta.disabled) || null;
+  function caretToEnd(ta) {
+    if (ta.value && !ta.value.endsWith('\n')) {
+      ta.value += '\n';
+      ta.dataset.autoNewline = ta.value;
+    }
+    ta.focus({ preventScroll: true });
+    const end = ta.value.length;
+    try { ta.setSelectionRange(end, end); } catch (e) { /* not a text control */ }
+  }
+  function focusPrimary() {
+    if (!isOpen()) return;
+    const ta = primary();
+    if (ta && document.activeElement !== ta) caretToEnd(ta);
+    fitDockFields(ta);
+  }
+  window.focusDockField = focusPrimary;
+  // Taken back only while the field still holds exactly what we left in it.
+  dock.addEventListener('focusout', e => {
+    const ta = e.target;
+    if (!ta || ta.tagName !== 'TEXTAREA' || ta.dataset.autoNewline == null) return;
+    if (ta.value === ta.dataset.autoNewline) ta.value = ta.value.slice(0, -1);
+    delete ta.dataset.autoNewline;
+  });
+  dock.addEventListener('input', e => {
+    if (e.target && e.target.dataset) delete e.target.dataset.autoNewline;
+    // Incremental: only the field being typed in changes size; the others
+    // only give way (it grew) or get back what they gave (it shrank).
+    if (e.target && e.target.tagName === 'TEXTAREA') fitDockFields(e.target, true);
+  });
+  // NO refit on focusin: moving the caret between fields used to re-run the
+  // allocation with a different "active" field, so the heights swapped back
+  // and forth on every click (hysteresis = the layout stays as it is until
+  // the user types).
+  dock.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || !isOpen()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    window.closeDock?.();
+  });
+  // A page switch the user drove from the KEYBOARD (no text field focused:
+  // arrows, Enter, digits) leaves the focus where it is. Pulling the caret
+  // into the new page's field made the next arrow move the caret instead of
+  // the page. Pointer-driven switches still bring the caret along.
+  const typingIn = el => !!(el && el.closest && el.closest('textarea, input, select, [contenteditable=""], [contenteditable="true"]'));
+  let navKeyAt = 0;
+  document.addEventListener('keydown', () => {
+    if (!typingIn(document.activeElement)) navKeyAt = Date.now();
+  }, true);
+
+  const px = v => parseFloat(v) || 0;
+  // Natural height = what the text needs (border-box), floored at 3 lines /
+  // the CSS min-height. Measured on an off-screen mirror <div> (pre-wrap,
+  // same font, padding and text width) — never by collapsing the live field,
+  // which reset its scroll position and, mid height-transition, read back
+  // the OLD height (so a field could grow but never settle).
+  let probe = null;
+  const MIRROR = ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing', 'wordSpacing',
+    'lineHeight', 'textTransform', 'textIndent', 'tabSize', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight'];
+  function measure(ta) {
+    const cs = getComputedStyle(ta);
+    const lh = px(cs.lineHeight) || px(cs.fontSize) * 1.5 || 20;
+    const borders = px(cs.borderTopWidth) + px(cs.borderBottomWidth);
+    const floor = Math.max(px(cs.minHeight), Math.ceil(3 * lh + px(cs.paddingTop) + px(cs.paddingBottom) + borders));
+    if (!probe) {
+      probe = document.createElement('div');
+      probe.id = 'dock-measure';
+      probe.setAttribute('aria-hidden', 'true');
+      probe.style.cssText = 'position:absolute;left:-10000px;top:0;visibility:hidden;pointer-events:none;'
+        + 'box-sizing:content-box;border:0;height:auto;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;';
+      document.body.appendChild(probe);
+    }
+    MIRROR.forEach(p => { probe.style[p] = cs[p]; });
+    probe.style.width = Math.max(0, ta.clientWidth - px(cs.paddingLeft) - px(cs.paddingRight)) + 'px';
+    const v = ta.value || '';
+    // A trailing newline only takes up a line once something follows it.
+    probe.textContent = !v || v.endsWith('\n') ? v + ' ' : v;
+    const natural = Math.max(floor, Math.ceil(probe.scrollHeight + borders));
+    return { natural, floor };
+  }
+  // Pure allocation (exported for the tests): heights for the fields'
+  // natural heights `nat` and floors `floor` under `budget`; `active` = the
+  // index of the field being typed in, which keeps its natural height for
+  // as long as the others can still give way. `cur` (optional) = the
+  // heights on screen now; given, the step is incremental and monotonic —
+  // while the active field grows the others only shrink, while it shrinks
+  // they only grow back (never past their own natural height), and nothing
+  // moves while the active field keeps its height.
+  window.allocDockHeights = function(nat, floor, budget, active, cur) {
+    const h = nat.map((v, i) => (cur && i !== active && cur[i] > 0) ? Math.min(v, Math.max(floor[i], cur[i])) : v);
+    let over = h.reduce((a, b) => a + b, 0) - budget;
+    while (over > 0) {
+      let k = -1;
+      for (let i = 0; i < h.length; i++) {
+        if (i === active || h[i] <= floor[i]) continue;
+        if (k < 0 || h[i] > h[k]) k = i;
+      }
+      if (k < 0) break;
+      // Tallest other field first, down to the next-tallest (then in small
+      // steps), so the shrinking is even rather than one field collapsing.
+      let second = floor[k];
+      h.forEach((v, i) => { if (i !== k && i !== active && v > second && v < h[k]) second = v; });
+      const step = Math.min(over, h[k] > second ? h[k] - second : Math.min(4, h[k] - floor[k]));
+      h[k] -= step;
+      over -= step;
+    }
+    // Room to spare: the most-squeezed other field gets its height back first.
+    let slack = -over;
+    while (slack > 0) {
+      let k = -1;
+      for (let i = 0; i < h.length; i++) {
+        if (i === active || h[i] >= nat[i]) continue;
+        if (k < 0 || nat[i] - h[i] > nat[k] - h[k]) k = i;
+      }
+      if (k < 0) break;
+      const give = Math.min(slack, nat[k] - h[k]);
+      h[k] += give;
+      slack -= give;
+    }
+    if (over > 0 && active >= 0) h[active] = Math.max(floor[active], h[active] - over);
+    return h;
+  };
+  let fitting = false;
+  function fitDockFields(activeEl, incremental) {
+    if (fitting || !isOpen()) return;
+    fitting = true;
+    const keep = dock.scrollTop;
+    try {
+      const list = fields();
+      if (!list.length) return;
+      const pick = list.includes(activeEl) ? activeEl : document.activeElement;
+      const active = Math.max(0, list.indexOf(pick));
+      const m = list.map(measure);
+      const cur = list.map(ta => ta.offsetHeight);
+      const dcs = getComputedStyle(dock);
+      const cap = px(dcs.maxHeight) || innerHeight * 0.8;
+      const used = cur.reduce((a, b) => a + b, 0);
+      const outer = dock.scrollHeight + px(dcs.borderTopWidth) + px(dcs.borderBottomWidth);
+      const budget = Math.max(0, cap - (outer - used) - 1);
+      const h = window.allocDockHeights(m.map(x => x.natural), m.map(x => x.floor), budget, active,
+        incremental && used > 0 ? cur : null);
+      list.forEach((ta, i) => {
+        // A sub-pixel difference is not a change: writing it anyway is what
+        // made the fields twitch on every keystroke.
+        if (Math.abs(cur[i] - h[i]) >= 1 || !ta.style.height) ta.style.height = h[i] + 'px';
+        const sc = h[i] < m[i].natural ? 'true' : 'false';
+        if (ta.dataset.scroll !== sc) ta.dataset.scroll = sc;
+      });
+      if (dock.scrollTop !== keep) dock.scrollTop = keep;
+    } finally { fitting = false; }
+  }
+  window.fitDockFields = fitDockFields;
+
+  // data-open is the single truth for "the dock just opened" — a real
+  // closed → open flip only: page switches re-write data-open="true" on an
+  // already open dock (primeDock), and treating that as an open pulled the
+  // caret back in after a keyboard page switch.
+  new MutationObserver(recs => {
+    if (isOpen() && recs.some(r => r.oldValue !== 'true')) raf(focusPrimary);
+  }).observe(dock, { attributes: true, attributeFilter: ['data-open'], attributeOldValue: true });
+  // Page switches: wait one frame so the layout's own handlers (same event)
+  // have swapped which fields are visible.
+  ['screen:changed', 'view:changed', 'overview:changed', 'iteration:changed'].forEach(ev =>
+    document.addEventListener(ev, () => {
+      const byKey = Date.now() - navKeyAt < 600;
+      raf(() => {
+        if (!isOpen() || document.body.classList.contains('panel-open')) return;
+        if (byKey && !dock.contains(document.activeElement)) { fitDockFields(); return; }
+        focusPrimary();
+      });
+    }));
+  window.addEventListener('resize', () => { if (isOpen()) fitDockFields(); });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+
+// --- Eye in the header panel (safety net) ---
+// While the overview header card (#design-header) is on screen, the
+// annotation eye (#anno-toggle) belongs INSIDE it, in its eye slot
+// (.design-header-eye, filled by wireDesignOverview's placeEye()). A state
+// where the header shows but the eye stayed at its floating fallback spot
+// below it read as a stray button. This only adopts — moving the eye back
+// out stays placeEye()'s job — and is a no-op without header or slot.
+(() => {
+  const adopt = () => {
+    const eye = document.getElementById('anno-toggle');
+    const header = document.getElementById('design-header');
+    const slot = header && header.querySelector('.design-header-eye');
+    if (!eye || !slot || slot.contains(eye)) return;
+    if (document.body.dataset.overview !== 'true' || !header.getClientRects().length) return;
+    const cs = getComputedStyle(header);
+    if (cs.display === 'none' || cs.visibility === 'hidden') return;
+    slot.appendChild(eye);
+  };
+  const later = () => (window.requestAnimationFrame || (g => setTimeout(g, 16)))(adopt);
+  ['screen:changed', 'view:changed', 'overview:changed', 'iteration:changed']
+    .forEach(ev => document.addEventListener(ev, later));
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', later);
+  else later();
+})();
 ```
 
+```css
+/* ── Shared tokens: tips and form fields ──
+   --tip-color is the calm INFO hue of every tip surface ("Wusstest du
+   schon?" in the dock, the hotkey nudges): blue-cyan, deliberately distinct
+   from --question-color / --warning-color (amber), which marks things that
+   still need an answer. A tip never needs anything from the user, so it must
+   not look like an open question.
+   --field-* is the one look of every text input in the concept UI. */
+:root {
+  --tip-color: #3fa7d6;
+  --question-color: var(--warning-color, #d29922);
+  --field-radius: 10px;
+  --field-bg: color-mix(in srgb, var(--text-color, #c9d1d9) 5%, var(--input-bg, #0d1117));
+  --field-border: color-mix(in srgb, var(--text-color, #c9d1d9) 16%, transparent);
+  --field-border-hover: color-mix(in srgb, var(--text-color, #c9d1d9) 28%, transparent);
+  --field-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent-color, #58a6ff) 22%, transparent), 0 0 16px color-mix(in srgb, var(--accent-color, #58a6ff) 16%, transparent);
+}
+/* Global field base — every textarea / text-like input / select on the page:
+   soft radius, a subtly filled surface, a hairline border that firms up on
+   hover, and an accent focus ring with glow. Only the SURFACE is set here
+   (no padding, no size, no font): those stay with each context's own rule.
+   The `html :is(...)` + `:not(.map-state)` shape is deliberate — it lifts the
+   rule over the per-context field rules (.decision-comment-row textarea,
+   .anno-answer, .upin-editor textarea, .feedback-section textarea, the
+   mapping notes) so the whole UI shares one look without editing each of
+   them, while an id-scoped rule (#design-general-feedback's quiet band)
+   still wins. Hidden state inputs (.map-state) are left alone. */
+html :is(textarea, input[type="text"], input[type="search"], input[type="email"], input[type="url"], input[type="number"], input:not([type]), select):not(.map-state) {
+  background-color: var(--field-bg);
+  border: 1px solid var(--field-border);
+  border-radius: var(--field-radius);
+  color: var(--text-color, #c9d1d9);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+html :is(textarea, input[type="text"], input[type="search"], input[type="email"], input[type="url"], input[type="number"], input:not([type]), select):not(.map-state):hover:not(:focus):not([readonly]) {
+  border-color: var(--field-border-hover);
+}
+html :is(textarea, input[type="text"], input[type="search"], input[type="email"], input[type="url"], input[type="number"], input:not([type]), select):not(.map-state):focus {
+  outline: none;
+  border-color: var(--accent-color, #58a6ff);
+  box-shadow: var(--field-focus-ring);
+}
+html :is(textarea, input)::placeholder { color: color-mix(in srgb, var(--text-secondary, #8b949e) 80%, transparent); opacity: 1; }
+
+/* Dock fields grow with their text (fitDockFields, § Panel Chrome JS) —
+   the height is the script's job, so no manual resize grip and no scrollbar
+   until the whole dock is out of room. NO height transition: a running
+   transition made every keystroke animate from a stale height while the
+   next measurement already ran, so neighbouring fields chased each other.
+   `scrollbar-gutter: stable` keeps the text width identical whether the
+   field scrolls or not — a scrollbar appearing re-wrapped the text, changed
+   its natural height and flipped the allocation back. */
+html .feedback-dock .feedback-section textarea {
+  resize: none; overflow-y: hidden; padding: 0.7rem 0.85rem; scrollbar-gutter: stable;
+}
+.feedback-dock .feedback-section textarea[data-scroll="true"] { overflow-y: auto; }
+
+/* ── Notes dock fields (R4 "Notiz-Dock"): breadcrumb header per field, soft
+   glow on the active one, 📎 inside the field, "Wusstest du schon?" tip. ── */
+.feedback-dock .feedback-section { padding: 10px; border-radius: 14px; background: rgba(255,255,255,0.025); }
+.feedback-dock .feedback-section:focus-within {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-color, #58a6ff) 12%, transparent), rgba(137,87,229,0.07));
+}
+.feedback-dock .feedback-section textarea:focus {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent-color, #58a6ff) 45%, transparent), 0 0 18px color-mix(in srgb, var(--accent-color, #58a6ff) 25%, transparent);
+}
+.dock-crumb { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+.dock-crumb i { font-style: normal; color: color-mix(in srgb, var(--text-secondary) 60%, transparent); }
+.dock-crumb .dock-scope { display: inline-flex; align-items: center; gap: 6px; }
+/* One rule for every field header: the ancestors are muted, ONLY the
+   field's own level (the last crumb) is emphasised — white, bold. So "II
+   Sonniger Tag" (page), "Kompakt" (variant) and "Concept" (general) look
+   identical, and an ancestor "Concept" is never highlighted. Scoped under
+   .feedback-dock so the generic `.feedback-section label strong` accent
+   (§ Panel) can never turn the variant name blue. */
+.feedback-dock .dock-crumb .dock-crumb-lv { color: var(--text-secondary); font-weight: 500; font-size: 12px; }
+.feedback-dock .dock-crumb strong, .feedback-dock .dock-crumb .dock-crumb-last { color: var(--text-color, #f0f6fc); font-weight: 650; font-size: 13px; }
+.dock-crumb .dock-tag {
+  margin-left: auto; font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  color: var(--text-secondary); background: rgba(255,255,255,0.05); white-space: nowrap;
+}
+.feedback-dock .feedback-section:focus-within .dock-tag { color: var(--accent-color); background: color-mix(in srgb, var(--accent-color, #58a6ff) 15%, transparent); }
+/* The 📎 sits inside the field (bottom-right); thumbnails flow under it. */
+.feedback-dock .attach-slot { position: relative; }
+/* right: 14px keeps it clear of the field's scrollbar; the field reserves a
+   matching right gutter (§ Attachments CSS) so typed text never runs under it. */
+.feedback-dock .attach-slot .attach-btn { position: absolute; right: 14px; top: -34px; opacity: 0.7; }
+.feedback-dock .attach-slot .attach-btn:hover { opacity: 1; }
+/* "Wusstest du schon?" — ONE line, always (the pool's texts are kept short,
+   ellipsis is only the safety net for a narrow phone sheet), in the calm
+   --tip-color, never the amber of open questions. */
+.dock-tip {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: nowrap; min-width: 0; padding: 7px 10px; border-radius: 12px;
+  background: color-mix(in srgb, var(--tip-color, #3fa7d6) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tip-color, #3fa7d6) 18%, transparent);
+  font-size: 12px; color: var(--text-color, #c9d1d9); white-space: nowrap;
+}
+.dock-tip b { flex: none; display: inline-flex; align-items: center; gap: 5px; align-self: center; color: var(--tip-color, #3fa7d6); font-weight: 650; }
+/* The lamp is an inline SVG filled with currentColor — the --tip-color of
+   the title — never the yellow 💡 emoji, which no CSS can tint. */
+.dock-tip .dock-tip-icon { flex: none; width: 13px; height: 13px; display: block; }
+.dock-tip .dock-tip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary, #8b949e); }
+.dock-tip[hidden] { display: none; }
+```

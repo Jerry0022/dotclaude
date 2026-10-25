@@ -267,6 +267,7 @@ describe("browser tab title carries the live status", () => {
       "var _submittedAt = 0, _submittedAction = null;",
       constLine("TAB_GLYPHS"),
       "let _baseTabTitle = null;",
+      "var _serverRound = null;",
       fnSource("renderTabTitle"),
       js,
     ].join("\n"));
@@ -285,6 +286,14 @@ describe("browser tab title carries the live status", () => {
     expect(tabPage("data-active", "renderTabTitle(); _submittedAt = 1; renderTabTitle(); _submittedAt = 0; renderTabTitle();"))
       .toBe("👉 Wetter-Widget");
     expect(tabPage("data-active", "document.title = 'Concept — Wetter-Widget'; renderTabTitle();")).toBe("👉 Wetter-Widget");
+  });
+  test("a second tab follows the server state from GET /decisions", () => {
+    const pre = (extra) => ["var _serverRound = null;", fnSource("noteServerRound"), extra].join("\n");
+    expect(tabPage("data-active", pre("noteServerRound({ submitted: true, action: 'iterate' });"))).toBe("⏳ Wetter-Widget");
+    expect(tabPage("data-active", pre("noteServerRound({ submitted: true, action: 'implement' });"))).toBe("🛠️ Wetter-Widget");
+    expect(tabPage("data-active", pre("noteServerRound({ submitted: true, action: 'iterate', _phase: 'implementing' });"))).toBe("🛠️ Wetter-Widget");
+    expect(tabPage("data-active", pre("noteServerRound({ submitted: true }); noteServerRound({ submitted: false });"))).toBe("👉 Wetter-Widget");
+    expect(fnSource("pollProcessedState")).toContain("noteServerRound");
   });
   test("renderPanelStatus drives it, so a background tab follows the poll", () => {
     expect(fnSource("renderPanelStatus")).toContain("renderTabTitle()");
@@ -321,5 +330,17 @@ describe("old rounds and the final report", () => {
     window.eval("maybeBuildFinalJourney();");
     expect(row.classList.contains("jr-build")).toBe(false);
     expect(cssSource).toContain("body.viewing-final .journey:not(.journey-final)");
+  });
+});
+
+describe("whole-app designs and tip/note wording", () => {
+  test("data-screen-fit=full fills the content area and hides captions", () => {
+    expect(cssSource).toMatch(/\[data-screen-fit="full"\][^{]*\{[^}]*padding: 0/);
+    expect(cssSource).toMatch(/\[data-screen-fit="full"\] \.device-caption \{ display: none/);
+    expect(md).toContain("`data-design-improved`");
+  });
+  test("no user-visible locale string says Pin", () => {
+    const rows = md.split("\n").filter((l) => /^\| `[a-z_.]+`\s*\|/.test(l));
+    expect(rows.filter((l) => /\bpins?\b/i.test(l.replace(/`[^`]*`/, "")))).toEqual([]);
   });
 });

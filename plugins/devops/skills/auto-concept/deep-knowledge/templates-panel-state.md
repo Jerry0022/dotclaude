@@ -134,6 +134,13 @@ body.viewing-final .panel-nav-scroll {
   padding-top: 0.6rem;
   border-top: 1px solid var(--border-color, #30363d);
 }
+/* ONE line between the scrolling list and the foot: the .panel-status
+   border-top above. The design layout's #screen-nav (the views list is its
+   last group) carries its own border-bottom (§ Layout CSS), which sat just
+   above it and drew a double grey line in every foot state (with or without
+   the open-questions hint, journey row or not). Neutralised here, inside
+   the scroll box only, so the one divider stays pinned with the foot. */
+.panel-nav-scroll > .screen-nav { border-bottom: 0; padding-bottom: 0; margin-bottom: 0.25rem; }
 /* Hard cap. The smallest case (one round, three sections) and the largest
    (ten rounds, twenty-five entries) get the same foot; what varies is only
    how much of the tree is on screen. #367: this box is deliberately NOT

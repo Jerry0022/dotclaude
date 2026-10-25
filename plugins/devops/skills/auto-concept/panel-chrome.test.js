@@ -726,13 +726,17 @@ describe("the design layout JS degrades instead of dying", () => {
     expect(panel.classList.contains("open")).toBe(false);
   });
 
-  test("the keyboard shortcuts read both overlays optionally", () => {
-    // Bound on every design page and fired on EVERY keypress: unguarded, a
-    // missing overlay threw once per keystroke and killed arrow-key
-    // navigation while pointing at the wrong component.
-    expect(jsSource).toMatch(
-      /if \(dock\?\.dataset\.open === 'true' \|\| panel\?\.classList\.contains\('open'\)\) return;/
-    );
+  test("the keyboard shortcuts never dereference an overlay (and never bail on one)", () => {
+    // Bound on every design page and fired on EVERY keypress: an unguarded
+    // overlay read threw once per keystroke when the markup lacked it. Since
+    // the second dock round the handler gates on text entry only, so it
+    // reads neither overlay at all — an open dock or panel no longer kills
+    // the arrow keys.
+    const h = jsSource.slice(jsSource.indexOf("const isTextEntry = el =>"));
+    expect(h.length).toBeGreaterThan(0);
+    const handler = h.slice(0, h.indexOf("showScreen(screens[nextIdx].id);"));
+    expect(handler).not.toMatch(/\bdock\b\.|\bpanel\b\./);
+    expect(handler).not.toMatch(/dock\?\.dataset\.open === 'true' \|\| panel\?\.classList\.contains\('open'\)/);
   });
 
   test("every dock function callable from outside checks for the dock first", () => {

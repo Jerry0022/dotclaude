@@ -109,7 +109,7 @@ describe("variant overview — quick nav pages and open questions", () => {
     qslide.querySelector(".design-quick-qitem").click();
     expect(document.body.dataset.viewActive).toBe("true");
     window.showOverview();
-    const hint = () => document.querySelector("#panel-ready .submit-open-questions");
+    const hint = () => document.querySelector(".submit-open-questions");
     expect(hint().hidden).toBe(false);
     const answer = (id, text) => {
       const ta = live(document).querySelector(`section[data-view="${id}"] textarea`);
@@ -147,8 +147,7 @@ describe("variant overview — generated only for ≥2 designs", () => {
     expect(document.body.dataset.overview).toBe("true");
     expect(document.querySelector("[data-design-overview]")).toBeNull();
     expect(document.getElementById("design-header").children.length).toBeGreaterThan(0);
-    expect(document.querySelector(".design-header-back").hidden).toBe(true);
-    expect(document.querySelector(".design-header-star").hidden).toBe(true);
+    expect(document.querySelector(".design-header-back, .design-header-star")).toBeNull();
     expect(document.querySelectorAll("#design-quick .design-quick-group").length).toBe(1);
     expect(document.getElementById("anno-toggle").parentElement.classList.contains("design-header-eye")).toBe(true);
     expect(document.body.dataset.overviewActive).not.toBe("true");
@@ -174,12 +173,14 @@ describe("variant overview — generated only for ≥2 designs", () => {
     const overlay = cards[0].querySelector(".design-ov-overlay");
     expect(overlay.querySelector(".design-ov-motto").textContent).toBe("Weniger ist Ruhe.");
     expect([...overlay.querySelectorAll(".design-ov-traits li")].map((li) => li.textContent)).toEqual(["Ein Ziel pro Tag", "Pflanze", "Keine Pushes"]);
-    expect(overlay.querySelector(".design-ov-kicker .design-ov-num").textContent).toBe("1");
+    expect(overlay.querySelector(".design-ov-kicker .design-ov-num"), "icon + name, no number").toBeNull();
     expect(overlay.querySelector(".design-ov-kicker .design-ov-name").textContent).toBe("Design 2");
     expect(cards[0].style.getPropertyValue("--dz-color")).toBe("#5f8b6a");
     // No page chips, no notes row, no second navigation.
     expect(ov.querySelector(".design-ov-chip, .design-ov-chips, .design-ov-notes, .design-ov-foot, .design-ov-dots")).toBeNull();
-    expect(cards[0].querySelector(".design-ov-open").textContent).toContain("↗");
+    expect(cards[0].querySelector(".design-ov-open"), "no open button: the tile is the control").toBeNull();
+    expect(cards[0].querySelector(".design-ov-badge"), "no badge on the centre tile").toBeNull();
+    expect(cards[0].querySelector(".design-ov-side .dz-icon")).not.toBeNull();
     // The preview is an inert clone outside every collector.
     const clone = cards[0].querySelector(".design-ov-scale");
     expect(clone.hasAttribute("inert")).toBe(true);
@@ -193,7 +194,7 @@ describe("variant overview — generated only for ≥2 designs", () => {
     expect(svg.hasAttribute("onload")).toBe(false);
     expect(window.__pwned).toBeUndefined();
     // Header + quick nav replace indicator + switcher; the eye moved in.
-    expect(document.querySelector("#design-header .design-header-name").textContent).toBe("Übersicht");
+    expect(document.querySelector("#design-header .design-header-name"), "no breadcrumb: the eye only").toBeNull();
     expect(document.querySelectorAll("#design-quick .design-quick-seg").length).toBe(3);
     expect(document.getElementById("anno-toggle").parentElement.classList.contains("design-header-eye")).toBe(true);
     // One tooltip per element: label + key in data-tip / data-tip-key.
@@ -209,7 +210,7 @@ describe("variant overview — generated only for ≥2 designs", () => {
     expect(document.body.dataset.overviewActive).toBe("false");
     expect(activeDesign(document).dataset.design).toBe("d2b");
     expect(activeDesign(document).hidden).toBe(false);
-    expect(document.querySelector("#design-header .design-header-back").hidden).toBe(false);
+    expect(document.querySelector("#screen-nav .screen-nav-overview-group").hidden, "the way back is the ☰ entry").toBe(false);
     key(window, document.body, { key: "Escape", code: "Escape" });
     expect(document.body.dataset.overviewActive).toBe("true");
   }, BOOT_TIMEOUT);
@@ -248,21 +249,20 @@ describe("favourite — at most one, toggled until submit, in the payload", () =
     expect(document.querySelector('.design-ov-slide[data-design-id="d2b"]').dataset.favorite).toBe("true");
     expect(btn("d2b").textContent).toBe("★");
     expect(document.querySelector("[data-design-overview]").dataset.hasFavorite).toBe("true");
-    expect(document.querySelector("#design-header .design-header-star").textContent).toBe("★ Design 2 B");
+    expect(document.querySelector('#design-quick .design-quick-seg[data-design-id="d2b"] .design-quick-star')).not.toBeNull();
     btn("d2c").click();
     expect(window.collectDecisions("iterate").favorite).toBe("d2c");
     expect(document.querySelectorAll('.design-ov-slide[data-favorite="true"]').length).toBe(1);
     // F on the overview toggles the CENTRE slide's design.
     key(window, document.body, { key: "f", code: "KeyF" });
     expect(window.collectDecisions("iterate").favorite).toBeNull();
-    expect(document.querySelector("#design-header .design-header-star").hidden).toBe(true);
+    expect(document.querySelector("#design-quick .design-quick-star")).toBeNull();
     // F on a design page toggles that design; the raw store never reaches allFields.
     window.showDesign("d2");
     key(window, document.body, { key: "f", code: "KeyF" });
     const payload = window.collectDecisions("iterate");
     expect(payload.favorite).toBe("d2");
     expect(Object.keys(payload.allFields || {})).not.toContain("design-ov-store");
-    expect(document.querySelector("#design-header .design-header-star").textContent).toBe("★");
     expect(document.querySelector('#design-quick .design-quick-seg[data-design-id="d2"] .design-quick-star').hidden).toBe(false);
   }, BOOT_TIMEOUT);
 
@@ -283,9 +283,8 @@ describe("favourite — at most one, toggled until submit, in the payload", () =
       expect(document.querySelector("[data-design-overview]").dataset.favorites).toBe("false");
       key(window, document.body, { key: "f", code: "KeyF" });
       expect(window.collectDecisions("iterate").favorite).toBeNull();
-      expect(document.querySelector("#design-header .design-header-name").dataset.tip).not.toMatch(/Favorit/);
       window.showDesign("d2b");
-      expect(document.querySelector("#design-header .design-header-star").hidden).toBe(true);
+      expect(document.querySelector("#design-header .design-header-star")).toBeNull();
       key(window, document.body, { key: "f", code: "KeyF" });
       expect(window.collectDecisions("iterate").favorite).toBeNull();
       expect(document.querySelector('#design-quick .design-quick-star')).toBeNull();
@@ -342,23 +341,12 @@ describe("carousel — turns, overlay, no scrolling", () => {
     expect(css).toContain('.design-ov-overlay[data-tone="warm"]');
   }, BOOT_TIMEOUT);
 
-  test("the header button toggles the overlay (default on), remembered per viewer; Space is the notes dock", async () => {
+  test("no layers button next to the eye: the eye hides the info box; an old stored 'off' is ignored", async () => {
     const a = await boot(page(2));
-    const ov = () => a.document.querySelector("[data-design-overview]");
-    expect(ov().dataset.overlay).toBe("on");
-    a.document.querySelector("#design-header .design-header-overlay").click();
-    expect(ov().dataset.overlay).toBe("off");
-    const btn = a.document.querySelector("#design-header .design-header-overlay");
-    expect(btn.hidden).toBe(false);
-    expect(btn.getAttribute("aria-pressed")).toBe("false");
-    const k = Object.keys(a.window.localStorage).find((x) => x.startsWith("concept-ov-overlay:"));
-    expect(a.window.localStorage.getItem(k)).toBe("off");
-    const b = await boot(page(2), { key: k, blob: "off" });
-    expect(b.document.querySelector("[data-design-overview]").dataset.overlay, "persisted").toBe("off");
-    b.document.querySelector("#design-header .design-header-overlay").click();
-    expect(b.document.querySelector("[data-design-overview]").dataset.overlay, "the touch path").toBe("on");
-    b.window.showDesign("d2");
-    expect(b.document.querySelector("#design-header .design-header-overlay").hidden, "overview only").toBe(true);
+    expect(a.document.querySelector("#design-header .design-header-overlay")).toBeNull();
+    expect(a.document.querySelector("[data-design-overview]").dataset.overlay).toBe("on");
+    const b = await boot(page(2), { key: "concept-ov-overlay:/", blob: "off" });
+    expect(b.document.querySelector("[data-design-overview]").dataset.overlay, "no way back existed").toBe("on");
   }, BOOT_TIMEOUT);
 
   test("the overview never scrolls: no overflow-y, sized from the viewport", () => {
@@ -368,7 +356,7 @@ describe("carousel — turns, overlay, no scrolling", () => {
     expect(rule[1]).toMatch(/overflow: hidden/);
     expect(rule[1]).not.toMatch(/overflow-y: auto|padding/);
     expect(css).toMatch(/\.design-ov-stage \{[^}]*container-type: size/);
-    expect(css).toMatch(/--dz-ov-w: min\(78cqw, 160cqh\)/);
+    expect(css).toMatch(/--dz-ov-w: min\(78cqw, calc\(\(100cqh - 2 \* var\(--dz-ov-glow\)\) \* 1\.6\)\)/);
   });
 
   test("the quick nav's band ends before the header's real right edge", async () => {
@@ -390,41 +378,23 @@ describe("header — one row, never expands", () => {
     expect(header.closest("main")).toBeNull();
     expect([...header.children].map((c) => c.className)).toEqual(["design-header-main"]);
     expect(header.querySelector(".design-header-tabs, .design-fav-btn, .design-header-note")).toBeNull();
-    // A tap on the header's surface opens nothing.
-    header.querySelector(".design-header-name").click();
-    expect(header.dataset.open).not.toBe("true");
+    // The row holds the eye slot and nothing else.
+    expect([...header.querySelector(".design-header-main").children].map((c) => c.className)).toEqual(["design-header-eye"]);
     const css = md.match(/```css\n([\s\S]*?)```/g).join("\n");
     expect(css).toMatch(/\.design-header \{\s*position: fixed;/);
     expect(css).not.toMatch(/\.design-header-more|\.design-header\[data-open/);
-    const hover = /\.design-header:hover, \.design-header:focus-within \{([^}]*)\}/.exec(css);
-    expect(hover, "hover rule").not.toBeNull();
-    expect(hover[1]).not.toMatch(/position|top:|left:|margin|width|height/);
+    expect(css, "no box, so no box hover").not.toMatch(/\.design-header:hover/);
   }, BOOT_TIMEOUT);
 
-  test("collapsed: icon + name, ★ only for the favourite; the back item has no arrow", async () => {
+  test("no header ★: the favourite toggles with F and shows as the quick nav's ★", async () => {
     const { window, document } = await boot(page(2));
     window.showDesign("d2b");
-    const back = document.querySelector("#design-header .design-header-back");
-    expect(back.textContent.trim()).toBe("Übersicht");
-    expect(back.textContent).not.toMatch(/[‹<←]/);
-    const star = document.querySelector("#design-header .design-header-star");
-    expect(star.hidden).toBe(false);
-    expect(star.textContent, "not the favourite → an empty star to click").toBe("☆");
-    expect(document.querySelector("#design-header .design-header-name").textContent).toBe("Design 2 B");
-    // The header star is a control like the eye and the pin: it toggles.
-    star.click();
+    expect(document.querySelector("#design-header .design-header-back, #design-header .design-header-star")).toBeNull();
+    key(window, document.body, { key: "f", code: "KeyF" });
     expect(window.collectDecisions("iterate").favorite).toBe("d2b");
-    expect(star.textContent).toBe("★");
-    expect(star.getAttribute("aria-pressed")).toBe("true");
-    star.click();
+    expect(document.querySelector('#design-quick .design-quick-seg[data-design-id="d2b"] .design-quick-star')).not.toBeNull();
+    key(window, document.body, { key: "f", code: "KeyF" });
     expect(window.collectDecisions("iterate").favorite).toBeNull();
-    // On the overview "★ <name>" opens the favourite.
-    star.click();
-    window.showOverview();
-    expect(star.textContent).toBe("★ Design 2 B");
-    star.click();
-    expect(document.body.dataset.overviewActive).toBe("false");
-    expect(activeDesign(document).dataset.design).toBe("d2b");
   }, BOOT_TIMEOUT);
 });
 
@@ -553,7 +523,9 @@ describe("Ctrl + click user pins", () => {
     window.showDesign("d1");
     expect(document.querySelectorAll("#d1-s1 .upin").length).toBe(1);
     expect(document.querySelector("#d1-s1 .upin-editor textarea").readOnly).toBe(true);
-    expect(document.querySelector("#design-header .design-header-star").disabled).toBe(true);
+    const stars = [...document.querySelectorAll('section[data-iteration="1"] .design-ov-star')];
+    expect(stars.length).toBeGreaterThan(0);
+    expect(stars.every((b) => b.disabled), "frozen favourite is read-only").toBe(true);
   }, BOOT_TIMEOUT);
 });
 

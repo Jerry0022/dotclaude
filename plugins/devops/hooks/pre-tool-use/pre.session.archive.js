@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.session.archive
- * @version 0.2.0
+ * @version 0.3.0
  * @event PreToolUse
  * @plugin devops
  * @description Only the post-ship hand-over archives this session (#632).
@@ -11,7 +11,10 @@
  *   or the user's own latest prompt asks for an archive. A latest prompt that
  *   refuses it ("nicht archivieren", "don't archive", "behalten", "keep the
  *   session", "Session offen lassen") blocks even a released hand-over.
- *   Archiving another session by its explicit id is untouched. Exit 2 =
+ *   While the background autosave of this session is still running
+ *   (lib/session-autosave-worker.js marker, live < 10 min) every archive of it
+ *   is blocked — also a released hand-over or the user's request: the unsaved
+ *   work would be cut off. Archiving another session by its explicit id is untouched. Exit 2 =
  *   block, reason on stderr.
  */
 
@@ -64,6 +67,13 @@ process.stdin.on('end', () => {
   try { hook = JSON.parse(inputData); } catch { process.exit(0); }
   if (!hook || !gate.ARCHIVE_TOOL_RE.test(hook.tool_name || '')) process.exit(0);
   if (!gate.targetsSelf(hook.tool_input, hook.session_id)) process.exit(0);
+  if (gate.autosaveRunning(hook.session_id)) {
+    process.stderr.write(
+      '[devops] archive_session on this session is blocked: the autosave of its open changes is still ' +
+      'running in the background. Do not retry now; end the response without text and archive after it finishes.\n'
+    );
+    process.exit(2);
+  }
   const intent = userArchiveIntent(hook);
   if (intent === 'refuse') {
     process.stderr.write(

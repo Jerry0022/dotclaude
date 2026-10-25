@@ -79,231 +79,262 @@
   }
   window.openDock = openDock;
   window.closeDock = closeDock;
-  // ── "Wusstest du schon?" — one static fact per dock open, never the same
-  // one twice in a row. A fact is true for this plugin (SKILL.md and its
-  // deep-knowledge); the pool is static, nothing is generated at runtime.
+  // ── "Wusstest du schon?" — one static fact per dock open (rules below).
   const DOCK_TIPS = {
     de: [
-      "Halte Alt: alle Hotkeys der Seite erscheinen als Tasten-Badges.",
-      "Strg + Klick setzt eine eigene Notiz direkt an eine Stelle.",
-      "Die Leertaste öffnet und schließt das Notiz-Dock, solange kein Feld den Fokus hat.",
-      "Das Auge 👁 blendet alle Notizen aus, damit du den Inhalt in Ruhe ansehen kannst.",
-      "Römische Ziffern (I, II, III) sind Detailseiten, Ziffern 1–3 wählen die Varianten.",
-      "Mit F markierst du die aktuelle Variante als Favorit ★.",
-      "V schaltet zwischen den Geräteansichten um, die das Design deklariert.",
-      "Pfeil links/rechts wechselt auf derselben Ebene, hoch/runter eine Ebene.",
-      "Esc führt aus einer Variante zurück zur Übersicht.",
-      "Die Bridge speichert deine Entwürfe laufend, ein Neuladen verliert nichts.",
-      "Abgeschickte Runden werden eingefroren und behalten genau deine Antworten.",
-      "Frühere Runden bleiben durchblätterbar, sie sind nur gesperrt.",
-      "Die Seite wird von einem Build-Skript aus Runden-Fragmenten zusammengesetzt, nie von Hand.",
-      "Jede Runde baut die Engine neu aus der aktuellen Plugin-Referenz.",
-      "Beim Umsetzen prüft das Plugin, ob ein Agent-Team daran arbeiten sollte und welches.",
-      "Vor dem Umsetzen läuft ein Reality-Check gegen den echten Code.",
-      "Folgeaufgaben können als Issues angelegt statt direkt umgesetzt werden.",
-      "Nach dem Umsetzen kann das Ergebnis direkt ausgeliefert werden (Ship).",
-      "Der Abschlussbericht ist immer ein Dokument mit Inhaltsverzeichnis.",
-      "Offene Punkte meldet das Panel, bevor du abschickst.",
-      "📎 hängt Dateien an eine Notiz, auch per Einfügen oder Drag and Drop.",
-      "Angehängte Dateien liegen im Konzept-Ordner, das Plugin liest sie von dort.",
-      "Zuordnungs-Fragen (was gehört wohin) bekommen einen eigenen Mapping-Block.",
-      "Automatische Notizen stellen die drei bis sieben wichtigsten Fragen zur Seite.",
-      "Jede Notiz-Blase lässt sich beiseiteziehen, wenn sie etwas verdeckt.",
-      "Ein beantworteter Pin zeigt ein fettes Häkchen.",
-      "Die Zahl am Auge zählt die offenen Notizen der Seite.",
-      "Der ganze eigene Pin ist ziehbar, nicht nur ein Griff.",
-      "Öffnest du einen Pin, schließt sich der zuvor geöffnete.",
-      "Während du eine Notiz schreibst, treten die anderen Notizen in den Hintergrund.",
-      "Das Dock zeigt über jedem Feld, worauf es sich bezieht: Concept, Variante, Seite.",
-      "Das oberste Dock-Feld gilt nur für diese Seite, das unterste für das ganze Concept.",
-      "Jede Variante ist ein eigenes Design, nebeneinander vergleichbar in der Übersicht.",
-      "Ab zwei Designs gibt es die Varianten-Übersicht mit Karten und Vorschau.",
-      "Jede Variante nennt genau drei echte Unterschiede zu den anderen.",
-      "Einen Favoriten gibt es nur bei Alternativen, höchstens einen pro Runde.",
-      "Der Favorit ist der Startpunkt der nächsten Runde.",
-      "Notizen zu den anderen Varianten fließen trotz Favorit ein.",
-      "Ohne Favorit entscheidet das Plugin anhand deiner Notizen, womit es weitermacht.",
-      "Eine Frage-Seite fragt nur, was unabhängig vom Siegerdesign gilt.",
-      "Die Wahl zwischen Designs triffst du im Dock, nicht auf einer Frage-Seite.",
-      "Der Modus (Entscheidung, Design, gemischt) wird einmal am Anfang geklärt.",
-      "Im gemischten Modus können Design- und Entscheidungsfragen im selben Concept liegen.",
-      "Das Template wird pro Runde neu gewählt, bleibt aber nach einem Design meist Design.",
-      "Der Abschlussbericht ist die einzige Ausnahme von der Template-Kontinuität.",
-      "Die Entscheidungs-Ansicht vergleicht nicht-visuelle Alternativen mit Vor- und Nachteilen.",
-      "Freie Runden sind für Analysen, Erklärungen und Rückblicke ohne Varianten.",
-      "Der Concept-Server läuft lokal, die Seite öffnet im echten Browser.",
-      "Ohne erreichbare Bridge ändert sich nur der Transport, nie die Seite.",
-      "Das Plugin wartet auf deine Antwort, statt weiterzuraten.",
-      "Dein Abschicken landet als eine Nachricht mit allen Entscheidungen und Notizen.",
-      "Notizen zu Seiten, Varianten und dem ganzen Concept werden getrennt übermittelt.",
-      "Eigene Pins werden mit Stelle und Zielelement mitgeschickt.",
-      "Ein Pin ohne Text wird nicht gespeichert.",
-      "Enter speichert einen Pin, Esc verwirft ihn.",
-      "Mit Umschalt + Enter schreibst du im Pin eine neue Zeile.",
-      "Das ☰ öffnet das Panel mit Entscheidungen, Runden und Inhaltsverzeichnis.",
-      "Im Panel wechselst du zwischen Hell und Dunkel.",
-      "Die Rundenleiste im Panel zeigt, wer gerade dran ist: du oder das Plugin.",
-      "Das Schloss in der Rundenleiste schaltet von weiteren Runden auf Umsetzen um.",
-      "Ein Klick auf den Rücklauf-Pfeil nimmt das Freischalten wieder zurück.",
-      "Beim Umsetzen zählt die Leiste die Anforderungen des freigegebenen Umfangs.",
-      "Die Zahl in der Leiste hat einen Tooltip mit dem aktuellen Schritt.",
-      "Die Rundenleiste baut sich beim ersten Öffnen einer Runde von links nach rechts auf.",
-      "Abgeschickt heißt gespeichert: auch ohne Verbindung geht nichts verloren.",
-      "Fehlt die Verbindung, speichert die Seite lokal weiter und gleicht später ab.",
-      "Der Toast unten zeigt den Fortschritt, auch wenn das Panel zu ist.",
-      "Fertige Toasts verschwinden von selbst, sobald du sie gesehen hast.",
-      "Eine neue Runde öffnet immer die Startseite des Concepts.",
-      "Neugedachte Varianten tragen den Hinweis Neugedacht, geänderte den Hinweis Verbessert.",
-      "Pro Variante erscheint höchstens ein Hinweis, nie zwei.",
-      "Die Übersicht zeigt echte Live-Vorschauen der Varianten, keine Bilder.",
-      "Design öffnen ↗ springt von der Übersicht in die gewählte Variante.",
-      "Der Schnellzugriff oben in der Mitte springt zwischen Varianten, Seiten und Fragen.",
-      "Der Fragen-Eintrag springt zur ersten offenen Frage, ein zweiter Klick zur nächsten.",
-      "Eine Frage gilt als beantwortet, sobald du darin etwas tust oder scrollst.",
-      "Der Tipp-Streifen über dem Toast erscheint nur, wenn ein Hotkey schneller wäre.",
-      "Mit dem Kreuz am Tipp schweigt er 30 Tage lang.",
-      "Alle Texte der Seite gibt es auf Deutsch und Englisch.",
-      "Die Sprache der Seite folgt der Sprache, in der du das Concept startest.",
-      "Geräteansichten gibt es nur, wenn das Design Telefon oder Tablet deklariert.",
-      "Ein Desktop-Werkzeug deklariert keine Geräteansichten.",
-      "Bei Geräteansichten sind eigene Pins ausgeschaltet, nur die Desktop-Ansicht trägt sie.",
-      "Eingefrorene Runden akzeptieren keine neuen Pins.",
-      "Der Hinweis über einer eingefrorenen Runde bringt dich zur aktuellen zurück.",
-      "Die letzte Runde ist die lebende, alle anderen sind gebacken.",
-      "Gebacken heißt: deine abgeschickten Werte stehen fest im Runden-Fragment.",
-      "Das Plugin schreibt nur Runden-Fragmente, nie die fertige Seite.",
-      "Eine Validierung prüft jede gebaute Seite, bevor sie überschrieben wird.",
-      "Eine veraltete Engine wird beim Bauen erkannt und abgelehnt.",
-      "Die Seite liegt unter docs/concepts, neben ihrem Quell-Ordner.",
-      "Beim Start in einem Repo-Hauptverzeichnis legt das Plugin zuerst einen eigenen Worktree an.",
-      "Zwei Alternativen mit Vor- und Nachteilen werden zur Entscheidungs-Runde.",
-      "Visuelle Fragen werden immer als Design gezeigt, nie nur beschrieben.",
-      "Die Klick-Prototypen der Designs sind echte Klickstrecken über mehrere Seiten.",
-      "Jeder Hotkey steht auch im Tooltip seines Bedienelements.",
-      "Tooltips für Hotkeys erscheinen erst nach längerem Verweilen.",
-      "Das 💬 füllt sich nur, wenn du etwas Seitenspezifisches schreibst, das zählt als Interaktion.",
-      "Das Dock lässt sich maximieren, wenn dir die Felder zu klein sind.",
-      "Das Dock wächst aus dem 💬 heraus und merkt sich, ob du es groß gestellt hast.",
-      "Das aktive Dock-Feld leuchtet sanft, damit du siehst, wohin du schreibst.",
-      "Notizen im Dock gelten für Seite, Variante oder das ganze Concept, je nach Feld.",
-      "Ohne Designs schrumpft die Zeile über dem Feld auf das, was es gibt.",
-      "Ein Concept lässt sich pausieren und später an derselben Stelle fortsetzen.",
-      "Am Ende steht eine Abschlusskarte mit dem, was entschieden und umgesetzt wurde."
+      "Alt halten zeigt alle Hotkeys der Seite.",
+      "Strg + Klick setzt eine Notiz ins Design.",
+      "Leertaste öffnet und schließt die Notizen.",
+      "Das Auge 👁 blendet alle Notizen aus.",
+      "Tasten 1–3 wählen die Variante.",
+      "I, II, III in der Leiste sind Unterseiten.",
+      "F markiert die Variante als Favorit ★.",
+      "V wechselt zwischen den Geräteansichten.",
+      "←/→ blättern, ↑/↓ wechseln die Ebene.",
+      "Esc führt zurück zur Übersicht.",
+      "Deine Entwürfe speichern sich laufend.",
+      "Neu laden verliert keine Notiz.",
+      "Abgeschickte Runden bleiben genau erhalten.",
+      "Frühere Runden bleiben lesbar, nur gesperrt.",
+      "Vor dem Umsetzen prüft das Plugin den Code.",
+      "Beim Umsetzen kann ein Agent-Team helfen.",
+      "Folgeaufgaben können Issues werden.",
+      "Das Ergebnis lässt sich direkt ausliefern.",
+      "Am Ende steht ein Bericht mit Gliederung.",
+      "Das Panel meldet offene Punkte vorab.",
+      "📎 hängt Dateien an, auch per Einfügen.",
+      "Dateien lassen sich ins Feld ziehen.",
+      "Anhänge liegen im Concept-Ordner.",
+      "Zuordnungen (was wohin) haben eine Matrix.",
+      "Notizen am Entwurf stellen die Kernfragen.",
+      "Notiz-Blasen lassen sich beiseiteziehen.",
+      "Beantwortete Notizen am Entwurf zeigen ✓.",
+      "Die Zahl am Auge zählt offene Notizen.",
+      "Eigene Notizen am Entwurf sind ganz ziehbar.",
+      "Es ist immer nur eine Notiz-Blase offen.",
+      "Beim Schreiben treten andere Notizen zurück.",
+      "Jedes Feld zeigt, worauf es sich bezieht.",
+      "Oben: diese Seite. Unten: das ganze Concept.",
+      "Jede Variante ist ein eigenes Design.",
+      "Die Übersicht vergleicht alle Varianten.",
+      "Jede Variante nennt drei echte Unterschiede.",
+      "Höchstens ein Favorit pro Runde.",
+      "Der Favorit startet die nächste Runde.",
+      "Notizen zu allen Varianten zählen mit.",
+      "Ohne Favorit entscheiden deine Notizen.",
+      "Frage-Seiten klären, was überall gilt.",
+      "Welches Design gewinnt, sagst du im Dock.",
+      "Der Modus wird einmal am Anfang geklärt.",
+      "Design und Entscheidung lassen sich mischen.",
+      "Nach einem Design bleibt es meist Design.",
+      "Entscheidungen zeigen Vor- und Nachteile.",
+      "Freie Runden: Analysen ohne Varianten.",
+      "Die Seite läuft lokal in deinem Browser.",
+      "Ohne Verbindung arbeitet die Seite weiter.",
+      "Das Plugin wartet auf dich, statt zu raten.",
+      "Abschicken sendet alles als eine Nachricht.",
+      "Notizen gehen getrennt nach Ebene raus.",
+      "Eigene Notizen merken sich ihre Stelle.",
+      "Eine leere Notiz wird nicht gespeichert.",
+      "Notiz: Enter speichert, Esc verwirft.",
+      "Umschalt + Enter macht eine neue Zeile.",
+      "☰ öffnet Entscheidungen, Runden, Inhalt.",
+      "Hell oder dunkel stellst du im Panel um.",
+      "Die Rundenleiste zeigt, wer gerade dran ist.",
+      "Das Schloss schaltet auf Umsetzen um.",
+      "Der Rücklauf-Pfeil nimmt das wieder zurück.",
+      "Beim Umsetzen zählt die Leiste den Umfang.",
+      "Die Zahl in der Leiste nennt den Schritt.",
+      "Abgeschickt heißt gespeichert.",
+      "Offline speichert die Seite lokal weiter.",
+      "Der Toast unten zeigt den Fortschritt.",
+      "Fertige Toasts gehen von selbst.",
+      "Eine neue Runde startet auf der Startseite.",
+      "Neugedacht/Verbessert markiert Änderungen.",
+      "Pro Variante höchstens ein Hinweis.",
+      "Die Übersicht zeigt echte Live-Vorschauen.",
+      "Design öffnen ↗ springt in die Variante.",
+      "Die Leiste oben springt zu jeder Seite.",
+      "„Fragen“ springt zur nächsten offenen Frage.",
+      "Eine Frage zählt, sobald du sie bedienst.",
+      "Hotkey-Tipps erscheinen nur bei Bedarf.",
+      "✕ am Tipp blendet ihn 30 Tage aus.",
+      "Alle Texte gibt es auf Deutsch und Englisch.",
+      "Die Sprache folgt deinem ersten Prompt.",
+      "Geräteansichten nur bei Handy oder Tablet.",
+      "Eigene Notizen nur in der Desktop-Ansicht.",
+      "Gesperrte Runden nehmen keine Notizen an.",
+      "Der Balken oben führt zur aktuellen Runde.",
+      "Nur die letzte Runde ist bearbeitbar.",
+      "Das Plugin nutzt einen eigenen Worktree.",
+      "Visuelle Fragen kommen immer als Design.",
+      "Prototypen sind echte Klickstrecken.",
+      "Jeder Hotkey steht im Tooltip seines Knopfs.",
+      "Hotkey-Tooltips folgen nach kurzem Warten.",
+      "⤢ vergrößert die Notiz-Felder.",
+      "Das Dock merkt sich, ob du es groß willst.",
+      "Das aktive Feld leuchtet sanft.",
+      "Felder wachsen mit deinem Text mit.",
+      "Beim Öffnen steht der Cursor schon im Feld.",
+      "Seitenwechsel nimmt den Cursor mit.",
+      "Esc im Notizfeld schließt die Notizen.",
+      "Ein Concept lässt sich pausieren.",
+      "Am Ende steht eine Abschlusskarte.",
+      "Strg + Enter startet die nächste Runde."
     ],
     en: [
-      "Hold Alt to show every hotkey of the page as key badges.",
-      "Ctrl + click places your own note right on a spot.",
-      "Space opens and closes the notes dock while no field has focus.",
-      "The eye 👁 hides all notes so you can look at the content in peace.",
-      "Roman numerals (I, II, III) are detail pages, digits 1-3 pick the variants.",
-      "F marks the current variant as your favourite ★.",
-      "V cycles through the device views the design declares.",
-      "Left/right arrows move on the same level, up/down one level.",
-      "Esc takes you from a variant back to the overview.",
-      "The bridge saves your drafts continuously, a reload loses nothing.",
-      "Submitted rounds are frozen and keep exactly your answers.",
-      "Earlier rounds stay browsable, they are just locked.",
-      "The page is assembled by a build script from round fragments, never by hand.",
-      "Every round rebuilds the engine from the current plugin reference.",
-      "On implement, the plugin checks whether an agent team should work on it and which.",
-      "Before implementing, a reality check runs against the real code.",
-      "Follow-ups can be filed as issues instead of being implemented right away.",
-      "After implementing, the result can be shipped right away.",
-      "The final report is always a document with a table of contents.",
-      "The panel reports open points before you submit.",
-      "📎 attaches files to a note, also by paste or drag and drop.",
-      "Attached files live in the concept folder, the plugin reads them from there.",
-      "Assignment questions (what goes where) get their own mapping block.",
-      "Automatic notes ask the three to seven most important questions about the page.",
-      "Every note bubble can be dragged aside when it covers something.",
-      "An answered pin shows a bold check mark.",
-      "The number on the eye counts the open notes of the page.",
-      "The whole own pin is draggable, not just a handle.",
-      "Opening a pin closes the one that was open.",
-      "While you write a note, the other notes step into the background.",
-      "The dock shows above every field what it refers to: concept, variant, page.",
-      "The top dock field is for this page only, the bottom one for the whole concept.",
-      "Each variant is its own design, comparable side by side in the overview.",
-      "From two designs on there is the variant overview with cards and previews.",
-      "Each variant names exactly three genuine differences from the others.",
-      "A favourite exists only for alternatives, at most one per round.",
-      "The favourite is the starting point of the next round.",
-      "Notes on the other variants still count despite a favourite.",
-      "Without a favourite the plugin decides from your notes what to continue with.",
-      "A question page only asks what holds whichever design wins.",
-      "You make the call between designs in the dock, not on a question page.",
-      "The mode (decision, design, mixed) is settled once at the start.",
-      "In mixed mode, design and decision questions can live in the same concept.",
-      "The template is picked per round but usually stays design after a design round.",
-      "The final report is the one exception to template continuity.",
-      "The decision view compares non-visual alternatives with pros and cons.",
-      "Free rounds are for analyses, explainers and retros without variants.",
-      "The concept bridge runs locally and the page opens in a real browser.",
-      "Without a reachable bridge only the transport changes, never the page.",
-      "The plugin waits for your answer instead of guessing on.",
-      "Your submit arrives as one message with all decisions and notes.",
-      "Notes on pages, variants and the whole concept are sent separately.",
-      "Your own pins are sent with their spot and target element.",
-      "A pin without text is not saved.",
-      "Enter saves a pin, Esc discards it.",
-      "Shift + Enter starts a new line inside a pin.",
-      "The ☰ opens the panel with decisions, rounds and table of contents.",
-      "In the panel you switch between light and dark.",
-      "The round row in the panel shows who is up: you or the plugin.",
-      "The lock in the round row switches from more rounds to implementing.",
-      "Clicking the back arrow takes the unlock back.",
-      "While implementing, the bar counts the requirements of the approved scope.",
-      "The number in the bar has a tooltip naming the current step.",
-      "The round row builds left to right the first time a round opens.",
-      "Submitted means saved: nothing is lost even without a connection.",
-      "Without a connection the page keeps saving locally and syncs later.",
-      "The toast at the bottom shows progress even when the panel is closed.",
-      "Finished toasts disappear on their own once you have seen them.",
-      "A new round always opens the start page of the concept.",
-      "Newly thought-up variants carry the note Neugedacht, changed ones Verbessert.",
-      "A variant shows at most one hint, never two.",
-      "The overview shows real live previews of the variants, not images.",
-      "Open design ↗ jumps from the overview into the chosen variant.",
-      "The quick nav at the top centre jumps between variants, pages and questions.",
-      "The questions entry jumps to the first open question, a second click to the next.",
-      "A question counts as answered once you do something or scroll in it.",
-      "The tip strip above the toast only appears when a hotkey would be faster.",
-      "The cross on a tip silences it for 30 days.",
-      "All texts of the page exist in German and English.",
-      "The page language follows the language you start the concept in.",
-      "Device views only exist when the design declares phone or tablet.",
-      "A desktop tool declares no device views.",
-      "In device views own pins are off, only the desktop view carries them.",
-      "Frozen rounds accept no new pins.",
-      "The bar over a frozen round takes you back to the current one.",
-      "The latest round is the live one, all others are baked.",
-      "Baked means your submitted values are written into the round fragment.",
-      "The plugin only writes round fragments, never the finished page.",
-      "A validation checks every built page before it is overwritten.",
-      "A stale engine is detected and rejected when building.",
-      "The page lives under docs/concepts, next to its source folder.",
-      "When started in a repo's main checkout the plugin first creates its own worktree.",
-      "Two or more alternatives with pros and cons become a decision round.",
-      "Visual questions are always shown as a design, never just described.",
-      "The design click-dummies are real click paths across several pages.",
-      "Every hotkey is also named in the tooltip of its control.",
-      "Tooltips for hotkeys appear only after hovering for a while.",
-      "The 💬 only counts when you type something page-specific, that counts as interaction.",
-      "The dock can be maximised if the fields feel too small.",
-      "The dock grows out of the 💬 and remembers whether you made it large.",
-      "The active dock field glows softly so you can see where you are writing.",
-      "Notes in the dock apply to a page, a variant or the whole concept, depending on the field.",
-      "Without designs the line above the field shrinks to what exists.",
-      "A concept can be paused and resumed later at the same spot.",
-      "At the end a completion card lists what was decided and implemented."
+      "Hold Alt to see every hotkey on the page.",
+      "Ctrl + click puts a note on the design.",
+      "Space opens and closes your notes.",
+      "The eye 👁 hides all notes.",
+      "Keys 1–3 pick the variant.",
+      "I, II, III in the bar are subpages.",
+      "F marks the variant as favourite ★.",
+      "V switches between device views.",
+      "←/→ flip pages, ↑/↓ change the level.",
+      "Esc takes you back to the overview.",
+      "Your drafts save themselves as you go.",
+      "Reloading never loses a note.",
+      "Submitted rounds stay exactly as sent.",
+      "Earlier rounds stay readable, just locked.",
+      "Before implementing, the plugin checks code.",
+      "An agent team can help with implementing.",
+      "Follow-ups can become issues.",
+      "The result can be shipped right away.",
+      "At the end comes a report with an outline.",
+      "The panel lists open points up front.",
+      "📎 attaches files, also by paste.",
+      "You can drag files into the field.",
+      "Attachments live in the concept folder.",
+      "Assignments (what goes where) get a matrix.",
+      "Notes on the design ask the key questions.",
+      "Note bubbles can be dragged aside.",
+      "Answered notes on the design show a ✓.",
+      "The number on the eye counts open notes.",
+      "Your own notes on the design are draggable.",
+      "Only one note bubble is open at a time.",
+      "While you write, other notes step back.",
+      "Each field shows what it refers to.",
+      "Top: this page. Bottom: the whole concept.",
+      "Each variant is a design of its own.",
+      "The overview compares all variants.",
+      "Each variant names three real differences.",
+      "At most one favourite per round.",
+      "The favourite starts the next round.",
+      "Notes on every variant still count.",
+      "No favourite? Your notes decide.",
+      "Question pages ask what holds everywhere.",
+      "Name the winning design in the dock.",
+      "The mode is settled once at the start.",
+      "Design and decisions can be mixed.",
+      "After a design round, design usually stays.",
+      "Decisions show pros and cons.",
+      "Free rounds: analyses without variants.",
+      "The page runs locally in your browser.",
+      "Without a connection the page keeps working.",
+      "The plugin waits for you, it never guesses.",
+      "Submitting sends everything as one message.",
+      "Notes are sent separately per level.",
+      "Your own notes remember their spot.",
+      "An empty note is not saved.",
+      "Note: Enter saves, Esc discards.",
+      "Shift + Enter starts a new line.",
+      "☰ opens decisions, rounds and contents.",
+      "Switch light or dark in the panel.",
+      "The round bar shows whose turn it is.",
+      "The lock switches to implementing.",
+      "The back arrow undoes that again.",
+      "While implementing, the bar counts scope.",
+      "The number in the bar names the step.",
+      "Submitted means saved.",
+      "Offline, the page keeps saving locally.",
+      "The toast at the bottom shows progress.",
+      "Finished toasts go away on their own.",
+      "A new round starts on the start page.",
+      "Rethought/Improved marks what changed.",
+      "At most one hint per variant.",
+      "The overview shows real live previews.",
+      "Open design ↗ jumps into the variant.",
+      "The bar on top jumps to any page.",
+      "“Questions” jumps to the next open one.",
+      "A question counts once you use it.",
+      "Hotkey tips only appear when useful.",
+      "✕ on a tip hides it for 30 days.",
+      "All texts exist in German and English.",
+      "The language follows your first prompt.",
+      "Device views only for phone or tablet.",
+      "Own notes only in the desktop view.",
+      "Locked rounds take no new notes.",
+      "The bar on top leads to the current round.",
+      "Only the latest round is editable.",
+      "The plugin uses its own worktree.",
+      "Visual questions always come as a design.",
+      "Prototypes are real click paths.",
+      "Every hotkey is in its control's tooltip.",
+      "Hotkey tooltips follow after a short wait.",
+      "⤢ enlarges the note fields.",
+      "The dock remembers if you made it large.",
+      "The active field glows softly.",
+      "Fields grow with your text.",
+      "On open, the cursor is already in the field.",
+      "Switching pages takes the cursor along.",
+      "Esc in a note field closes the notes.",
+      "A concept can be paused and resumed.",
+      "At the end comes a completion card.",
+      "Ctrl + Enter starts the next round."
     ]
   };
+  // Index → hotkey id (same ids as § Hotkey overlay's conceptHotkeyUsed):
+  // a hotkey tip is dropped for good once the user has used that hotkey.
+  // de[i] and en[i] are the same fact, so one map serves both locales.
+  const DOCK_TIP_HOTKEY = { 0: 'alt', 1: 'upin', 2: 'dock', 4: 'variants', 6: 'fav', 7: 'view', 8: 'pages', 9: 'esc', 95: 'dock-esc', 98: 'submit' };
+  window.DOCK_TIP_HOTKEY = DOCK_TIP_HOTKEY;
   window.DOCK_TIPS = DOCK_TIPS;
   window.nextDockTipIndex = function(n, last, rand) {
     if (n < 2) return 0;
     const r = typeof rand === 'number' ? rand : Math.random();
     return ((last < 0 ? 0 : last) + 1 + Math.floor(r * (n - 1))) % n;
   };
+  // Tip rules (the nudges in § Hotkey overlay follow the same spirit):
+  // 1. never a tip already shown in this page session; 2. never one seen on
+  // an earlier visit until the pool is used up (localStorage
+  // `hint-dock-tips-seen`, try / catch); 3. a hotkey tip never again once
+  // that hotkey was used (window.conceptHotkeyUsed); 4. never the same tip
+  // twice in a row. Each text is ONE dock line (≤ 44 chars, test-enforced)
+  // and says "Notiz", never the dev-internal "Pin".
+  const TIPS_SEEN_KEY = 'hint-dock-tips-seen';
+  const sessionTips = new Set();
+  function readSeenTips() {
+    try { return new Set(JSON.parse(localStorage.getItem(TIPS_SEEN_KEY) || '[]')); } catch (e) { return new Set(); }
+  }
+  function writeSeenTips(set) {
+    if (typeof _guardedSetItem === 'function') _guardedSetItem(TIPS_SEEN_KEY, JSON.stringify([...set]));
+  }
+  // Pure pick (exported for the tests): a random index of `n` that is not in
+  // `excluded`; falls back to nextDockTipIndex when everything is excluded.
+  window.pickDockTip = function(n, excluded, last, rand) {
+    const open = [];
+    for (let i = 0; i < n; i++) if (!excluded.has(i) && i !== last) open.push(i);
+    if (!open.length) return window.nextDockTipIndex(n, last, rand);
+    const r = typeof rand === 'number' ? rand : Math.random();
+    return open[Math.min(open.length - 1, Math.floor(r * open.length))];
+  };
+  function chooseDockTip(n) {
+    const usedHotkey = i => !!(DOCK_TIP_HOTKEY[i] && window.conceptHotkeyUsed?.(DOCK_TIP_HOTKEY[i]));
+    let seen = readSeenTips();
+    const blocked = s => {
+    const x = new Set([...s, ...sessionTips]);
+    for (let i = 0; i < n; i++) if (usedHotkey(i)) x.add(i);
+    return x;
+  };
+    let excluded = blocked(seen);
+    if (excluded.size >= n) { seen = new Set(); excluded = blocked(seen); }   // pool exhausted: start over
+    const i = window.pickDockTip(n, excluded, lastDockTip);
+    sessionTips.add(i);
+    seen.add(i);
+    writeSeenTips(seen);
+    return i;
+  }
   let lastDockTip = -1;
   function showDockTip() {
     if (!dock) return;
@@ -313,7 +344,8 @@
       box.id = 'dock-tip';
       box.className = 'dock-tip';
       const title = document.createElement('b');
-      title.textContent = '💡 {{dock.tip_title}}';
+      title.innerHTML = '<svg class="dock-tip-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 1a5 5 0 0 0-3.1 8.9c.6.5 1.1 1.2 1.1 2V12h4v-.1c0-.8.5-1.5 1.1-2A5 5 0 0 0 8 1zM6 13h4v.5A1.5 1.5 0 0 1 8.5 15h-1A1.5 1.5 0 0 1 6 13.5z"/></svg>';
+      title.append('{{dock.tip_title}}');
       const text = document.createElement('span');
       text.className = 'dock-tip-text';
       box.append(title, text);
@@ -321,7 +353,7 @@
     }
     const lang = (document.documentElement.lang || 'en').slice(0, 2) === 'de' ? 'de' : 'en';
     const pool = DOCK_TIPS[lang];
-    lastDockTip = window.nextDockTipIndex(pool.length, lastDockTip);
+    lastDockTip = chooseDockTip(pool.length);
     box.querySelector('.dock-tip-text').textContent = pool[lastDockTip];
     box.hidden = false;
   }
@@ -341,17 +373,11 @@
   dock?.addEventListener('input', stopFabPulse);
   dockClose?.addEventListener('click', closeDock);
 
-  // Maximise/restore (Work package B) — a RESIZE, never a close. Distinct
-  // from minimise above: minimise flips data-open, this flips
-  // data-userMaximized, a SEPARATE attribute from data-size (applyDockSize()
-  // below still only ever computes compact/wide from the round's shape,
-  // unchanged) — the CSS composes the two via
-  // `.feedback-dock[data-size][data-user-maximized="true"]`, which applies on
-  // top of whichever of compact/wide is current. The choice is persisted
-  // (state['dockMaximized'], § State Persistence) and restored on reload via
-  // window.applyDockSize() (see restoreState()) — primeDock() must never
-  // silently clear data-userMaximized on an iteration switch, and it does
-  // not: applyDockSize() only ever writes data-size.
+  // Maximise/restore (Work package B) — a RESIZE, never a close: it flips
+  // data-userMaximized, SEPARATE from data-size (applyDockSize() still only
+  // computes compact/wide); the CSS composes both. Persisted as
+  // state['dockMaximized'] (§ State Persistence), restored via
+  // applyDockSize() — which never clears data-userMaximized on a switch.
   const dockMaximize = document.getElementById('feedback-maximize');
   function syncMaximizeButton() {
     if (!dockMaximize || !dock) return;
@@ -373,9 +399,7 @@
   // itself on load and auto-close on the first mockup click, which meant the
   // first thing a concept showed was three empty textareas over the artefact
   // the user came to look at. Now the 💬 FAB is the only thing that opens it,
-  // in every iteration state including frozen ones — no auto-open, no
-  // auto-close, nothing to un-learn.
-  //
+  // in every iteration state including frozen ones — nothing to un-learn.
   // Size is one of exactly two values. A document round (decision / free —
   // the projection on <html data-template>, which showIteration() rewrites
   // before any iteration:changed listener runs) shows only the general

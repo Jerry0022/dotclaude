@@ -93,18 +93,21 @@ describe("C · header islands and FABs", () => {
     const header = /\.design-header \{([^}]*)\}/.exec(css())[1];
     expect(header).toMatch(/border: 0/);
     expect(header).not.toMatch(/border-left|border: 1px/);
+    // No island any more: the corner is the bare eye.
+    expect(header).toMatch(/background: transparent; box-shadow: none/);
     window.showDesign("d2");
     expect(document.querySelector("#design-header .design-header-pin")).toBeNull();
     expect(document.querySelector("#design-header .design-header-eye")).not.toBeNull();
   }, BOOT_TIMEOUT);
 
   test("glow pulses on first open and new round, reduced motion switches every new animation off", () => {
-    expect(md).toMatch(/body\.chrome-glow \.panel-fab, body\.chrome-glow \.feedback-fab \{ animation: chromeGlow/);
-    expect(md).toMatch(/body\.chrome-glow \.design-header \{ animation: chromeGlowIsland/);
+    // The ☰ is navigation chrome now (no accent tile, no pulse); only 💬 glows.
+    expect(md).toMatch(/body\.chrome-glow \.feedback-fab \{ animation: chromeGlow/);
+    expect(md).not.toMatch(/body\.chrome-glow \.panel-fab/);
+    expect(md).not.toMatch(/body\.chrome-glow \.design-header/);
     expect(md).toMatch(/if \(last && last !== now\) pulseChromeGlow\(\);/);
     const rm = md.match(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\}/g).join("\n");
-    expect(rm).toMatch(/body\.chrome-glow \.panel-fab/);
-    expect(rm).toMatch(/body\.chrome-glow \.design-header/);
+    expect(rm).toMatch(/body\.chrome-glow \.feedback-fab/);
     expect(rm).toMatch(/\.anno-pin \{ animation: none; \}/);
   });
 
@@ -151,6 +154,27 @@ describe("C · header islands and FABs", () => {
     window.showOverview();
     window.updateAnnoUI();
     expect(eye.hidden).toBe(false);
+  }, BOOT_TIMEOUT);
+
+  test("eye counter: the current page's notes only, neither answered nor opened; the overview counts none", async () => {
+    const { window, document } = await boot(page(2));
+    const badge = document.getElementById("anno-eye-count");
+    window.showDesign("d2");
+    addAnnos(window, document, screenOf(document));
+    expect(badge.textContent).toBe("1");
+    // the overview owns no notes: no sum of every design's notes
+    window.showOverview();
+    window.updateAnnoUI();
+    expect(badge.hidden).toBe(true);
+    // a question view owns none either
+    window.showDesign("d2");
+    window.updateAnnoUI();
+    expect(badge.textContent).toBe("1");
+    expect(badge.hidden).toBe(false);
+    // opened once = seen
+    document.querySelector('[data-anno-pin="n1"]').click();
+    window.updateAnnoUI();
+    expect(badge.hidden).toBe(true);
   }, BOOT_TIMEOUT);
 });
 

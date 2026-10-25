@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.16.0
+ * @version 0.17.0
  * @event PreToolUse
  * @plugin devops
  * @description Block Read/Bash/Glob/Grep operations that would consume a
@@ -32,13 +32,19 @@
  *   see `pre.tokens.guard.bash.test.js`'s dedicated cap describe block for
  *   the raised-limit coverage) rather than removed.
  *
- *   Grep is never blocked for being "answerable from the graph" (0.16.0):
- *   the graphify answer-in-gate was removed. 105 of 140 fires were retried
- *   anyway, and each forced retry re-read the whole context to save a search
- *   that returned ~470 tokens. Grep/Glob only go through the size/broadness
- *   checks below; graph-first guidance lives in agents/scout.md and
- *   deep-knowledge/tool-selection.md instead of a block.
+ *   Grep is never blocked for being "answerable from an index" — Grep/Glob only
+ *   go through the size/broadness checks below. A broad-search block points at
+ *   the haiku `devops:scout` agent (a concrete Agent call shape) so broad
+ *   exploration runs outside the main context.
  *
+ *   Mandatory reads never block (0.17.0): everything under the plugin's own
+ *   `skills/`, `deep-knowledge/` and `agents/` — resolved from this hook's
+ *   location (installed plugin root, whatever its directory is called) plus the
+ *   source repo's `plugins/devops/…` and `devops/<version>/…` cache layouts.
+ *   The skills order those reads "completely"; the old regex needed a `devops`
+ *   path segment, which the installed root (`…/plugin_<id>/`) does not have, so
+ *   a ~11K-token bridge-server.md was blocked and then retried unchanged.
+
  *   No blind retry (0.15.0): an unbounded Bash command (`git log`, `find .`)
  *   is priced at the Bash output cap like a file read, so at the harness
  *   default it runs and the bounded form comes back as a hint instead of a
@@ -54,17 +60,13 @@
  *   "Broad" means no `path`, `.`, `/`, or a path that resolves to the project
  *   root itself (isRepoWide) — the absolute cwd used to slip past every check.
  *
- *   Session-start injection: on the FIRST broad Grep/Glob of a session,
+ *   Project-map injection: on the FIRST broad Grep/Glob of a session,
  *   attaches orientation as additionalContext and ALLOWS the search, so
  *   Claude can scope subsequent calls with a `path` instead of only being
  *   nagged after a block. Injected at most once per session (temp flag); later
  *   broad searches still hit the normal block. The injection combines:
- *     - `.claude/project-map.md` (file-structure re-scoping hint), regenerated
- *       right before it is injected so a months-old copy never lands in
- *       context (recorded as `map_injected` for graphify-audit), and
- *     - an ambient graphify nudge when `graphify-out/graph.json` exists
- *       (steer toward `graphify query` over grepping — see hooks/lib/graph-nudge).
- *   Fires if EITHER source is present.
+ *   `.claude/project-map.md` (file-structure re-scoping hint), regenerated
+ *   right before it is injected so a months-old copy never lands in context.
  */
 
 // Every sibling require here is guarded. A consumer's plugin cache can update
@@ -83,12 +85,6 @@ const cwd = process.cwd();
 const CONFIG_DIR = require('../lib/project-root').projectClaudeDir(cwd);
 const CONFIG_PATH = path.join(CONFIG_DIR, 'token-config.json');
 
-// Note: background graphify spawns (self-heal refresh) go through
-// `gstate.bgWithSentinel` (hooks/lib/graphify-state.js) rather than a local
-// bg() helper — it wraps the same detached/stdio:'ignore' spawn shape but
-// also records ok/fail to a sentinel file so a silent failure (Gap #5) can
-// be surfaced at the next SessionStart instead of vanishing.
-
 let PLAN_DEFAULTS;
 try {
   PLAN_DEFAULTS = require('../lib/plan-defaults');
@@ -105,13 +101,6 @@ try { bashCost = require('../lib/bash-context-cost'); } catch { /* fallback belo
 // An image Read is priced by pixels; without the module, by bytes as before.
 let imageCost = null;
 try { imageCost = require('../lib/image-tokens'); } catch { /* byte estimate below */ }
-
-// Telemetry only — never lets a metrics failure affect the guard's verdict.
-let metricsLib = null;
-try { metricsLib = require('../lib/graphify-metrics'); } catch { /* telemetry unavailable */ }
-function recordMetric(event, extra, ctx) {
-  try { if (metricsLib) metricsLib.record(event, extra, ctx); } catch { /* fail-silent */ }
-}
 
 // Savings log for the plugin audit (estimates, labelled as such). Fail-silent.
 function logSaving(op, estTokens, extra) {
@@ -193,6 +182,29 @@ function refreshProjectMap() {
   } catch { /* keep the existing map */ }
 }
 
+const SCOUT_CALL = 'Agent({ subagent_type: "devops:scout", model: "haiku", run_in_background: true, '
+  + 'description: "locate <topic>", prompt: "<what to find and what to return>" }) — it searches outside your context and returns file paths.';
+
+const PLUGIN_ROOT = path.resolve(__dirname, '..', '..');
+
+/**
+ * True for a file under the plugin's own `skills/`, `deep-knowledge/` or
+ * `agents/`. The running hook sits at `<plugin root>/hooks/pre-tool-use`, so
+ * its root is the installed root (cache dir, any name) or the source repo's
+ * `plugins/devops`. The path pattern covers another version's cache dir and a
+ * repo checkout the hook is not running from.
+ */
+function isPluginOwnDoc(absPath) {
+  const norm = (p) => {
+    const r = path.resolve(p).replace(/\\/g, '/');
+    return process.platform === 'win32' ? r.toLowerCase() : r;
+  };
+  const file = norm(absPath);
+  const root = norm(PLUGIN_ROOT).replace(/\/+$/, '') + '/';
+  if (file.startsWith(root) && /^(?:skills|deep-knowledge|agents)\//.test(file.slice(root.length))) return true;
+  return /\/devops\/(?:[^/]+\/)?(?:skills\/[^/]+\/(?:deep-knowledge|modes)|deep-knowledge|agents)\/.+\.md$/.test(file);
+}
+
 function flagPath(key) {
   const hash = crypto.createHash('md5').update(key).digest('hex').slice(0, 12);
   return path.join(os.tmpdir(), `claude_confirm_${hash}.flag`);
@@ -270,14 +282,10 @@ process.stdin.on('end', () => {
   if (toolName === 'Read') {
     const filePath = toolInput.file_path || '';
     const absPath = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
-    // A devops skill's own deep-knowledge / mode files are mandatory reads:
-    // SKILL.md pointers say "Read … completely" (auto-concept step*.md,
-    // do-run modes). Advising offset + limit there would split the procedure
-    // the skill depends on, so they pass at any threshold. Plugin cache
-    // (…/devops/<version>/skills/…) and source repo (…/devops/skills/…).
-    if (/[\\/]devops[\\/](?:[^\\/]+[\\/])?skills[\\/][^\\/]+[\\/](?:deep-knowledge|modes)[\\/].+\.md$/i.test(absPath)) {
-      process.exit(0);
-    }
+    // The plugin's own skills / deep-knowledge / agents are mandatory reads:
+    // SKILL.md pointers say "Read … completely". Advising offset + limit there
+    // would split the procedure the skill depends on, so they pass at any size.
+    if (isPluginOwnDoc(absPath)) process.exit(0);
     try {
       const stat = fs.statSync(absPath);
       // The Read tool shows png/jpg/jpeg/gif/webp as an image, billed by its
@@ -357,7 +365,6 @@ process.stdin.on('end', () => {
       description = 'Bash: unbounded output — may flood context';
       verboseSuggestion = verboseMatch.suggestion;
       if (estimatedTokens < THRESHOLD) {
-        recordMetric('guard_hinted', { tool: toolName, kind: 'bash-verbose' }, { cwd, sid: hook.session_id || 'nosid' });
         process.stdout.write(JSON.stringify({
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
@@ -439,41 +446,26 @@ process.stdin.on('end', () => {
     const sid = hook.session_id || hook.sessionId || 'nosid';
     const mapKey = crypto.createHash('md5').update(`${sid}:${cwd}`).digest('hex').slice(0, 12);
     const mapFlag = path.join(os.tmpdir(), `devops_mapinject_${mapKey}.flag`);
-    // Guarded like every other sibling require — a missing lib must degrade to
-    // "no graph nudge", never crash the guard into failing open.
-    let graphNudge = null;
-    try { graphNudge = require('../lib/graph-nudge'); } catch { /* map-only */ }
     const hasMap = fs.existsSync(projectMap);
-    let hasGraph = false;
-    try { hasGraph = !!graphNudge && graphNudge.hasGraph(cwd); } catch { /* map-only */ }
-    // Fire once per session if EITHER the project-map or a graphify graph exists.
-    if ((hasMap || hasGraph) && !fs.existsSync(mapFlag)) {
+    if (hasMap && !fs.existsSync(mapFlag)) {
       try {
-        const sections = [];
-        if (hasMap) {
-          refreshProjectMap();
-          const mapBody = fs.readFileSync(projectMap, 'utf8').trim();
-          recordMetric('map_injected', { tool: toolName, bytes: mapBody.length }, { cwd, sid });
-          sections.push([
-            `[project-map] Before this broad ${toolName} (no narrower \`path\` set), here is the project's file structure.`,
-            'Use it to re-scope: pick the directory that contains your target and pass it as the `path`',
-            'parameter on this and future Grep/Glob calls instead of scanning the whole repo.',
-            '',
-            mapBody,
-          ].join('\n'));
-        }
-        if (hasGraph) {
-          sections.push(graphNudge.buildGraphNudge(cwd));
-          try { require('../lib/graphify-metrics').record('nudge_injected', {}, { cwd, sid }); } catch {}
-        }
+        refreshProjectMap();
+        const mapBody = fs.readFileSync(projectMap, 'utf8').trim();
+        const text = [
+          `[project-map] Before this broad ${toolName} (no narrower \`path\` set), here is the project's file structure.`,
+          'Use it to re-scope: pick the directory that contains your target and pass it as the `path`',
+          'parameter on this and future Grep/Glob calls instead of scanning the whole repo.',
+          '',
+          mapBody,
+        ].join('\n');
         fs.writeFileSync(mapFlag, Date.now().toString());
         process.stdout.write(JSON.stringify({
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
-            additionalContext: sections.join('\n\n'),
+            additionalContext: text,
           },
         }));
-        process.exit(0); // allow the search; map/graph hint now in context for the next one
+        process.exit(0); // allow the search; map now in context for the next one
       } catch {}
     }
   }
@@ -502,7 +494,6 @@ process.stdin.on('end', () => {
   const flag = flagPath(flagKey);
 
   // Telemetry classification — cheap, string-only, no extra work on the hot path.
-  const sidForMetrics = hook.session_id || hook.sessionId || 'nosid';
   const guardKind = toolName === 'Read' ? 'read'
     : (toolName === 'Bash' && verboseSuggestion) ? 'bash-verbose'
     : (toolName === 'Bash' && matchedFilesOut) ? 'bash-file'
@@ -520,7 +511,6 @@ process.stdin.on('end', () => {
     } catch { /* stays expired */ }
     try { fs.unlinkSync(flag); } catch {}
     if (fresh) {
-      recordMetric('guard_released', { tool: toolName, kind: guardKind }, { cwd, sid: sidForMetrics });
       logSaving('released', estimatedTokens, { tool: toolName, kind: guardKind });
       process.exit(0); // User confirmed — allow
     }
@@ -529,7 +519,6 @@ process.stdin.on('end', () => {
 
   // First time — block and warn
   try { fs.writeFileSync(flag, Date.now().toString()); } catch {}
-  recordMetric('guard_blocked', { tool: toolName, kind: guardKind, est: estimatedTokens }, { cwd, sid: sidForMetrics });
   logSaving('blocked', estimatedTokens, { tool: toolName, kind: guardKind });
 
   const W = 54;
@@ -576,7 +565,7 @@ process.stdin.on('end', () => {
   const narrower = toolName === 'Read'
     ? 'Read only the part you need (offset + limit), or Grep the file for the lines you want.'
     : (toolName === 'Grep' || toolName === 'Glob')
-      ? 'Set `path` to the directory that holds your target (project map / graphify query tell you which).'
+      ? 'Set `path` to the directory that holds your target (the project map tells you which). For open-ended exploration delegate instead: ' + SCOUT_CALL
       : verboseSuggestion
         ? `Use the bounded form: ${verboseSuggestion}`
         : 'Read only the part you need (head / tail / grep on the file), not the whole file.';

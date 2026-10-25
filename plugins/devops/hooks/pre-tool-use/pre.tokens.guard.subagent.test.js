@@ -53,9 +53,6 @@ function project() {
 // they raise the env var to a value that keeps the pre-cap behaviour intact.
 const UNCAPPED_OUTPUT_LEN = "1000000";
 
-// Requirement 8: every hook spawn points DOTCLAUDE_GRAPHIFY_METRICS at an
-// isolated temp file — never the real `~/.claude/graphify-metrics.jsonl`.
-const METRICS_FILE = path.join(HOME_DIR, "graphify-metrics-isolated.jsonl");
 
 function run(dir, extra, file) {
   const tmp = path.join(dir, ".tmp");
@@ -69,7 +66,6 @@ function run(dir, extra, file) {
     env: {
       ...process.env, HOME: HOME_DIR, USERPROFILE: HOME_DIR,
       TMPDIR: tmp, TEMP: tmp, TMP: tmp,
-      DOTCLAUDE_GRAPHIFY_METRICS: path.join(HOME_DIR, "m.jsonl"),
     },
   });
   return { status: res.status, stderr: res.stderr || "" };

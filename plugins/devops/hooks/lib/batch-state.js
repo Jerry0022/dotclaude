@@ -1017,7 +1017,7 @@ function parseBatchCommand(text) {
  * a 📥 or ⏳ here would read as a session state instead of a note.
  */
 const PANEL_ICONS = Object.freeze({
-  stored: '🗂️', image: '🖼️', question: '💭', notice: '🔔',
+  saved: '💾', stored: '🗂️', image: '🖼️', question: '💭', notice: '🔔',
   fire: '🎬', stop: '🛑', autoEnd: '🕰️', running: '📌',
 });
 

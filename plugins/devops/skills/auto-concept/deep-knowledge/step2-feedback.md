@@ -254,6 +254,11 @@ signal Claude monitors.
   start page on overview concepts, scroll top on plain pages). Reduced motion
   turns all of it off. The final report has no journey row, so nothing builds
   up there.
+- **Tips once**: a tip shown once is not shown again (dismissed 30 days); the
+  tip lines are one short line each ("Space opens your notes").
+- **Dock focus**: opening the notes dock puts the cursor in its first field.
+- **Wording**: user-visible text says "note"/"Notiz" for what an own marker on
+  the design holds — never "Pin" (internal term only).
 
 ## File naming and iteration tabs
 

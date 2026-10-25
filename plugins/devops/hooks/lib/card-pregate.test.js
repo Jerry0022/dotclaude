@@ -278,6 +278,21 @@ describe('card-pregate — analysis after a change (#624)', () => {
     expect(writeToolsThisTurn(t)).toEqual(['Bash', 'Agent devops:core', 'execute_sql']);
   });
 
+  test('a write outside the repo work tree is no change; inside it still is', () => {
+    const fs = require('fs'), os = require('os'), path = require('path');
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'pregate-repo-'));
+    fs.mkdirSync(path.join(repo, '.git'));
+    const outside = path.join(os.tmpdir(), 'pregate-scratch', 'a.js');
+    const t = [
+      prompt('analysiere'),
+      toolUse('w1', 'Write', { file_path: outside }),
+    ].join('\n');
+    expect(writeToolsThisTurn(t, repo)).toEqual([]);
+    const t2 = [prompt('fix'), toolUse('w2', 'Write', { file_path: path.join(repo, 'src.js') })].join('\n');
+    expect(writeToolsThisTurn(t2, repo)).toEqual(['Write']);
+    fs.rmSync(repo, { recursive: true, force: true });
+  });
+
   test('findings: analysis + write tools → reason; other variants or no tools → none', () => {
     expect(findings(analysis, { writeTools: ['Edit'] }).join('\n')).toMatch(/Variant `analysis` but this turn changed something: Edit/);
     expect(findings(analysis, { writeTools: [] })).toEqual([]);

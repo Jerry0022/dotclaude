@@ -67,7 +67,7 @@ process.stdin.on('end', () => {
   // strict — a time window would only land the same text there a second time.
   //
   // A subagent is its own context: its report never reaches the main thread,
-  // so it must not spend the main thread's (keyed like post.flow.debug).
+  // so it must not spend the main thread's (keyed per session and agent).
   //
   // Without a session_id, runOnce falls back to the literal "unknown": one
   // marker shared by every session that ever lacks an id, and since the marker

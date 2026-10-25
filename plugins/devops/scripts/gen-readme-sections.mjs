@@ -62,7 +62,7 @@ const CATEGORIES = [
   { title: "agents & runs — delegation, do-run contract, burn", domains: ["agent", "run", "burn"] },
   { title: "skills & knowledge — routing, overrides, injected docs", domains: ["skill", "knowledge", "strict", "readme", "design", "concept"] },
   { title: "plugin & MCP — updates, dependencies, server health", domains: ["plugin", "mcp", "permissions", "statusline", "thinking", "watchdog", "tmp", "project"] },
-  { title: "issues, team & graph", domains: ["issue", "team", "graphify"] },
+  { title: "issues & team", domains: ["issue", "team"] },
 ];
 
 // ── Roster extraction ───────────────────────────────────────────────────────

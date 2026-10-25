@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.agent.relay
- * @version 0.1.0
+ * @version 0.2.0
  * @event PreToolUse
  * @plugin devops
  * @matcher (all tools)
@@ -24,19 +24,54 @@
 
 require('../lib/plugin-guard');
 
-const relay = require('../lib/agent-card-relay');
-
 const PASS_TOOLS = /(^|__)(show_widget|read_me)$/;
+const CARD_PREFIX = 'Agent card';
+const TAIL_BYTES = 512 * 1024;
+// The in-flight message's text may not be in the transcript yet when
+// PreToolUse fires: re-read once before holding the call back.
+const RECHECK_MS = 250;
 
-function main(hook) {
-  if (hook.agent_id) return null;
-  if (PASS_TOOLS.test(String(hook.tool_name || ''))) return null;
+/** Fast path: does the transcript tail mention an announced card at all? */
+function tailHasCard(transcriptPath) {
+  if (!transcriptPath) return false;
+  const fs = require('fs');
+  let fd;
+  try {
+    const size = fs.statSync(transcriptPath).size;
+    const start = Math.max(0, size - TAIL_BYTES);
+    fd = fs.openSync(transcriptPath, 'r');
+    const buf = Buffer.alloc(size - start);
+    fs.readSync(fd, buf, 0, size - start, start);
+    return buf.includes(CARD_PREFIX);
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) try { fs.closeSync(fd); } catch { /* already closed */ }
+  }
+}
+
+function pause(ms) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { /* no wait */ }
+}
+
+function evaluate(relay, hook) {
   const text = relay.readTail(hook.transcript_path);
   if (!text.includes(relay.CARD_PREFIX)) return null;
   if (relay.progressUpdates(text)) return null;
   const msgId = relay.messageIdOf(text, hook.tool_use_id);
   if (!msgId) return null;
-  const launch = relay.launchToNudge(text, hook.session_id, { skipMsgId: msgId });
+  return relay.launchToNudge(text, hook.session_id, { skipMsgId: msgId });
+}
+
+function main(hook, deps = {}) {
+  if (hook.agent_id) return null;
+  if (PASS_TOOLS.test(String(hook.tool_name || ''))) return null;
+  if (!tailHasCard(hook.transcript_path)) return null; // no heavy require
+  const relay = require('../lib/agent-card-relay');
+  let launch = evaluate(relay, hook);
+  if (!launch) return null;
+  (deps.pause || pause)(RECHECK_MS);
+  launch = evaluate(relay, hook);
   if (!launch) return null;
   relay.markNagged(hook.session_id, launch.covers);
   return { block: relay.nudgeText(launch) };

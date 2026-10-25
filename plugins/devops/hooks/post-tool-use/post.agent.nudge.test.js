@@ -291,12 +291,12 @@ describe("post.agent.nudge", () => {
   });
 
   // Q8: an un-namespaced skill that is NOT one of this plugin's own skill
-  // directory names (a user/consumer skill, e.g. "graphify") must not be
+  // directory names (a user/consumer skill, e.g. "notes") must not be
   // mistaken for a devops skill and must not silence the nudge.
   test("Q8: a non-devops un-namespaced skill does not silence the nudge", () => {
     const dir = project();
     const files = Array.from({ length: 5 }, (_, i) => path.join(dir, `q8c${i}.js`));
-    const entries = [promptEntry("Q8c prompt"), skillEntry("graphify"), ...files.map((p) => editEntry("Edit", p))];
+    const entries = [promptEntry("Q8c prompt"), skillEntry("notes"), ...files.map((p) => editEntry("Edit", p))];
     const t = writeTranscript(dir, entries);
     expect(run(hookFor(dir, t, path.join(dir, "q8c5.js")))).not.toBe("");
   });

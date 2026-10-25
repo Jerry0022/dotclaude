@@ -1,5 +1,80 @@
 # Changelog
 
+## [0.309.0] — 2026-10-25
+
+Design concept pages are calmer: no breadcrumb header any more, and the notes dock and the keys behave the same wherever the focus is.
+
+### Changed
+- **Top-left corner.** The breadcrumb header is gone; only a quiet eye stays. Its badge counts the unseen notes of the current page only (0 on the overview). Back to the overview via the ☰ menu or Esc.
+- **Overview.** The centred variant is marked in the quick navigation (with a ▾ hinting at its pages) instead of a badge on the tile. Side tiles show the quick-nav icon beside the arrow, the name below on hover. The hover glow is no longer cut off, and a page-filling app preview stays clear of the info card.
+- **Fragen.** With two or more question pages the quick-nav entry opens its dropdown again.
+- **Notes dock.** Field headers emphasise only their own level (white, bold). Fields resize only while you type, without jumping. The tip lamp uses the tip colour.
+
+### Fixed
+- **Keys.** Arrows and Enter work whenever no text field is focused, also with the dock or the ☰ menu open.
+- **Menu.** No own-note (Strg) hint while the menu is open; one divider instead of two.
+
+## [0.308.0] — 2026-10-25
+
+Hooks put less text into the context and make you wait less. graphify is gone from the plugin. Wave 1 of the hooks audit covered 28 sessions, ≈1.2 M injected tokens and ≈260 timeouts.
+
+Why: `post.flow.completion` caused 57 % of all hook context. The per-prompt card contract fired 486 times, yet 83 cards were still missed. `pre.agent.relay` held calls back even after the card was shown. The debug nudge fired 8 times and was never followed. graphify was queried 4 times in 25 days.
+
+### Changed
+- **Card contract.** The static rules now live in the `render_completion_card` tool description. The per-prompt reminder is two lines, and the stop-guard block reason is shorter.
+- **Status chatter.** `post.flow.completion` keeps status as state, not context, and shows the concept-infra hint once per session. Edits outside the repo or worktree (`lib/repo-tree.js` `inRepoTree`) no longer count as code edits.
+- **Knowledge dispatch.** Docs, pointers, the glossary and the delegation nudge are injected only for real user prompts. A task notification keeps the cached locale.
+- **Governor gate.** A fast path skips the load probe when nothing is queued.
+- **Autosave.** `stop.session.autosave` works within a time budget (`sessionEnd.autosaveWaitSeconds`, default 8). The rest finishes in a detached worker, and the archive gate waits for it.
+- **tokens.guard.** It works out the plugin root itself, so skill docs, deep-knowledge and agents are exempt in every cache layout. A broad Grep or Glob now points at the `devops:scout` agent.
+- **project-map.** It reads optional `.claude/project-map.hints.json` hints per directory (`gen-project-map.mjs` 0.3.0).
+
+### Added
+- **Hook telemetry.** `plugin-guard` records each hook's duration and timeouts. `ss.orphan.nudge` warns about hooks that keep timing out. The repo-only `.claude/skills/plugin-audit/scripts/hook-audit.js` evaluates the log.
+
+### Fixed
+- **Relay false hold.** `pre.agent.relay` no longer holds a call when the agent card was already shown in the same message.
+
+### Removed
+- **graphify.** The three graphify hooks and their libs, `graph-nudge`, `graphify-audit`, `check-tool.js`, `deep-knowledge/graphify.md` and the `graphify-out` ignores are gone.
+- **`post.flow.debug`.** The "MANDATORY auto-fix" nudge after shell failures is gone.
+
+## [0.307.1] — 2026-10-25
+
+The session title now says ❓ Question whenever a call waits for you, not only for an AskUserQuestion. A red card's Fix button ends in a ship.
+
+Why: a Backlog run waited on a `start_session` approval card with ⏳ in the sidebar, as if Claude were still working. The Fix button said "then render the card again", although the only other way out of that card row is shipping.
+
+### Fixed
+- **Question title for every blocking call.** `pre.ask.title` / `post.ask.title` (0.2.0) now match `AskUserQuestion`, `ExitPlanMode` and `mcp__ccd_session__start_session` (all initiations except `own_initiative`, and not a start by `proposal_id`). The rule lives in `lib/ask-title.js` `isBlockingCall`.
+- **Fix button ends in ship.** For red findings the button now ends in "dann ship" / "then ship", for a blocker in "dann erneut ship" / "then ship again". `prompt.ship.detect` reads a "<work>, dann ship" prompt as a deferred ship (`lib/ship-intent.js` `isDeferredShip`): the work comes first and do-ship runs last. Until then `prompt.flow.title-work` keeps the work title instead of switching to Shipping.
+- **Load-proof hook tests.** Three tests failed only on a machine under heavy load. Spawned cleanup-gate runs now get `DEVOPS_GIT_TIMEOUT_MS=30000` (`lib/git-timeout.js` never goes below 5000). The parse ceilings rise to 1000 ms, and RT3-R4 may run for 120 s.
+
+## [0.307.0] — 2026-10-25
+
+The design overview, the notes dock and the tips were reworked from a full round of feedback on an example concept.
+
+### Changed
+- **Overview.** The eye sits inside the header and the layers button is gone. The focused tile glows on hover instead of showing a "Design öffnen" button. Previews fill the tile but keep clear of the info card. Side tiles are plain and show the variant icon; arrows are tall chevrons that fade in with a glow. Enter opens the focused tile. The current page in the header is a quiet label, not a button. The info card is half-transparent until hovered, shows icon + name only, and replaces the "Verbessert" chip with a short line from the new `data-design-improved` attribute.
+- **Notes dock.** Opening it (Space or click) focuses the most specific field with the caret at the end and a fresh line; switching pages moves the focus along. Fields grow with their text and shrink the others first. The dock no longer overlaps the ☰ button, which now wears the navigation-bar surface.
+- **Tips.** Every tip fits one line, users never see the word "Pin" (it is "Notiz"), a tip shows at most once per session, and a hotkey tip stops once the hotkey was used. Tips get their own calm `--tip-color`, apart from the amber `--question-color` of open questions.
+- **Fields.** One modern look for every input and textarea; the 📎 button no longer covers the text.
+- **Designs of a whole app** render edge to edge (`data-screen-fit="full"`) and carry no round commentary under the mock.
+- **Menu.** The "Fragen offen" hint sits above the submit row.
+
+### Fixed
+- **Implement asked twice.** After the 🔒 unlock (or the caret menu) "Umsetzen" no longer opens a browser confirm.
+- **Second tab's title.** A tab that did not submit itself now follows the server state (⏳/🛠️) without a reload.
+
+## [0.306.0] — 2026-10-25
+
+In batch mode the "note saved" answer is now easy to see. The red panel no longer shows the hook's plugin path or the whole prompt again.
+
+Why: with exit 2 Claude Code builds the block message as `[<hook command>]: <stderr>`, which puts the full plugin path first. It also adds the plugin attribution and an `Original prompt:` block, so the one line that matters got lost. A JSON `decision: "block"` shows only `reason`, and `suppressOriginalPrompt` drops the prompt block (checked in the bundled CLI 2.1.308 and npm CLI 2.1.175). No hook can change the fixed "operation blocked by hook" header or the red styling.
+
+### Changed
+- **Batch ack layout.** `prompt.batch.collect` (0.13.0) blocks collected, rearm and help prompts with stdout JSON plus exit 0 (`blockPrompt`, written synchronously so a cut-off line cannot fail open). The ack now opens with `💾 NOTIZ #n GESPEICHERT`. Below it come the first 70 characters of the prompt in quotes (a hook cannot summarize, so the echo lets you match the note; the cut never splits an emoji), then `(rotes Panel = Absicht, kein Fehler)`, then the three command lines as before. The new icon is `PANEL_ICONS.saved`. 💾 rather than ✅, because ✅ belongs to the completion card.
+
 ## [0.305.0] — 2026-10-25
 
 A concept tab now shows its state in the browser tab, and exclusive decisions get one recommended choice instead of all of them.

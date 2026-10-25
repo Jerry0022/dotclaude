@@ -593,30 +593,33 @@ describe("RT3-R5 + QA: heredocs, here-strings and PowerShell backticks", () => {
   });
 });
 
+// The ceilings are far above a linear parse (~30-80 ms) yet far below a
+// quadratic one on these inputs (seconds) — 250 ms flaked under a loaded
+// machine (284 ms, 2026-10-25).
 describe("RT3-R9: linear parsing of hostile or long input", () => {
   const time = (fn) => { const t = process.hrtime.bigint(); fn(); return Number(process.hrtime.bigint() - t) / 1e6; };
 
-  test("RT3-R9: a 1 MB command (heredoc plus text) parses in < 250 ms", () => {
+  test("RT3-R9: a 1 MB command (heredoc plus text) parses in < 1000 ms", () => {
     const body = "line with `git push` and 'quotes\" (\n".repeat(28_000);
     const cmd = `cat > big.md <<'EOF'\n${body}EOF\n${"echo a && ".repeat(2_000)}git commit -m x`;
     expect(cmd.length).toBeGreaterThan(1_000_000);
     let f;
-    expect(time(() => { f = bash(cmd); })).toBeLessThan(250);
+    expect(time(() => { f = bash(cmd); })).toBeLessThan(1000);
     expect(f.commit).toBe(true);
     expect(f.release).toBe(false);
   });
 
-  test("RT3-R9: 10,000 lone `&` parse in < 250 ms", () => {
+  test("RT3-R9: 10,000 lone `&` parse in < 1000 ms", () => {
     const cmd = "sleep 1 & ".repeat(10_000);
-    expect(time(() => bash(cmd))).toBeLessThan(250);
+    expect(time(() => bash(cmd))).toBeLessThan(1000);
     expect(C.splitSegments(cmd)).toHaveLength(10_001);
     expect(C.splitSegments("a 2>&1 & b")).toEqual(["a 2>&1 ", " b"]);
   });
 
   test("RT3-R9: one unmatched `\"` followed by many `\\\"` stays linear", () => {
     const cmd = `echo "${'\\" '.repeat(100_000)}`;
-    expect(time(() => bash(cmd))).toBeLessThan(250);
-    expect(time(() => C.splitSegments(cmd))).toBeLessThan(250);
+    expect(time(() => bash(cmd))).toBeLessThan(1000);
+    expect(time(() => C.splitSegments(cmd))).toBeLessThan(1000);
   });
 
   test("RT3-R9: text past the 256 KB cap is not parsed", () => {

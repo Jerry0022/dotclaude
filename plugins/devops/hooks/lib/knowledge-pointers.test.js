@@ -17,7 +17,7 @@ describe("knowledge-pointers", () => {
       if (p.legacy) expect(RETIRED[p.legacy]?.doc, p.legacy).toBe(p.file);
       else expect(p.extension, `${p.file}: no legacy skill, no legacy override`).toBe(false);
     }
-    expect(POINTERS.filter((p) => p.legacy).map((p) => p.legacy).sort()).toEqual(Object.keys(RETIRED).sort());
+    expect(POINTERS.filter((p) => p.legacy).map((p) => p.legacy).sort()).toEqual(Object.keys(RETIRED).filter((k) => k !== "auto-graph").sort());
     // Only the skills that had an extension step keep an override.
     expect(POINTERS.filter((p) => p.extension).map((p) => p.legacy).sort())
       .toEqual(["auto-usage", "claude-strict", "setup-project", "setup-readme"]);
@@ -30,8 +30,6 @@ describe("knowledge-pointers", () => {
     ["refresh usage", "usage.md"],
     ["wie viel hab ich verbraucht?", "usage.md"],
     ["/auto-usage", "usage.md"],
-    ["was sagt der knowledge graph dazu", "graphify.md"],
-    ["/auto-graph", "graphify.md"],
     ["strikt bitte", "strict.md"],
     ["nichts anderes anfassen", "strict.md"],
     ["/claude-strict on", "strict.md"],
@@ -47,8 +45,6 @@ describe("knowledge-pointers", () => {
 
   test.each([
     "set `strict` in tsconfig",
-    "lies docs/graphify-notes.md",
-    "run /graphify on it",
     "the readme is fine",
     "",
   ])("no pointer for %j", (msg) => {

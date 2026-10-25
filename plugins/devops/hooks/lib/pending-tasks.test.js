@@ -1091,11 +1091,6 @@ describe('#807 — only live, model-started work counts, and it is always named'
     toolResult(id, BASH_BG_TEXT.replaceAll('b68oycrr6', taskId)),
   ];
 
-  test('a hook-spawned install (graphify uv tool install) is not work', () => {
-    const t = bash('toolu_i', 'bin1', { command: 'uv tool install graphifyy', description: 'Install graphify' });
-    expect(scanOpenTasks(t.join('\n'))).toEqual([]);
-  });
-
   test.each(['completed', 'failed', 'killed'])('a %s notification ends the task', (status) => {
     const t = bash('toolu_n', 'bn1', { command: 'npm test', description: 'Run the suite' });
     expect(scanOpenTasks(t.join('\n'))).toHaveLength(1);
@@ -1123,10 +1118,5 @@ describe('#807 — only live, model-started work counts, and it is always named'
     expect(withoutOwnShipAgent(['do-ship', 'Ship im Subagenten', 'x --delegated'], 'ship-successful')).toEqual([]);
     const keep = ['ship the fix', 'ship-watcher', 'Deploy and ship tests'];
     expect(withoutOwnShipAgent(keep, 'ship-successful')).toEqual(keep);
-  });
-
-  test('a model-started npm install graphify-foo still counts', () => {
-    const t = bash('toolu_g', 'bg1', { command: 'npm install graphify-foo' });
-    expect(scanOpenTasks(t.join('\n'))).toHaveLength(1);
   });
 });

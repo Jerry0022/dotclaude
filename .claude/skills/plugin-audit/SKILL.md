@@ -101,6 +101,21 @@ Appends the run summary (footprint, cost/benefit, check tallies, suggestion coun
 `report-pending.json`. Run it after step 4 even when the user discarded everything —
 the decade trigger reads `last.json`.
 
+## Hook audit (on demand, 0 model tokens)
+
+Silent hooks never appear in transcripts, so the audit has two sources: the
+transcripts (hook attachments: output, blocks, timeouts, durations, context weight,
+compliance) and the plugin's own telemetry file `~/.claude/devops-hook-telemetry.jsonl`
+(`hooks/lib/hook-telemetry.js`: every run, silent ones included; a start without an
+end = killed/timeout).
+
+```
+node .claude/skills/plugin-audit/scripts/hook-audit.js [--days 14] [--only hooks,weight,comply,blocks,telemetry] [--json]
+```
+
+Run it before tuning a hook or when the user reports slow turn ends. Extend `CHECKS`
+in the script to measure whether the model acts on a new hook instruction.
+
 ## Notes
 
 - `scripts/lib/trigger.js --prev X --new Y` decides the automatic run (decade boundary,

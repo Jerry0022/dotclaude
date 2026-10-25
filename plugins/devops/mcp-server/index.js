@@ -2881,7 +2881,24 @@ server.registerTool(
       "On the Desktop app the result carries a CARD WIDGET block instead of markdown: that " +
       "show_widget call IS the card — mandatory, the LAST action of the turn, no text after it, " +
       "and the app's one no-output nudge that follows gets an empty reply; " +
-      "the visible title line is only for a failed call, never a shortcut.",
+      "the visible title line is only for a failed call, never a shortcut. " +
+      "WHEN: call it once ALL work of the turn is done — as the first action of the closing step; pass " +
+      "`session_id` (the one the hook context names), `cwd` (without it PR/commit/branch render as dead " +
+      "text), `lang` (\"de\" when the user writes German, else \"en\"). `summary` max ~10 words in the user's language. " +
+      "VARIANT (pick exactly one): ship-successful = ship pipeline ran and merged to remote/main (only after /do-ship + merge); " +
+      "ship-blocked = ship pipeline ran, NOT merged; released = a channel promotion ran (also right after a ship in the same run: ONE released card, never ship-successful first); " +
+      "aborted = task aborted/infeasible/rate-limited; test = code edits and an app/service startable (any project type); " +
+      "test-minimal = user started the app via prompt, no edits yet; ready = code/doc changes (>=1 edit), no app — also when implementation was handed to agents still running (+ pending); " +
+      "finished unshipped commits in a linked side session = ready + open {text, reply: \"ship\"}, never analysis; " +
+      "analysis = nothing changed ANYWHERE (answer/investigation only; never for work outside the repo, delegated work or a mode activation); " +
+      "paused = the user pauses the work to continue later OR the next step is a Claude Code restart / reboot / usage-limit reset (pass pause:{reason:\"restart\"|\"reboot\"|\"usage-reset\"}); " +
+      "fallback = work done outside the repo with no repo diff (DB op, delete, deploy, data migration, settings change) or unsure. A mode activation (batch, concept) uses its override, never analysis. " +
+      "VALIDATION (V&V gate): for any code change this turn populate `validation` — map each requirement / acceptance criterion to how the change meets it and how you confirmed it; " +
+      "a code-change card without it is blocked once and re-requested. " +
+      "PENDING: background agents/workflows/tasks you started that still run -> `pending` [{ name, kind: agent|task|workflow, doing }] (replaces the CTA with the 'not finished yet' line; never an internal agentId; list only work really running; an ended or foreign task -> `pendingDismissed: \"<why>\"`). " +
+      "CONCEPT (outranks pending): while an /auto-concept page is open pass `concept: { phase: \"waiting\"|\"iterating\"|\"implementing\" }`; the bridge server, keepalive pulser and pickup waker are infrastructure, never `pending`. " +
+      "`cta` is an object of placeholders (e.g. { reason }), never a sentence. `delivery` (PR -> Ship -> Promote track) whenever the work reached a pipeline stage (a PR exists, it was shipped, a channel was promoted): fill the stages that happened, leave later ones absent, omit it when none apply. " +
+      "Offline fallback when the MCP server never connected: node <plugin>/mcp-server/index.js --render-card <payload.json> (same JSON args, relay stdout verbatim).",
     inputSchema: z.object({
       variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` = the channel-promotion card (alpha→beta→stable) do-ship renders whenever a promotion ran, also after a ship in the same run: ONE released card carries the ship's changes, tests, state and userFinalTest plus the promotion facts, never a ship-successful card first. `ready-files` = `ready` for work on disk in a project with no git repo (no commit/branch/PR/merge). `paused` = work the user pauses (\"machen wir später weiter\") AND work whose next step is a Claude Code restart, a reboot or a usage-limit reset — never `analysis`, `ready` or `fallback` then; pass `pause: { reason }`. It asks nothing; the title becomes `🟦 ➜ ✋ Paused ┃ …` (`🔌 Restart` / `💻 Reboot` / `🔋 Limit reset` with a reason)."),
       summary: z.string().transform(v => clampText(v, SUMMARY_MAX).value)

@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.305.0**
+**Version: 0.309.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -26,7 +26,7 @@ keep git clean, block risky moves and stop context waste.
 - **Runs while you are away** — `/do-run` works off a backlog, a task or the leftover weekly budget, and ships each item
 - **Per-project tuning** — extend any skill with a `reference.md`, no fork
 
-<!--devops:count:hooks-->90<!--/devops:count:hooks--> hooks ·
+<!--devops:count:hooks-->86<!--/devops:count:hooks--> hooks ·
 <!--devops:count:skills-->14<!--/devops:count:skills--> skills ·
 <!--devops:count:agents-->12<!--/devops:count:agents--> agents ·
 ~0.7M tokens/week overhead (1–4 % of a Max plan), paid back 1.5–6× by the
@@ -119,7 +119,7 @@ new skill, and project extensions under an old name keep loading.
 | `/auto-update` | Hidden | Update the plugin ("devops update") |
 
 **Former skills, now knowledge + hooks:** `/setup-readme` → `readme-standards.md`,
-`/auto-graph` → `graphify.md`, `/auto-usage` → `usage.md` (the card fetches
+`/auto-usage` → `usage.md` (the card fetches
 usage itself), `/claude-strict` → `strict.md`. A prompt naming one gets a
 pointer to the doc.
 
@@ -495,7 +495,7 @@ A different stack: extend the skills per project — see [Customize](#customize)
 </details>
 
 <details>
-<summary><strong>Hooks</strong> — <!--devops:count:hooks-->90<!--/devops:count:hooks--> hooks by lifecycle and by category</summary>
+<summary><strong>Hooks</strong> — <!--devops:count:hooks-->86<!--/devops:count:hooks--> hooks by lifecycle and by category</summary>
 
 ```
 SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolUse  ──>  Stop
@@ -522,7 +522,6 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.git.check` — Check for stale changes AND workspace setup issues at session start.
 - `ss.git.sync` — Starts ONE detached background git sync for this worktree.
 - `ss.orphan.nudge` — One-line nudge when the current repo has unlanded work or worktrees with uncommitted…
-- `ss.graphify` — graphify enforcement — install-check + auto-build wiring for the graphify integration…
 - `ss.ship.verify` — Surface results from the post-merge watcher (post-ship CI + optional deploy verify).
 - `ss.ship.resume` — Keep a running /do-ship stable across a compaction or a resume.
 - `ss.run.task` — Keep a running do-run's task verbatim across a compaction or a resume.
@@ -534,7 +533,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 #### UserPromptSubmit — runs when the user sends a message
 
 - `prompt.flow.open-url` — Opens a local page in the default browser when the prompt is the card widget's open p…
-- `prompt.batch.collect` — Collect mode for `/do-batch`: while active, blocks the user prompt (exit 2 — the harn…
+- `prompt.batch.collect` — Collect mode for `/do-batch`: while active, blocks the user prompt (JSON `decision: "…
 - `prompt.run.contract` — Arm, refresh or pre-arm the do-run RUN CONTRACT from the prompt (run-contract spec B,…
 - `prompt.flow.silent-turn` — Detects background/cron-injected prompts and marks the turn as "silent" so post.flow.…
 - `prompt.flow.title-work` — Marks a session as "being worked on" in the sidebar: on the first real prompt of a se…
@@ -565,7 +564,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `pre.readme.standards` — Once per session, before the first substantial write to a README file, points Claude…
 - `pre.mcp.health` — Detects dead or stale MCP servers before tool calls fail cryptically.
 - `pre.session.archive` — Only the post-ship hand-over archives this session (#632).
-- `pre.ask.title` — Puts `👉 ➜ ❓ Question ┃ ` on the session title BEFORE a question blocks: a title stil…
+- `pre.ask.title` — Puts `👉 ➜ ❓ Question ┃ ` on the session title BEFORE a call blocks on the user (a qu…
 - `pre.strict.agent-gate` — While strict mode is active, refuse an Agent spawn whose prompt does not start with t…
 - `pre.agent.model` — Refuses an Agent spawn once when it would silently inherit the session model — no `mo…
 - `pre.agent.announce` — Makes every Agent spawn visible to the user: resolves the agent's effective model and…
@@ -585,16 +584,13 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 #### PostToolUse — runs after each tool call
 
 - `post.flow.completion` — Keeps the completion-card contract in Claude's context: on the FIRST tool call of eve…
-- `post.flow.debug` — After 2+ consecutive shell failures: MANDATE the devops `auto-fix` skill before the n…
-- `post.graphify.query` — When Claude runs `graphify query ...`, record a per-session flag (`markQueryDone` — k…
-- `post.graphify.search` — Telemetry only: record every Grep/Glob that actually RAN (`search_ran`) with its resu…
 - `post.concept.gate` — Deterministic backstop for concept pages.
 - `post.claude.budget` — Deterministic context-budget gate for Claude configuration files — CLAUDE.md, SKILL.m…
 - `post.agent.nudge` — AUD-024: outside a do-run run, a single turn can change many files without ever spawn…
 - `post.design.remind` — Once per context, when a UI file is written or edited, reminds Claude of the standing…
 - `post.run.contract` — Record what happened for the do-run RUN CONTRACT (spec A events, B arming, E batch ma…
 - `post.ask.answers` — Answer-check (run-contract spec F): an AskUserQuestion answer token that equals the O…
-- `post.ask.title` — The question is answered, so Claude works again: hands Claude the set call that puts…
+- `post.ask.title` — The user answered (a question, a plan approval, a start_session approval), so Claude…
 - `post.cleanup.gate` — Arms and feeds the /auto-cleanup deletion gate (lib/cleanup-gate.js).
 - `post.skill.marker` — Record a loaded skill in the caller's per-turn marker (lib/skill-turn-marker) — the "…
 - `post.skill.overrides` — The override loader for a skill started through the Skill tool: resolves the skill's…
@@ -664,7 +660,6 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.flow.appstart` *(UserPromptSubmit)*
 - `pre.ask.title` *(PreToolUse)*
 - `post.flow.completion` *(PostToolUse)*
-- `post.flow.debug` *(PostToolUse)*
 - `post.ask.answers` *(PostToolUse)*
 - `post.ask.title` *(PostToolUse)*
 - `post.flow.title-mode` *(PostToolUse)*
@@ -723,14 +718,11 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `post.project.setup` *(PostToolUse)*
 - `stop.mcp.reap` *(Stop)*
 
-#### issues, team & graph
+#### issues & team
 
-- `ss.graphify` *(SessionStart)*
 - `ss.team.changelog` *(SessionStart)*
 - `prompt.issue.detect` *(UserPromptSubmit)*
 - `pre.issue.guard` *(PreToolUse)*
-- `post.graphify.query` *(PostToolUse)*
-- `post.graphify.search` *(PostToolUse)*
 <!--/devops:block:hook-categories-->
 
 </details>
@@ -767,11 +759,11 @@ plugins/
 │   ├── .claude-plugin/plugin.json ← Plugin manifest (SemVer, tags v0.x.y)
 │   ├── .mcp.json                  ← MCP servers: completion card, ship, issues
 │   ├── CONVENTIONS.md             ← Naming, versioning, extension rules
-│   ├── hooks/                     ← <!--devops:count:hooks-->90<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+│   ├── hooks/                     ← <!--devops:count:hooks-->86<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
 │   ├── skills/                    ← <!--devops:count:skills-->14<!--/devops:count:skills--> skill definitions (SKILL.md)
 │   ├── agents/                    ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 │   ├── mcp-server/                ← Card renderer + Desktop widget, ship tools, issue matching
-│   ├── deep-knowledge/            ← Cross-cutting reference docs (<!--devops:count:dk-->57<!--/devops:count:dk--> topics)
+│   ├── deep-knowledge/            ← Cross-cutting reference docs (<!--devops:count:dk-->56<!--/devops:count:dk--> topics)
 │   ├── scheduled-tasks/           ← Runbooks for opt-in background jobs
 │   ├── evals/                     ← Behavioral evals and skill A/B runs (ab-run.js)
 │   ├── templates/                 ← Output style, changelog and release templates

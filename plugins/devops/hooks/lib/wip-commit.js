@@ -29,7 +29,7 @@ const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const PROTECTED = /^(main|master|develop|trunk|release\/.+)$/;
 const SECRET = /(^|\/)(\.env(\..*)?|\.npmrc|\.netrc|\.pypirc|\.htpasswd|id_(rsa|dsa|ecdsa|ed25519).*|kubeconfig.*|service-account[^/]*\.json|[^/]*\.(pem|key|p12|pfx|keystore|jks|sql|dump|bak|tfvars)|[^/]*\.tfstate[^/]*|[^/]*credentials[^/]*|[^/]*secret[^/]*|[^/]*token[^/]*)$/i;
 const SECRET_CONTENT = /BEGIN [A-Z ]*PRIVATE KEY|aws_secret_access_key\s*[=:]|ghp_[A-Za-z0-9]{20,}|xox[bp]-[0-9A-Za-z-]{10,}/;
-const BUILD_DIRS = new Set(['dist', 'build', 'out', 'coverage', 'node_modules', 'graphify-out', '.next', '.nuxt',
+const BUILD_DIRS = new Set(['dist', 'build', 'out', 'coverage', 'node_modules', '.next', '.nuxt',
   'target', '.cache', '.venv', '__pycache__', '.gradle', '.turbo']);
 const TOOLING_ROOT = /^(AUTONOMOUS|BACKLOG|BURN)[-_]/;
 

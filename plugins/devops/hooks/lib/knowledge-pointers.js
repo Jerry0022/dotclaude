@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module knowledge-pointers
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description Trigger phrases → one-line POINTERS to a deep-knowledge doc,
  *   for `prompt.knowledge.dispatch`. PR 3 of the skill restructure
@@ -15,7 +15,7 @@
  *
  *   Why a pointer and not the doc body (the dispatch's TOPIC_MAP injects
  *   whole files): these docs are 5–14 KB, and some of their words are common
- *   ("strict", "graphify") — a false match must cost one line, not 3 k
+ *   ("strict") — a false match must cost one line, not 3 k
  *   tokens. The pointer names the file; the model reads it when the prompt
  *   really is about that topic. Nothing here is mandatory, and nothing ever
  *   names a Skill — the four names are no skills any more.
@@ -49,13 +49,6 @@ const POINTERS = Object.freeze([
       'README erstellen', 'README aktualisieren', 'README überarbeiten', 'README schreiben', 'README anpassen',
       '/setup-readme',
     ]),
-  }),
-  Object.freeze({
-    file: 'graphify.md',
-    legacy: 'auto-graph',
-    extension: false,
-    topic: 'the devops graphify integration (install, freshness, `graphify query`, the search gate, opt-out) — for codebase-graph questions; not for single-file lookups',
-    phrases: Object.freeze(['knowledge graph', 'graphify', 'code graph', 'codebase graph', '/auto-graph']),
   }),
   Object.freeze({
     file: 'usage.md',

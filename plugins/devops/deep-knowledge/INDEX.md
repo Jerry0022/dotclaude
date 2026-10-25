@@ -32,7 +32,6 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [fact-verification.md](fact-verification.md) | Fact Verification | Cross-cutting rule for all web research, claims, and statistics. |
 | [feature-elaboration.md](feature-elaboration.md) | Feature Elaboration | How a feature is thought through before anyone builds it — `po` lenses in |
 | [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/do-ship`, the role agents, and hooks. |
-| [graphify.md](graphify.md) | graphify — Codebase Knowledge Graph (default-on, opt-out) | Codebase knowledge graph via the external graphify CLI: default-on, opt-out v... |
 | [harden-polish-shared.md](harden-polish-shared.md) | Harden/Polish — Shared Reference | Cross-cutting reference for `/auto-harden` and `/auto-polish`. Covers |
 | [home-backup.md](home-backup.md) | Home Backup (opt-in) | Back up the allowlisted part of `~/.claude` (settings, agents, own skills/com... |
 | [injection-hardening.md](injection-hardening.md) | Prompt-Injection Hardening — Untrusted Content & Egress Control | Cross-cutting defense for any skill or agent that reads untrusted content (fi... |

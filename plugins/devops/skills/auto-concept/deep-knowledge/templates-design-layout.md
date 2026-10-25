@@ -110,7 +110,12 @@
          updated top-edge partition comment. `hidden` by default; JS
          (updateAnnoUI(), § Layout JS) reveals it only when the ACTIVE screen
          has ≥1 annotation, and keeps the count live across screen/iteration
-         switches. aria-pressed / aria-label reflect body.anno-hidden. -->
+         switches. aria-pressed / aria-label reflect body.anno-hidden.
+         Whenever the top-left eye slot (#design-header) is on screen the
+         eye lives INSIDE it (.design-header-eye: placeEye() in
+         wireDesignOverview, plus the adopt safety net in § Panel Chrome JS)
+         — the floating spot below is only the fallback for rounds without
+         that header. Keep id and class stable: both movers key on them. -->
     <button id="anno-toggle" class="anno-toggle-fab" type="button" hidden
             aria-pressed="true"
             aria-label="{{anno.toggle_hide}}"
@@ -143,11 +148,11 @@
          Rendered ONLY while the visible iteration has ≥2 designs
          (body[data-overview="true"]); in that mode they replace
          #screen-indicator (top left) and #design-switcher (top centre), and
-         #anno-toggle moves into the header's first row. A single-design round
-         never shows any of them and renders exactly as before.
-         #design-header — the one card top left: back item · icon · name ·
-           ★ · eye · pin icon (motto = the name's tooltip); one row,
-           never expands.
+         #anno-toggle moves into #design-header. Every design round gets
+         them; the carousel itself needs ≥2 designs.
+         #design-header — top left, the eye slot and nothing else: no
+           breadcrumb, no back item, no title, no ★, no box. Back to the
+           overview via the ☰ menu's "Übersicht" entry (or Esc).
          #design-quick — top-centre quick nav: one row — designs (the active
            one with its pages), then a `?` segment when the round has views.
          #upin-hint — bottom-centre hint while Ctrl is held (user pins).

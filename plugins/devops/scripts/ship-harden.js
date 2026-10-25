@@ -23,7 +23,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const MAX_FILES = 40;
-const SKIP_PATH_RE = /(^|\/)(node_modules|vendor|dist|build|coverage|graphify-out)\/|\.min\.(js|css)$|(^|\/)package-lock\.json$|(^|\/)CHANGELOG\.md$/;
+const SKIP_PATH_RE = /(^|\/)(node_modules|vendor|dist|build|coverage)\/|\.min\.(js|css)$|(^|\/)package-lock\.json$|(^|\/)CHANGELOG\.md$/;
 const TEST_FILE_RE = /(\.|_)(test|spec)\.[cm]?[jt]sx?$|(^|\/)__tests__\/|(^|\/)test_[^/]*\.py$|_test\.py$/;
 const CODE_FILE_RE = /\.([cm]?[jt]sx?|py|vue|svelte|astro)$/;
 

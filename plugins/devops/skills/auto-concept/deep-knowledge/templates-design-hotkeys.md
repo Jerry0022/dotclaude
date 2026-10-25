@@ -24,6 +24,14 @@ the same hotkeys and tips as a design round. Three jobs:
   ("Halte Alt für alle Hotkeys"). It auto-expires after 9 s; ✕ silences that
   one nudge for 30 days (`localStorage` `concept-nudge:<id>` = timestamp,
   every access in try / catch). Never two nudges within 60 s.
+  **Tip rules** (shared with the dock's "Wusstest du schon?", § Panel chrome):
+  a nudge is shown at most ONCE per page session; at most twice ever
+  (`hint-nudge-shown:<id>`, the Alt tip once); and never again once the
+  user has used that hotkey (`hint-hotkey-used:<id>`, recorded on the
+  first real use — Space, Alt, 1–9, arrows, Ctrl + Enter, F, V, Esc,
+  Ctrl + click on the design). Every nudge is one line (`nowrap` +
+  ellipsis) in the calm `--tip-color`, never the amber of open questions.
+  `window.conceptHotkeyUsed(id)` reads the used state for the dock tips.
   **Contract for the toast:** the tab's bottom edge is
   `bottom: var(--hk-nudge-bottom, 6.5rem)`; the toast code sets that custom
   property on `:root` to the toast's height + gap (nothing else is shared).
@@ -87,8 +95,11 @@ the same hotkeys and tips as a design round. Three jobs:
       badge.style.top = Math.round(r.top) + 'px';
       layer.appendChild(badge);
     });
+    // No "Ctrl + click" pin example while the ☰ panel is open: the design
+    // sits behind its backdrop, a click there closes the panel, never pins.
     const onDesign = document.querySelector('section[data-design]')
-      && body.dataset.overviewActive !== 'true' && body.dataset.viewActive !== 'true';
+      && body.dataset.overviewActive !== 'true' && body.dataset.viewActive !== 'true'
+      && !body.classList.contains('panel-open');
     if (onDesign) {
       const ex = mk('div', 'hk-pin-example');
       ex.append(mk('span', 'hk-pin-dot'), mk('span', 'hk-pin-label', T.ctrl + ' + ' + T.click));
@@ -123,8 +134,30 @@ the same hotkeys and tips as a design round. Three jobs:
     current.node.remove();
     current = null;
   }
+  // Tip rules (see the prose above): once per session, ≤ MAX_SHOWS ever,
+  // never after the hotkey was used. A Space tip that showed five times in
+  // one session was the bug that made these rules.
+  const USED = 'hint-hotkey-used:';
+  const SHOWN = 'hint-nudge-shown:';
+  const MAX_SHOWS = { alt: 1 };
+  const read = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const write = (k, v) => { if (typeof _guardedSetItem === 'function') _guardedSetItem(k, v); };
+  const usedNow = new Set();
+  function hotkeyUsed(id) { return usedNow.has(id) || !!read(USED + id); }
+  function markUsed(id) {
+    if (usedNow.has(id)) return;
+    usedNow.add(id);
+    write(USED + id, String(Date.now()));
+  }
+  window.conceptHotkeyUsed = hotkeyUsed;
+  const sessionShown = new Set();
   function nudge(id, caps, text) {
     if (silenced(id) || current || Date.now() - lastShown < 60000) return false;
+    if (sessionShown.has(id) || hotkeyUsed(id)) return false;
+    const shows = Number(read(SHOWN + id)) || 0;
+    if (shows >= (MAX_SHOWS[id] || 2)) return false;
+    sessionShown.add(id);
+    write(SHOWN + id, String(shows + 1));
     lastShown = Date.now();
     const node = mk('div', 'hk-nudge');
     node.id = 'hk-nudge';
@@ -145,6 +178,26 @@ the same hotkeys and tips as a design round. Three jobs:
   }
   window.conceptNudge = nudge;
   window.conceptNudgeSilenced = silenced;
+
+  // Real hotkey use ends that hotkey's tips for good (capture phase, so a
+  // handler that stops the event still counts; fields only for Ctrl + Enter).
+  document.addEventListener('keydown', e => {
+    const k = e.key;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && k === 'Enter') { markUsed('submit'); return; }
+    if (k === 'Alt') { markUsed('alt'); return; }
+    if (k === 'Escape' && e.target && e.target.closest && e.target.closest('#feedback-dock')) { markUsed('dock-esc'); return; }
+    if (fieldIn(e.target) || mod || e.altKey) return;
+    if (k === ' ') markUsed('dock');
+    else if (/^[1-9]$/.test(k)) markUsed('variants');
+    else if (/^Arrow/.test(k)) markUsed('pages');
+    else if (k === 'f' || k === 'F') markUsed('fav');
+    else if (k === 'v' || k === 'V') markUsed('view');
+    else if (k === 'Escape') markUsed('esc');
+  }, true);
+  document.addEventListener('click', e => {
+    if ((e.ctrlKey || e.metaKey) && e.target && e.target.closest && e.target.closest('section[data-design]')) markUsed('upin');
+  }, true);
 
   // Mouse moments. detail > 0 = a real pointer click (a keyboard "click"
   // reports 0), so using the hotkey never counts as the slow way.
@@ -172,14 +225,15 @@ the same hotkeys and tips as a design round. Three jobs:
     }
   }, true);
   // First visit: once, a few seconds after the page settled.
-  setTimeout(() => {
-    if (silenced('alt')) return;
-    if (nudge('alt', ['Alt'], T.alt)) silence('alt');
-  }, 7000);
+  setTimeout(() => { nudge('alt', ['Alt'], T.alt); }, 7000);
 })();
 ```
 
 ```css
+/* ☰ panel open → no own-note hint of any kind: neither the Ctrl-held
+   "Strg + Klick" bar (#upin-hint, wireDesignOverview) nor the Alt overlay's
+   pin example. The design is behind the backdrop; a click closes the panel. */
+body.panel-open .upin-hint, body.panel-open .hk-pin-example { display: none !important; }
 /* Alt overlay: badges sit at the control's top-right, right-aligned, slightly overlapping. */
 .hk-overlay { position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; }
 .hk-badge {
@@ -207,16 +261,16 @@ the same hotkeys and tips as a design round. Three jobs:
   position: fixed; left: 50%; bottom: var(--hk-nudge-bottom, 6.5rem); transform: translateX(-50%); z-index: 9000;
   display: flex; align-items: center; gap: 0.6rem; max-width: min(92vw, 560px); box-sizing: border-box;
   padding: 0.4rem 0.7rem 0.45rem; border-radius: 12px 12px 0 0; overflow: hidden;
-  font-size: 0.9rem; color: var(--text-secondary, #8b949e);
+  font-size: 0.9rem; color: var(--text-secondary, #8b949e); white-space: nowrap;
   background: color-mix(in srgb, var(--panel-bg, #0d1117) 55%, transparent);
   backdrop-filter: blur(6px); animation: hk-nudge-in 0.25s ease both;
 }
 .hk-nudge-keys { display: inline-flex; gap: 0.25rem; }
 .hk-nudge-key {
   min-width: 1.5rem; padding: 0.1rem 0.4rem; border-radius: 6px; text-align: center; font: inherit; font-weight: 800;
-  color: #1a1200; background: var(--warning-color, #d29922); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  color: #04141c; background: var(--tip-color, #3fa7d6); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
 }
-.hk-nudge-text { min-width: 0; }
+.hk-nudge-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .hk-nudge-x {
   flex: none; width: 1.5rem; height: 1.5rem; padding: 0; border: 0; border-radius: 50%; background: transparent;
   color: inherit; font: inherit; cursor: pointer;
@@ -224,7 +278,7 @@ the same hotkeys and tips as a design round. Three jobs:
 .hk-nudge-x:hover, .hk-nudge-x:focus-visible { background: rgba(255, 255, 255, 0.1); color: var(--text, #e6edf3); }
 .hk-nudge-timer {
   position: absolute; left: 0; bottom: 0; height: 1.5px; width: 100%; transform-origin: 0 50%;
-  background: var(--warning-color, #d29922); animation: hk-nudge-timer 9s linear both;
+  background: var(--tip-color, #3fa7d6); animation: hk-nudge-timer 9s linear both;
 }
 @keyframes hk-nudge-in { from { opacity: 0; transform: translateX(-50%) translateY(6px); } }
 @keyframes hk-nudge-timer { to { transform: scaleX(0); } }
