@@ -4,7 +4,7 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js\"", "timeout": 20 },
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js\"", "timeout": 5 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.permissions.ensure.js\"", "timeout": 10 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.statusline.ensure.js\"", "timeout": 10 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.thinking.display.js\"", "timeout": 10 },
@@ -16,9 +16,9 @@
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.mcp.reap.js\"", "timeout": 10 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.watchdog.reap.js\"", "timeout": 10 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.tmp.sweep.js\"", "timeout": 10 },
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.tokens.scan.js\"", "timeout": 20 },
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.tokens.scan.js\"", "timeout": 5 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.project.setup.js\"", "timeout": 10 },
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.git.check.js\"", "timeout": 20 },
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.git.check.js\"", "timeout": 10 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.git.sync.js\"", "timeout": 20 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.orphan.nudge.js\"", "timeout": 5 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.ship.verify.js\"", "timeout": 10 },
@@ -26,7 +26,7 @@
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.run.task.js\"", "timeout": 10 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.concept.resume.js\"", "timeout": 10 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.title.sweep.js\"", "timeout": 5 },
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.team.changelog.js\"", "timeout": 20 },
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.team.changelog.js\"", "timeout": 5 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.governor.attach.js\"", "timeout": 5 }
         ]
       }
