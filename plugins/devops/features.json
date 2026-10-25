@@ -1,0 +1,10 @@
+{
+  "features": {
+    "batch": {
+      "minChannel": "alpha",
+      "summary": "Message Batches API for large, unattended read-only jobs on the API credit",
+      "docs": ["deep-knowledge/api-batch.md"],
+      "scripts": ["scripts/claude-api-batch.js", "scripts/batch-policy.js"]
+    }
+  }
+}

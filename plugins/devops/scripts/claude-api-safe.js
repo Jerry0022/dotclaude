@@ -60,27 +60,73 @@ const DEFAULT_TIMEOUT_S = 180;
 const DEFAULT_MAX_TOKENS = 8000;
 // Credits refresh per billing cycle, whose date we do not know — retry after
 // half a day instead of hammering an empty balance on every call.
+const CACHE_READ_WARN_TOKENS = 10e6; // one call reading more than this is flagged by --usage
 const LIMIT_TTL_MS = 12 * 60 * 60 * 1000;
 
 const RC = Object.freeze({ OK: 0, ERROR: 1, LIMIT: 75, TIMEOUT: 124, DISABLED: 126, NO_KEY: 127 });
 
-// $/MTok: input, output, 5-min cache write, cache read (platform pricing 2026-10).
+// $/MTok: input, output, 5-min cache write, cache read (platform pricing 2026-10-25).
 const PRICES = {
   'claude-opus-5-5': [4, 20, 5, 0.2],
-  'claude-sonnet-5-5': [2, 10, 2.5, 0.2],
+  'claude-sonnet-5-5': [2, 10, 2.5, 0.1],
   'claude-haiku-5-5': [0.1, 0.5, 0.125, 0.01],
   'claude-fable-5-1': [10, 50, 12.5, 0.25],
 };
+// Haiku 5.5 prices a request whose prompt (input + cache read + cache write) exceeds 100k tokens higher.
+const LARGE_PROMPT_TOKENS = 100000;
+const PRICES_LARGE = {
+  'claude-haiku-5-5': [0.5, 2.5, 0.625, 0.05],
+};
 const WEB_SEARCH_USD = 0.01; // $10 per 1,000 searches
+const COST_TYPES = ['input', 'cacheWrite', 'cacheRead', 'output', 'webSearch'];
 
-/** Estimated $ of one response's `usage` (list prices; the Console is authoritative). */
+/** $ of one request's `usage`, split by cost type (list prices; the Console is authoritative). */
+function costParts(model, usage = {}) {
+  const u = usage || {};
+  const prompt = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+  const table = (prompt > LARGE_PROMPT_TOKENS && PRICES_LARGE[model]) || PRICES[model] || PRICES[DEFAULT_MODEL];
+  const [inp, outp, cw, cr] = table;
+  const searches = (u.server_tool_use && u.server_tool_use.web_search_requests) || 0;
+  return {
+    input: (u.input_tokens || 0) * inp / 1e6,
+    cacheWrite: (u.cache_creation_input_tokens || 0) * cw / 1e6,
+    cacheRead: (u.cache_read_input_tokens || 0) * cr / 1e6,
+    output: (u.output_tokens || 0) * outp / 1e6,
+    webSearch: searches * WEB_SEARCH_USD,
+  };
+}
+
+/**
+ * costParts for a usage that sums `n` requests (agent turns, batch items) when
+ * the per-request split is unknown: priced as n equal requests, so a size
+ * tier (Haiku >100k) is judged per prompt, never on the sum.
+ */
+function costPartsOfSum(model, usage = {}, n = 1) {
+  const k = n > 1 ? Math.floor(n) : 1;
+  if (k === 1) return costParts(model, usage);
+  const u = usage || {};
+  const per = {
+    input_tokens: (u.input_tokens || 0) / k,
+    output_tokens: (u.output_tokens || 0) / k,
+    cache_read_input_tokens: (u.cache_read_input_tokens || 0) / k,
+    cache_creation_input_tokens: (u.cache_creation_input_tokens || 0) / k,
+    server_tool_use: { web_search_requests: ((u.server_tool_use && u.server_tool_use.web_search_requests) || 0) / k },
+  };
+  const p = costParts(model, per);
+  const out = {};
+  for (const t of COST_TYPES) out[t] = p[t] * k;
+  return out;
+}
+
+function addParts(a = {}, b = {}) {
+  const out = {};
+  for (const k of COST_TYPES) out[k] = (a[k] || 0) + (b[k] || 0);
+  return out;
+}
+
+/** Estimated $ of one response's `usage`. */
 function costOf(model, usage = {}) {
-  const [inp, outp, cw, cr] = PRICES[model] || PRICES[DEFAULT_MODEL];
-  const searches = (usage.server_tool_use && usage.server_tool_use.web_search_requests) || 0;
-  return ((usage.input_tokens || 0) * inp
-    + (usage.output_tokens || 0) * outp
-    + (usage.cache_creation_input_tokens || 0) * cw
-    + (usage.cache_read_input_tokens || 0) * cr) / 1e6 + searches * WEB_SEARCH_USD;
+  return COST_TYPES.reduce((s, k) => s + costParts(model, usage)[k], 0);
 }
 
 /** Sum of `usage` objects (several turns of one agent run). */
@@ -89,6 +135,9 @@ function addUsage(a = {}, b = {}) {
   for (const k of ['input_tokens', 'output_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens']) {
     out[k] = (a[k] || 0) + (b[k] || 0);
   }
+  const searches = ((a.server_tool_use && a.server_tool_use.web_search_requests) || 0)
+    + ((b.server_tool_use && b.server_tool_use.web_search_requests) || 0);
+  if (searches) out.server_tool_use = { web_search_requests: searches };
   return out;
 }
 
@@ -138,9 +187,13 @@ function loadSwitches({ cwd, home } = {}) {
   try {
     const cfg = require('../hooks/lib/devops-config');
     const { values } = cfg.load(cwd || process.cwd(), home ? { home } : {});
-    return { enabled: values.apiCredit.enabled === true, webGuide: values.apiCredit.webGuide === true };
+    return {
+      enabled: values.apiCredit.enabled === true,
+      webGuide: values.apiCredit.webGuide === true,
+      contextEditing: values.apiCredit.contextEditing !== false, // default on
+    };
   } catch {
-    return { enabled: false, webGuide: false };
+    return { enabled: false, webGuide: false, contextEditing: true };
   }
 }
 
@@ -172,9 +225,26 @@ function resetLimit({ home } = {}) {
   fs.rmSync(limitPath(home), { force: true });
 }
 
+function roundParts(p) {
+  if (!p) return undefined;
+  const o = {};
+  for (const k of COST_TYPES) o[k] = Math.round((p[k] || 0) * 1e6) / 1e6;
+  return o;
+}
+
+function halve(p) {
+  if (!p) return p;
+  const o = {};
+  for (const k of COST_TYPES) o[k] = (p[k] || 0) / 2;
+  return o;
+}
+
 /** Append one call to the usage log. Best effort — logging never fails a call. */
-function logUsage({ home, now = Date.now(), tool, tag = null, cwd, model, usage, usd = 0, rc, turns = null }) {
+function logUsage({ home, now = Date.now(), tool, tag = null, cwd, model, usage, usd = 0, rc, turns = null, parts = null, ctx = null, batch = false, extra = null }) {
   const u = usage || {};
+  // batch: Message Batches API bills 50 % of input and output (cache multipliers stack) —
+  // the caller passes the normal-path $, the line stores half and the saving.
+  if (batch) usd = usd / 2;
   try {
     fs.mkdirSync(claudeDir(home), { recursive: true });
     const row = {
@@ -183,6 +253,11 @@ function logUsage({ home, now = Date.now(), tool, tag = null, cwd, model, usage,
       cacheRead: u.cache_read_input_tokens || 0, cacheWrite: u.cache_creation_input_tokens || 0,
       usd: Math.round(usd * 1e6) / 1e6, // micro-dollars: many tiny calls must still add up
       rc, ...(turns ? { turns } : {}),
+      parts: roundParts(batch ? halve(parts || (model ? costPartsOfSum(model, u, turns || 1) : null)) : (parts || (model ? costPartsOfSum(model, u, turns || 1) : null))),
+      ...(batch ? { batch: true, savingUsd: Math.round(usd * 1e6) / 1e6 } : {}),
+      ...(extra || {}),
+      ...((u.server_tool_use && u.server_tool_use.web_search_requests) ? { searches: u.server_tool_use.web_search_requests } : {}),
+      ...(ctx ? { ctxClears: ctx.clears || 0, ctxClearedTokens: ctx.clearedTokens || 0 } : {}),
     };
     fs.appendFileSync(path.join(claudeDir(home), USAGE_FILE), JSON.stringify(row) + '\n');
   } catch { /* best effort */ }
@@ -207,10 +282,34 @@ function usageSummary({ home, since }) {
     return m;
   };
   const usd = Math.round(rows.reduce((s, r) => s + (r.usd || 0), 0) * 100) / 100;
-  return {
+  // $ per cost type, from each line's own model prices (older lines: recomputed
+  // from tokens, spread over the line's turns so a size tier is judged per prompt).
+  let byType = {};
+  for (const r of rows) {
+    const p = r.parts || costPartsOfSum(r.model, {
+      input_tokens: r.in, output_tokens: r.out, cache_read_input_tokens: r.cacheRead,
+      cache_creation_input_tokens: r.cacheWrite,
+      server_tool_use: { web_search_requests: r.searches || 0 },
+    }, r.turns || 1);
+    byType = addParts(byType, p);
+  }
+  for (const k of COST_TYPES) byType[k] = Math.round((byType[k] || 0) * 100) / 100;
+  const topCalls = [...rows].sort((a, b) => (b.usd || 0) - (a.usd || 0)).slice(0, 3)
+    .map((r) => ({ ts: r.ts, tag: r.tag || r.tool, project: r.project || '?', usd: Math.round((r.usd || 0) * 100) / 100 }));
+  const warnings = rows.filter((r) => (r.cacheRead || 0) > CACHE_READ_WARN_TOKENS)
+    .map((r) => `${r.ts} ${r.tag || r.tool} (${r.project || '?'}): read ${(r.cacheRead / 1e6).toFixed(1)} M cache tokens, $${(r.usd || 0).toFixed(2)}`);
+  const result = {
     since, calls: rows.length, ok: rows.filter((r) => r.rc === 0).length, usd,
     byUse: group((r) => r.tag || r.tool), byProject: group((r) => r.project || '?'), byModel: group((r) => r.model || '?'),
+    byCostType: byType, topCalls, warnings,
   };
+  if (rows.some((r) => r.ctxClears !== undefined)) {
+    result.contextEditing = {
+      clears: rows.reduce((s, r) => s + (r.ctxClears || 0), 0),
+      clearedTokens: rows.reduce((s, r) => s + (r.ctxClearedTokens || 0), 0),
+    };
+  }
+  return result;
 }
 
 function parseArgs(argv) {
@@ -235,7 +334,7 @@ function parseArgs(argv) {
  * no SDK install). Maps failures onto the RC contract.
  * @returns {Promise<{rc:number, body?:object, message?:string}>}
  */
-async function postMessages({ key, body, timeoutMs, fetchImpl = globalThis.fetch }) {
+async function postMessages({ key, body, timeoutMs, fetchImpl = globalThis.fetch, headers = {} }) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -245,6 +344,7 @@ async function postMessages({ key, body, timeoutMs, fetchImpl = globalThis.fetch
         'content-type': 'application/json',
         'x-api-key': key,
         'anthropic-version': API_VERSION,
+        ...headers,
       },
       body: JSON.stringify(body),
       signal: ctrl.signal,
@@ -336,6 +436,7 @@ async function run(argv, {
     const summary = usageSummary({ home, since: start.toISOString() });
     summary.since = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
     out(JSON.stringify(summary, null, 2) + '\n');
+    for (const w of summary.warnings) err(`claude-api-safe: WARNING ${w}\n`);
     return RC.OK;
   }
 
@@ -405,7 +506,7 @@ async function run(argv, {
 module.exports = {
   RC, KEY_VAR, ENV_FILE, LIMIT_FILE, USAGE_FILE, DEFAULT_MODEL, PRICES,
   parseEnvFile, resolveKey, loadSwitches, activeLimit, storeLimit, resetLimit,
-  costOf, addUsage, logUsage, usageSummary,
+  costOf, costParts, costPartsOfSum, addParts, addUsage, logUsage, usageSummary,
   parseArgs, postMessages, textOf, callApi, sessionLine, run,
 };
 

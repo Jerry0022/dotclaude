@@ -12,7 +12,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Concept — {title}</title>
+  <title>{title}</title>
   <style>/* all CSS inline */</style>
 </head>
 <body>

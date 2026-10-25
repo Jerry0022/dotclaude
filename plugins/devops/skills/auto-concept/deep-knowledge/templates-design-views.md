@@ -139,7 +139,9 @@ Reuses the decision template's proven bi-state mechanics wholesale — no new
 markup vocabulary. A `data-view-kind="decision"` view is a fullscreen frame
 (heading + free prose authored above/between the alternatives) around one
 or more `[data-decision]` groups, each with the same bi-state
-(`Miteinbeziehen` / `Verwerfen`, default include) and the same mandatory
+(`Miteinbeziehen` / `Verwerfen`; pre-selection per § Bi-State Variant
+Evaluation — exclusive alternatives: only the recommended one included,
+independent topics: included) and the same mandatory
 adjacent `textarea[data-comment="{decisionId}-note"]` as § Bi-State Variant
 Evaluation. `ensureCommentSlots()` (§ Comment Slot Injection) already runs
 page-wide on `DOMContentLoaded` and reaches every `[data-decision]` group

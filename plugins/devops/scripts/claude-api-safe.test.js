@@ -226,3 +226,60 @@ describe("parseEnvFile unescapes double-quoted values (H4)", () => {
     expect(api.parseEnvFile(`KEY=${quoteValue(value)}\n`).KEY).toBe(value);
   });
 });
+
+describe("prices and cost view", () => {
+  test("Sonnet cache read is $0.10/MTok", () => {
+    expect(api.costOf("claude-sonnet-5-5", { cache_read_input_tokens: 1_000_000 })).toBeCloseTo(0.1, 6);
+  });
+  test("Haiku prompts over 100k tokens use the higher tier (prompt = input + read + write)", () => {
+    expect(api.costOf("claude-haiku-5-5", { input_tokens: 1_000_000 })).toBeCloseTo(0.5, 6);
+    const small = { input_tokens: 10_000, output_tokens: 1_000_000 };
+    expect(api.costParts("claude-haiku-5-5", small).output).toBeCloseTo(0.5, 6);
+    const big = { input_tokens: 10_000, cache_read_input_tokens: 80_000, cache_creation_input_tokens: 20_001, output_tokens: 1_000_000 };
+    const p = api.costParts("claude-haiku-5-5", big);
+    expect(p.output).toBeCloseTo(2.5, 6);
+    expect(p.cacheRead).toBeCloseTo(80_000 * 0.05 / 1e6, 9);
+    expect(p.cacheWrite).toBeCloseTo(20_001 * 0.625 / 1e6, 9);
+    expect(api.costParts("claude-haiku-5-5", { ...big, cache_creation_input_tokens: 10_000 }).output).toBeCloseTo(0.5, 6);
+  });
+  test("summed usage of several turns is priced per turn: Haiku's tier is judged per prompt, not on the sum", () => {
+    // 4 turns × 50k input = 200k summed; each prompt < 100k → base tier.
+    const sum = { input_tokens: 200_000, output_tokens: 4_000 };
+    const perTurn = api.costOf("claude-haiku-5-5", { input_tokens: 50_000, output_tokens: 1_000 });
+    const parts = api.costPartsOfSum("claude-haiku-5-5", sum, 4);
+    const total = Object.values(parts).reduce((s, v) => s + v, 0);
+    expect(total).toBeCloseTo(4 * perTurn, 9);
+    expect(total).toBeLessThan(api.costOf("claude-haiku-5-5", sum));
+    expect(api.costPartsOfSum("claude-haiku-5-5", sum, 1)).toEqual(api.costParts("claude-haiku-5-5", sum));
+    // An old log line without parts is recomputed the same way by --usage.
+    const h = fs.mkdtempSync(path.join(os.tmpdir(), "safe-sum-"));
+    fs.mkdirSync(path.join(h, ".claude"), { recursive: true });
+    fs.writeFileSync(path.join(h, ".claude", "api-credit-usage.jsonl"),
+      JSON.stringify({ ts: "2026-10-20T00:00:00.000Z", tool: "agent", model: "claude-haiku-5-5", in: 200_000, out: 4_000, cacheRead: 0, cacheWrite: 0, usd: 0, rc: 0, turns: 4 }) + "\n");
+    const s = api.usageSummary({ home: h, since: "2026-10-01" });
+    expect(s.byCostType.input).toBeCloseTo(Math.round(200_000 * 0.1 / 1e6 * 100) / 100, 6);
+    fs.rmSync(h, { recursive: true, force: true });
+  });
+  test("--usage adds $ per cost type, top 3 calls, >10M cache-read warning and context-editing totals", async () => {
+    const now = Date.parse("2026-10-20T12:00:00Z");
+    const log = (o) => api.logUsage({ home, now, tool: "agent", tag: "scout", cwd: "/x/proj", rc: 0, ...o });
+    const big = { input_tokens: 0, cache_read_input_tokens: 11_000_000, cache_creation_input_tokens: 1_000_000, output_tokens: 100_000 };
+    log({ model: "claude-opus-5-5", usage: big, usd: api.costOf("claude-opus-5-5", big), ctx: { clears: 2, clearedTokens: 130000 } });
+    for (const n of [1, 2, 3]) log({ model: "claude-sonnet-5-5", usage: { input_tokens: n * 1000 }, usd: n * 0.002 });
+    const r = await runCli(["--usage"], { now });
+    const s = JSON.parse(r.out);
+    expect(s.calls).toBe(4);
+    expect(s.byCostType.cacheRead).toBeCloseTo(2.2, 2);
+    expect(s.byCostType.cacheWrite).toBeCloseTo(5, 2);
+    expect(s.byCostType.output).toBeCloseTo(2, 2);
+    expect(Object.keys(s.byCostType)).toEqual(["input", "cacheWrite", "cacheRead", "output", "webSearch"]);
+    expect(s.topCalls).toHaveLength(3);
+    expect(s.topCalls[0]).toMatchObject({ tag: "scout", project: "proj" });
+    expect(s.topCalls[0].usd).toBeGreaterThanOrEqual(s.topCalls[1].usd);
+    expect(s.warnings).toHaveLength(1);
+    expect(s.warnings[0]).toMatch(/11\.0 M cache tokens/);
+    expect(r.err).toMatch(/WARNING/);
+    expect(s.contextEditing).toEqual({ clears: 2, clearedTokens: 130000 });
+    expect(s.byUse.scout.calls).toBe(4);
+  });
+});

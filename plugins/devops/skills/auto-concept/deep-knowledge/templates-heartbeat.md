@@ -341,6 +341,7 @@ function renderPanelStatus() {
   if (detail) detail.hidden = (status !== 'submitted');
   if (typeof renderStatusDots === 'function') renderStatusDots();
   if (typeof renderJourney === 'function') renderJourney();
+  if (typeof renderTabTitle === 'function') renderTabTitle();
   // Toast: while the round is in flight, and while it is the user's turn but
   // the bridge is away ("👉 Du bist dran · alles gespeichert" + verbinde…).
   if (typeof renderSubmittedToast === 'function') {
