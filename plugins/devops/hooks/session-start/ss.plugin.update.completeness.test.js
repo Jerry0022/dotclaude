@@ -7,8 +7,8 @@ import path from "node:path";
  * Characterization test for the PER-PLUGIN MCP completeness check in
  * ss.plugin.update.js's missingMcpFiles().
  *
- * The bug: MCP_CRITICAL_FILES is a devops-shaped list (mcp-server/ship/index.js,
- * mcp-server/issues/index.js, mcp-server/lib/heartbeat.js, ...) but the old
+ * The bug: MCP_CRITICAL_FILES is a devops-shaped list (mcp-server/ship/server.js,
+ * mcp-server/issues/server.js, mcp-server/lib/heartbeat.js, ...) but the old
  * missingMcpFiles(targetRoot, expectMcp) asserted that WHOLE list against every
  * plugin that merely ships an .mcp.json. The local-llm plugin ships an .mcp.json
  * but its mcp-server/ has only index.js — so the check reported 3 files
@@ -94,7 +94,7 @@ describe("ss.plugin.update missingMcpFiles — per-plugin completeness", () => {
     expect(missingMcpFiles(dst, src)).toEqual([]);
   });
 
-  test("devops-shaped source, cache dropped mcp-server/ship/index.js → flagged (#190 preserved)", () => {
+  test("devops-shaped source, cache dropped mcp-server/ship/server.js → flagged (#190 preserved)", () => {
     DEVOPS_FILES.forEach((rel) => write(src, rel, `// ${rel}`));
     const dropped = path.join("mcp-server", "ship", "index.js");
     mirror(src, dst, DEVOPS_FILES.filter((rel) => rel !== dropped));

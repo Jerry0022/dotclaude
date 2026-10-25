@@ -1,6 +1,6 @@
 /**
  * @module cache-rebuild
- * @version 0.1.0
+ * @version 0.2.0
  * @description The plugin-cache rebuild used by ss.plugin.update — extracted so
  *   it can run OUT OF BAND, in a detached child process, long after the MCP
  *   connect window has closed.
@@ -60,9 +60,7 @@ const MCP_CRITICAL_FILES = [
   path.join('mcp-server', 'index.js'),
   path.join('mcp-server', 'lib', 'heartbeat.js'),
   path.join('mcp-server', 'lib', 'ensure-deps.js'),
-  path.join('mcp-server', 'ship', 'index.js'),
   path.join('mcp-server', 'ship', 'server.js'),
-  path.join('mcp-server', 'issues', 'index.js'),
   path.join('mcp-server', 'issues', 'server.js'),
 ];
 
