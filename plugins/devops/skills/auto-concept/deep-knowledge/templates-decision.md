@@ -1,4 +1,4 @@
-# Concept templates, part 07 of 42: Template: decision
+# Concept templates, part 07 of 46: Template: decision
 
 # Template: decision
 
@@ -40,8 +40,17 @@ layout, and for the markup + CSS + JS every page carries.
 
 ## Bi-State Variant Evaluation
 
-Every variant in a decision page MUST include a **bi-state** selector with
-exactly two options.
+**Legacy control.** New decisions are authored in one of the seven decision
+modes (`decision-modes.md`; markup in `templates-analysis.md` § Decision
+modes) — a `[data-decision]` with `data-decision-mode`. A `[data-decision]`
+WITHOUT a mode is this bi-state: old and frozen rounds keep it and its
+`evaluation` payload unchanged, and a new round may still use it for its one
+fitting job — independent items, each taken or left — though `multi` is
+preferred there. Mutually exclusive alternatives are always `single`, never
+the emulation below (gate A7).
+
+In a legacy-style decision page, every variant includes a **bi-state**
+selector with exactly two options.
 
 | State | Label | Behavior |
 |-------|-------|----------|
@@ -51,16 +60,17 @@ exactly two options.
 - **The pre-selected state is Claude's recommendation** — the user may flip
   any of them, nothing is locked:
   - **Mutually exclusive alternatives** (only one can be built — one
-    architecture, one library, one strategy): exactly ONE variant is
-    pre-selected **Miteinbeziehen** — the one Claude recommends — and every
-    other one **Verwerfen**. All-included reads as "take them all", which
-    an exclusive choice cannot mean and which left users unsure what to do.
+    architecture, one library, one strategy) are a `single` decision in new
+    rounds. On a legacy page: exactly ONE variant is pre-selected
+    **Miteinbeziehen** — the one Claude recommends — and every other one
+    **Verwerfen**. All-included reads as "take them all", which an exclusive
+    choice cannot mean and which left users unsure what to do.
   - **Independent topics or findings** (each can be taken on its own):
     **Miteinbeziehen** by default; **Verwerfen** only where Claude actually
     advises against one.
   - A page may mix both: decide per `[data-decision]` group.
-- No "Nur diese" / "only" option — the user implicitly picks a single
-  variant by setting all others to "Verwerfen"
+- No "Nur diese" / "only" option and no third state — a single pick out of
+  alternatives is a `single` decision (radio cards), not a bi-state
 - No "Claude setzt um" / "Feedback" hint labels — the action-vs-feedback
   distinction is now expressed by the two submit buttons (iterate vs.
   implement), NOT by the evaluation selector
@@ -285,7 +295,8 @@ the override slot.
 **Behavior:**
 - Default: "Miteinbeziehen" (all variants considered)
 - "Verwerfen": grays out the variant card visually (still accessible)
-- To pick a single variant, set all others to "Verwerfen" manually
+- A single pick out of alternatives is a `single` decision in new rounds; a
+  legacy page reads it as the one "Miteinbeziehen" left among "Verwerfen"
 
 ### Decision schema
 
@@ -319,26 +330,35 @@ button the user clicked. See § Two-Button Submit below.
 ## Content Variants (within the decision template)
 
 The decision template has six content sub-variants. They describe the shape
-of the variant cards — not a different page layout.
+of the variant cards — not a different page layout. Every question on them is
+a decision in one of the seven modes (`decision-modes.md`, markup in
+`templates-analysis.md` § Decision modes); the include / discard bi-state
+above is the legacy control and there is no tri-state, no "Nur diese" and no
+priority selector.
 
 ### Variant: analysis
 
-**Purpose:** Present findings from a data analysis with accept/reject controls.
+**Purpose:** Analysis results and the decisions that follow from them.
+
+This variant is the guided **Full** analysis: `data-analysis="full"` on the
+`decision` round — Briefing → Themenfelder → one decision per stage →
+Review. Markup in `templates-analysis.md`; authoring rules (Full vs Lite,
+briefing, kurz / lang per level) in `step1-templates.md` § 1b · Analysis
+results and decisions — Full vs Lite; displays from `analysis-palette.md`.
 
 ```
-[Header: Analysis title + date]
-[Summary card: key metrics / TL;DR]
+[Briefing: Analyse → Potential (KPI) → Themenfelder (≤ 3) → "Los geht's" (duration)]
 
-[Finding 1]
-  ├── Description + evidence
-  ├── [Tri-state: Verwerfen / Miteinbeziehen (default) / Nur diese]
-  ├── [Priority: Hoch / Mittel / Niedrig]
-  └── [Note field: "Notiz..."]
+[Themenfeld 1]
+  [Decision stage]                         [Analysis column ≈ 33 %]
+    ├── Gilt für (quiet text)                ├── L1 Briefing  · short
+    ├── Question (largest type)              ├── L2 Themenfeld · short (its result)
+    ├── One context sentence                 └── L3 this decision · long (palette display + 2–4 sentences)
+    ├── Options in the mode, ★ = recommendation, preselected
+    ├── Note (one inline field) · "Als Issue anlegen"
+    └── Weiter (Enter) · Zurück (⇧ + Enter)
 
-[Finding 2]
-  └── ...
-
-[Submit button]
+[Review: deviations → issues → untouched; "Was deine Auswahl bewirkt" chart]
 ```
 
 ### Variant: plan
@@ -373,12 +393,13 @@ of the variant cards — not a different page layout.
 [Variant A: Name]
   ├── Description + diagram/illustration
   ├── Pro/Con list
-  ├── [Tri-state: Verwerfen / Miteinbeziehen (default) / Nur diese]
-  ├── [Rating: 1-5 stars or slider]
   └── [Comment field (wide, min-height: 80px)]
 
 [Variant B: Name]
   └── ...
+
+[Decision, mode single: "Welche Architektur bauen wir?" — one option card
+ per variant (outcome label + consequence), ★ = recommendation, preselected]
 
 [Decision panel sidebar: summary + submit]
 ```
@@ -399,15 +420,16 @@ of the variant cards — not a different page layout.
 [Per-option detail cards]
   ├── Strengths
   ├── Weaknesses
-  ├── [Tri-state: Verwerfen / Miteinbeziehen (default) / Nur diese]
   └── [Comment field (wide)]
 
+[Decision, mode single: the winner — one option card per candidate, ★ preselected]
 [Decision panel sidebar: summary + submit]
 ```
 
-Each option in the comparison gets the same **bi-state evaluation** as
-concept variants. Decision schema matches the decision template schema, with
-additional `weight-*` entries for weight sliders.
+The winner is ONE `single` decision across the options (`decision-modes.md`),
+never a bi-state per option — N include / discard toggles for one exclusive
+choice is gate warning A7. Legacy pages with a bi-state per option keep their
+`evaluation` payload; weight sliders still add `weight-*` entries.
 
 ### Variant: dashboard
 

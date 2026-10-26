@@ -373,6 +373,48 @@ function hasKeyedControls(fragment) {
   return false;
 }
 
+/**
+ * Typed mode decisions → the form-control keys that carry them
+ * (templates-analysis.md § Control convention). The inverse of
+ * collectModeDecision(): lets a payload that carries `decisions[]` but no
+ * (or a partial) `allFields` still restore every mode value into the frozen
+ * round. `allFields` wins where both name a key.
+ */
+function modeFields(fragment, decisions) {
+  const out = {};
+  if (!Array.isArray(decisions)) return out;
+  const boxNames = [];
+  for (const m of fragment.matchAll(tagRe('input'))) {
+    if ((getAttr(m[2], 'type') || '').toLowerCase() === 'checkbox') boxNames.push(getAttr(m[2], 'name') || '');
+  }
+  for (const d of decisions) {
+    if (!d || !d.mode || !d.id) continue;
+    const n = `dm-${d.id}`;
+    const v = d.value;
+    switch (d.mode) {
+      case 'single': case 'verify': out[n] = v == null ? '' : String(v); break;
+      case 'multi': {
+        const on = new Set(Array.isArray(v) ? v : []);
+        boxNames.filter(b => b.startsWith(`${n}.`)).forEach(b => { out[b] = on.has(b.slice(n.length + 1)); });
+        break;
+      }
+      case 'yesnoalt': out[n] = (v && v.answer) || ''; out[`${n}-alt`] = (v && v.alt) || ''; break;
+      case 'slider': out[n] = v == null ? '' : String(v); break;
+      case 'order': out[n] = Array.isArray(v) ? v.join(',') : ''; break;
+      case 'wording':
+        out[n] = d.choice || ''; out[`${n}-text`] = d.choice === 'custom' ? String(v ?? '') : '';
+        break;
+      default: continue;
+    }
+    if (d.mode === 'verify') out[`${n}-fix`] = d.fix || '';
+    out[`${n}-touched`] = d.untouched ? '' : '1';
+    out[`${n}-issue`] = d.issue ? '1' : '';
+    out[`${n}-epic`] = d.epic || '';
+    if (typeof d.note === 'string') out[`${d.id}-note`] = d.note;
+  }
+  return out;
+}
+
 function bake(fragment, payload, opts = {}) {
   const notes = [];
   if (opts.unanswered) {
@@ -380,7 +422,8 @@ function bake(fragment, payload, opts = {}) {
     // correction): frozen as authored and explicitly marked, never a guessed payload.
     return { html: replaceRootAttrs(fragment, a => setAttr(setAttr(a, 'data-baked', true), 'data-unanswered', true)), notes };
   }
-  const fields = payload && payload.allFields;
+  const typed = modeFields(fragment, payload && payload.decisions);
+  const fields = (Object.keys(typed).length || (payload && payload.allFields)) ? { ...typed, ...((payload && payload.allFields) || {}) } : undefined;
   if ((!fields || !Object.keys(fields).length) && hasKeyedControls(fragment)) {
     notes.push('the payload carries no allFields, so no control value was written (a stored -decisions.json summary is not a /decisions payload)');
   }
@@ -573,7 +616,7 @@ function assemble({ page, head, fragments, slug = 'concept', md = readTemplates(
       .replace(/^<html data-template="design">/m, () =>
         `<!DOCTYPE html>\n<html lang="${esc(page.locale || 'en')}" data-theme="dark" data-page-version="${esc(version)}" data-template="${liveTemplate}">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>${esc(title)}</title>\n${headExtra}\n<style>\n${css}\n</style>\n</head>`)
       .replace(/<body style="overflow: hidden">/, () => `<body${liveTemplate === 'design' ? ' style="overflow: hidden"' : ''}>`)
-      .replace(/<main>[\s\S]*?<\/main>/, () => `<main>\n${sectionsHtml}\n</main>`)
+      .replace(/<main>[\s\S]*?<\/main>/, () => `${pageHeader(page)}<main>\n${sectionsHtml}\n</main>`)
       .replace(/<\/body>\s*<\/html>\s*$/, () => `<script type="application/json" id="concept-decisions">\n{"submitted": false, "decisions": [], "comments": {"general": {"text": "", "attachments": []}, "items": []}}\n</script>\n<script>\n${js}\n</script>\n</body>\n</html>\n`);
   } else {
     const skel = htmlBlocks.find(b => b.code.startsWith('<!DOCTYPE html>'));
@@ -594,12 +637,25 @@ function assemble({ page, head, fragments, slug = 'concept', md = readTemplates(
   return { html, rounds: rounds.map(r => r.n), liveN, liveTemplate, problems };
 }
 
+/**
+ * Title + subtitle header for the design skeleton. That skeleton has no
+ * <header> of its own, so a mixed page (or a design page whose later round is
+ * a document round) lost page.json's title/subtitle. Fullscreen design rounds
+ * keep the screen to themselves: the header hides while the visible tab is a
+ * design round (html[data-template] follows the tab the user looks at).
+ */
+function pageHeader(page) {
+  if (!page.title && !page.subtitle) return '';
+  const sub = page.subtitle ? `\n        <p class="subtitle">${esc(page.subtitle)}</p>` : '';
+  return `<header class="page-header" data-page-header>\n        <h1>${esc(page.title || 'Concept')}</h1>${sub}\n      </header>\n      <style>html[data-template="design"] [data-page-header] { display: none; }</style>\n      `;
+}
+
 /** Deterministic gate over the assembled page (hooks/lib/concept-gate.js). */
 function runGate(outPath, html) {
   const r = gate.evaluate(outPath, html);
   return {
     ok: r.ok,
-    reason: r.ok ? '' : gate.buildBlockReason(outPath, r.missing, r.forbidden, r.structural, r.mapping, r.overlap, r.stale, r.collisions, r.finalReport),
+    reason: r.ok ? '' : gate.buildBlockReason(outPath, r.missing, r.forbidden, r.structural, r.mapping, r.overlap, r.stale, r.collisions, r.finalReport, r.analysis),
     warnings: (r.warnings || []).map(w => w.why),
   };
 }

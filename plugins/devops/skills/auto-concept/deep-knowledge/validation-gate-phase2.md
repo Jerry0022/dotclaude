@@ -96,7 +96,7 @@ run this subset:
 | # | Pattern | Purpose |
 |---|---------|---------|
 | P22 | `section[data-design]` — at least one, count ≥1 | **Structural assertion, always run once `data-view=` is present:** a design iteration with views MUST still carry ≥1 `data-design`. Views never stand alone — a page with `data-view` and zero `data-design` picked the wrong template; it belongs in `decision`. |
-| P23 | `data-view-kind="decision"` OR `data-view-kind="comparison"` OR `data-view-kind="mapping"` | Every `[data-view]` MUST declare its kind — an unrecognised or missing kind means the page invented a fourth shape with no reference implementation. |
+| P23 | `data-view-kind="decision"` OR `"comparison"` OR `"mapping"` OR `"analysis"` | Every `[data-view]` MUST declare its kind — an unrecognised or missing kind means the page invented a shape with no reference implementation. `analysis` is the embedded Lite block (templates-analysis.md). |
 | P24 | `view-switch-item` | View segments in the top-centre switcher — required once any view exists, so switching to it is reachable without opening the ☰ panel. |
 | P25 | `screen-nav-view-item` | View entries in the panel's second `#screen-nav` group. |
 | P26 | `showView` | The JS that switches the active top-level item to a view — missing means the switcher/nav segments render but do nothing. |

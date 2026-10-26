@@ -5,9 +5,11 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 
 | File | Topic | Summary |
 |------|-------|---------|
+| [analysis-palette.md](analysis-palette.md) | Analysis display palette — which display carries which finding | The catalogue Claude picks from whenever an analysis level (`data-alevel`) of a |
 | [artifact-fallback.md](artifact-fallback.md) | Artifact Fallback — deciding on a claude.ai artifact (#589) | The second-tier no-bridge path of `SKILL.md` Step 3. The decision to take it |
 | [bridge-server-state.md](bridge-server-state.md) | Concept Bridge Server + Edge, steps 4 to 7 | Continues [bridge-server.md](bridge-server.md) (timestamp convention, steps 1... |
 | [bridge-server.md](bridge-server.md) | Concept Bridge Server + Edge | The **concept bridge server** (`scripts/concept-server.py`) serves static files |
+| [decision-modes.md](decision-modes.md) | Decision modes — how a concept page asks | How Claude authors a decision on a concept page: the seven modes, the fields |
 | [interactive-components.md](interactive-components.md) | Interactive Components | Reference implementations for interactive elements in concept pages. |
 | [iteration-rules.md](iteration-rules.md) | Iteration Tabs (single file, many iterations) | Every concept page is a stack of iteration tabs. The **tab bar lives at the |
 | [monitoring.md](monitoring.md) | Concept Browser Monitoring | How Claude monitors the concept page for user decisions, processes them |
@@ -19,52 +21,53 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [step2-generate.md](step2-generate.md) | Concept step 2 — engine source, page anatomy, submit actions | Engine source, localisation, design defaults, panel layout and anatomy, inter... |
 | [step3-open-browser.md](step3-open-browser.md) | Concept step 3 — opening the page, bridge launch, open-concept cards | No-bridge fallbacks, the Edge open command and its gates, the bridge server a... |
 | [step4-monitor.md](step4-monitor.md) | Concept step 4 — heartbeat, pickup and polling schedule | Heartbeat, `/pending` pickup and the polling schedule — execution detail of `... |
-| [step5-finalize.md](step5-finalize.md) | Concept step 5b — finalize parts A to D, legacy actions, critical invariant | Finalize parts A · Issues, B · Implement, C · Ship and D · Close out, legacy ... |
+| [step5-finalize.md](step5-finalize.md) | Concept step 5b — finalize parts A to D, legacy actions, critical invariant | Finalize parts A · Issues, B · Implement, C · Ship, D · Close out and E · Tes... |
 | [step5-process.md](step5-process.md) | Concept step 5a–5b — reading a submission and the iterate / implement / finalize branches | Round marking, reading a submission, checkpoints and the iterate / implement ... |
 | [step5-update-page.md](step5-update-page.md) | Concept step 5c–5d — appending rounds, the final report, resuming the watch | Appending rounds, the final report and its open points, re-confirming wakes a... |
 | [step6-closeout.md](step6-closeout.md) | Concept step 6 — disposition, cleanup procedure, completion card | Disposition, the cleanup procedure, durable-store disposal, safety rules and ... |
-| [templates-attachments-js.md](templates-attachments-js.md) | Concept templates, part 31 of 42: Shared systems — attachments JS | // --- IndexedDB mirror: the copy that survives the bridge being gone --- |
-| [templates-attachments.md](templates-attachments.md) | Concept templates, part 30 of 42: Shared systems — attachments (HTML, CSS) | Every field marked `textarea[data-attachable]` — the feedback dock (general, |
-| [templates-common-structure.md](templates-common-structure.md) | Concept templates, part 02 of 42: Shared systems — common structure (all templates) | <!DOCTYPE html> |
-| [templates-common.md](templates-common.md) | Concept templates, part 01 of 42: Overview, UI locale | Three **templates** (layout modes) cover every concept use case. A template is |
-| [templates-decision.md](templates-decision.md) | Concept templates, part 07 of 42: Template: decision | Multi-variant evaluation in a document column, with the ☰ overlay panel over |
-| [templates-design-css-2.md](templates-design-css-2.md) | Concept templates, part 12 of 42: Template: design — layout CSS (continued 2) | /* ── Screen navigation inside the ☰ panel ── */ |
-| [templates-design-css.md](templates-design-css.md) | Concept templates, part 11 of 42: Template: design — layout CSS | /* ── Scrollbars (ui-defaults.md R5) ───────────────────────────────────── |
-| [templates-design-hotkeys.md](templates-design-hotkeys.md) | Concept templates, part 19 of 42: Template: design — hotkey overlay, Space and nudges | Runs on EVERY template (decision, free, design), so the plain-mode pages get |
-| [templates-design-js.md](templates-design-js.md) | Concept templates, part 13 of 42: Template: design — layout JS | Only one screen is visible at a time, scoped to the one active design. Each |
-| [templates-design-layout.md](templates-design-layout.md) | Concept templates, part 10 of 42: Template: design — fullscreen layout, overlay panel, feedback dock | <!-- data-template mirrors the ACTIVE iteration; applyIterationTemplate() |
-| [templates-design-overview-css-2.md](templates-design-overview-css-2.md) | Concept templates, part 18 of 42: Template: design — variant overview CSS (≥2 designs) (continued 2) | /* ── Side-tile label: neighbours only. The variant icon — exactly the |
-| [templates-design-overview-css.md](templates-design-overview-css.md) | Concept templates, part 17 of 42: Template: design — variant overview CSS (≥2 designs) | Chrome of § Variant overview (≥2 designs). Every rule is gated on |
-| [templates-design-overview.md](templates-design-overview.md) | Concept templates, part 16 of 42: Template: design — variant overview JS | The engine half of § Variant overview (≥2 designs). `buildDesignUI()` calls |
-| [templates-design-screens.md](templates-design-screens.md) | Concept templates, part 15 of 42: Template: design — screen patterns, decision schema, collectDecisions | A design iteration holds one or more `<section data-design>`, each owning |
-| [templates-design-views.md](templates-design-views.md) | Concept templates, part 09 of 42: Template: design — views, variant overview | A third, independent thing a `design` iteration may hold: non-visual |
-| [templates-design-wiring.md](templates-design-wiring.md) | Concept templates, part 14 of 42: Template: design — annotation JS, click-through handler | Entirely independent of `wireDesignLayout()` above: a page with no |
-| [templates-design.md](templates-design.md) | Concept templates, part 08 of 42: Template: design — rules, devices, click-through, annotation layer | *(legacy alias: `prototype` — normalised to `design` on read)* |
-| [templates-final-report.md](templates-final-report.md) | Concept templates, part 42 of 42: Shared systems — final report panel, design system | The final-report section closes a concept session. It is appended via the |
-| [templates-free-pins.md](templates-free-pins.md) | Concept templates, part 21 of 42: Template: free — Document pins | The document-round counterpart of the design round's own Ctrl + click pins |
-| [templates-free.md](templates-free.md) | Concept templates, part 20 of 42: Template: free | The same document layout as `decision`, but the body is Claude-authored free |
-| [templates-heartbeat.md](templates-heartbeat.md) | Concept templates, part 40 of 42: Shared systems — connection heartbeat (HTTP bridge) | The server response splits the heartbeat into TWO timestamps: |
-| [templates-mapping-js.md](templates-mapping-js.md) | Concept templates, part 33 of 42: Shared systems — information mapping engine JS | // --- Information mapping engine (§ Information Mapping) -------------------- |
-| [templates-mapping.md](templates-mapping.md) | Concept templates, part 32 of 42: Shared systems — information mapping engine (spec, DOM contract, CSS) | Shared, template-independent engine for `section[data-mapping]` (§ View kind ... |
-| [templates-panel-chrome-js.md](templates-panel-chrome-js.md) | Concept templates, part 04 of 42: Panel chrome — page-level JS | // --- Panel chrome (all templates) --- |
-| [templates-panel-feedback-dock.md](templates-panel-feedback-dock.md) | Concept templates, part 05 of 42: Panel chrome — feedback dock | // --- Feedback dock (all templates) --- |
-| [templates-panel-iteration.md](templates-panel-iteration.md) | Concept templates, part 06 of 42: Per-iteration templates | The template is chosen **per iteration**. Every `<section data-iteration="N">` |
-| [templates-panel-state-2.md](templates-panel-state-2.md) | Concept templates, part 25 of 42: Shared systems — decision panel state CSS (continued 2) | /* Close-out sheet. Every question at once inside one bounded box — the box |
-| [templates-panel-state-3.md](templates-panel-state-3.md) | Concept templates, part 26 of 42: Shared systems — decision panel state CSS (continued 3) | /* Open-questions section — checkbox list with optional "[Issue #NNN]" |
-| [templates-panel-state.md](templates-panel-state.md) | Concept templates, part 24 of 42: Shared systems — decision panel state CSS | /* ── Panel anatomy (all templates) ── |
-| [templates-panel.md](templates-panel.md) | Concept templates, part 03 of 42: Panel chrome — markup and CSS | **The decision panel is page chrome, not a layout choice.** It is the same |
-| [templates-persistence-2.md](templates-persistence-2.md) | Concept templates, part 28 of 42: Shared systems — state persistence (continued 2) | // `text:iN:` keys with N below the live round = drafts of a submitted |
-| [templates-persistence-comments.md](templates-persistence-comments.md) | Concept templates, part 29 of 42: Shared systems — persist warning banner, comment slots | `_showPersistWarning()` (above) creates this element on first failure — |
-| [templates-persistence.md](templates-persistence.md) | Concept templates, part 27 of 42: Shared systems — state persistence | Interactive element state MUST survive page reloads AND accidental tab closes |
-| [templates-rounds.md](templates-rounds.md) | Concept templates, part 41 of 42: Shared systems — iteration tabs | Iterations of a concept page are appended as `<section data-iteration="N">` |
-| [templates-section-nav-2.md](templates-section-nav-2.md) | Concept templates, part 23 of 42: Shared systems — section navigation (continued 2) | function buildSectionNav() { |
-| [templates-section-nav.md](templates-section-nav.md) | Concept templates, part 22 of 42: Shared systems — section navigation | All three templates reuse the same iteration, persistence, heartbeat, submit |
-| [templates-submit-journey.md](templates-submit-journey.md) | Concept templates, part 38 of 42: Shared systems — journey row, panel state reset, submit progress | The bottom of every live panel is ONE row plus ONE status line (CSS in |
-| [templates-submit-js-2.md](templates-submit-js-2.md) | Concept templates, part 36 of 42: Shared systems — two-button submit JS (continued 2) | // The rows currently on the sheet — every non-plan block that is not hidden. |
-| [templates-submit-js-3.md](templates-submit-js-3.md) | Concept templates, part 37 of 42: Shared systems — two-button submit JS (continued 3) | async function submitFinalize() { |
-| [templates-submit-js.md](templates-submit-js.md) | Concept templates, part 35 of 42: Shared systems — two-button submit JS | let _submittedAt = 0; |
-| [templates-submit.md](templates-submit.md) | Concept templates, part 34 of 42: Shared systems — collectDecisions, two-button submit (HTML, CSS) | The submit handler picks the branch from the **active iteration's** |
-| [templates-utilities.md](templates-utilities.md) | Concept templates, part 39 of 42: Shared systems — tooltips, theme toggle | Page chrome on every template, like the theme toggle below: no element of a |
+| [templates-analysis.md](templates-analysis.md) | Concept templates, part 43 of 43: Template: analysis — Full + Lite contract, decision modes, collect | Analysis results and the decisions that follow from them are **not a fourth |
+| [templates-attachments-js.md](templates-attachments-js.md) | Concept templates, part 31 of 43: Shared systems — attachments JS | // --- IndexedDB mirror: the copy that survives the bridge being gone --- |
+| [templates-attachments.md](templates-attachments.md) | Concept templates, part 30 of 43: Shared systems — attachments (HTML, CSS) | Every field marked `textarea[data-attachable]` — the feedback dock (general, |
+| [templates-common-structure.md](templates-common-structure.md) | Concept templates, part 02 of 43: Shared systems — common structure (all templates) | <!DOCTYPE html> |
+| [templates-common.md](templates-common.md) | Concept templates, part 01 of 43: Overview, UI locale | Three **templates** (layout modes) cover every concept use case. A template is |
+| [templates-decision.md](templates-decision.md) | Concept templates, part 07 of 43: Template: decision | Multi-variant evaluation in a document column, with the ☰ overlay panel over |
+| [templates-design-css-2.md](templates-design-css-2.md) | Concept templates, part 12 of 43: Template: design — layout CSS (continued 2) | /* ── Screen navigation inside the ☰ panel ── */ |
+| [templates-design-css.md](templates-design-css.md) | Concept templates, part 11 of 43: Template: design — layout CSS | /* ── Scrollbars (ui-defaults.md R5) ───────────────────────────────────── |
+| [templates-design-hotkeys.md](templates-design-hotkeys.md) | Concept templates, part 19 of 43: Template: design — hotkey overlay, Space and nudges | Runs on EVERY template (decision, free, design), so the plain-mode pages get |
+| [templates-design-js.md](templates-design-js.md) | Concept templates, part 13 of 43: Template: design — layout JS | Only one screen is visible at a time, scoped to the one active design. Each |
+| [templates-design-layout.md](templates-design-layout.md) | Concept templates, part 10 of 43: Template: design — fullscreen layout, overlay panel, feedback dock | <!-- data-template mirrors the ACTIVE iteration; applyIterationTemplate() |
+| [templates-design-overview-css-2.md](templates-design-overview-css-2.md) | Concept templates, part 18 of 43: Template: design — variant overview CSS (≥2 designs) (continued 2) | /* ── Side-tile label: neighbours only. The variant icon — exactly the |
+| [templates-design-overview-css.md](templates-design-overview-css.md) | Concept templates, part 17 of 43: Template: design — variant overview CSS (≥2 designs) | Chrome of § Variant overview (≥2 designs). Every rule is gated on |
+| [templates-design-overview.md](templates-design-overview.md) | Concept templates, part 16 of 43: Template: design — variant overview JS | The engine half of § Variant overview (≥2 designs). `buildDesignUI()` calls |
+| [templates-design-screens.md](templates-design-screens.md) | Concept templates, part 15 of 43: Template: design — screen patterns, decision schema, collectDecisions | A design iteration holds one or more `<section data-design>`, each owning |
+| [templates-design-views.md](templates-design-views.md) | Concept templates, part 09 of 43: Template: design — views, variant overview | A third, independent thing a `design` iteration may hold: non-visual |
+| [templates-design-wiring.md](templates-design-wiring.md) | Concept templates, part 14 of 43: Template: design — annotation JS, click-through handler | Entirely independent of `wireDesignLayout()` above: a page with no |
+| [templates-design.md](templates-design.md) | Concept templates, part 08 of 43: Template: design — rules, devices, click-through, annotation layer | *(legacy alias: `prototype` — normalised to `design` on read)* |
+| [templates-final-report.md](templates-final-report.md) | Concept templates, part 42 of 43: Shared systems — final report panel, design system | The final-report section closes a concept session. It is appended via the |
+| [templates-free-pins.md](templates-free-pins.md) | Concept templates, part 21 of 43: Template: free — Document pins | The document-round counterpart of the design round's own Ctrl + click pins |
+| [templates-free.md](templates-free.md) | Concept templates, part 20 of 43: Template: free | The same document layout as `decision`, but the body is Claude-authored free |
+| [templates-heartbeat.md](templates-heartbeat.md) | Concept templates, part 40 of 43: Shared systems — connection heartbeat (HTTP bridge) | The server response splits the heartbeat into TWO timestamps: |
+| [templates-mapping-js.md](templates-mapping-js.md) | Concept templates, part 33 of 43: Shared systems — information mapping engine JS | // --- Information mapping engine (§ Information Mapping) -------------------- |
+| [templates-mapping.md](templates-mapping.md) | Concept templates, part 32 of 43: Shared systems — information mapping engine (spec, DOM contract, CSS) | Shared, template-independent engine for `section[data-mapping]` (§ View kind ... |
+| [templates-panel-chrome-js.md](templates-panel-chrome-js.md) | Concept templates, part 04 of 43: Panel chrome — page-level JS | // --- Panel chrome (all templates) --- |
+| [templates-panel-feedback-dock.md](templates-panel-feedback-dock.md) | Concept templates, part 05 of 43: Panel chrome — feedback dock | // --- Feedback dock (all templates) --- |
+| [templates-panel-iteration.md](templates-panel-iteration.md) | Concept templates, part 06 of 43: Per-iteration templates | The template is chosen **per iteration**. Every `<section data-iteration="N">` |
+| [templates-panel-state-2.md](templates-panel-state-2.md) | Concept templates, part 25 of 43: Shared systems — decision panel state CSS (continued 2) | /* Close-out sheet — the final report's to-do inbox. A flex column end to |
+| [templates-panel-state-3.md](templates-panel-state-3.md) | Concept templates, part 26 of 43: Shared systems — decision panel state CSS (continued 3) | /* ── Final-report body components (§ Final Report Panel → Report body) ────── |
+| [templates-panel-state.md](templates-panel-state.md) | Concept templates, part 24 of 43: Shared systems — decision panel state CSS | /* ── Panel anatomy (all templates) ── |
+| [templates-panel.md](templates-panel.md) | Concept templates, part 03 of 43: Panel chrome — markup and CSS | **The decision panel is page chrome, not a layout choice.** It is the same |
+| [templates-persistence-2.md](templates-persistence-2.md) | Concept templates, part 28 of 43: Shared systems — state persistence (continued 2) | // `text:iN:` keys with N below the live round = drafts of a submitted |
+| [templates-persistence-comments.md](templates-persistence-comments.md) | Concept templates, part 29 of 43: Shared systems — persist warning banner, comment slots | `_showPersistWarning()` (above) creates this element on first failure — |
+| [templates-persistence.md](templates-persistence.md) | Concept templates, part 27 of 43: Shared systems — state persistence | Interactive element state MUST survive page reloads AND accidental tab closes |
+| [templates-rounds.md](templates-rounds.md) | Concept templates, part 41 of 43: Shared systems — iteration tabs | Iterations of a concept page are appended as `<section data-iteration="N">` |
+| [templates-section-nav-2.md](templates-section-nav-2.md) | Concept templates, part 23 of 43: Shared systems — section navigation (continued 2) | function buildSectionNav() { |
+| [templates-section-nav.md](templates-section-nav.md) | Concept templates, part 22 of 43: Shared systems — section navigation | All three templates reuse the same iteration, persistence, heartbeat, submit |
+| [templates-submit-journey.md](templates-submit-journey.md) | Concept templates, part 38 of 43: Shared systems — journey row, panel state reset, submit progress | The bottom of every live panel is ONE row plus ONE status line (CSS in |
+| [templates-submit-js-2.md](templates-submit-js-2.md) | Concept templates, part 36 of 43: Shared systems — two-button submit JS (continued 2) | // Every user-facing string comes from the sheet's data-label-* attributes, |
+| [templates-submit-js-3.md](templates-submit-js-3.md) | Concept templates, part 37 of 43: Shared systems — two-button submit JS (continued 3) | async function submitFinalize(shipRun) { |
+| [templates-submit-js.md](templates-submit-js.md) | Concept templates, part 35 of 43: Shared systems — two-button submit JS | let _submittedAt = 0; |
+| [templates-submit.md](templates-submit.md) | Concept templates, part 34 of 43: Shared systems — collectDecisions, two-button submit (HTML, CSS) | The submit handler picks the branch from the **active iteration's** |
+| [templates-utilities.md](templates-utilities.md) | Concept templates, part 39 of 43: Shared systems — tooltips, theme toggle | Page chrome on every template, like the theme toggle below: no element of a |
 | [templates.md](templates.md) | Concept HTML Templates | Index of the concept engine reference: the three templates (decision, design,... |
 | [validation-gate-phase2.md](validation-gate-phase2.md) | Post-Generation Validation Gate, part 2: template-specific patterns and failure handling | Continues [validation-gate.md](validation-gate.md) (Phase 0 to Generic Form C... |
 | [validation-gate.md](validation-gate.md) | Post-Generation Validation Gate | After writing the HTML file, validate that all mandatory interactive patterns |

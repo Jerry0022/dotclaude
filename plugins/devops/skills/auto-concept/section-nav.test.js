@@ -98,7 +98,8 @@ describe("Kompass tree — source contracts", () => {
 
   test("kinds derive from the eval-{id} contract + data-nav-group, thresholds are the decided ones", () => {
     const fn = slice(md, "function buildSectionNav()");
-    expect(fn).toMatch(/sec\.dataset\.navGroup\s*\|\|\s*\(sec\.querySelector\(`input\[name="eval-\$\{sec\.id\}"\]`\)/);
+    expect(fn).toMatch(/sec\.dataset\.navGroup\s*\|\|\s*\(isDecision\(sec\)/);
+    expect(fn).toContain("const isDecision = s => !!s.querySelector(`input[name=\"eval-${s.id}\"]`) || s.hasAttribute('data-decision-mode');");
     expect(md).toMatch(/const NAV_GROUP_MIN_KINDS = 2;/);
     expect(md).toMatch(/const NAV_GROUP_OVER_ENTRIES = 12;/);
     expect(md).toMatch(/const NAV_MANUAL_CLOSE_GRACE_MS = 4000;/);
@@ -367,6 +368,25 @@ describe("Kompass tree — behaviour (reference JS on jsdom)", () => {
     expect(tabs[2].querySelector(".iteration-tab-summary")).toBeNull();
     p.select(2);
     expect(tabs[2].querySelector(".iteration-tab-summary")).toBeNull();
+  });
+
+  test("decisions nested inside a plain section are listed and counted (analysis topics); group labels name decisions/findings", () => {
+    const p = page([R(1, { live: true, selected: true, entries: 0 })]);
+    const iter = p.document.querySelector("section[data-iteration]");
+    iter.innerHTML = [
+      '<section id="brief" data-nav-label="Briefing" data-analysis-briefing></section>',
+      '<section id="t1" data-topic data-nav-label="Topic one">',
+      '<section id="d1" data-nav-label="D1" data-decision="d1" data-decision-mode="single"></section>',
+      '<section id="d2" data-nav-label="D2" data-decision="d2" data-decision-mode="slider"></section>',
+      "</section>",
+    ].join("");
+    p.window.buildSectionNav();
+    const ids = [...p.document.querySelectorAll(".section-nav-item")].map((a) => a.dataset.sectionId);
+    expect(ids).toEqual(["brief", "t1", "d1", "d2"]);
+    expect(p.document.querySelectorAll(".section-nav-item[data-variant]").length).toBe(2);
+    expect(md).toMatch(/\| `nav\.group_variants` +\| Decisions +\| Entscheidungen \|/);
+    expect(md).toMatch(/\| `nav\.group_findings` +\| Findings +\| Befunde \|/);
+    expect(md).not.toMatch(/\| Varianten \|/);
   });
 
   test("groups only when ≥2 kinds AND >12 entries — the fallback path with no unambiguous variant", () => {

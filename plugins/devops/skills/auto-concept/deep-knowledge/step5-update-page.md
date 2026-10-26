@@ -268,6 +268,13 @@ lack `data-oq-origin`, or that carries a checkbox among them
 
 Claude pre-selects every answer in the panel; the user only corrects.
 
+**Visible label length — hard rule.** The close-out sheet shows each row title in
+two lines at most. The visible label of a Fund (`.oq-label`) and the text of
+every 🧪 / 👉 item (`.todo-text`, else the `<li>` text) is a short noun phrase
+of **at most 48 characters** — "Veralteter Hinweistext am Login", not a
+sentence. Everything longer goes into `data-issue-body` / the report body. The
+gate blocks a longer label (`validation-gate.md` pattern 33c).
+
 **Funde — `data-route-default` + `data-route-reason` (one word):**
 
 | Route | `data-route-default` | When | Typical reason |

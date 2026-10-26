@@ -165,7 +165,10 @@ with an overview table carrying a recommendation column and jump links
    the schematic UI elements of a design or to matrix targets — an
    assignment, not a choice; § Views (optional) → View kind `mapping`, rules
    in § 1c below); count preference 7 per `decision` / `comparison` view
-   (Step 0.5). Any view, whatever its kind, MAY name the design it belongs
+   (Step 0.5). A fourth kind, `analysis`, is the **Lite** analysis — up to
+   5 questions with their finding beside them, one at a time
+   (§ 1b · Analysis results and decisions — Full vs Lite); prefer it over a
+   bi-state `decision` view whenever a question rests on a finding. Any view, whatever its kind, MAY name the design it belongs
    to with `data-view-for="{designId}"` — the ☰ nav then nests it under that
    design instead of the flat views group. In **design** mode (Step 0.5) views are out of scope — the
    non-visual questions belong to a later `decision` iteration only when
@@ -210,8 +213,8 @@ most and then asks its own, design-independent question.
 | Template | Layout signature |
 |---|---|
 | **design** | Fullscreen content, overlay decision panel (☰ FAB top right, collapsed by default), speech-bubble feedback dock on the 💬 FAB bottom right (same 60px circle as ☰; collapsed by default; general / per-design / per-screen / per-view comments), design switcher when ≥2 designs; both FABs carry a locale tooltip (`title` + `aria-label`, swapped open/close) and the 💬 FAB pulses once until first use so it is not an unlabelled circle; view segments alongside it when ≥1 optional view (`step2-feedback.md` § Views (optional)), device-view toggle bottom-left when ≥2 form factors |
-| **decision** | Document column, variant cards, tri-state per variant; notes inline on the card; the 💬 dock (bottom right, same as design) holds the general note + attachments |
-| **free** | Document column, Claude-authored freeform body, optional tri-state per section; notes inline; the 💬 dock holds the general note + attachments |
+| **decision** | Document column, variant cards, one decision per card in its mode (`decision-modes.md`; legacy: bi-state per variant); notes inline on the card; the 💬 dock (bottom right, same as design) holds the general note + attachments. With `data-analysis="full"` the round is the guided analysis flow instead (§ 1b · Analysis results and decisions — Full vs Lite) |
+| **free** | Document column, Claude-authored freeform body, optional decision per section (a mode, or the legacy bi-state); notes inline; the 💬 dock holds the general note + attachments |
 
 The ☰ panel and the 💬 feedback dock are the same overlays in all three —
 both are page chrome, not part of the layout, and neither moves between
@@ -270,23 +273,79 @@ those does once the screen is cloned into a frame.
 ## 1b · Content variants
 
 The decision template has six content sub-variants that shape the variant
-cards:
+cards. Every question on any of them is authored in a decision mode
+(`deep-knowledge/decision-modes.md`); the include / discard bi-state is legacy
+(`templates-decision.md` § Bi-State Variant Evaluation).
 
 | Variant | When to use | Interactive elements |
 |---------|------------|---------------------|
-| **analysis** | Data analysis, metrics review, findings | Tri-state per finding, priority selectors |
-| **plan** | Implementation plans, roadmaps, migration strategies | Checkboxes to approve/skip steps, effort tags, comments per step |
-| **concept** | Architecture concepts, design proposals, feature specs | Tri-state per variant, rate options, comment fields |
-| **comparison** | Technology comparison, option evaluation | Criteria matrix, weight sliders, winner selection, tri-state per option |
-| **dashboard** | Status overviews, metric dashboards, health checks | Filters, toggles, expandable sections |
-| **creative** | Brainstorming, ideation, mind maps | Add/remove ideas, grouping, voting |
+| **analysis** | Analysis results and the decisions that follow from them | The guided **Full** analysis (`data-analysis="full"`) — § 1b · Analysis results and decisions — Full vs Lite |
+| **plan** | Implementation plans, roadmaps, migration strategies | `multi` for the steps in scope, `order` where sequence matters, effort tags, comments per step |
+| **concept** | Architecture concepts, design proposals, feature specs | `single` across the alternatives (never N bi-states), comment fields |
+| **comparison** | Technology comparison, option evaluation | Criteria matrix (Scorecard / Vergleichstabelle from `analysis-palette.md`), `single` for the winner, `slider` for a weight |
+| **dashboard** | Status overviews, metric dashboards, health checks | Palette displays, filters, expandable sections; `verify` where a status needs confirming |
+| **creative** | Brainstorming, ideation, mind maps | `multi` to keep ideas, `wording` for names, grouping |
 
 Design and free templates have no sub-variants — their body is
-content-specific (design = visual mockup(s); free = Claude-authored).
+content-specific (design = visual mockup(s); free = Claude-authored). Both
+may embed a **Lite** analysis (§ 1b · Analysis results and decisions — Full
+vs Lite).
 
 These are **recommendations, not rigid categories**. Mix elements across
 variants, create hybrid layouts, or invent new structures when the content
-calls for it.
+calls for it — but a question is always a decision in its mode.
+
+## 1b · Analysis results and decisions — Full vs Lite
+
+Before writing a single decision or analysis display, read
+`deep-knowledge/decision-modes.md` and `deep-knowledge/analysis-palette.md`
+completely (SKILL.md Step 1b-ii names both). Markup, payload and gate rules:
+`templates-analysis.md` and `validation-gate.md` § Analysis & decision modes.
+
+**Which variant.**
+
+| Situation | Variant | Shape |
+|---|---|---|
+| The concept's content IS analysis results + the decisions that follow (an audit, a measurement, "where do the tokens go", a findings review) | **Full** — `data-analysis="full"` on a `decision` round | Briefing → one Themenfeld after another → one decision per stage → Review → Nächste Runde |
+| A few questions come up inside another concept — a design round, a prototype, a plan — and need their finding beside them | **Lite** — `data-analysis="lite"` (a `data-view-kind="analysis"` view in a design round, or a section in a `decision` / `free` round) | L1 + L3, one decision at a time with progress dots, **≤ 5 decisions** |
+| More than 5 such questions | Full, as its own round | — |
+
+Lite never gets topics or a briefing; Full never hides inside a design round.
+
+**The briefing (Full).** It reads top to bottom: **Analyse** (1–2 sentences,
+what was analysed and found) → **Potential** (one prominent number, e.g.
+"≈ 51 M Tokens", as a `kpi`) → the **Themenfelder** as chips linked to the
+potential by connector lines (`data-share` = their part of it) → the
+**"Los geht's"** CTA that names the duration ("≈ 6 min"). The motivation is
+short and punchy — two sentences at most, no "was wir gemessen haben"
+sub-header, no "Deine drei Themenfelder" heading, no level numbers. A Full
+without what / why / potential fails the gate (A1).
+
+**Themenfelder.** At most **3** per Full with at most **7** decisions each —
+3 and 7 are the golden numbers (gate A4 warns beyond). Group by what the
+decisions change, not by where the finding came from. Topic colours are never
+red, green or orange (status colours); `analysis-palette.md` § Style rules.
+
+**Every decision** carries the anatomy of `decision-modes.md` § Anatomy: a
+real question, Gilt für, the finding it rests on (L3), outcome label +
+consequence per option, recommendation + why, preselection = recommendation.
+The mode comes from `decision-modes.md` § Which mode?. Timing is never a
+decision; deferring is the "Als Issue anlegen" link.
+
+**Kurz / lang per level.** The level the reader is on is long, the others
+short; one level long at a time.
+
+| Level | Title (`data-title`) | Short | Long |
+|---|---|---|---|
+| L1 · Briefing / overall | the briefing's stepper name | the potential as KPI or mini graphic + 1 sentence | the overall display (e.g. Wirkungsmatrix, Rangbalken per topic) + 2–4 sentences — shown in the briefing, collapses after it, reopenable |
+| L2 · Themenfeld (Full only) | the topic's stepper name | always the topic's **result**, never its progress | the display that shows what the topic's problem is made of (e.g. Wasserfall) + 2–4 sentences |
+| L3 · this decision | the decision's stepper name | after deciding: the answer in a sentence | undecided: the finding; decided: the consequence of the chosen option |
+
+Short = one sentence (≤ 140 characters) + KPI or mini graphic, strongly
+preferring the mini graphic whenever there is a number; no number →
+Formatierter Text. Long = one palette display + 2–4 sentences, never scrolls;
+evidence goes into `data-evidence` (opens as popup). Display choice, slot
+budgets and custom-type rules: `analysis-palette.md`.
 
 ## 1c · Mapping spec rules
 
