@@ -85,7 +85,11 @@ mode `free`, locale `de`, one round fragment `rounds/01.html`), runs concept-bui
 (one bi-state card per suggestion, include checked by default).
 
 Then open it through the devops **auto-concept** skill, Step 3 (concept bridge +
-Edge) and handle the submission per auto-concept Step 5: every suggestion left on
+Edge). The bridge never serves dot-segment paths (`/.claude/…` → 404), so serve a
+copy: put `report.html` into an empty site folder outside the repo (the session's
+scratchpad), write that folder's `.claude/concept-active.json` (`html_path:
+"report.html"`) and start the bridge and both watchers with that folder as root and
+`--state` (2026-10-26, v0.320.0) and handle the submission per auto-concept Step 5: every suggestion left on
 *Miteinbeziehen* becomes an issue via **auto-issue** or is implemented, as the user
 chooses in the page. The report is ONLY interactive — there is no static fallback.
 No live session (ship ran headless)? `audit.js --trigger ship` already wrote
