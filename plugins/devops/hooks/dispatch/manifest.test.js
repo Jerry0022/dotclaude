@@ -32,9 +32,12 @@ describe("hooks.json is generated from the dispatcher manifest", () => {
     for (const event of Object.keys(manifest.hooks)) {
       const entries = hooksJson.hooks[event];
       const disp = entries.filter((g) => g.hooks.some((h) => h.command.includes("hooks/dispatch/dispatch.js")));
+      // `"dispatch": false` modules keep their own entry and their own timeout.
+      const dispatched = eventModules(manifest, event, PLUGIN_ROOT).filter((m) => m.dispatch);
+      if (!dispatched.length) { expect(disp.length, event).toBe(0); continue; }
       expect(disp.length, event).toBe(1);
       const t = disp[0].hooks[0].timeout;
-      for (const m of eventModules(manifest, event, PLUGIN_ROOT)) expect(t, `${event}/${m.name}`).toBeGreaterThanOrEqual(m.timeoutS + build.HEADROOM_S);
+      for (const m of dispatched) expect(t, `${event}/${m.name}`).toBeGreaterThanOrEqual(m.timeoutS + build.HEADROOM_S);
       expect(disp[0].hooks[0].command).toBe(build.dispatcherCommand(event));
     }
   });
@@ -48,7 +51,7 @@ describe("hooks.json is generated from the dispatcher manifest", () => {
     for (const event of Object.keys(manifest.hooks)) {
       const disp = hooksJson.hooks[event].find((g) => g.hooks.some((h) => h.command.includes("hooks/dispatch/dispatch.js")));
       for (const name of names) {
-        const anyModule = eventModules(manifest, event, PLUGIN_ROOT).some((m) => matches(name, m.matcher));
+        const anyModule = eventModules(manifest, event, PLUGIN_ROOT).some((m) => m.dispatch && matches(name, m.matcher));
         if (anyModule) expect(matches(name, disp.matcher), `${event} ${name}`).toBe(true);
       }
     }

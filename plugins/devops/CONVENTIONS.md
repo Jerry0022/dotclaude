@@ -37,6 +37,7 @@ Prefixes:
   sub.     = SubagentStart (additionalContext reaches the subagent; SessionStart context does not)
   stop.    = Stop
   substop. = SubagentStop
+  perm.    = PermissionRequest
 
 Examples:
   ss.git.sync.js
@@ -56,7 +57,7 @@ Every hook file starts with a JSDoc header:
 /**
  * @hook {prefix}.{domain}.{action}
  * @version X.Y.Z
- * @event {SessionStart|UserPromptSubmit|PreToolUse|PostToolUse|PostToolUseFailure|SubagentStart|Stop}
+ * @event {SessionStart|UserPromptSubmit|PreToolUse|PostToolUse|PostToolUseFailure|SubagentStart|SubagentStop|PermissionRequest|Stop}
  * @plugin devops
  * @description One-line description of what this hook does.
  */

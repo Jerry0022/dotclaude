@@ -1,6 +1,6 @@
 /**
  * @module ask-title
- * @version 0.2.0
+ * @version 0.3.0
  * @description The session title while a call waits for the user — an
  *   AskUserQuestion, an ExitPlanMode plan approval, or a start_session that
  *   asks the user ("offer", "user_asked": the app's approval card): the card
@@ -20,7 +20,7 @@
  */
 
 const S = require('./title-scheme');
-const { WORK_PREFIX, stripPrefixes, classify, leadingPrefix } = S;
+const { WORK_PREFIX, stripPrefixes, classify, leadingPrefix, approvalRestoredTitle } = S;
 
 const MARKER = '[ask-title]';
 const QUESTION_PREFIX = S.prefixOf('question');
@@ -76,6 +76,9 @@ function restoredTitle(current, previous) {
   let head = WORK_PREFIX;
   const kind = typeof previous === 'string' ? classify(previous) : 'plain';
   if (kind === 'shipping' || kind === 'process') head = leadingPrefix(previous).prefix;
+  // A background agent's approval wait before the question: back to its ⏳ head.
+  const waited = kind === 'approval' ? approvalRestoredTitle(previous) : null;
+  if (waited) head = leadingPrefix(waited).prefix;
   return head + rest;
 }
 

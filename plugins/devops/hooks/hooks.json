@@ -22,6 +22,14 @@
         ]
       }
     ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/permission-request/perm.approval.flag.js\"", "timeout": 30, "asyncRewake": true },
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/permission-request/perm.approval.watch.js\"", "timeout": 3600, "asyncRewake": true }
+        ]
+      }
+    ],
     "SubagentStart": [
       {
         "hooks": [
@@ -40,8 +48,7 @@
       {
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" PostToolUseFailure", "timeout": 65 }
-        ],
-        "matcher": "mcp__ccd_session_mgmt__archive_session|Bash|PowerShell"
+        ]
       }
     ],
     "Stop": [

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.320.0] — 2026-10-26
+
+The session title now shows the finger whenever the user has to allow something, also while a background agent waits on a tool permission dialog. Before, only the main thread could rename the session, `pre.ask.title` stayed silent inside subagents and no PermissionRequest hook was registered, so nothing woke the idle main thread and the title kept its ⏳ while work stood still.
+
+### Added
+- **👉 while a background agent waits on a permission.** `⏳ ➜ 🤖 Team ┃ X` becomes `👉 ➜ 🤖 Team ┃ X` (Solo and Testing alike, a bare ⏳ becomes `👉 Solo`) and returns to ⏳ once the dialog is answered. Ship, working concept, batch and outcome titles stay as they are. Main-thread prompts are not covered: the user already sees that dialog.
+- **PermissionRequest hooks `perm.approval.flag` / `perm.approval.watch`.** Own `hooks.json` entries with `asyncRewake: true` wake the idle main thread with the exact title (the hook itself is the waker; a model-armed background waker was rejected because it needs arming at every turn end). `post.approval.clear` (PostToolUse + PostToolUseFailure) and `substop.approval.clear` (SubagentStop) drop the wait. Entry key = agent id + hash of tool name and input; a denied dialog is cleared by the agent's next finished call that started after it, SubagentStop clears all of the agent's entries. Writes run under an exclusive lock file (stale-lock takeover, fail-open after 1 s); an entry counts as answered after 55 min and the watch deadline sits just past that, so a forgotten entry never pins 👉.
+- **Silent rename-only wake turn.** A wake turn that only renames the session renders no card (approval-wake flag read by `stop.flow.guard` / `post.flow.completion`, dropped on the next user prompt); a turn with any other tool call keeps every gate.
+
+### Changed
+- **Title rule documented** in `deep-knowledge/session-title-scheme.md`; `perm.` hook prefix in `CONVENTIONS.md`; the README/architecture roster generator knows the PermissionRequest event and the "approval" domain.
+
 ## [0.319.1] — 2026-10-26
 
 A git write that timed out on Windows no longer leaves the real git running behind the recovery. `execFileSync`'s timeout kills only Git for Windows' `cmd\git.exe` launcher; the `mingw64` git it started kept the index lock and kept writing the checkout, so the mid-checkout recovery reported "another process holds index.lock" for a lock that was its own git's.

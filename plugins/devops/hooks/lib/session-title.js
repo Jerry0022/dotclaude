@@ -135,7 +135,8 @@ function interruptedTitle(current) {
 /**
  * #833: the title a card-less NOTIFICATION turn leaves once no background
  * work of the session is live. A title that still says ⏳ (bare work, a
- * running ship, Team, Testing) is replaced by `terminalPrefix` (the last
+ * running ship, Team, Testing) — or a 👉 approval head, whose agent is gone
+ * too — is replaced by `terminalPrefix` (the last
  * delegated-ship result's `titlePrefix`, see `lastTitlePrefix`) or, without
  * one, by `👉 ➜ ⚡ Interrupted ┃ `. A working concept page, a batch and every
  * non-⏳ state stay (`null`). The caller proves "no live work".
@@ -147,7 +148,7 @@ function interruptedTitle(current) {
 function staleWorkTitle(current, terminalPrefix = null) {
   if (typeof current !== 'string') return null;
   const kind = classify(current);
-  if (kind !== 'work' && kind !== 'shipping' && kind !== 'process') return null;
+  if (kind !== 'work' && kind !== 'shipping' && kind !== 'process' && kind !== 'approval') return null;
   if (current.startsWith(CONCEPT_WORKING_PREFIX)) return null;
   const r = rest(current);
   return r ? (terminalPrefix || INTERRUPTED_PREFIX) + r : null;

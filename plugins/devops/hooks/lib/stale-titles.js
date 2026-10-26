@@ -1,6 +1,6 @@
 /**
  * @module stale-titles
- * @version 0.1.0
+ * @version 0.2.0
  * @description Finds sessions whose sidebar title still says ⏳ although no
  *   Claude process works on them any more — left behind when the Desktop app
  *   or Claude Code crashed or was quit mid-turn, so no Stop hook (F5) could
@@ -10,7 +10,8 @@
  *   `~/.claude/projects/<slug>/<sessionId>/custom-title.json`
  *   (`{"customTitle": …}`) — a few bytes, no transcript tail to read. A
  *   session id can sit under several slugs (it moved into a worktree); the
- *   newest sidecar wins. A candidate needs a ⏳ title, a transcript idle for
+ *   newest sidecar wins. A candidate needs a ⏳ title (or a 👉 approval head:
+ *   a crash mid-approval leaves the finger with nobody left to approve), a transcript idle for
  *   `idleMs`, and no live Claude process in the governor's session file. The
  *   caller's own session is never one. The hook only pre-filters: Claude
  *   still checks `isRunning:false` in list_sessions before renaming.
@@ -19,7 +20,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { STATUS, INTERRUPTED_PREFIX, stripPrefixes } = require('./title-scheme');
+const { STATUS, INTERRUPTED_PREFIX, stripPrefixes, classify } = require('./title-scheme');
 
 const IDLE_MS = 2 * 60_000;
 const MAX_AGE_MS = 7 * 24 * 3_600_000;
@@ -44,7 +45,8 @@ function governorAlive(id, governorDir) {
 
 /** The title `title` becomes: Interrupted in front of its bare text, or null. */
 function interruptedFor(title) {
-  if (typeof title !== 'string' || !title.startsWith(STATUS.work)) return null;
+  if (typeof title !== 'string') return null;
+  if (!title.startsWith(STATUS.work) && classify(title) !== 'approval') return null;
   const rest = stripPrefixes(title).trim();
   return rest ? INTERRUPTED_PREFIX + rest : null;
 }

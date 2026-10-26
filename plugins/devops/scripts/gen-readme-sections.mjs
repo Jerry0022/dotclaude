@@ -64,6 +64,7 @@ const EVENTS = [
   { name: "PreToolUse", key: "pre", header: "PreToolUse — runs before each tool call" },
   { name: "SubagentStart", key: "sub", header: "SubagentStart — runs when a subagent is spawned" },
   { name: "SubagentStop", key: "substop", header: "SubagentStop — runs when a subagent finishes" },
+  { name: "PermissionRequest", key: "perm", header: "PermissionRequest — runs when a tool call waits for the user's permission" },
   { name: "PostToolUse", key: "post", header: "PostToolUse — runs after each tool call" },
   { name: "Stop", key: "stop", header: "Stop — runs when Claude finishes responding" },
 ];
@@ -75,7 +76,7 @@ const CATEGORIES = [
   { title: "tokens & load — keep the context window and the machine free", domains: ["tokens", "governor", "crawl", "claude"] },
   { title: "git & branches — keep work in sync and off main", domains: ["git", "main", "edit", "worktree", "orphan", "session", "cleanup"] },
   { title: "ship — the release pipeline", domains: ["ship"] },
-  { title: "flow — completion card, verification, session title", domains: ["flow", "ask", "guide", "batch", "title"] },
+  { title: "flow — completion card, verification, session title", domains: ["flow", "ask", "approval", "guide", "batch", "title"] },
   { title: "agents & runs — delegation, do-run contract, burn", domains: ["agent", "run", "burn"] },
   { title: "skills & knowledge — routing, overrides, injected docs", domains: ["skill", "knowledge", "strict", "readme", "design", "concept"] },
   { title: "plugin & MCP — updates, dependencies, server health", domains: ["plugin", "mcp", "permissions", "statusline", "thinking", "watchdog", "tmp", "project"] },

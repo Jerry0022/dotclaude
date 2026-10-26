@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.319.1**
+**Version: 0.320.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -26,7 +26,7 @@ keep git clean, block risky moves and stop context waste.
 - **Runs while you are away** — `/do-run` works off a backlog, a task or the leftover weekly budget, and ships each item
 - **Per-project tuning** — extend any skill with a `reference.md`, no fork
 
-<!--devops:count:hooks-->86<!--/devops:count:hooks--> hooks ·
+<!--devops:count:hooks-->90<!--/devops:count:hooks--> hooks ·
 <!--devops:count:skills-->14<!--/devops:count:skills--> skills ·
 <!--devops:count:agents-->12<!--/devops:count:agents--> agents ·
 ~0.7M tokens/week overhead (1–4 % of a Max plan), paid back 1.5–6× by the
@@ -495,7 +495,7 @@ A different stack: extend the skills per project — see [Customize](#customize)
 </details>
 
 <details>
-<summary><strong>Hooks</strong> — <!--devops:count:hooks-->86<!--/devops:count:hooks--> hooks by lifecycle and by category</summary>
+<summary><strong>Hooks</strong> — <!--devops:count:hooks-->90<!--/devops:count:hooks--> hooks by lifecycle and by category</summary>
 
 ```
 SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolUse  ──>  Stop
@@ -580,10 +580,17 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 #### SubagentStop — runs when a subagent finishes
 
 - `substop.agent.wip` — A finished agent that ran in an isolated worktree (.claude/worktrees/agent-*) and lef…
+- `substop.approval.clear` — A background agent ended: every permission wait it left in lib/approval-wait.js goes…
+
+#### PermissionRequest — runs when a tool call waits for the user's permission
+
+- `perm.approval.flag` — A background agent stopped at a tool permission dialog: puts the 👉 in the title's st…
+- `perm.approval.watch` — The second half of perm.approval.flag: stays in the background (`asyncRewake`) until…
 
 #### PostToolUse — runs after each tool call
 
 - `post.flow.completion` — Keeps the completion-card contract in Claude's context: on the FIRST tool call of eve…
+- `post.approval.clear` — A background agent's tool call finished: drops its permission wait (and every one the…
 - `post.concept.gate` — Deterministic backstop for concept pages.
 - `post.claude.budget` — Deterministic context-budget gate for Claude configuration files — CLAUDE.md, SKILL.m…
 - `post.agent.nudge` — AUD-024: outside a do-run run, a single turn can change many files without ever spawn…
@@ -659,7 +666,11 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.flow.title-work` *(UserPromptSubmit)*
 - `prompt.flow.appstart` *(UserPromptSubmit)*
 - `pre.ask.title` *(PreToolUse)*
+- `substop.approval.clear` *(SubagentStop)*
+- `perm.approval.flag` *(PermissionRequest)*
+- `perm.approval.watch` *(PermissionRequest)*
 - `post.flow.completion` *(PostToolUse)*
+- `post.approval.clear` *(PostToolUse)*
 - `post.ask.answers` *(PostToolUse)*
 - `post.ask.title` *(PostToolUse)*
 - `post.flow.title-mode` *(PostToolUse)*
@@ -759,7 +770,7 @@ plugins/
 │   ├── .claude-plugin/plugin.json ← Plugin manifest (SemVer, tags v0.x.y)
 │   ├── .mcp.json                  ← MCP servers: completion card, ship, issues
 │   ├── CONVENTIONS.md             ← Naming, versioning, extension rules
-│   ├── hooks/                     ← <!--devops:count:hooks-->86<!--/devops:count:hooks--> hooks (JS) registered in hooks/dispatch/manifest.json
+│   ├── hooks/                     ← <!--devops:count:hooks-->90<!--/devops:count:hooks--> hooks (JS) registered in hooks/dispatch/manifest.json
 │   ├── skills/                    ← <!--devops:count:skills-->14<!--/devops:count:skills--> skill definitions (SKILL.md)
 │   ├── agents/                    ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 │   ├── mcp-server/                ← Card renderer + Desktop widget, ship tools, issue matching
