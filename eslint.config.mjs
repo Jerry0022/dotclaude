@@ -12,6 +12,10 @@ export default [
     rules: {
       "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       "no-empty": ["error", { allowEmptyCatch: true }],
+      // New in ESLint 10 recommended; the `let x = fallback; try { x = ... } catch {}`
+      // idiom is used deliberately throughout the hooks/scripts.
+      "no-useless-assignment": "off",
+      "preserve-caught-error": "off",
     },
   },
   {

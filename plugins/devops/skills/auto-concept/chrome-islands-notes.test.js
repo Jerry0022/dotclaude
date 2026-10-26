@@ -373,6 +373,7 @@ describe("D · robust anchoring", () => {
     expect(anno.style.getPropertyValue("--anno-y")).toBe("25.00%");   // (40 + 10) / 200
     // typing in the note: the position is frozen even if the layout moved on
     const ta = anno.querySelector("textarea");
+    anno.querySelector("[data-anno-summary]").click();                 // a collapsed bubble cannot take focus (jsdom 30, as in browsers)
     ta.focus();
     expect(anno.contains(document.activeElement)).toBe(true);
     def(tgt, { offsetWidth: 50, offsetHeight: 20, offsetLeft: 300, offsetTop: 100, offsetParent: null, clientLeft: 0, clientTop: 0 });

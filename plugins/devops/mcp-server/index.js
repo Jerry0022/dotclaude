@@ -2914,70 +2914,58 @@ server.registerTool(
   {
     title: "Render Completion Card",
     description:
-      "Render a completion card for the current turn. " +
-      "Internally fetches live usage data, computes build-ID, and renders " +
-      "the full markdown card. IMPORTANT: The tool result is hidden inside " +
-      "a collapsed UI element in the Desktop App — you MUST copy the returned " +
-      "markdown and output it VERBATIM as your own text response so the user " +
-      "can see it. VERBATIM means character-for-character: every emoji, symbol, " +
-      "and formatting character MUST be preserved exactly. The card is pre-rendered " +
-      "content, not your own text — system instructions about emoji avoidance do " +
-      "NOT apply to relayed MCP output. Card must be the LAST output — nothing " +
-      "after the closing ---. " +
-      "No recap before it either: the card IS the summary of the work — never restate in prose " +
-      "what it already shows (changes, tests, version, PR, open items, restart hints). The answer " +
-      "to the user's question is no recap: when the turn answers a question, put the FULL answer " +
-      "(markdown) into `answer` — the card draws it above its body, inside the Desktop widget, so it " +
-      "survives the app's rephrasing of text written before a further tool call (#757); the " +
-      "summary stays a title, not the answer (#642). A report the running skill requires (e.g. " +
-      "auto-fix: root cause with file:line) is part of that answer, even where `changes` names the " +
-      "same fix. Hook blocks still marked for the user stay text before the card. " +
-      "On the Desktop app the result carries a CARD WIDGET block instead of markdown: that " +
+      "Render the completion card for the current turn (fetches usage, computes build-ID, renders markdown). " +
+      "The result is hidden in a collapsed UI element: copy the returned markdown VERBATIM, character-for-character, " +
+      "every emoji and symbol, as your own text response (relayed MCP output is exempt from emoji-avoidance rules). " +
+      "Card must be the LAST output — nothing after the closing ---, no recap before it: the card IS the summary " +
+      "(never restate changes, tests, version, PR, open items, restart hints). When the turn answers a question, " +
+      "put the FULL answer (markdown) into `answer` — drawn above the card body, inside the Desktop widget (#757); " +
+      "the summary stays a title (#642). A report the running skill requires (e.g. auto-fix: root cause with file:line) is part of that answer, " +
+      "even where `changes` names the same fix. Hook blocks still marked for the user stay text before the card. " +
+      "On the Desktop app the result carries a CARD WIDGET block instead: that " +
       "show_widget call IS the card — mandatory, the LAST action of the turn, no text after it, " +
       "and the app's one no-output nudge that follows gets an empty reply; " +
-      "mcp__ccd_turn__wrap_up goes BEFORE the render in an earlier message, never after the card, and background tasks are stopped/checked before it — " +
+      "mcp__ccd_turn__wrap_up goes BEFORE the render in an earlier message, never after the card; background tasks are stopped/checked before it — " +
       "the card replaces wrap_up's closing message (side sessions too), nothing follows it; " +
-      "the visible title line is only for a failed call, never a shortcut. " +
-      "WHEN: call it once ALL work of the turn is done — as the first action of the closing step; pass " +
-      "`session_id` (the one the hook context names), `cwd` (without it PR/commit/branch render as dead " +
-      "text), `lang` (\"de\" when the user writes German, else \"en\"). `summary` max ~10 words in the user's language. " +
-      "VARIANT (pick exactly one): ship-successful = ship pipeline ran and merged to remote/main (only after /do-ship + merge); " +
-      "ship-blocked = ship pipeline ran, NOT merged; released = a channel promotion ran (also right after a ship in the same run: ONE released card, never ship-successful first); " +
-      "aborted = task aborted/infeasible/rate-limited; test = code edits and an app/service startable (any project type); " +
+      "the visible title line is only for a failed call. " +
+      "WHEN: call it once ALL work is done, as the first action of the closing step; pass " +
+      "`session_id` (from the hook context), `cwd`, `lang` (\"de\" if the user writes German, else \"en\"). `summary` max ~10 words in the user's language. " +
+      "VARIANT (exactly one): ship-successful = ship pipeline ran and merged (only after /do-ship + merge); " +
+      "ship-blocked = ship ran, NOT merged; released = a channel promotion ran (also right after a ship in the same run: ONE released card, never ship-successful first); " +
+      "aborted = aborted/infeasible/rate-limited; test = code edits and an app/service startable; " +
       "test-minimal = user started the app via prompt, no edits yet; ready = code/doc changes (>=1 edit), no app — also when implementation was handed to agents still running (+ pending); " +
       "finished unshipped commits in a linked side session = ready + open {text, reply: \"ship\"}, never analysis; " +
       "analysis = nothing changed ANYWHERE (answer/investigation only; never for work outside the repo, delegated work or a mode activation); " +
-      "paused = the user pauses the work to continue later OR the next step is a Claude Code restart / reboot / usage-limit reset (pass pause:{reason:\"restart\"|\"reboot\"|\"usage-reset\"}); " +
-      "fallback = work done outside the repo with no repo diff (DB op, delete, deploy, data migration, settings change) or unsure. A mode activation (batch, concept) uses its override, never analysis. " +
-      "VALIDATION (V&V gate): for any code change this turn populate `validation` — map each requirement / acceptance criterion to how the change meets it and how you confirmed it; " +
-      "a code-change card without it is blocked once and re-requested. " +
-      "PENDING: background agents/workflows/tasks you started that still run -> `pending` [{ name, kind: agent|task|workflow, doing }] (replaces the CTA with the 'not finished yet' line; never an internal agentId; list only work really running; an ended or foreign task -> `pendingDismissed: \"<why>\"`). " +
-      "CONCEPT (outranks pending): while an /auto-concept page is open pass `concept: { phase: \"waiting\"|\"iterating\"|\"implementing\" }`; the bridge server, keepalive pulser and pickup waker are infrastructure, never `pending`. " +
-      "`cta` is an object of placeholders (e.g. { reason }), never a sentence. `delivery` (PR -> Ship -> Promote track) whenever the work reached a pipeline stage (a PR exists, it was shipped, a channel was promoted): fill the stages that happened, leave later ones absent, omit it when none apply. " +
-      "Offline fallback when the MCP server never connected: node <plugin>/mcp-server/index.js --render-card <payload.json> (same JSON args, relay stdout verbatim).",
+      "paused = the user pauses to continue later OR the next step is a Claude Code restart / reboot / usage-limit reset (pass pause:{reason:\"restart\"|\"reboot\"|\"usage-reset\"}); " +
+      "fallback = work outside the repo with no repo diff (DB op, deploy, data migration, settings change) or unsure. A mode activation (batch, concept) uses its override, never analysis. " +
+      "VALIDATION (V&V gate): for any code change populate `validation` (requirement -> how met, how confirmed); a code-change card without it is blocked once. " +
+      "PENDING: background agents/workflows/tasks you started that still run -> `pending` [{ name, kind: agent|task|workflow, doing }] (replaces the CTA with the 'not finished yet' line; list only work really running; an ended or foreign task -> `pendingDismissed: \"<why>\"`). " +
+      "CONCEPT (outranks pending): while an /auto-concept page is open pass `concept: { phase: \"waiting\"|\"iterating\"|\"implementing\" }`; bridge server, pulser and waker are infrastructure, never `pending`. " +
+      "`cta` is an object of placeholders (e.g. { reason }), never a sentence. `delivery` (PR -> Ship -> Promote track) whenever the work reached a pipeline stage (a PR exists, it was shipped, a channel was promoted): fill the stages that happened, omit it when none apply. " +
+      "Offline fallback if the MCP server never connected: node <plugin>/mcp-server/index.js --render-card <payload.json> (same JSON args, relay stdout verbatim).",
     inputSchema: z.object({
-      variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` = the channel-promotion card (alpha→beta→stable) do-ship renders whenever a promotion ran, also after a ship in the same run: ONE released card carries the ship's changes, tests, state and userFinalTest plus the promotion facts, never a ship-successful card first. `ready-files` = `ready` for work on disk in a project with no git repo (no commit/branch/PR/merge). `paused` = work the user pauses (\"machen wir später weiter\") AND work whose next step is a Claude Code restart, a reboot or a usage-limit reset — never `analysis`, `ready` or `fallback` then; pass `pause: { reason }`. It asks nothing; the title becomes `🟦 ➜ ✋ Paused ┃ …` (`🔌 Restart` / `💻 Reboot` / `🔋 Limit reset` with a reason)."),
+      variant: z.enum(CARD_VARIANTS).describe("Card variant by task outcome (rules in the tool description). `released` = channel promotion; ONE card also after a ship in the same run. `ready-files` = `ready` in a project without git repo. `paused` = user pause OR next step is a restart / reboot / usage-limit reset (never analysis/ready/fallback then); pass `pause: { reason }`."),
       summary: z.string().transform(v => clampText(v, SUMMARY_MAX).value)
-        .describe("What changed for the user, ≤ 8 words / 60 characters (clamped on a word boundary, not rejected). No pipeline status — 'gemergt', 'geshipped', 'live', the version: the Delivery block and the CTA already say that."),
-      answer: z.string().optional().describe("The full answer to the user's question, as markdown (#757). Drawn ABOVE the card body — inside the Desktop widget, as markdown in front of the card elsewhere. Use it whenever the turn answers a question or the running skill owes a report (root cause with file:line, findings, a comparison); also for other topics of the user's prompt. Raw HTML is shown as text; links need http(s). Never a recap of what the card already shows."),
+        .describe("What changed for the user, ≤ 8 words / 60 characters (clamped). No pipeline status (merged, live, version)."),
+      answer: z.string().optional().describe("The full answer to the user's question, as markdown (#757), drawn ABOVE the card body. Use it whenever the turn answers a question or the running skill owes a report (root cause with file:line, findings, comparison). Raw HTML is shown as text; links need http(s)."),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),
-      cwd: z.string().optional().describe("Working directory of the target repo. STRONGLY RECOMMENDED for ship-* variants — without it, getRepoUrl falls back to the MCP server's own cwd (plugin dir) and the card cannot render clickable PR/commit/branch links. Also what lets the card read the project's mode state: the open /auto-concept page's URL (.claude/concept-active.json) and an armed /do-batch collection (.claude/batch-mode.json → 📥 BATCH CTA)."),
-      buildId: z.string().optional().describe("Pre-computed build-ID (from ship_build). If provided, skips internal computation. Use this when the worktree/branch state may have changed after building (e.g. post-merge)."),
+      cwd: z.string().optional().describe("Working directory of the target repo. Without it PR/commit/branch render as dead text and concept/batch mode state is not read."),
+      buildId: z.string().optional().describe("Pre-computed build-ID (from ship_build); skips internal computation."),
       session_id: z.string().optional().describe("Session ID for flag writing"),
       changes: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.object({
-          area: z.string().describe("Functional surface the user perceives or the change is about (e.g. 'Completion card', 'Ship pipeline', 'Branch cleanup', 'Skill fix'). NOT a file path or internal module name. Technical wording only when the topic itself is purely technical (parser, flag, protocol)."),
-          description: z.string().describe("What behaves differently now, in user-domain language. Describe the functional/user-visible effect — same rule as `area`: technical phrasing only when the topic is genuinely technical."),
+          area: z.string().describe("Functional surface the user perceives (e.g. 'Completion card', 'Ship pipeline'), NOT a file path or module."),
+          description: z.string().describe("What behaves differently now, in user-domain language."),
         })).optional(),
-      ).describe("Top 3 FUNCTIONAL changes — both `area` AND description should describe what the user perceives or what behaves differently, not which files were edited. Keep the 'area → description' shape. Files/paths only when the file IS the deliverable (skill, keybindings.json, settings.json, CLAUDE.md, hook script). Internal helpers/renderers/libs never appear. Good: 'Completion card → Changes-Bullets jetzt funktional formuliert'. Good (purely technical topic): 'JSON parser → akzeptiert trailing commas'. Bad: 'mcp-server/index.js → renderChanges() angepasst'."),
+      ).describe("Top 3 FUNCTIONAL changes as 'area → description': what the user perceives, not which files were edited. Files only when the file IS the deliverable (skill, settings.json, CLAUDE.md, hook script). Bad: 'mcp-server/index.js → renderChanges() angepasst'."),
       tests: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.object({
           method: z.string(),
           result: z.string(),
         })).optional(),
-      ).describe("Automated gates that ran — rendered on the header line(s) under **Geprüft** ('npm test → 1460 grün · eslint → sauber'). Keep method ≤ 40 and result ≤ 60 characters; state numbers, not prose. Non-green or skipped gates belong here too ('Codex-Review → übersprungen — Limit')."),
+      ).describe("Automated gates that ran, shown under **Geprüft** ('npm test → 1460 grün'). method ≤ 40, result ≤ 60 chars; numbers, not prose. Non-green or skipped gates belong here too."),
       state: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({
@@ -2991,11 +2979,11 @@ server.registerTool(
           }).nullable().optional(),
           merged: z.string().nullable().optional(),
           appStatus: z.enum(["running", "not-started"]).nullable().optional(),
-          mode: z.enum(["file-only", "git-no-remote", "git"]).optional().describe("Repo mode from ship_preflight. 'file-only' switches the state line to the files/delivered form — the branch/PR/origin segments have no meaning without a repo. Omitting this was why the file-only render path was unreachable: unknown keys are stripped, so state.mode never arrived."),
-          filesModified: z.number().optional().describe("file-only mode: how many files changed on disk. Replaces the commit count."),
-          delivered: z.string().optional().describe("file-only / no-remote mode: what actually left the working tree ('none', 'local-commit-only', ...). Never claim a merge here."),
-          kept: z.boolean().optional().describe("Ship cleanup was skipped — branch + worktree preserved for follow-up work. Switches the ship-successful decision heading to '{version} — weiter in `{branch}`?'."),
-          deployPending: z.boolean().optional().describe("Out-of-band deploy artifacts (DB migrations / edge functions) were merged but NOT deployed (#243). Flips the ship-successful decision heading to '👉 ⚠️ Not deployed — Gemergt, aber nicht live — Migration jetzt deployen?' (noch nicht live)'. Pair with the top-level `deployGate` list naming each artifact."),
+          mode: z.enum(["file-only", "git-no-remote", "git"]).optional().describe("Repo mode from ship_preflight. 'file-only' switches the state line to the files/delivered form."),
+          filesModified: z.number().optional().describe("file-only: files changed on disk (replaces the commit count)."),
+          delivered: z.string().optional().describe("file-only / no-remote: what left the working tree ('none', 'local-commit-only', ...). Never claim a merge."),
+          kept: z.boolean().optional().describe("Ship cleanup skipped - branch + worktree kept for follow-up work (heading becomes '{version} — weiter in `{branch}`?')."),
+          deployPending: z.boolean().optional().describe("Out-of-band deploy artifacts (migrations, edge functions) merged but NOT deployed (#243); pair with top-level `deployGate`."),
         }).optional(),
       ).describe("Repository state"),
       cta: z.preprocess(
@@ -3008,10 +2996,10 @@ server.registerTool(
           info: z.string().optional(),
           reason: z.string().optional(),
           description: z.string().optional(),
-          activity: z.enum(["ship", "promote", "test", "concept", "batch", "analysis", "agents"]).optional().describe("aborted only: the named process that was aborted. The title and the heading keep its activity ('🟥 ➜ 🚀 Ship ┃ …'); omit for a generic abort ('🟥 ➜ 📦 Aborted ┃ …')."),
+          activity: z.enum(["ship", "promote", "test", "concept", "batch", "analysis", "agents"]).optional().describe("aborted only: the process that was aborted; omit for a generic abort."),
         }).optional(),
-      ).describe("CTA template placeholders — an OBJECT, e.g. { reason } for aborted, { version } for ship cards, { description } for test-minimal. A plain string is accepted as { info }."),
-      nextStep: z.string().optional().describe("analysis variant: the ONE step you recommend Claude does next, written as the user's instruction ('Bau im Governor eine Summen-Drossel für viele kleine Claude-Prozesse ein.'). The Desktop primary button becomes 'Empfehlung umsetzen' and sends exactly this text — without it the button says only 'Umsetzen' and the user cannot tell what it starts. Steps the user must do themselves belong in the answer text, not here. ship-successful with state.kept: the announced follow-up work on the kept branch, as the user's instruction — the 'Weiter' button sends it; without it a kept ship reads like any finished ship (no 'weiter in <branch>?', no Weiter button)."),
+      ).describe("CTA placeholders - an OBJECT, e.g. { reason } for aborted, { version } for ship, { description } for test-minimal. A plain string is accepted as { info }."),
+      nextStep: z.string().optional().describe("analysis: the ONE step you recommend Claude does next, as the user's instruction ('Bau im Governor eine Summen-Drossel ein.'); the Desktop button sends exactly this text. ship-successful with state.kept: the follow-up on the kept branch."),
       userTest: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.string()).optional(),
@@ -3025,108 +3013,108 @@ server.registerTool(
             afterDeployment: z.boolean().optional(),
           }),
         ])).optional(),
-      ).describe("User-final-test items — for changes where automation cannot cover the last step (packaged Electron/Tauri without desktop takeover, 3rd-party integrations). Pass strings for local final tests; pass { action, afterDeployment: true } for 3rd-party items that require deployment first. Available in all variants except test-minimal and test — in the test variant all manual steps go into userTest (single test section, no duplicate)."),
+      ).describe("Last-step checks automation cannot cover (packaged Electron/Tauri, 3rd-party integrations). Strings for local checks; { action, afterDeployment: true } for items needing deployment first. All variants except test-minimal and test (there: userTest)."),
       open: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([
           z.string(),
           z.object({
             text: z.string().describe("The open point as the card shows it."),
-            reply: z.string().optional().describe("The user's answer when they want this point tackled, written as the user ('Ja, die Änderung bitte auch in X machen.' · 'Die Migration bitte gleich mitziehen.'). The Desktop button 'Nachbessern' (ready, test and ship-successful cards) puts all replies, in order, into the input box, so Enter is all that is left. For an either-or question name the option you recommend."),
+            reply: z.string().optional().describe("The user's answer if they want this point tackled, written as the user ('Ja, die Änderung bitte auch in X machen.'). For either-or name your recommendation."),
           }),
         ])).optional(),
-      ).describe("Follow-ups that are NOT tests — a decision the user must take, a cleanup, an open question about THIS work ('Die alte Config-Datei wird nicht mehr gelesen — löschen oder behalten?'). Never another branch, worktree or session (a branch in another worktree is that session's work; open points naming one are dropped; leftovers are ship_hygiene's and the auto-cleanup page's job). Never a topic you flagged with spawn_task: the task chip IS the offer, so a point saying a chip/follow-up task exists is dropped; on the Desktop app a finding outside this work's scope goes into such a chip, not onto the card. { text, reply } gives each point its prepared answer; a plain string gets a generic 'Ja, bitte.'. Rendered as '⚠ OFFEN' after the 🔬 test block. Admission as in auto-concept's open points: only something the user deferred or found on the way outside the scope (no chip outside Desktop) — never the approved scope's obvious next step (ship, push, release, version bump, post — dropped on test and ready cards unless it ends in '?'), a generic nudge, or a shortfall of this very task (that goes in changes/validation). Default: omit. Manual tests stay in userFinalTest; the promote nudge goes into delivery.promote.stableLag."),
+      ).describe("Follow-ups that are NOT tests: a decision the user must take, a cleanup, an open question about THIS work. Never another branch, worktree or session (dropped). Never a spawn_task topic (the chip IS the offer). Only what the user deferred or found outside scope - never the obvious next step (ship, push, release, bump), a generic nudge, or a shortfall of this task (that goes in changes/validation). Default: omit. Manual tests stay in userFinalTest."),
       pending: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([
           z.string(),
           z.object({
-            name: z.string().describe("What is running, named: the agent type ('devops:frontend'), the workflow name ('harden-pass') or the task label ('npm test'). Shown on the dim line above the CTA, so the user reads WHICH work is in flight — never pass an internal agentId."),
-            kind: z.enum(["agent", "task", "workflow"]).optional().describe("'agent' (default) = background subagent; 'task' = backgrounded Bash command; 'workflow' = a Workflow run, which fans out to agents of its own. Workflows are counted and named as their own class — never fold them into the agent count."),
-            doing: z.string().optional().describe("Short description of the work it is doing, e.g. 'Farbstil auf Tokens umstellen'."),
+            name: z.string().describe("What is running, named: agent type ('devops:frontend'), workflow name or task label ('npm test'). Never an internal agentId."),
+            kind: z.enum(["agent", "task", "workflow"]).optional().describe("'agent' (default) = background subagent; 'task' = backgrounded Bash command; 'workflow' = a Workflow run (counted as its own class, never folded into agents)."),
+            doing: z.string().optional().describe("Short description of the work, e.g. 'Farbstil auf Tokens umstellen'."),
           }),
         ])).optional(),
-      ).describe("Background work STILL RUNNING at turn end — subagents started with run_in_background, backgrounded Bash tasks, or Workflow runs. MANDATORY whenever such work is in flight: it overrides the decision heading of EVERY variant with 'noch nicht fertig — {what}', names the first three items on a dim line above the CTA and renders a block per item, so the card never asks the user to act on a result that does not exist yet (the body still reports what IS true). stop.flow.guard blocks the turn when open background work is detected and this field is missing. List only work that is really running and that you started - NEVER invent an entry to get past the gate (use pendingDismissed when the work is not yours or already finished)."),
-      pendingDismissed: z.string().optional().describe("Answer to the pending gate when it listed background work that is NOT live work of yours: one sentence why (e.g. hook-spawned install, not mine / already finished, output checked). Use ONLY after checking the task output; accepted once. NEVER use it to hide work that really runs, and NEVER invent a `pending` entry to pass the gate."),
+      ).describe("Background work STILL RUNNING at turn end (run_in_background subagents, backgrounded Bash tasks, Workflow runs). MANDATORY when in flight (overrides every variant's heading; stop.flow.guard blocks the turn if missing). Only work really running that you started - NEVER invent an entry (use pendingDismissed otherwise)."),
+      pendingDismissed: z.string().optional().describe("Answer to the pending gate when the listed work is NOT live work of yours: one sentence why (hook-spawned, not mine / already finished, output checked). Only after checking the task output; accepted once. NEVER to hide running work."),
       concept: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.union([
           z.enum(["waiting", "iterating", "implementing"]),
           z.object({
-            phase: z.enum(["waiting", "iterating", "implementing"]).optional().describe("'waiting' (default) = the page is open and the next step is the user's submission; 'iterating' = a submission was processed and the next iteration is being produced; 'implementing' = an implement submission is being executed."),
-            url: z.string().optional().describe("Override for the page URL shown above the CTA while the phase is 'waiting' (no link while iterating or implementing). Normally NOT needed: pass `cwd` and the card reads port + html_path from the project's .claude/concept-active.json — the URL the page is already open at."),
+            phase: z.enum(["waiting", "iterating", "implementing"]).optional().describe("'waiting' (default) = page open, next step is the user's submission; 'iterating' = next iteration being produced; 'implementing' = an implement submission is executing."),
+            url: z.string().optional().describe("Override for the page URL (shown only while 'waiting'). Normally not needed: with `cwd` the card reads it from .claude/concept-active.json."),
           }),
         ]).optional(),
-      ).describe("A /auto-concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '👉 🧭 Concept — {phase}' ('⏳ 🧭 Concept — …' while iterating or implementing, like the session title), where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work still goes into `pending` and follows the phase as its own sentence ('⏳ 🧭 Concept — in Implementierung. 2 Agenten arbeiten — ich melde mich'). The bridge's own tasks (server, keepalive pulser, pickup waker) are infrastructure: NEVER list them in `pending`. Pass `cwd` too: while 'waiting' the card shows the page's http://localhost:{port}/… link above the CTA (none while iterating/implementing)."),
+      ).describe("A /auto-concept page is OPEN at turn end. Replaces every variant's CTA and outranks `pending`. Real background work still goes into `pending`; bridge server, pulser and waker are infrastructure - NEVER in `pending`. Pass `cwd` too."),
       pause: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({
-          reason: z.enum(["restart", "reboot", "usage-reset", "user"]).optional().describe("What unblocks the work: 'restart' = restart Claude Code (a new plugin/MCP version, a settings change), 'reboot' = restart the machine, 'usage-reset' = wait for the usage limit to reset, 'user' (default) = the user paused it."),
-          resetAt: z.string().optional().describe("usage-reset only: when the limit resets, as the user reads it (e.g. '23:40' or 'Mo 09:00'). Named in the heading."),
+          reason: z.enum(["restart", "reboot", "usage-reset", "user"]).optional().describe("What unblocks the work: restart Claude Code (new plugin/MCP version, settings change) · reboot the machine · wait for usage-limit reset · 'user' (default) = user paused it."),
+          resetAt: z.string().optional().describe("usage-reset only: when the limit resets, as the user reads it ('23:40', 'Mo 09:00')."),
         }).optional(),
-      ).describe("paused variant only: why the work stops (#583). The session title and the heading name the reason ('🟦 ➜ 🔌 Restart ┃ …') and the context line the one action that resumes it. Omit for a plain user pause."),
+      ).describe("paused variant only: why the work stops (#583). Omit for a plain user pause."),
       deployGate: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([
           z.string(),
           z.object({
-            artifact: z.string().describe("The out-of-band deploy artifact path, e.g. 'supabase/migrations/1.sql'."),
-            kind: z.string().optional().describe("Deploy kind — 'migration', 'function', or 'infra'."),
-            action: z.string().optional().describe("The concrete deploy action still required, e.g. 'apply_migration' or 'deploy_edge_function desktop-latest'."),
+            artifact: z.string().describe("Out-of-band deploy artifact path, e.g. 'supabase/migrations/1.sql'."),
+            kind: z.string().optional().describe("'migration', 'function' or 'infra'."),
+            action: z.string().optional().describe("The deploy action still required, e.g. 'apply_migration'."),
           }),
         ])).optional(),
-      ).describe("Out-of-band deploy gate (#243) — artifacts a code merge did NOT deploy (DB migrations, edge/serverless functions) and that are therefore NOT live yet. Renders the '👉 ➜ ⚠️ Not deployed ┃' state with a block naming each artifact + its deploy action, so a merged-but-undeployed ship never reads as done. Pair with state.deployPending to also flip the decision heading. Available in all variants except test-minimal and test. Populate from ship_preflight.outOfBandDeploys when the project has no deploy handler that already applied them."),
+      ).describe("Out-of-band deploy gate (#243): artifacts a merge did NOT deploy (DB migrations, edge functions), so NOT live yet. Pair with state.deployPending. Not for test-minimal/test. Fill from ship_preflight.outOfBandDeploys."),
       validation: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.object({
-          requirement: z.string().describe("A requirement / acceptance criterion the change had to satisfy — in user-domain language."),
+          requirement: z.string().describe("A requirement / acceptance criterion, in user-domain language."),
           status: z.enum(["met", "partial", "unmet"]).optional().describe("Whether this change satisfies the requirement."),
-          evidence: z.string().optional().describe("How you CONFIRMED it (the test that proves it, the behaviour observed) — not a restatement of the requirement."),
-          waitsOn: z.enum(["user", "deploy", "external", "pending"]).optional().describe("Only for a partial/unmet requirement Claude CANNOT close itself: user = work only the user can do (decide, approve, a manual setup step — not verifying what you built: that is met + userTest) · deploy = only verifiable after ship/deploy/restart · external = a third party · pending = your own background agent/workflow is still running (checked against the transcript — stale once it finished). waitsOn needs `evidence` naming what exactly it waits for. Without waitsOn a partial/unmet requirement is YOUR gap: stop.flow.guard blocks the turn once to close it, and ship_release refuses to merge over it."),
+          evidence: z.string().optional().describe("How you CONFIRMED it (the proving test, observed behaviour) - not a restatement."),
+          waitsOn: z.enum(["user", "deploy", "external", "pending"]).optional().describe("Only for a partial/unmet requirement Claude CANNOT close: user = only the user can do it (decide, approve, manual setup - not verifying what you built: that is met + userTest) · deploy = verifiable only after ship/deploy/restart · external = third party · pending = your own background work still running. Needs `evidence`. Without waitsOn a partial/unmet item is YOUR gap (blocks the turn and ship_release)."),
         })).optional(),
-      ).describe("V&V gate — validation attestation (“did we build the RIGHT thing”). REQUIRED for any turn that changed source code: map each requirement / acceptance criterion to how this change meets it and how you confirmed it. A code-change card without `validation` is blocked once by stop.flow.guard and re-requested. Pure refactor/chore with no explicit requirement: one item stating the intent and how behaviour was kept equivalent. Each item: { requirement, status: met|partial|unmet (REQUIRED — a missing status is a gap), evidence, waitsOn? }. met = delivered: implemented but only verifiable by the user (device, account) is met — evidence names what you verified, the user's check goes to userTest/userFinalTest. Close every gap you can before rendering — partial/unmet only for what waits on the user, a deploy, a third party or your own still-running background work (waitsOn)."),
+      ).describe("V&V gate (“did we build the RIGHT thing”). REQUIRED for any turn that changed source code: map each requirement / acceptance criterion to how the change meets it and how you confirmed it; a code-change card without it is blocked once. Pure refactor: one item stating the intent and how behaviour was kept equivalent. status is REQUIRED. met = delivered, even if only the user can verify it: the user's check goes to userTest/userFinalTest. Close every gap you can before rendering."),
       verification: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({
           skipped: z.boolean().describe("true = you deliberately did not run the Light check (browser check / passing test run)."),
-          reason: z.string().optional().describe("One line: why verification is genuinely impossible here. Required with skipped: true."),
+          reason: z.string().optional().describe("One line: why verification is impossible here. Required with skipped: true."),
         }).optional(),
-      ).describe("Deliberate verification skip (#612). When this turn changed code but no matching Light check ran, the card is refused once — run the check, or pass { skipped: true, reason }. The card then shows '⚠ unverified — skipped: <reason>' and a decision point, and the Stop gate accepts the skip. Never write the reason as prose below the card."),
+      ).describe("Deliberate verification skip (#612). If code changed but no matching Light check ran, the card is refused once: run the check, or pass { skipped: true, reason }. Never write the reason as prose below the card."),
       delivery: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({
-          pr: z.object({ number: z.number(), title: z.string() }).nullable().optional().describe("PR for this work, or null for a direct commit (PR node renders '⊘ no PR')."),
+          pr: z.object({ number: z.number(), title: z.string() }).nullable().optional().describe("PR for this work, or null for a direct commit."),
           ship: z.object({
             version: z.string(),
             base: z.string().optional(),
             components: z.array(z.object({
               name: z.string().describe("Display name, e.g. 'Desktop app'."),
-              version: z.string().describe("The component's own version, e.g. '0.10.0'."),
-              tag: z.string().optional().describe("The component's release tag, e.g. 'desktop-v0.10.0'."),
+              version: z.string().describe("The component's own version."),
+              tag: z.string().optional().describe("Release tag, e.g. 'desktop-v0.10.0'."),
               channel: z.string().optional().describe("Release channel, e.g. 'alpha'."),
-              root: z.boolean().optional().describe("true = this entry is the repo's root/web app. When no entry is root, the card omits the root version and Build-ID."),
-            })).optional().describe("Multi-app repos (#695): the components this ship released. One entry renders inline in the heading and pipeline line ('Desktop app 0.10.0 → main · desktop-v0.10.0 · alpha'); several render one line each. Omit for a single-app repo. ship_preflight's `components` hint lists sub-app manifests whose version the diff changed."),
-          }).nullable().optional().describe("Ship stage: version merged to `base` (e.g. main). null = not shipped yet. A bare semver renders with a 'v' prefix; any other string is shown as given."),
+              root: z.boolean().optional().describe("true = the repo's root/web app. With no root entry the card omits root version and Build-ID."),
+            })).optional().describe("Multi-app repos (#695): components this ship released; omit for a single-app repo."),
+          }).nullable().optional().describe("Ship stage: version merged to `base`. null = not shipped yet."),
           promote: z.object({
-            channels: z.object({ alpha: z.string().nullable().optional(), beta: z.string().nullable().optional(), stable: z.string().nullable().optional() }).describe("Version each channel serves right now — pass the latest beta and stable too, not only the reached ones; null = channel has no tag yet (renders as —). Channels on the same version merge on the ladder."),
-            current: z.enum(["alpha", "beta", "stable"]).optional().describe("Channel this turn landed on — highlighted 🟢 in the ladder."),
-            fastTrack: z.boolean().optional().describe("alpha→stable direct: beta renders as ⏭ skipped."),
-            betaLag: z.object({ versions: z.number(), days: z.number().optional() }).optional().describe("How far beta trails the highest channel (from git ls-remote --tags). Renders as '−N · D d' after beta's version on the channel ladder."),
-            stableLag: z.object({ versions: z.number(), days: z.number().optional() }).optional().describe("How far stable trails the highest channel (from git ls-remote --tags). Renders as '−N · D d' after stable's version on the channel ladder. Replaces the old userFinalTest promote item."),
-          }).nullable().optional().describe("Promote stage: alpha→beta→stable ladder. null = not promoted yet (Promote node ⚪)."),
+            channels: z.object({ alpha: z.string().nullable().optional(), beta: z.string().nullable().optional(), stable: z.string().nullable().optional() }).describe("Version each channel serves now (pass latest beta and stable too); null = no tag yet."),
+            current: z.enum(["alpha", "beta", "stable"]).optional().describe("Channel this turn landed on."),
+            fastTrack: z.boolean().optional().describe("alpha→stable direct: beta shows as skipped."),
+            betaLag: z.object({ versions: z.number(), days: z.number().optional() }).optional().describe("How far beta trails the highest channel (git ls-remote --tags)."),
+            stableLag: z.object({ versions: z.number(), days: z.number().optional() }).optional().describe("How far stable trails the highest channel (git ls-remote --tags)."),
+          }).nullable().optional().describe("Promote stage: alpha→beta→stable ladder. null = not promoted yet."),
         }).optional(),
-      ).describe("Delivery track (ready / ship-successful / released) — the pipeline through-line PR → Ship → Promote(alpha→beta→stable) showing WHERE this turn sits (✅ done · 🟢 current · ⚪ pending). ship-successful also names the reached channel in its CTA. Populate the stages that happened; leave later ones null/absent."),
+      ).describe("Delivery track (ready / ship-successful / released): PR → Ship → Promote showing WHERE this turn sits. Populate the stages that happened; leave later ones null/absent."),
       promotion: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({
           from: z.enum(["alpha", "beta"]).optional(),
-          to: z.enum(["beta", "stable"]).optional().describe("Target channel — drives the released CTA (beta = PROMOTED, stable = RELEASED — LIVE)."),
-          sha: z.string().optional().describe("Commit SHA the tags point at (bit-identical re-tag)."),
-          tags: z.array(z.string()).optional().describe("Tags pushed by ship_promote, e.g. ['stable/v0.117.0', 'v0.117.0']."),
+          to: z.enum(["beta", "stable"]).optional().describe("Target channel (beta = PROMOTED, stable = RELEASED)."),
+          sha: z.string().optional().describe("Commit SHA the tags point at."),
+          tags: z.array(z.string()).optional().describe("Tags pushed by ship_promote, e.g. ['stable/v0.117.0']."),
           release: z.boolean().optional().describe("A GitHub Release exists (stable only)."),
           fastTrack: z.boolean().optional(),
         }).optional(),
-      ).describe("Promotion facts (released variant) — the end-info of a channel promotion: tags pushed at which SHA, whether a GitHub Release exists (stable), and that the re-tag is bit-identical. Populate from the ship_promote result."),
+      ).describe("Promotion facts (released variant): populate from the ship_promote result."),
     }),
   },
   async (params) => {

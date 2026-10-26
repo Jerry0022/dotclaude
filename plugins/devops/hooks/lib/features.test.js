@@ -234,18 +234,18 @@ describe("ss.knowledge.index — gated docs", () => {
 
   test("stable lists neither the gated INDEX row nor the beta doc", () => {
     const ctx = ctxFor("stable");
-    expect(ctx).toContain("open (Open)");
+    expect(ctx).toContain("open");
     expect(ctx).not.toMatch(/\bearly\b/);
     expect(ctx).not.toMatch(/\bmid\b/);
   });
 
   test("beta sees the beta doc only, alpha sees both", () => {
     const beta = ctxFor("beta");
-    expect(beta).toContain("mid (Beta thing)");
+    expect(beta).toContain("mid");
     expect(beta).not.toMatch(/\bearly\b/);
     const alpha = ctxFor("alpha");
-    expect(alpha).toContain("mid (Beta thing)");
-    expect(alpha).toContain("early (Early)");
+    expect(alpha).toContain("mid");
+    expect(alpha).toContain("early");
   });
 });
 

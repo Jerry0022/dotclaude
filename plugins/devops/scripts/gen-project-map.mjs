@@ -20,14 +20,17 @@
  *   wins over a bare directory name (`hooks`), which wins over the generic
  *   DIR_HINTS below.
  *
- *   Usage: node scripts/gen-project-map.mjs [project-root]
+ *   Usage: node scripts/gen-project-map.mjs [--check] [project-root]
+ *   --check  writes nothing; exits 1 when project-map.md is missing or stale.
  */
 
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname, basename, resolve } from "node:path";
 
-const projectRoot = process.argv[2] || process.cwd();
+const args = process.argv.slice(2);
+const checkMode = args.includes("--check");
+const projectRoot = args.find((a) => !a.startsWith("--")) || process.cwd();
 
 // ── Well-known directory descriptions ──────────────────────────────────────
 
@@ -336,7 +339,7 @@ function generate() {
 
   // Write to .claude/project-map.md
   const claudeDir = join(projectRoot, ".claude");
-  if (!existsSync(claudeDir)) mkdirSync(claudeDir, { recursive: true });
+  if (!checkMode && !existsSync(claudeDir)) mkdirSync(claudeDir, { recursive: true });
 
   const outPath = join(claudeDir, "project-map.md");
   const existing = (() => {
@@ -346,6 +349,12 @@ function generate() {
       return null;
     }
   })();
+
+  if (checkMode) {
+    if (existing === content) return false;
+    console.error("[gen-project-map] project-map.md is stale or missing");
+    process.exit(1);
+  }
 
   if (existing === content) {
     console.error("[gen-project-map] project-map.md is up-to-date");

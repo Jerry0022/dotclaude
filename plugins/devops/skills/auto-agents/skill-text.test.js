@@ -112,7 +112,7 @@ describe("agent-orchestration.md § Model & Effort Defaults stays the source of 
     expect(step22).toMatch(/class `free` \(never on Pro/);
     expect(step22).toMatch(/\*\*Fewer wake-ups:\*\*/);
     const policy = readFileSync(join(PLUGIN_ROOT, "deep-knowledge", "agent-proactivity.md"), "utf8");
-    expect(policy).toMatch(/domain agent on `sonnet`; opus only for design-heavy\/ambiguous work in class\s+`free`/);
+    expect(policy).toMatch(/domain agent on `sonnet`; opus only for\s+design-heavy\/ambiguous work in class\s+`free`/);
   });
 
   it("caps background wake-ups in the wave rules", () => {

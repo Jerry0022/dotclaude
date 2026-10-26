@@ -26,7 +26,12 @@ via `/auto-issue`, which is a later turn after the restart anyway.
    `Plugin-Audit läuft im Hintergrund — der Bericht öffnet sich als Concept-Seite, sobald er fertig ist`
    (a `userFinalTest` entry of the info kind; never an open point that blocks).
 4. When the background task completes, run `.claude/skills/plugin-audit/SKILL.md`
-   steps 2–5 in this session (currency agent, synthesis agent, report, record). If
+   steps 2–5 in this session (currency agent, synthesis agent, report, record) —
+   **automatically, without asking**: the report page opens on its own. Never
+   turn it into an open point or a "Bericht aufbereiten?" offer on the card
+   (v0.320.0, 2026-10-26, the report sat behind such a question). `audit.js
+   --trigger ship` prints this as a `[plugin-audit] Next …` line after its
+   summary, so the completion notice carries it. If
    the session is already over, `audit.js` left `report-pending.json` in the audit
    state dir; the next session opens the report on its first prompt.
 

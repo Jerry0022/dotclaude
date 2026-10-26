@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.325.0] — 2026-10-26
+
+Follow-ups of the 0.320.0 plugin audit: leaner per-session context, fewer false alarms in the audit itself, and current dependencies.
+
+### Changed
+- **Plugin audit opens its report without asking.** After a decade-crossing ship, `audit.js --trigger ship` prints a `[plugin-audit] Next …` line, and the report steps 2–5 run in the same session. The report is never parked as an open point on the card again. The report page is served from a site folder, because the concept bridge never serves dot-segment paths.
+- **Audit wiring check without false alarms.** Quoted hook command paths are parsed. Missing MCP server dependencies are installed instead of reported. The project map is verified with `gen-project-map --check`.
+- **Smaller always-on context.** The deep-knowledge index injection lists names only, which saves about 530 tokens per session. Dead MCP entry references are fixed.
+- **Smaller tool schemas.** `render_completion_card` is about 32 % smaller and `local_generate` about 35 % smaller.
+- **Agent delegation rules sharpened.** The spawn-shape and card blocks in `agent-proactivity.md` and the model-gate refusal text are clearer. The savings log now records narrowed guard follow-ups and local-llm delegations.
+- **Housekeeping.** Added an eval case for auto-frustrated, closed 3 concept pages (`data-closed`), added a title test for Claude Code 2.1.309, and added the note `docs/dev/cc-2.1.310-opportunities.md`.
+
+### Dependencies
+- undici 7.30.1 and zod 4.6.7 (security fixes), eslint 10, @eslint/js 10, globals 17 and jsdom 30. jsdom 30 no longer focuses elements that are not rendered, the same as real browsers do. Three auto-concept tests now open their panel before they focus into it.
+
 ## [0.324.1] — 2026-10-26
 
 Pins in the concept overview, no more parking of stale checkouts, and a ship that actually shows "Shipping" in the sidebar.
