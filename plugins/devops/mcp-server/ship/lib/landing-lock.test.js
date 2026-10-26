@@ -1,7 +1,7 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir, hostname } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
 import { acquireLandingLock, releaseLandingLockFor, lockPath } from "./landing-lock.js";
 
@@ -120,6 +120,16 @@ describe("landing-lock", () => {
     expect(Date.parse(JSON.parse(readFileSync(lockPath(cwd), "utf8")).heartbeatAt)).toBe(t);
     a.release();
     expect(a.refresh()).toBe(false);
+  });
+
+  it("REGRESSION (review): refresh never resurrects a lock another ship stole, and leaves no temp file", async () => {
+    const cwd = repo();
+    const a = await acquireLandingLock(cwd, { branch: "a", ...fast });
+    plant(cwd, { token: "thief" }); // a steal landed after a's heartbeat expired
+    expect(a.refresh()).toBe(false);
+    expect(JSON.parse(readFileSync(lockPath(cwd), "utf8")).token).toBe("thief");
+    expect(a.release()).toBe(false);
+    expect(readdirSync(dirname(lockPath(cwd))).some((f) => f.endsWith(".hb"))).toBe(false);
   });
 
   it("is per repo: another repo is never blocked", async () => {

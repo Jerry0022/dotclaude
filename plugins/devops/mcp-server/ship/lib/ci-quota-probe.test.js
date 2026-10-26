@@ -50,6 +50,30 @@ describe("early CI-quota probe", () => {
     expect(readRecord("a3", { file, now })).not.toBeNull();
   });
 
+  test("REGRESSION (review): an unreadable annotation fetch is unknown and never clears a block", () => {
+    const now = Date.parse("2026-10-26T12:00:00Z");
+    recordBlock("a5", { file, now: Date.parse("2026-10-26T09:00:00Z") });
+    const api = (p) => {
+      if (p.endsWith("/annotations")) throw new Error("HTTP 502");
+      return fakeApi()(p);
+    };
+    const res = probeCiQuota("/repo", { key: "a5", file, now, api });
+    expect(res.status).toBe("unknown");
+    expect(res.cleared).toBeUndefined();
+    expect(readRecord("a5", { file, now })).not.toBeNull();
+  });
+
+  test.each(["skipped", "neutral", "stale", "action_required"])(
+    "REGRESSION (review): a %s run proves nothing — no healthy verdict, the block stays",
+    (conclusion) => {
+      const now = Date.parse("2026-10-26T12:00:00Z");
+      recordBlock("a6", { file, now: Date.parse("2026-10-26T09:00:00Z") });
+      const res = probeCiQuota("/repo", { key: "a6", file, now, force: true, api: fakeApi({ conclusion }) });
+      expect(res.status).toBe("unknown");
+      expect(readRecord("a6", { file, now })).not.toBeNull();
+    },
+  );
+
   test("probe errors → unknown, no block", () => {
     const res = probeCiQuota("/repo", { key: "a4", file, api: () => { throw new Error("gh: not found"); } });
     expect(res.status).toBe("unknown");

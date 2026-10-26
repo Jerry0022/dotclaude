@@ -170,9 +170,10 @@ export async function localFullGreen(cwd) {
   try {
     const mod = await import("../lib/test-results.js");
     if (typeof mod.findFullGreen !== "function") return null;
-    const key = mod.treeKey(cwd);
-    if (!key?.treeHash) return null;
-    return mod.findFullGreen(cwd, { treeHash: key.treeHash, now: Date.now() }) || null;
+    // HEAD's tree — the commit that gets merged, never a dirty working tree.
+    const treeHash = treeOf("HEAD", { cwd });
+    if (!treeHash) return null;
+    return mod.findFullGreen(cwd, { treeHash, now: Date.now() }) || null;
   } catch { return null; }
 }
 
@@ -564,20 +565,11 @@ export async function handler(params) {
       let checkResult = watchPRChecks(pr.number, opts, quota
         ? { timeoutSec: Math.min(checksTimeoutSec, 60), noChecksGraceMs: 0 }
         : { timeoutSec: checksTimeoutSec });
-      let earlyQuotaSkip = false;
-      if (quota && quota.decision?.value !== "wait" && (checkResult.status === "timeout" || checkResult.status === "no-checks")) {
-        // A recorded block (early probe or an earlier ship) and no verdict in the
-        // short probe: do NOT sit in a 600 s watch for checks that cannot start.
-        // Take the account-limited path at once — the M6 gate below then lets the
-        // merge through only with a green FULL local suite on exactly this tree.
-        earlyQuotaSkip = true;
-        quotaBypass = true;
-        result.checksSkippedByQuota = true;
-        checkResult = { status: "passed", checks: [] };
-      } else if (quota && (checkResult.status === "timeout" || checkResult.status === "no-checks")) {
-        // Checks are running or queued after all, or not registered yet right
-        // after the push (the short probe has no #508 grace) — fall back to the
-        // full wait, so a quota record never merges past an unseen check.
+      if (quota && (checkResult.status === "timeout" || checkResult.status === "no-checks")) {
+        // No verdict in the short probe: checks are running or queued after all
+        // (a minutes block fails its jobs within seconds), or not registered yet
+        // right after the push (the short probe has no #508 grace). Fall back to
+        // the full wait — a quota record never merges past an unseen check.
         lock.refresh();
         checkResult = watchPRChecks(pr.number, opts, { timeoutSec: checksTimeoutSec });
       }
@@ -623,8 +615,6 @@ export async function handler(params) {
         // No stored decision: interactive ships ask first (A2); autonomous ones
         // take the #768 path below (account-limited, local gate → skipChecks).
         if (!decision && isInteractiveShip(params)) askQuotaDecision = true;
-      } else if (earlyQuotaSkip) {
-        quotaNote = { status: "skipped", quota: describeRecord(quota), reason: "CI-quota block recorded — checks not awaited (no 600 s wait); merge requires a green full local suite on this tree" };
       } else if (quota && (checkResult.status === "passed" || checkResult.status === "failed")) {
         // A check ran for real again (not a minutes block) — the block is over.
         // This PR's checks ran over main incl. every ship merged without CI —
@@ -694,7 +684,11 @@ export async function handler(params) {
     // Second leg: ship_build deferred the full suite to CI (fullSuiteVia "ci") — then
     // the PR's `suite` check must have run AND passed. Absent, skipped, neutral or a
     // quota bypass (checks replaced) → the same local-green fallback, else no merge.
-    const suiteViaCi = shipFullSuiteVia(params) === "ci";
+    // Unknown (manual pipeline, no checkpoint) counts as "ci" wherever ship_build
+    // could have run only the related tests — a repo with the CI suite: the merge
+    // then needs the passing `suite` check or a green full local run, never neither.
+    const via = shipFullSuiteVia(params);
+    const suiteViaCi = via === "ci" || (!via && hasCiSuite(cwd));
     const suiteOk = suiteViaCi && !quotaBypass && ciSuitePassed(ciChecks);
     if (suiteOk) result.fullSuiteCi = { check: CI_SUITE_CHECK, passed: true };
     if ((quotaBypass && hasCiSuite(cwd)) || (suiteViaCi && !suiteOk)) {

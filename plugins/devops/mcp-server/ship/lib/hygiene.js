@@ -1523,7 +1523,24 @@ export function acquireWorkerLock(cwd, now = Date.now(), pid = process.pid) {
   try {
     const file = workerLockPath(cwd);
     if (!file || workerLockHeld(cwd, now)) return false;
-    try { fs.unlinkSync(file); } catch { /* absent or stale */ }
+    // A stale lock is claimed by renaming it away (only one racer's rename
+    // succeeds) — never by an unconditional unlink that could delete a lock
+    // another worker created a moment ago.
+    if (fs.existsSync(file)) {
+      const claimed = `${file}.${pid}.${now}.stale`;
+      try { fs.renameSync(file, claimed); } catch { return false; }
+      let fresh = false;
+      try {
+        const lock = JSON.parse(fs.readFileSync(claimed, "utf8"));
+        fresh = typeof lock.at === "number" && now - lock.at < WORKER_LOCK_STALE_MS && (!lock.pid || pidAlive(lock.pid));
+      } catch { /* unreadable = stale */ }
+      if (fresh) {
+        // Another worker wrote a live lock after our check: put it back, we lose.
+        try { fs.renameSync(claimed, file); } catch { /* it re-created one meanwhile */ }
+        return false;
+      }
+      try { fs.unlinkSync(claimed); } catch { /* gone */ }
+    }
     fs.writeFileSync(file, JSON.stringify({ pid, at: now }), { flag: "wx" });
     return true;
   } catch {
@@ -1531,8 +1548,14 @@ export function acquireWorkerLock(cwd, now = Date.now(), pid = process.pid) {
   }
 }
 
-export function releaseWorkerLock(cwd) {
-  try { const file = workerLockPath(cwd); if (file) fs.unlinkSync(file); } catch { /* best effort */ }
+export function releaseWorkerLock(cwd, pid = process.pid) {
+  try {
+    const file = workerLockPath(cwd);
+    if (!file) return;
+    const lock = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (lock.pid && lock.pid !== pid) return; // not ours — never delete another worker's lock
+    fs.unlinkSync(file);
+  } catch { /* best effort */ }
 }
 
 /**

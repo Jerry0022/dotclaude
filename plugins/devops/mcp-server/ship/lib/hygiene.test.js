@@ -907,6 +907,21 @@ describe("runHygiene — trigger, switches and the nudge", () => {
       expect(spawned).toBe(1);
     });
 
+    test("REGRESSION (review): a worker never deletes a live lock it did not take; a stale one is claimed once", () => {
+      const { dir } = makeRepo();
+      // Worker A holds a live lock; worker B passed its check before A wrote it.
+      expect(acquireWorkerLock(dir, NOW, process.pid)).toBe(true);
+      expect(acquireWorkerLock(dir, NOW, process.ppid)).toBe(false);
+      releaseWorkerLock(dir, process.ppid); // not B's lock — must survive
+      expect(workerLockHeld(dir, NOW)).toBe(true);
+      // Stale (old timestamp): the next worker claims it.
+      const later = NOW + WORKER_LOCK_STALE_MS + 1;
+      expect(acquireWorkerLock(dir, later, process.pid)).toBe(true);
+      expect(acquireWorkerLock(dir, later, process.ppid)).toBe(false);
+      releaseWorkerLock(dir, process.pid);
+      expect(workerLockHeld(dir, later)).toBe(false);
+    });
+
     test("persisted at-risk items of the last worker run reach the deferred ship card (gone units dropped)", () => {
       const { dir, c1 } = makeRepo();
       git(dir, "branch", "old-landed", c1);

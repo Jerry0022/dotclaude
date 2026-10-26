@@ -116,8 +116,13 @@ export async function acquireLandingLock(cwd, {
         try {
           const o = readOwner(path);
           if (!o || o.token !== token) return false;
-          writeFileSync(path, JSON.stringify({ ...o, heartbeatAt: new Date(now()).toISOString() }));
-          return true;
+          // Atomic swap, then re-verify: a steal that landed between the read and
+          // the rename is detected instead of being overwritten with our token.
+          const tmp = `${path}.${token}.hb`;
+          writeFileSync(tmp, JSON.stringify({ ...o, heartbeatAt: new Date(now()).toISOString() }));
+          renameSync(tmp, path);
+          const after = readOwner(path);
+          return !!after && after.token === token;
         } catch { return false; }
       },
       release() { held.delete(path); return removeIfOwner(path, (o) => o.token === token); },

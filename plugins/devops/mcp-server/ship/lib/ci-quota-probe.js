@@ -51,13 +51,20 @@ export function classifyRuns(api, { branch } = {}) {
       }
       continue;
     }
-    if (!FAILED.has(run.conclusion)) return { status: "healthy", runId: run.id, createdAt: run.created_at };
+    // Only a run that succeeded proves minutes; skipped / neutral / stale /
+    // action_required say nothing (an `if:` or path filter, a pending approval).
+    if (run.conclusion === "success") return { status: "healthy", runId: run.id, createdAt: run.created_at };
+    if (!FAILED.has(run.conclusion)) continue;
     const jobs = api(`repos/{owner}/{repo}/actions/runs/${run.id}/jobs`)?.jobs || [];
     const failed = jobs.filter((j) => FAILED.has(j.conclusion));
     if (!failed.length) continue;
     const kinds = failed.map((j) => {
-      try { return classifyAnnotations(api(`repos/{owner}/{repo}/check-runs/${j.id}/annotations`)); } catch { return null; }
+      try { return classifyAnnotations(api(`repos/{owner}/{repo}/check-runs/${j.id}/annotations`)); } catch { return undefined; }
     });
+    // An annotations fetch that failed is no evidence either way — never clear a block on it.
+    if (kinds.some((k) => k === undefined)) {
+      return { status: "unknown", runId: run.id, createdAt: run.created_at, reason: `run ${run.id}: annotations unreadable` };
+    }
     if (kinds.every((k) => k === MINUTES_KIND)) {
       return { status: "exhausted", runId: run.id, createdAt: run.created_at, reason: `run ${run.id}: jobs not started — Actions minutes / spending limit` };
     }
