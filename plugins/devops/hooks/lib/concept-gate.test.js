@@ -1033,6 +1033,13 @@ describe("final report (templates-final-report.md, validation-gate.md 33b / 37b)
   test("the build feedback names the final-report finding", () => {
     const r = evaluate("docs/concepts/x.html", report("<p>nicht führbar</p>"));
     expect(buildBlockReason("x.html", r.missing, r.forbidden, r.structural, r.mapping, r.overlap, r.stale, r.collisions, r.finalReport)).toMatch(/final-report-not-guidable/);
+    const fr = [{ kind: "final-report-skeleton", why: "x" }];
+    const collision = [{ kind: "engine-class", why: "y" }];
+    const withCollision = buildBlockReason("x.html", [], [], [], [], [], [], collision, fr);
+    expect(withCollision).toMatch(/final-report-skeleton/);
+    expect(withCollision).toMatch(/engine-class/);
+    expect(buildBlockReason("x.html", [], [], [], [], [{ kind: "re-ask", why: "z" }], [], [], fr)).toMatch(/final-report-skeleton/);
+    expect(buildBlockReason("x.html", [], [], [], [], [], [], [], fr)).toMatch(/TODO/);
   });
 
   test("the final-report anchors exist in templates.md — the list cannot drift from the reference", () => {

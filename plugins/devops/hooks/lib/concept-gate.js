@@ -145,7 +145,7 @@ function finalReportRegion(html) {
  */
 function findFinalReportIssues(html) {
   const region = finalReportRegion(html);
-  if (!region || !(html || '').includes('function collectTodos')) return [];
+  if (!region) return [];
   const issues = [];
   // The report-only skeleton (`concept-build.js init --report`) marks every
   // part still to be written with a `<!-- TODO: … -->` comment. They are
@@ -154,6 +154,7 @@ function findFinalReportIssues(html) {
   if (/<!--\s*TODO:/.test(region.html)) {
     issues.push({ kind: 'final-report-skeleton', why: 'the final report still carries the skeleton\'s <!-- TODO: … --> markers — write the report (templates-final-report.md) before the build', at: region.at });
   }
+  if (!(html || '').includes('function collectTodos')) return issues;
   const body = region.html.replace(/<!--[\s\S]*?-->/g, '');
   const oqStart = body.search(/\sdata-open-questions\b/);
   if (oqStart >= 0) {
@@ -957,6 +958,12 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
     const lines = [`BLOCKED: the final report in "${name}" breaks the close-out authoring rules.`, ''];
     finalReport.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
     lines.push('');
+    if (finalReport.every(i => i.kind === 'final-report-skeleton')) {
+      lines.push('Replace every <!-- TODO: … --> of the report-only skeleton with the authored report — see');
+      lines.push('templates-final-report.md § Final-report section HTML.');
+      lines.push('The rest of the page passed — re-write the file and open it once this gate passes.');
+      return lines.join('\n');
+    }
     lines.push('The Funde are plain <li> elements in the 🔍 fold with data-issue-title, data-issue-type,');
     lines.push('data-oq-origin ("deferred" | "found"), data-route-default and data-route-reason — no');
     lines.push('checkboxes; the panel is the only place to answer. See step5-update-page.md § Final-report');
@@ -964,7 +971,7 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
     lines.push('The rest of the page passed — re-write the file and open it once this gate passes.');
     return lines.join('\n');
   }
-  const onlyCollisions = collisions.length > 0 && !missing.length && !forbidden.length && !structural.length && !mapping.length && !overlap.length && !stale.length;
+  const onlyCollisions = collisions.length > 0 && !finalReport.length && !missing.length && !forbidden.length && !structural.length && !mapping.length && !overlap.length && !stale.length;
   if (onlyCollisions) {
     const lines = [`BLOCKED: mock CSS in "${name}" collides with the engine chrome (P32).`, ''];
     collisions.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
@@ -977,7 +984,7 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
     lines.push('The rest of the page passed — re-write the file and open it once this gate passes.');
     return lines.join('\n');
   }
-  const onlyOverlap = overlap.length > 0 && !missing.length && !forbidden.length && !structural.length && !mapping.length;
+  const onlyOverlap = overlap.length > 0 && !finalReport.length && !missing.length && !forbidden.length && !structural.length && !mapping.length;
   if (onlyOverlap) {
     const lines = [`BLOCKED: a view in "${name}" re-asks the design choice.`, ''];
     overlap.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
