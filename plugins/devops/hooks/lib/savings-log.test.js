@@ -41,6 +41,12 @@ describe('savings-log', () => {
     process.env.DEVOPS_SAVINGS_LOG = path.join(path.dirname(f), 'blocker', 'log.jsonl'); // parent is a file
     expect(record('a', 'b', 1)).toBe(false);
   });
+  it('logs a local-llm delegation from the local-llm copy', () => {
+    const f = tmpLog();
+    expect(llm.recordDelegated('x'.repeat(350), 42)).toBe(true);
+    const o = JSON.parse(fs.readFileSync(f, 'utf8').trim());
+    expect(o).toMatchObject({ source: 'local-llm', op: 'delegated', estTokens: 100, localTokensUsed: 42 });
+  });
   it('the local-llm copy stays identical', () => {
     const a = fs.readFileSync(new URL('./savings-log.js', import.meta.url), 'utf8');
     const b = fs.readFileSync(new URL('../../../local-llm/hooks/lib/savings-log.js', import.meta.url), 'utf8');
