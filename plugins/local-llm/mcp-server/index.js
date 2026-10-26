@@ -167,35 +167,26 @@ server.registerTool(
   {
     title: "Local LLM Code Generation",
     description:
-      "Generate code via a local AnythingLLM Desktop workspace. " +
-      "Use ONLY for mechanical, well-specified coding tasks (GREEN tier): " +
-      "boilerplate, DTOs, test files from patterns, CRUD, type definitions, " +
-      "repetitive variations. " +
-      "NEVER use for: debugging, architecture, security-critical code, " +
-      "cross-file reasoning, or ambiguous tasks. " +
-      "Claude MUST formulate a complete, unambiguous prompt and MUST " +
-      "review the output before using it.",
+      "Generate code via a local AnythingLLM workspace. ONLY for mechanical, " +
+      "well-specified tasks (boilerplate, DTOs, tests from patterns, CRUD, types, " +
+      "repetitive variations); NEVER for debugging, architecture, security-critical, " +
+      "cross-file or ambiguous work. Give a complete, unambiguous prompt and review the output.",
     inputSchema: z.object({
       task: z.string().describe(
-        "Precise code generation task. Must be unambiguous and self-contained. " +
-        "Include: language, function signature, expected behavior, types, constraints."
+        "Precise, self-contained task: language, signature, behavior, types, constraints."
       ),
       context: z.string().optional().describe(
-        "Relevant code context: existing types, interfaces, patterns to follow. " +
-        "Keep under 2000 tokens — the local model has limited context (8K)."
+        "Existing types/patterns to follow. Under 2000 tokens (local model has 8K context)."
       ),
       language: z.string().optional().describe(
-        "Programming language (e.g., 'typescript', 'python', 'go')."
+        "Programming language (e.g. 'typescript')."
       ),
       temperature: z.number().min(0).max(1).optional().describe(
-        "Generation temperature. Default 0.2 (deterministic). Never above 0.5 for code."
+        "Default 0.2. Never above 0.5 for code."
       ),
       instructions: z.string().optional().describe(
-        "Optional task-specific guidance appended to the base system prompt. " +
-        "Use this to enforce style, library choices, output shape, naming, or " +
-        "to suppress reasoning output (e.g. 'no thinking, output code only', " +
-        "'use vitest', 'prefer arrow functions', 'no type assertions'). " +
-        "Keep it short — system context counts against the model's window."
+        "Short task-specific guidance appended to the system prompt: style, libraries, " +
+        "output shape, or 'no thinking, output code only'."
       ),
     }),
   },
