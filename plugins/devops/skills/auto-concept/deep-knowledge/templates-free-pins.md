@@ -47,8 +47,9 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
   hidden by measurement), and `collectDesignDecisions()` appends
   `documentPinsPayload()` to its `userPins` (entries with an `anchor` belong to
   views; the variant overview ignores them). The design eye stays the toggle.
-- **Final report: not yet.** Its `finalize` payload (templates-submit-js-3.md)
-  carries no `userPins`, so no pin can be set there.
+- **Final report.** Pins work there too: its `finalize` payload
+  (templates-submit-js-3.md) carries `userPins` from `documentPinsPayload()`,
+  and `bake` freezes them into the tab like any other round's.
 - **Set while hidden.** Ctrl + click works with everything hidden
   (`body.anno-hidden`): the new note (design `.upin` and document pin alike)
   gets `data-upin-fresh` and stays visible with its editor; older notes stay
@@ -83,10 +84,10 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
   const isLive = it => !!(it && it.hasAttribute('data-active'));
   const templateOf = it => (typeof resolveIterationTemplate === 'function' ? resolveIterationTemplate(it) : (it.dataset.iterationTemplate || 'decision'));
   // A round hosts document pins when it is a decision / free round, or a design
-  // round with question views (section[data-view]); never the final report
-  // (its finalize payload has no userPins) and never the variant overview.
+  // round with question views (section[data-view]) — the final report included
+  // (its finalize payload carries userPins); never the variant overview.
   const viewOn = it => it.querySelector(':scope > section[data-view][data-view-active="true"]');
-  const isDocIt = it => !!it && !it.hasAttribute('data-final-report')
+  const isDocIt = it => !!it
     && (templateOf(it) !== 'design' || !!it.querySelector(':scope > section[data-view]'));
   // Where a Ctrl + click may set a note: the whole round, or — in a design
   // round — the question view that is on screen.
@@ -493,6 +494,9 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
 .dpin-layer .upin-pin { cursor: pointer; touch-action: manipulation; }
 .dpin-layer .upin[hidden] { display: none; }
 .dpin-layer:has(.upin[data-editing="true"]) { z-index: 45; }
+/* One note open → the other notes stay in place, dimmed into the background
+   (same contract as the design notes' body[data-note-editing] rule). */
+body[data-note-editing="true"] .dpin-layer .upin:not([data-editing="true"]) .upin-pin { opacity: 0.35; animation: none; transition: opacity 0.15s ease; }
 .dpin-layer .upin[data-orphan="true"] .upin-pin { opacity: 0.6; }
 body.dpin-armed section[data-iteration][data-active] :is(p, li, tr) { cursor: crosshair; }
 body.anno-hidden .dpin-layer .upin:not([data-upin-fresh]), body.anno-hidden .dpin-hint { display: none !important; }
