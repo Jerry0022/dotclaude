@@ -743,9 +743,12 @@ function buildResultLines(input, lang, { clamp = true } = {}) {
 // they carry a finding.
 // ---------------------------------------------------------------------------
 
-/** A result text without its "0 rot" / "0 failed" counts — those name a green count, never a red one. */
+/** "0 rot" / "0 failed" / "0 Lint-Fehler" / "0 TS errors": a zero count, an optional short qualifier, a verdict word. */
+const ZERO_RED_RE = /\b0\s*(?:\p{L}+[-\s]+)?(?:rot|red|fail\w*|fehler|errors?)\b/giu;
+
+/** A result text without its zero red counts — those name a green count, never a red one. */
 function withoutZeroRed(text) {
-  return String(text || '').replace(/\b0\s*(rot|red|fail\w*|fehler|errors?)\b/gi, '');
+  return String(text || '').replace(ZERO_RED_RE, '');
 }
 
 /** The first non-zero red count a result names ("120 passed, 0 failed, 2 errors" → "2"), else null. */
@@ -758,7 +761,7 @@ function redCountOf(text) {
 function glyphForResult(result) {
   const r = String(result || '').toLowerCase();
   // "0 rot" / "0 failed" is a green result that merely names the count.
-  const zeroed = r.replace(/\b0\s*(rot|red|fail\w*|fehler|errors?)\b/g, '');
+  const zeroed = withoutZeroRed(r);
   // A verdict word next to a count is the verdict: "3 rot" fails, while
   // "7663 grün · 1 Flake (auch auf main rot) behoben" stays green — a failure
   // word elsewhere in the prose never overrides the counted verdict.
