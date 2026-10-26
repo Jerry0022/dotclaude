@@ -92,8 +92,7 @@ describe("ss.orphan.nudge", () => {
     });
     test("appended on its own line below the risk line; silent without the fields or for another repo", () => {
       const withRisk = buildNudge({ cwd: "C:/r/app", lang: "en", report: report([{ path: "C:/r/app", atRisk: [risk()], landedOutside: 2 }]), now: NOW });
-      expect(withRisk.split("
-")).toHaveLength(2);
+      expect(withRisk.split("\n")).toHaveLength(2);
       expect(buildNudge({ cwd: "C:/r/app", report: report([entry({})]), now: NOW })).toBeNull();
       expect(buildNudge({ cwd: "C:/r/other", report: report([entry({ mainOnLanded: "x" })]), now: NOW })).toBeNull();
     });

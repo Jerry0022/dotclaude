@@ -339,8 +339,7 @@ describe("main checkout on a landed local-only branch (#879) and landed worktree
     const { dir, c1 } = makeRepo();
     const wt = path.join(mkTmp("hylife-sib-"), "wt");
     git(dir, "worktree", "add", "-q", wt, "-b", "feat/dirty", c1);
-    fs.writeFileSync(path.join(wt, "new.txt"), "x
-");
+    fs.writeFileSync(path.join(wt, "new.txt"), "x\n");
     const wt2 = path.join(mkTmp("hylife-sib-"), "wt");
     git(dir, "worktree", "add", "-q", wt2, "-b", "feat/ahead", c1);
     commitAt(wt2, "c.txt", "y
