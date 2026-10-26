@@ -299,55 +299,13 @@ function maybeBuildJourney() {
   setTimeout(() => row.classList.remove('jr-build'), 1400);
 }
 
-// Final report: the status line is hidden there (the sheet's button carries
-// the state), so the journey shows as its own finished row at the top of
-// #panel-final-report — ✓✓ · Umsetzung ✓ · 🏁 lit — not interactive, built
-// up left → right the first time the final report opens.
-function mountFinalJourney() {
-  const host = document.getElementById('panel-final-report');
-  if (!host || host.querySelector('.journey-final')) return null;
-  const row = _jrEl('div', 'journey journey-final');
-  row.dataset.phase = 'done';
-  row.setAttribute('role', 'img');
-  row.setAttribute('aria-label', '{{panel.journey_done}}');
-  const round = _jrEl('span', 'jr-toggle jr-round');
-  const dots = _jrEl('span', 'jr-mini');
-  for (let i = 0; i < 2; i++) { const d = _jrEl('span', 'jr-dot'); d.innerHTML = _JR_CHK; dots.appendChild(d); }
-  round.appendChild(dots);
-  const impl = _jrEl('span', 'jr-toggle jr-impl');
-  const run = _jrEl('span', 'jr-run');
-  const fill = _jrEl('i', 'jr-run-done');
-  fill.style.width = '100%';
-  const ok = _jrEl('span', 'jr-other');
-  ok.dataset.ok = '';
-  ok.innerHTML = _JR_CHK;
-  run.append(fill, ok, _jrEl('b', '', '{{panel.journey_implement}}'));
-  impl.appendChild(run);
-  const finish = _jrEl('span', 'jr-node jr-finish', '🏁');
-  finish.dataset.tip = '{{panel.journey_finish}}';
-  const wire = () => { const w = _jrEl('i', 'jr-wire'); w.dataset.ok = ''; return w; };
-  row.append(round, wire(), impl, wire(), finish);
-  host.insertBefore(row, host.firstChild);
-  return row;
-}
-function maybeBuildFinalJourney() {
-  const row = document.querySelector('.journey-final');
-  if (!row || !document.body.classList.contains('viewing-final')
-    || !document.body.classList.contains('panel-open')) return;
-  const base = (typeof STORAGE_KEY === 'string') ? STORAGE_KEY : 'concept';
-  try { const k = base + '-jr-built-final'; if (sessionStorage.getItem(k)) return; sessionStorage.setItem(k, '1'); } catch (e) { return; }
-  row.classList.remove('jr-build');
-  void row.offsetWidth;
-  row.classList.add('jr-build');
-  setTimeout(() => row.classList.remove('jr-build'), 1400);
-}
-
+// The final report has no journey row: its panel body belongs to the
+// close-out inbox (§ Final Report Panel), and the 🏁 phase icon in the head
+// ("🏁 Abschluss") already says where the session is.
 function _bootJourney() {
   mountJourney();
-  mountFinalJourney();
   maybeBuildJourney();
-  maybeBuildFinalJourney();
-  new MutationObserver(() => { maybeBuildJourney(); maybeBuildFinalJourney(); })
+  new MutationObserver(() => { maybeBuildJourney(); })
     .observe(document.body, { attributes: true, attributeFilter: ['class'] });
   if (typeof renderPanelStatus === 'function') renderPanelStatus();
   if (typeof maybeShowNewRoundToast === 'function') maybeShowNewRoundToast();

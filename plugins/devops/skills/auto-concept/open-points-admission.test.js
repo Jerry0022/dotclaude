@@ -85,7 +85,7 @@ describe("open points — the admission gate in prose", () => {
     expect(skill).not.toContain("future improvements");
     expect(skill).not.toContain("**Nächste Schritte**");
     // What replaced it is a hand-off list for steps only the user can take.
-    expect(skill).toContain("**Danach von Hand**");
+    expect(skill).toContain("**🧪 / 👉 data lists**");
     expect(skill).toContain("Never a place for recommendations");
     expect(reality).not.toContain("Nächste Schritte");
   });
@@ -105,21 +105,25 @@ describe("open points — the admission gate in prose", () => {
   });
 });
 
-describe("open points — the origin in the reference markup", () => {
-  test("every example open point declares an admissible origin", () => {
-    const inputs = htmlSource.match(/<input[^>]*data-issue-title=[^>]*>/g) || [];
-    expect(inputs.length, "example open points").toBeGreaterThanOrEqual(4);
-    for (const el of inputs) {
+describe("open points — the origin and pre-selection in the reference markup", () => {
+  test("every example Fund declares an admissible origin, a route default and a reason — and is no checkbox", () => {
+    const funde = htmlSource.match(/<li[^>]*data-issue-title=[^>]*>/g) || [];
+    expect(funde.length, "example Funde").toBeGreaterThanOrEqual(4);
+    for (const el of funde) {
       expect(el, el).toMatch(/data-oq-origin="(deferred|found)"/);
+      expect(el, el).toMatch(/data-route-default="(now|issue|ignore)"/);
+      expect(el, el).toMatch(/data-route-reason="[^"]+"/);
     }
-    // Both origins are shown, so the author sees what each one looks like.
-    expect(htmlSource).toContain('data-oq-origin="found"');
-    expect(htmlSource).toContain('data-oq-origin="deferred"');
+    expect(htmlSource).not.toMatch(/<input[^>]*data-issue-title=/);
+    const report = htmlSource.slice(htmlSource.indexOf("data-final-report data-active"));
+    expect(report.slice(0, 9000)).not.toContain('type="checkbox"');
   });
 
-  test("the attribute table lists data-oq-origin as mandatory", () => {
-    expect(md).toContain("The first four attributes are MANDATORY");
+  test("the attribute table lists origin, route default and reason as mandatory", () => {
     expect(md).toMatch(/\| `data-oq-origin` \| yes \|/);
+    expect(md).toMatch(/\| `data-route-default` \| yes \|/);
+    expect(md).toMatch(/\| `data-route-reason` \| yes \|/);
+    expect(md).toMatch(/\| `data-routed` \| set by Claude \|/);
   });
 
   test("the sheet carries both origin labels through the locale, never hard-coded", () => {
@@ -127,13 +131,13 @@ describe("open points — the origin in the reference markup", () => {
     expect(md).toMatch(/\| `final\.origin_found`\s+\| found on the way\s+\| unterwegs gefunden \|/);
     expect(SKELETON.code).toContain('data-label-origin-deferred="{{final.origin_deferred}}"');
     expect(SKELETON.code).toContain('data-label-origin-found="{{final.origin_found}}"');
-    expect(cssSource).toContain(".closeout-sheet .followup-origin {");
+    expect(cssSource).toContain(".closeout-sheet .closeout-route-origin {");
   });
 });
 
 /**
- * A page whose live round is a final report with the given open points,
- * running the reference close-out JS on jsdom.
+ * A page whose live round is a final report with the given Funde and
+ * hand-offs, running the reference close-out JS on jsdom.
  */
 function page(items, { handoffs = [], closed = false } = {}) {
   const dom = new JSDOM(localeKeys(SKELETON.code), { runScripts: "outside-only", pretendToBeVisual: true });
@@ -147,37 +151,33 @@ function page(items, { handoffs = [], closed = false } = {}) {
   if (closed) sec.setAttribute("data-closed", "");
   if (handoffs.length) {
     const ho = document.createElement("section");
-    ho.id = "handoffs";
-    ho.dataset.navLabel = "final.handoffs";
     ho.setAttribute("data-handoffs", "");
-    const ol = document.createElement("ol");
-    for (const text of handoffs) {
+    ho.hidden = true;
+    const ul = document.createElement("ul");
+    handoffs.forEach((text, i) => {
       const li = document.createElement("li");
+      li.dataset.todoId = "h" + (i + 1);
+      li.dataset.crit = "high";
       li.innerHTML = text;
-      ol.appendChild(li);
-    }
-    ho.appendChild(ol);
+      ul.appendChild(li);
+    });
+    ho.appendChild(ul);
     sec.appendChild(ho);
   }
-  const block = document.createElement("section");
+  const block = document.createElement("details");
   block.setAttribute("data-open-questions", "");
   const ul = document.createElement("ul");
   for (const it of items) {
     const li = document.createElement("li");
-    const label = document.createElement("label");
-    const box = document.createElement("input");
-    box.type = "checkbox";
-    box.name = it.id;
-    box.checked = true;
-    box.dataset.issueTitle = it.title;
-    box.dataset.issueType = "chore";
-    if (it.origin !== undefined) box.dataset.oqOrigin = it.origin;
+    li.dataset.oqId = it.id;
+    li.dataset.issueTitle = it.title;
+    li.dataset.issueType = "chore";
+    li.dataset.routeDefault = "issue";
+    if (it.origin !== undefined) li.dataset.oqOrigin = it.origin;
     const span = document.createElement("span");
     span.className = "oq-label";
     span.textContent = it.title;
-    label.appendChild(box);
-    label.appendChild(span);
-    li.appendChild(label);
+    li.appendChild(span);
     ul.appendChild(li);
   }
   block.appendChild(ul);
@@ -193,8 +193,7 @@ function page(items, { handoffs = [], closed = false } = {}) {
       "function hideContentDimmer() {}",
       "function showSubmitWarning() {}",
       "window.fetch = async () => ({ ok: true, json: async () => ({}) });",
-      "if (!window.Element.prototype.scrollIntoView) window.Element.prototype.scrollIntoView = function () {};",
-      "if (!window.CSS || !window.CSS.escape) window.CSS = { escape: (s) => String(s).replace(/[^a-zA-Z0-9_-]/g, '\\\\$&') };",
+      "if (!window.CSS || !window.CSS.escape) window.CSS = { escape: (s) => String(s).replace(/[^a-zA-Z0-9_-]/g, '_') };",
       CLOSEOUT_JS,
     ].join("\n")
   );
@@ -204,98 +203,84 @@ function page(items, { handoffs = [], closed = false } = {}) {
   return document;
 }
 
-describe("open points — the origin tag on the sheet row", () => {
-  test("a deferred point and a found point each get their own tag, from the locale", () => {
+const originIn = (doc, key) => {
+  doc.querySelector(`#closeout-decide-list [data-route-open="${key}"]`).click();
+  const el = doc.querySelector("#closeout-route-sheet [data-route-origin]");
+  const out = { hidden: el.hidden, text: el.textContent };
+  doc.querySelector("#closeout-route-sheet [data-route-close]").click();
+  return out;
+};
+
+describe("open points — the origin tag in the bottom sheet", () => {
+  test("a deferred Fund and a found Fund each get their own tag, from the locale", () => {
     const doc = page([
       { id: "oq-a", title: "[FEATURE] Rate-limit", origin: "deferred" },
       { id: "oq-b", title: "[BUG] SAML", origin: "found" },
     ]);
-    const tags = Array.from(doc.querySelectorAll("#closeout-followup-list .followup .followup-origin"));
-    expect(tags.map((t) => t.dataset.origin)).toEqual(["deferred", "found"]);
-    expect(tags.map((t) => t.textContent)).toEqual(["final.origin_deferred", "final.origin_found"]);
-    // Context, not a choice: the three routes are untouched.
-    for (const row of doc.querySelectorAll("#closeout-followup-list .followup")) {
-      expect(row.querySelectorAll(".followup-routes input[type=radio]").length).toBe(3);
-    }
+    expect(originIn(doc, "oq-a")).toEqual({ hidden: false, text: "final.origin_deferred" });
+    expect(originIn(doc, "oq-b")).toEqual({ hidden: false, text: "final.origin_found" });
+    // Context, not a choice: the three tiles are untouched.
+    expect(doc.querySelectorAll("#closeout-route-sheet [data-route-tile]").length).toBe(3);
   });
 
-  test("a row without an admissible origin renders no tag rather than a made-up one", () => {
+  test("a Fund without an admissible origin shows no tag rather than a made-up one", () => {
     const doc = page([
       { id: "oq-x", title: "[CHORE] Phase 4" },
       { id: "oq-y", title: "[CHORE] Something", origin: "scope" },
     ]);
-    expect(doc.querySelectorAll("#closeout-followup-list .followup").length).toBe(2);
-    expect(doc.querySelectorAll("#closeout-followup-list .followup-origin").length).toBe(0);
-  });
-
-  test("the tag sits between the title and the routes", () => {
-    const doc = page([{ id: "oq-a", title: "[BUG] SAML", origin: "found" }]);
-    const row = doc.querySelector("#closeout-followup-list .followup");
-    const classes = Array.from(row.children).map((c) => c.className);
-    expect(classes).toEqual(["followup-title", "followup-origin", "followup-routes"]);
+    expect(doc.querySelectorAll("#closeout-decide-list [data-route-open]").length).toBe(2);
+    expect(originIn(doc, "oq-x").hidden).toBe(true);
+    expect(originIn(doc, "oq-y").hidden).toBe(true);
   });
 });
 
-// The steps the user has to take by hand after the merge used to be one more
-// paragraph in the report body — visually gone the moment the reader scrolled,
-// and absent from the panel where the close-out happens. They are now a
-// painted section, a marked TOC entry, and a sheet block that outlives the
-// close-out.
-describe("hand-offs — what the user still has to do by hand", () => {
+// The steps the user has to take by hand after the merge are the 👉 group:
+// in the panel where the close-out happens, with a mode each, and still there
+// after the close-out.
+describe("hand-offs — 👉 Du machst danach", () => {
   const STEPS = ["Set the cron to <code>0,20,40 * * * *</code>", "Watch the first run"];
 
-  test("the sheet mirrors the report's hand-off list, with a count", () => {
+  test("the 👉 group mirrors the report's hand-off list, with a count", () => {
     const doc = page([], { handoffs: STEPS });
-    const block = doc.querySelector('[data-closeout-block="handoffs"]');
-    expect(block.hidden).toBe(false);
-    const items = Array.from(doc.querySelectorAll("#closeout-handoffs-list li")).map((li) => li.textContent);
+    const group = doc.querySelector('[data-closeout-group="handoffs"]');
+    expect(group.hidden).toBe(false);
+    const items = Array.from(doc.querySelectorAll("#closeout-handoffs-list .closeout-todo-title")).map((el) => el.textContent);
     expect(items).toEqual(["Set the cron to 0,20,40 * * * *", "Watch the first run"]);
-    expect(doc.getElementById("closeout-handoffs-count").textContent).toBe("(2)");
+    expect(group.querySelector("[data-closeout-count]").textContent).toBe("2");
   });
 
-  test("no hand-offs, no block — the normal case renders nothing", () => {
+  test("no hand-offs, no group — the normal case renders nothing", () => {
     const doc = page([{ id: "oq-a", title: "[BUG] SAML", origin: "found" }]);
-    expect(doc.querySelector('[data-closeout-block="handoffs"]').hidden).toBe(true);
-    expect(doc.querySelectorAll("#closeout-handoffs-list li").length).toBe(0);
+    expect(doc.querySelector('[data-closeout-group="handoffs"]').hidden).toBe(true);
   });
 
-  test("after the close-out the hand-offs are the only block left on the sheet", () => {
+  test("after the close-out the 👉 items stay; the 🧭 group and the buttons do not", () => {
     const doc = page([{ id: "oq-a", title: "[BUG] SAML", origin: "found" }], { handoffs: STEPS, closed: true });
-    const visible = Array.from(doc.querySelectorAll(".closeout-block"))
+    const visible = Array.from(doc.querySelectorAll("[data-closeout-group]"))
       .filter((el) => !el.hidden)
-      .map((el) => el.dataset.closeoutBlock);
+      .map((el) => el.dataset.closeoutGroup);
     expect(visible).toEqual(["handoffs"]);
-    const btn = doc.getElementById("closeout-execute");
-    expect(btn.hidden).toBe(false);
-    expect(btn.disabled).toBe(true);
-    expect(btn.dataset.finalizeState).toBe("done");
-    expect(doc.querySelectorAll("#closeout-handoffs-list li").length).toBe(2);
+    expect(doc.getElementById("closeout-ship").hidden).toBe(true);
+    expect(doc.getElementById("closeout-close").hidden).toBe(false);
+    expect(doc.querySelectorAll("#closeout-handoffs-list .closeout-todo").length).toBe(2);
   });
 
-  test("a closed report without hand-offs shows the done state and nothing else", () => {
+  test("a closed report without hand-offs shows the done button and no group", () => {
     const doc = page([], { closed: true });
-    const visible = Array.from(doc.querySelectorAll(".closeout-block")).filter((el) => !el.hidden);
-    expect(visible).toEqual([]);
+    expect(Array.from(doc.querySelectorAll("[data-closeout-group]")).filter((el) => !el.hidden)).toEqual([]);
+    expect(doc.getElementById("closeout-close").hidden).toBe(false);
   });
 
-  test("the TOC marks the hand-offs entry and the body paints the section", () => {
-    const nav = md.slice(md.indexOf("function buildSectionNav()"), md.indexOf("function buildSectionNav()") + 4000);
-    expect(nav).toContain("if (sec.hasAttribute('data-handoffs')) link.setAttribute('data-handoffs', '');");
-    expect(cssSource).toContain(".section-nav-item[data-handoffs] .section-nav-label {");
-    expect(cssSource).toContain("section[data-handoffs] {");
-    expect(cssSource).toContain(".closeout-sheet .closeout-handoffs {");
-  });
-
-  test("the reference report shows the section with its locale label, in the TOC", () => {
-    expect(htmlSource).toContain('<section id="handoffs" data-nav-label="{{final.handoffs}}" data-handoffs>');
-    expect(md).toMatch(/\| `final\.handoffs`\s+\| By hand, afterwards\s+\| Danach von Hand \|/);
-    expect(SKELETON.code).toContain('data-closeout-block="handoffs"');
+  test("the reference report carries 🧪/👉 as data lists with criticality and guidability", () => {
+    expect(htmlSource).toContain('<section data-handoffs hidden aria-label="{{final.group_handoffs}}">');
+    expect(htmlSource).toContain('<section data-tests hidden aria-label="{{final.group_tests}}">');
+    expect(htmlSource).toMatch(/<li data-todo-id="[^"]+" data-crit="(low|mid|high)" data-guide="(web|desktop|)">/);
+    expect(md).toMatch(/\| `final\.group_handoffs`\s+\| You do afterwards\s+\| Du machst danach \|/);
     expect(SKELETON.code).toContain('id="closeout-handoffs-list"');
+    expect(SKELETON.code).toContain('id="closeout-tests-list"');
   });
 
-  test("SKILL.md and the gate carry the rule", () => {
-    expect(skill).toContain("`renderHandoffs`");
-    expect(skill).toContain("is the only block that stays visible");
+  test("the gate carries the rule", () => {
     const row = gate.split("\n").find((l) => l.startsWith("| 37b | "));
     expect(row, "gate row 37b").toBeTruthy();
     expect(row).toContain("`closeout-handoffs-list`");

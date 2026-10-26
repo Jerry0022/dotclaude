@@ -214,6 +214,8 @@ Never commit — the user lands the result via `/do-ship`.
 
 ### 7b. `concept`
 
+(Audit proposals are decisions, so they are always a concept page with decision rounds — never the report-only Abschluss page. That page, `auto-concept --report`, is only the step after an implementation, e.g. after 7a when Funde, 🧪 or 👉 are left.)
+
 Nothing is changed. Invoke the plugin's `auto-concept` skill
 (`Skill("devops:auto-concept")` — never a hand-built HTML page) with the audit dossier
 (`requirements.md` + `findings.json`) and let its per-iteration template rule

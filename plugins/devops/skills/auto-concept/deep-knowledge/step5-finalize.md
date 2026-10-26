@@ -1,6 +1,6 @@
 # Concept step 5b — finalize parts A to D, legacy actions, critical invariant
 
-Finalize parts A · Issues, B · Implement, C · Ship and D · Close out, legacy actions and the critical invariant — execution detail of `SKILL.md` Step 5b, moved here verbatim. Each `##` section below is named by exactly one mandatory pointer in `SKILL.md`, at the place the text used to stand; read it completely before executing that step — it is as binding as the step itself.
+Finalize parts A · Issues, B · Implement, C · Ship, D · Close out and E · Tests and hand-offs, legacy actions and the critical invariant — execution detail of `SKILL.md` Step 5b, moved here verbatim. Each `##` section below is named by exactly one mandatory pointer in `SKILL.md`, at the place the text used to stand; read it completely before executing that step — it is as binding as the step itself.
 
 **The report is a fragment.** The final report lives in its round fragment
 `docs/concepts/{name}/rounds/NN.html` (`step2-build.md`). Every "rewrite /
@@ -15,7 +15,12 @@ substituted by the build, but writing the locale VALUE stays correct too.
    `{ id, title, type, description, role?, module?, milestone?, selected: true }`.
    `description` falls back to the visible `.oq-label` text when the
    author of the final-report did not set `data-issue-body`; either is
-   enough to skip prompting.
+   enough to skip prompting. An item with `id: "__sammel"` is the
+   **Sammel-Issue** the sheet builds when the report lists more than three
+   Funde: it carries `collected[]` (the folded items, same shape). File it
+   as ONE issue — title naming the shared theme, each collected item a
+   checklist line in the body — and route every collected item to it in
+   step 7.
 2. Read the `disposition` sub-object from the same payload and store it for
    part D. Do NOT apply it here — cleanup runs last, after ship.
 3. **User-value gate (silent, mandatory).** Apply the gate from the
@@ -66,13 +71,15 @@ substituted by the build, but writing the locale VALUE stays correct too.
    originating context months later. Prepend whatever richer body the
    payload's `item.description` carries.
 
-7. Update the final-report HTML: in the open-questions section, replace
-   each created item's label with `[Issue #NNN] {title}` (linked to the
-   issue URL), disable the checkbox, and add a small ✓ badge. For items
-   that were merged by the user-value gate, link ALL source items to the
-   one merged issue. Disabling is what makes the row disappear from the
-   close-out sheet on the next render — an already-routed item can never be
-   submitted twice.
+7. Update the final-report fragment: on each created item's Fund `<li>`
+   (the 🔍 fold, `data-oq-id`), set `data-routed`, append the
+   `[Issue #NNN]` link to the issue URL and a small ✓ badge
+   (`templates-final-report.md` § After a point is routed). For items
+   that were merged by the user-value gate or folded into the Sammel-Issue,
+   link ALL source items to the one issue. `data-routed` is what drops the
+   row from the to-do inbox on the next render — an already-routed item can
+   never be submitted twice. (Pages from before the inbox still carry a
+   checkbox: there, `disabled` does the same.)
 
 ## B · Implement the selected follow-ups
 
@@ -93,22 +100,20 @@ because the session feels like it is ending.
    filed.
 3. Checkpoint each item as its code lands (`action: "finalize:implement"`,
    `step: "followup-implemented"`, the item id AND its title in `artifacts`).
-   Both, because the id comes from the report's checkbox `name` and a
+   Both, because the id comes from the report's `data-oq-id` and a
    hand-written report can leave it empty — a resumed run that can only match
    on an empty id rebuilds what already exists.
 4. Rewrite the item's `<li>` in the report the way part A does for issues:
-   keep the checkbox, add `disabled`, append an `.oq-done` note naming what
-   landed. Write the locale's `final.done_prefix` VALUE ("umgesetzt" /
+   set `data-routed`, append an `.oq-done` note naming what landed. Write the locale's `final.done_prefix` VALUE ("umgesetzt" /
    "implemented"), never the raw `{{final.done_prefix}}` token — placeholders
    are substituted at generation time, and this rewrite happens long after
-   that, so a token written here stays on screen as a token. Disabling the
-   checkbox is what drops the row from the close-out sheet on the next
-   render.
+   that, so a token written here stays on screen as a token. `data-routed`
+   is what drops the row from the to-do inbox on the next render.
 5. Add a short **Nachtrag** section to the final report naming what was built
    and where. Do NOT append a new iteration — the final report is the closing
    artefact and stays the last tab.
 6. If an item cannot be built (it turns out to need a decision, or it breaks
-   something), stop that item, leave its checkbox live, and say so in the
+   something), stop that item, leave it unrouted, and say so in the
    Nachtrag. Never silently downgrade it to an issue: the user asked for code
    and has to see that they did not get it.
 
@@ -168,6 +173,53 @@ asks to close out a concept that is closed a minute later. Details:
    here is a coin flip on whether the user's closing impression is the final
    report or an HTTP 404. The bridge shutdown that follows is the honest
    end-of-session signal.
+
+## E · Tests and hand-offs
+
+Runs in part D's slot, after the ship (C) succeeded or was not requested, and
+never when C blocked. Read `tests[]` and `handoffs[]` from the payload (absent
+= empty). Per item, by `mode`:
+
+| `mode` | `guide` | What happens |
+|---|---|---|
+| `skip` | any | Dropped. Not mentioned anywhere. |
+| `guide` | `web` | After close-out (Step 6a done, watchers stopped) start the `auto-guide` skill for the item — a browser walk-through of the web task. |
+| `guide` | `desktop` | A desktop task: offer a script or takeover help for the PC step (`computer-use` takeover or a ready-to-run script), after close-out. |
+| `guide` | `inline` | Not guidable by tool: write the short numbered steps into the final message. A `guide` request on a non-guidable item always ends here — never answer "not guidable". |
+| `self` | any | The user does it. Goes onto the completion card: `userFinalTest` for a 🧪 test, the hand-off line for a 👉 item. Max 3 per kind, one very short line each. |
+
+Rules:
+
+- Order after the card: the completion card comes last as always (Step 6b /
+  the ship card). A started `auto-guide` or the inline steps follow the
+  close-out, not the other way round — the chat must not end on a half-finished
+  guide while the bridge is still running.
+- Hand `auto-guide` the item text and the report's slug as context; it asks
+  nothing the item already answers.
+- The report fragment's done state lists only the 🧪/👉 items with their chosen
+  mode (write the mode word in the locale); `skip` items are gone. No line that
+  the card repeats them.
+- An item the report offered as "Muss nicht" (criticality low, pre-selected
+  `skip`) and the user left that way produces nothing.
+
+### Pre-selection rules (for the author of the report)
+
+Claude sets the defaults when it writes the Funde, 🧪 and 👉 rows (authoring:
+`step5-update-page.md` § Final-report append); the user only corrects them.
+
+- **Fund route.** ⚡ *Jetzt umsetzen* is the default tendency: small, in the
+  repo, cosmetics included. 📌 *Issue* only when the fix is **risky**, needs
+  **more preparation than a guide** (a concept first) or lies outside the
+  repo — size alone is no criterion. ✕ *Ignorieren* is the rarest: only when
+  the current state works as is, is no workaround, and the alternative would
+  merely be another way. Every Fund carries a one-word reason chip ("klein",
+  "kosmetisch", "riskant", "braucht Concept").
+- **🧪 / 👉 mode.** Criticality decides between *Muss nicht* (`skip`) and
+  needed. If needed and guidable (a web task → web guide via `auto-guide`; a PC
+  task → desktop script / takeover help) pre-select *Mit Anleitung* (`guide`);
+  otherwise pre-select *Mach ich selbst* (`self`). Never print "nicht
+  führbar" — a non-guidable item picked with *Mit Anleitung* simply gets
+  written steps (`inline`).
 
 ## Legacy mapping, rationale and the critical invariant
 

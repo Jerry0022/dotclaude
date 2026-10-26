@@ -1,51 +1,220 @@
 # Concept templates, part 26 of 42: Shared systems — decision panel state CSS (continued 3)
 
 ```css
-/* Open-questions section — checkbox list with optional "[Issue #NNN]"
-   linked badges once items have been routed to GitHub. */
-/* Hand-offs section in the report body — what the user has to do by hand
-   after the merge. It used to be one more paragraph among the others and
-   disappeared visually; it is the one part of the report that turns into a
-   to-do for a person, so it is the one part that is painted. */
-section[data-handoffs] {
-  border-left: 4px solid var(--warning-color, #d29922);
-  background: color-mix(in srgb, var(--warning-color, #d29922) 8%, transparent);
-  border-radius: 0 8px 8px 0;
-  padding: 0.9rem 1.1rem;
-  margin: 1.5rem 0;
+/* ── Final-report body components (§ Final Report Panel → Report body) ──────
+   Claude authors the report in plain markup with these engine classes — no
+   round stylesheet. Every colour is a page token, so light and dark both work.
+   Order on the page: .fr-head (or .fr-banner once closed) · .fr-ba (+ .fr-try)
+   or .fr-flow · .fr-sentence · .fr-cols (.fr-wins | .fr-nfr) · .fr-ladder ·
+   the 🔍 and 🛠 folds. No checkboxes anywhere in the body. */
+section[data-final-report] .fr-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 0 0 1rem; }
+section[data-final-report] .fr-phase {
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-color, #c9d1d9) 10%, transparent);
+  color: var(--text-color, #c9d1d9);
 }
-section[data-handoffs] h3::before { content: '⚠ '; color: var(--warning-color, #d29922); }
-section[data-handoffs] ol { padding-left: 1.3rem; }
-section[data-handoffs] li { margin-bottom: 0.45rem; }
-section[data-open-questions] .open-questions-list {
-  list-style: none;
-  padding: 0;
-  margin: 1rem 0;
+section[data-final-report] .fr-title { margin: 0; font-size: 1.35rem; }
+/* Done banner: "🏁 Abgeschlossen · 🚀 live als vX" — sits under the heading. */
+section[data-final-report] .fr-banner {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 10px;
+  font-weight: 600;
+  color: var(--success-color, #3fb950);
+  border: 1px solid color-mix(in srgb, var(--success-color, #3fb950) 50%, transparent);
+  background: color-mix(in srgb, var(--success-color, #3fb950) 12%, transparent);
 }
-section[data-open-questions] .open-questions-list li {
+section[data-final-report] .fr-banner em { margin-left: auto; font-style: normal; font-weight: 500; font-size: 0.85rem; color: var(--text-secondary, #8b949e); }
+/* Vorher / Nachher — two screenshots side by side, "▶ Selbst ausprobieren"
+   centred over the pair. */
+section[data-final-report] .fr-ba { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin: 0 0 1rem; min-height: 3.5rem; }
+section[data-final-report] .fr-shot {
+  position: relative;
+  margin: 0;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 10px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--text-color, #c9d1d9) 4%, var(--bg-color, #0d1117));
+  aspect-ratio: 16 / 10;
+}
+section[data-final-report] .fr-shot img { display: block; width: 100%; height: 100%; object-fit: cover; }
+section[data-final-report] .fr-shot figcaption {
+  position: absolute;
+  left: 0.5rem;
+  top: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-color, #0d1117) 82%, transparent);
+  color: var(--text-color, #c9d1d9);
+}
+section[data-final-report] .fr-try {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  background: var(--accent-color, #58a6ff);
+  color: var(--bg-color, #0d1117);
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+section[data-final-report] .fr-try:focus-visible { outline: 2px solid var(--text-color, #c9d1d9); outline-offset: 3px; }
+/* Nothing visual changed: a short flow instead of the image pair. */
+section[data-final-report] .fr-flow { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0; margin: 0 0 1rem; list-style: none; counter-reset: fr-flow; }
+section[data-final-report] .fr-flow li {
+  flex: 1 1 9rem;
+  counter-increment: fr-flow;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border-color, #30363d);
-  border-radius: 6px;
-  background: var(--bg-subtle, transparent);
+  border-radius: 10px;
+  font-size: 0.85rem;
 }
-section[data-open-questions] .open-questions-list label {
+section[data-final-report] .fr-flow li::before { content: counter(fr-flow) " · "; color: var(--text-secondary, #8b949e); font-weight: 700; }
+section[data-final-report] .fr-label {
+  margin: 0 0 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #8b949e);
+}
+section[data-final-report] .fr-sentence { margin: 0 0 1.1rem; font-size: 1.02rem; line-height: 1.5; }
+section[data-final-report] .fr-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 0.9rem; margin: 0 0 1rem; }
+section[data-final-report] .fr-card {
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 12px;
+  padding: 0.8rem 0.95rem;
+  background: color-mix(in srgb, var(--text-color, #c9d1d9) 3%, transparent);
+}
+/* "Was kam raus" — the top three results, each with its own big glyph in a
+   tinted disc and one bold key phrase: lively, never a plain bullet list. */
+section[data-final-report] .fr-wins { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+section[data-final-report] .fr-wins li { display: flex; align-items: center; gap: 0.7rem; font-size: 0.92rem; line-height: 1.4; }
+section[data-final-report] .fr-win-icon {
+  flex: none;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
   display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 15%, transparent);
 }
-section[data-open-questions] .oq-done {
+section[data-final-report] .fr-wins li:nth-child(2) .fr-win-icon { background: color-mix(in srgb, var(--success-color, #3fb950) 15%, transparent); }
+section[data-final-report] .fr-wins li:nth-child(3) .fr-win-icon { background: color-mix(in srgb, var(--warning-color, #d29922) 15%, transparent); }
+section[data-final-report] .fr-wins b { color: var(--text-color, #c9d1d9); }
+/* "Was es aushält" — Belastungs-Balken. One meter per NFR class: the big
+   measured value, a bar "tested up to" against the tick "target" (Claude
+   always estimates the target), and one context sentence. Green when met,
+   amber when below — from data-met. Bar geometry comes from two custom
+   properties Claude writes: --fr-tested and --fr-target (percent of the bar). */
+section[data-final-report] .fr-meters { display: flex; flex-direction: column; gap: 0.75rem; }
+section[data-final-report] .fr-meter { display: grid; grid-template-columns: 1fr auto; gap: 0.25rem 0.75rem; align-items: baseline; }
+section[data-final-report] .fr-meter-name { font-size: 0.85rem; font-weight: 600; }
+section[data-final-report] .fr-meter-value { font-size: 1.35rem; font-weight: 800; line-height: 1.1; text-align: right; }
+section[data-final-report] .fr-meter-bar {
+  grid-column: 1 / -1;
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-color, #c9d1d9) 10%, transparent);
+}
+section[data-final-report] .fr-meter-bar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--fr-tested, 0%);
+  border-radius: 6px;
+  background: var(--success-color, #3fb950);
+}
+section[data-final-report] .fr-meter[data-met="false"] .fr-meter-bar::before { background: var(--warning-color, #d29922); }
+section[data-final-report] .fr-meter-bar::after {
+  content: "";
+  position: absolute;
+  left: var(--fr-target, 100%);
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--text-color, #c9d1d9);
+}
+section[data-final-report] .fr-meter-context { grid-column: 1 / -1; margin: 0; font-size: 0.8rem; line-height: 1.4; color: var(--text-secondary, #8b949e); }
+section[data-final-report] .fr-meter-verdict { font-weight: 700; color: var(--success-color, #3fb950); }
+section[data-final-report] .fr-meter[data-met="false"] .fr-meter-verdict { color: var(--warning-color, #d29922); }
+/* Prüftiefe-Leiter — 7 levels, each data-state="done" | "open" | "na"
+   (+ "you" for level 7 while it waits on the user). The strongest reached
+   level is named big in .fr-ladder-top; gaps stay hollow. */
+section[data-final-report] .fr-depth { margin: 0 0 1rem; }
+section[data-final-report] .fr-ladder-top { margin: 0 0 0.5rem; font-size: 1.05rem; font-weight: 700; color: var(--success-color, #3fb950); }
+section[data-final-report] .fr-ladder-top small { margin-left: 0.4rem; font-size: 0.8rem; font-weight: 500; color: var(--text-secondary, #8b949e); }
+section[data-final-report] .fr-ladder { list-style: none; margin: 0 0 0.4rem; padding: 0; display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.25rem; }
+section[data-final-report] .fr-ladder li { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; text-align: center; font-size: 0.7rem; line-height: 1.25; color: var(--text-secondary, #8b949e); }
+section[data-final-report] .fr-ladder li::before {
+  content: attr(data-level);
+  width: 1.5rem;
+  height: 1.5rem;
+  box-sizing: border-box;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  border: 2px solid var(--border-color, #30363d);
+}
+section[data-final-report] .fr-ladder li[data-state="done"] { color: var(--text-color, #c9d1d9); }
+section[data-final-report] .fr-ladder li[data-state="done"]::before {
+  background: var(--success-color, #3fb950);
+  border-color: var(--success-color, #3fb950);
+  color: var(--bg-color, #0d1117);
+}
+section[data-final-report] .fr-ladder li[data-state="you"]::before { border-style: dashed; }
+section[data-final-report] .fr-ladder li[data-state="na"] { opacity: 0.45; }
+section[data-final-report] .fr-ladder-foot { margin: 0; font-size: 0.8rem; color: var(--text-secondary, #8b949e); }
+/* The two folds — 🔍 Funde and 🛠 Für Entwickler. */
+section[data-final-report] .fr-fold {
+  margin: 0 0 0.6rem;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 10px;
+  padding: 0.5rem 0.85rem;
+}
+section[data-final-report] .fr-fold > summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; }
+section[data-final-report] .fr-fold > summary:focus-visible { outline: 2px solid var(--accent-color, #58a6ff); outline-offset: 2px; }
+section[data-final-report] .fr-fold[open] > summary { margin-bottom: 0.5rem; }
+section[data-final-report] .fr-funde { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+section[data-final-report] .fr-funde li {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 8px;
+}
+section[data-final-report] .fr-funde .oq-label { font-weight: 600; }
+section[data-final-report] .fr-fkv { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.6rem; margin: 0.35rem 0 0; font-size: 0.82rem; }
+section[data-final-report] .fr-fkv dt { margin: 0; color: var(--text-secondary, #8b949e); font-weight: 600; }
+section[data-final-report] .fr-fkv dd { margin: 0; }
+section[data-final-report] .fr-dev { margin: 0; padding-left: 1.1rem; font-size: 0.85rem; line-height: 1.5; }
+/* What became of a Fund after the close-out (Claude's routed rewrite). */
+[data-open-questions] .oq-done {
   margin-left: 0.5rem;
   font-size: 0.8rem;
   color: var(--success-color, #3fb950);
 }
-section[data-open-questions] .open-questions-list input[type="checkbox"]:disabled + .oq-label {
-  opacity: 0.7;
-}
-section[data-open-questions] .oq-issue-link {
+[data-open-questions] .oq-issue-link {
   display: inline-block;
   margin-left: 0.5rem;
   padding: 1px 6px;
@@ -56,8 +225,12 @@ section[data-open-questions] .oq-issue-link {
   border-radius: 4px;
   text-decoration: none;
 }
-section[data-open-questions] .oq-issue-link:hover {
+[data-open-questions] .oq-issue-link:hover {
   background: color-mix(in srgb, var(--success-color, #3fb950) 15%, transparent);
+}
+@media (max-width: 600px) {
+  section[data-final-report] .fr-ba { grid-template-columns: 1fr; }
+  section[data-final-report] .fr-ladder { grid-template-columns: repeat(4, 1fr); row-gap: 0.6rem; }
 }
 
 /* ── Journey row (§ Submit → Journey row) ──────────────────────────────────
@@ -80,26 +253,9 @@ section[data-open-questions] .oq-issue-link:hover {
   display: flex; align-items: center;
   padding: 0.15rem 0 0.4rem;
 }
-body.viewing-frozen .journey, body.viewing-final .journey:not(.journey-final) { display: none; }
-/* Finished row on the final report (mountFinalJourney): mini ✓✓, Umsetzung
-   bar full, 🏁 lit. Sits on top of #panel-final-report, never interactive. */
-.journey-final { flex: none; padding: 0 0 0.6rem; }
-.journey-final .jr-round { flex: 0 0 62px; }
-.journey-final .jr-impl {
-  flex: 1 1 0; height: 44px; padding: 3px;
-  background: var(--jr-track);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .04);
-}
-.journey-final .jr-mini { cursor: default; }
-.journey-final .jr-dot { color: var(--jr-ai); background: color-mix(in srgb, var(--jr-ai) 14%, transparent); }
-.journey-final .jr-dot .jr-chk { display: block; }
-.journey-final .jr-run .jr-other { position: relative; z-index: 1; color: var(--jr-ai); }
-.journey-final .jr-run b { position: relative; z-index: 1; }
-.journey-final .jr-finish {
-  width: 34px; height: 34px; font-size: 15px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--jr-gold) 92%, #fff), #c6901a);
-  box-shadow: 0 0 18px rgba(227, 179, 65, .45), 0 2px 8px rgba(0, 0, 0, .35);
-}
+/* The final report has no journey row at all: the panel body belongs to
+   the close-out inbox (§ Final Report Panel). */
+body.viewing-frozen .journey, body.viewing-final .journey { display: none; }
 .journey [hidden] { display: none !important; }
 #panel-submitted { display: none !important; }
 .submit-split[hidden], #submit-menu.jr-retired { display: none !important; }

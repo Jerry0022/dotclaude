@@ -196,8 +196,7 @@ holding the secondary action ("Mit Feedback implementieren"), which fires
 changes. The misclick barrier is the extra click plus colour + border
 (warning outline, ⚠ icon), not distance: there is no `.submit-gap` anywhere
 any more — the final-report close-out sheet dropped its own copy too, in
-favour of the accordion rows in front of its single button (§ The close-out
-sheet). The hint lines moved into `data-tip` tooltips; the one line that stays
+favour of its two ship-answer buttons (§ The close-out sheet). The hint lines moved into `data-tip` tooltips; the one line that stays
 visible is inside the menu ("Kein Code beim Primär-Button").
 
 ### HTML

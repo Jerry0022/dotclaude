@@ -105,6 +105,79 @@ const ENGINE_DOCUMENT = [
   { token: '.concept-content {', why: 'document-round content rule — § Layout — Document rounds (engine CSS gutted?)' },
 ];
 
+// Final-report engine (templates-final-report.md § Final Report Panel). A page
+// with a `data-final-report` round — after a concept, or as the page's ONLY
+// round (report-only entry, `concept-build.js init --report`) — must carry the
+// to-do-inbox close-out: two buttons that are the ship answer and the 🧪/👉
+// collector. A final report on the older accordion sheet ("Weiter ›", one
+// execute button) was not generated from the current templates.md.
+const ENGINE_FINAL = [
+  { token: 'id="closeout-ship"', why: 'close-out "Abschließen & shippen" button — § Final Report Panel (final-report engine predates the to-do inbox)' },
+  { token: 'id="closeout-noship"', why: 'close-out "Nur abschließen, nicht shippen" button — § Final Report Panel' },
+  { token: 'function collectTodos', why: '🧪/👉 mode collector for the finalize payload — § Final Report Panel' },
+  { token: 'async function submitFinalize', why: 'finalize submit with durable ack — § Final Report Panel (engine JS gutted?)' },
+];
+
+/** The raw HTML of the `data-final-report` round, or null when there is none. */
+function finalReportRegion(html) {
+  const src = html || '';
+  const open = /<section\b(?:[^>"']|"[^"]*"|'[^']*')*\sdata-final-report\b(?:[^>"']|"[^"]*"|'[^']*')*>/i.exec(src);
+  if (!open) return null;
+  // Up to the section's own closing tag: the report is the last round, so
+  // "until the next round" ran into the engine scripts after it.
+  const rest = src.slice(open.index + open[0].length);
+  const tags = /<(\/?)section\b[^>]*>/gi;
+  let depth = 1;
+  let m;
+  while ((m = tags.exec(rest))) {
+    depth += m[1] ? -1 : 1;
+    if (depth === 0) return { at: open.index, html: open[0] + rest.slice(0, m.index) };
+  }
+  return { at: open.index, html: open[0] + rest };
+}
+
+/**
+ * Final-report body rules (validation-gate.md 33b / 37b): the Funde are plain
+ * elements, never checkboxes; every Fund names an admissible origin; nothing
+ * on the report says "nicht führbar". Only applies to a page that carries the
+ * current final-report engine — an older page is the stale-engine finding's
+ * job, not this one.
+ */
+function findFinalReportIssues(html) {
+  const region = finalReportRegion(html);
+  if (!region) return [];
+  const issues = [];
+  // The report-only skeleton (`concept-build.js init --report`) marks every
+  // part still to be written with a `<!-- TODO: … -->` comment. They are
+  // invisible on the page, so an unfilled skeleton would build and open as an
+  // empty report — block it until each one is replaced.
+  if (/<!--\s*TODO:/.test(region.html)) {
+    issues.push({ kind: 'final-report-skeleton', why: 'the final report still carries the skeleton\'s <!-- TODO: … --> markers — write the report (templates-final-report.md) before the build', at: region.at });
+  }
+  if (!(html || '').includes('function collectTodos')) return issues;
+  const body = region.html.replace(/<!--[\s\S]*?-->/g, '');
+  const oqStart = body.search(/\sdata-open-questions\b/);
+  if (oqStart >= 0) {
+    const oq = body.slice(oqStart);
+    if (/<input\b[^>]*type=["']checkbox["']/i.test(oq)) {
+      issues.push({ kind: 'final-report-checkbox', why: 'a checkbox inside [data-open-questions] of the final report — the Funde are plain elements now; the panel is the only place to answer (validation-gate.md 33b)', at: region.at });
+    }
+    for (const m of oq.matchAll(/<[a-z]+\b(?:[^>"']|"[^"]*"|'[^']*')*\sdata-issue-title=(?:[^>"']|"[^"]*"|'[^']*')*>/gi)) {
+      const tag = m[0];
+      if (/\sdata-routed\b/.test(tag)) continue;
+      const origin = /\sdata-oq-origin=["']([^"']*)["']/.exec(tag);
+      if (!origin || (origin[1] !== 'deferred' && origin[1] !== 'found')) {
+        const title = /\sdata-issue-title=["']([^"']*)["']/.exec(tag);
+        issues.push({ kind: 'final-report-origin', why: `Fund "${title ? title[1] : '?'}" has no data-oq-origin="deferred" | "found" — it skipped the open-points admission gate (validation-gate.md 33b)`, at: region.at });
+      }
+    }
+  }
+  if (/nicht führbar|not guidable/i.test(body)) {
+    issues.push({ kind: 'final-report-not-guidable', why: 'the final report says "nicht führbar" — never shown: "Mit Anleitung" on such an item means written steps (validation-gate.md 37b)', at: region.at });
+  }
+  return issues;
+}
+
 // Clipboard / paste-into-chat submit anti-patterns. A valid live-bridge
 // concept page never copies anything to the clipboard, so any match here is
 // the exact regression the user reported.
@@ -288,7 +361,8 @@ function engineAnchorMissing(body, e) {
  * Engine-currency / engine-integrity markers absent from the html (see
  * ENGINE, ENGINE_DESIGN, ENGINE_DOCUMENT). The shared list always applies;
  * the template-scoped lists follow `<html data-template>` (design →
- * ENGINE_DESIGN; decision / free / prototype → ENGINE_DOCUMENT; absent → none).
+ * ENGINE_DESIGN; decision / free / prototype → ENGINE_DOCUMENT; absent → none);
+ * a page with a `data-final-report` round adds ENGINE_FINAL.
  */
 function findStaleEngine(html) {
   const body = html || '';
@@ -296,7 +370,8 @@ function findStaleEngine(html) {
   const scoped = template === 'design' ? ENGINE_DESIGN
     : (template === 'decision' || template === 'free' || template === 'prototype') ? ENGINE_DOCUMENT
     : [];
-  return [...ENGINE, ...scoped].filter(e => engineAnchorMissing(body, e));
+  const final = finalReportRegion(body) ? ENGINE_FINAL : [];
+  return [...ENGINE, ...scoped, ...final].filter(e => engineAnchorMissing(body, e));
 }
 
 /** Required markers absent from the html. */
@@ -765,6 +840,26 @@ function findViewOverlap(html) {
  *
  * @returns {Array<{kind:string, why:string, at:number}>}
  */
+/**
+ * Advisory: placeholders left in the final report. The locale table carries
+ * `{n}` for the author to fill ("{n} Funde unterwegs", "Stufe {n} von 7"), and
+ * a `{{key}}` the build could not substitute stays as written — either one
+ * shows up as raw text on the page. Code spans and comments are skipped.
+ */
+function findFinalReportPlaceholders(html) {
+  const region = finalReportRegion(html);
+  if (!region) return [];
+  const body = region.html
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(code|pre|script|style|textarea)\b[\s\S]*?<\/\1>/gi, '')
+    .replace(/<[^>]*>/g, ' ');
+  const found = [...new Set([...body.matchAll(/\{\{[^{}\s]+\}\}|\{n\}/g)].map(m => m[0]))];
+  return found.map(token => ({
+    kind: 'final-report-placeholder',
+    why: `the final report shows the placeholder ${token} as raw text — fill in the value or fix the locale key`,
+  }));
+}
+
 function findDesignAuthoringWarnings(html) {
   const body = String(html || '').replace(/<!--[\s\S]*?-->/g, m => ' '.repeat(m.length));
   const warnings = [];
@@ -821,7 +916,7 @@ function findDesignAuthoringWarnings(html) {
  */
 function evaluate(filePath, html) {
   if (!isConceptHtml(filePath, html)) {
-    return { applicable: false, ok: true, missing: [], forbidden: [], structural: [], mapping: [], overlap: [], stale: [], warnings: [] };
+    return { applicable: false, ok: true, missing: [], forbidden: [], structural: [], mapping: [], overlap: [], stale: [], finalReport: [], warnings: [] };
   }
   const missing = findMissing(html);
   const forbidden = findForbidden(html);
@@ -830,9 +925,10 @@ function evaluate(filePath, html) {
   const overlap = findViewOverlap(html);
   const stale = findStaleEngine(html);
   const collisions = findChromeCollisions(html);
+  const finalReport = findFinalReportIssues(html);
   return {
     applicable: true,
-    ok: missing.length === 0 && forbidden.length === 0 && structural.length === 0 && mapping.length === 0 && overlap.length === 0 && stale.length === 0 && collisions.length === 0,
+    ok: missing.length === 0 && forbidden.length === 0 && structural.length === 0 && mapping.length === 0 && overlap.length === 0 && stale.length === 0 && collisions.length === 0 && finalReport.length === 0,
     missing,
     forbidden,
     structural,
@@ -840,13 +936,14 @@ function evaluate(filePath, html) {
     overlap,
     stale,
     collisions,
+    finalReport,
     // Advisory, never part of `ok`.
-    warnings: findDesignAuthoringWarnings(html),
+    warnings: [...findDesignAuthoringWarnings(html), ...findFinalReportPlaceholders(html)],
   };
 }
 
 /** Build the blocking feedback shown to Claude (stderr, exit 2). */
-function buildBlockReason(filePath, missing, forbidden, structural, mapping, overlap, stale = [], collisions = []) {
+function buildBlockReason(filePath, missing, forbidden, structural, mapping, overlap, stale = [], collisions = [], finalReport = []) {
   missing = missing || [];
   forbidden = forbidden || [];
   structural = structural || [];
@@ -854,8 +951,27 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
   overlap = overlap || [];
   stale = stale || [];
   collisions = collisions || [];
+  finalReport = finalReport || [];
   const name = path.basename(filePath || 'concept.html');
-  const onlyCollisions = collisions.length > 0 && !missing.length && !forbidden.length && !structural.length && !mapping.length && !overlap.length && !stale.length;
+  const onlyFinal = finalReport.length > 0 && !missing.length && !forbidden.length && !structural.length && !mapping.length && !overlap.length && !stale.length && !collisions.length;
+  if (onlyFinal) {
+    const lines = [`BLOCKED: the final report in "${name}" breaks the close-out authoring rules.`, ''];
+    finalReport.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
+    lines.push('');
+    if (finalReport.every(i => i.kind === 'final-report-skeleton')) {
+      lines.push('Replace every <!-- TODO: … --> of the report-only skeleton with the authored report — see');
+      lines.push('templates-final-report.md § Final-report section HTML.');
+      lines.push('The rest of the page passed — re-write the file and open it once this gate passes.');
+      return lines.join('\n');
+    }
+    lines.push('The Funde are plain <li> elements in the 🔍 fold with data-issue-title, data-issue-type,');
+    lines.push('data-oq-origin ("deferred" | "found"), data-route-default and data-route-reason — no');
+    lines.push('checkboxes; the panel is the only place to answer. See step5-update-page.md § Final-report');
+    lines.push('append and templates-final-report.md § Final-report section HTML.');
+    lines.push('The rest of the page passed — re-write the file and open it once this gate passes.');
+    return lines.join('\n');
+  }
+  const onlyCollisions = collisions.length > 0 && !finalReport.length && !missing.length && !forbidden.length && !structural.length && !mapping.length && !overlap.length && !stale.length;
   if (onlyCollisions) {
     const lines = [`BLOCKED: mock CSS in "${name}" collides with the engine chrome (P32).`, ''];
     collisions.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
@@ -868,7 +984,7 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
     lines.push('The rest of the page passed — re-write the file and open it once this gate passes.');
     return lines.join('\n');
   }
-  const onlyOverlap = overlap.length > 0 && !missing.length && !forbidden.length && !structural.length && !mapping.length;
+  const onlyOverlap = overlap.length > 0 && !finalReport.length && !missing.length && !forbidden.length && !structural.length && !mapping.length;
   if (onlyOverlap) {
     const lines = [`BLOCKED: a view in "${name}" re-asks the design choice.`, ''];
     overlap.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
@@ -885,6 +1001,11 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
   if (onlyMapping) lines.push(`BLOCKED: mapping spec problems in "${name}".`);
   else lines.push(`BLOCKED: "${name}" is not a valid live-bridge concept page.`);
   lines.push('');
+  if (finalReport.length) {
+    lines.push('Final-report authoring rules (validation-gate.md 33b / 37b):');
+    finalReport.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
+    lines.push('');
+  }
   if (collisions.length) {
     lines.push('Mock CSS collides with the engine chrome (P32):');
     collisions.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
@@ -966,6 +1087,7 @@ module.exports = {
   ENGINE,
   ENGINE_DESIGN,
   ENGINE_DOCUMENT,
+  ENGINE_FINAL,
   FORBIDDEN,
   isConceptHtml,
   isConceptSourceFile,
@@ -977,7 +1099,10 @@ module.exports = {
   findMappingIssues,
   findViewOverlap,
   findChromeCollisions,
+  findFinalReportIssues,
+  finalReportRegion,
   findDesignAuthoringWarnings,
+  findFinalReportPlaceholders,
   ENGINE_CLASSES,
   evaluate,
   buildBlockReason,
