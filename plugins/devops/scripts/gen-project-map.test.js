@@ -127,3 +127,29 @@ describe("gen-project-map project hints (.claude/project-map.hints.json)", () =>
     expect(repoWithDirs("c", "{not json")).toMatch(/^lib\/ {2}\(1\) — Library code$/m);
   });
 });
+
+describe("gen-project-map --check", () => {
+  it("exits 1 when missing or stale, 0 when current, and never writes", () => {
+    const base = mkdtempSync(join(tmpdir(), "gen-project-map-check-"));
+    try {
+      const root = join(base, "repo");
+      makeRepo(root);
+      const run = () => {
+        try {
+          execFileSync(process.execPath, [SCRIPT, "--check", root], { stdio: ["ignore", "pipe", "pipe"] });
+          return 0;
+        } catch (e) {
+          return e.status;
+        }
+      };
+      expect(run()).toBe(1);
+      expect(() => readFileSync(join(root, ".claude", "project-map.md"), "utf8")).toThrow();
+      execFileSync(process.execPath, [SCRIPT, root], { stdio: ["ignore", "pipe", "pipe"] });
+      expect(run()).toBe(0);
+      writeFileSync(join(root, ".claude", "project-map.md"), "stale\n");
+      expect(run()).toBe(1);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+});
