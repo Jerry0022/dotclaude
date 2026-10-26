@@ -23,7 +23,7 @@ describe("annotation bubble improved line (rounds 2+)", () => {
   });
 
   test("a click on a collapsed bubble's hint opens it", () => {
-    expect(src).toContain(`e.target.closest('.anno-bubble[data-open="false"] .anno-bubble-improved')`);
+    expect(src).toContain(`e.target.closest('.anno-bubble:not([data-open="true"]) .anno-bubble-improved')`);
   });
 
   test("submit scan adds an optional improved field", () => {

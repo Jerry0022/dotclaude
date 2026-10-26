@@ -4,8 +4,8 @@
 
 The document-round counterpart of the design round's own Ctrl + click pins
 (§ Variant overview JS, "User pins"). In a `decision` or `free` round
-(and on the question views of a design round, `section[data-view]`; never the
-final report, never the variant overview or a design screen) **Ctrl + click** — a long
+(and on the question views of a design round, `section[data-view]`, and
+the final report; never the variant overview or a design screen) **Ctrl + click** — a long
 press (~500 ms) on touch — on a paragraph, list item or table row sets the
 user's own note pin there. The pin looks and behaves like the design pin
 (same `.upin*` classes: note field, Enter saves, Esc discards, delete,

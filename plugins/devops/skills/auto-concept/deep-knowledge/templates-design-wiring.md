@@ -442,7 +442,7 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     }
     // The improved hint on a collapsed bubble is part of its one line: a
     // click there opens the bubble like the question does.
-    const hint = e.target.closest('.anno-bubble[data-open="false"] .anno-bubble-improved');
+    const hint = e.target.closest('.anno-bubble:not([data-open="true"]) .anno-bubble-improved');
     if (hint) { openBubble(hint.closest('[data-anno-bubble]').dataset.annoBubble); return; }
     // Clicking anywhere else in the bubble (the textarea, the attach slot)
     // must never close it; clicking anywhere outside the layer does.
