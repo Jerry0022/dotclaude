@@ -245,8 +245,7 @@ sit in the worktree.
 a timeout, or stopped by its own error on a file it cannot write (a smudge
 filter, a Windows file lock), it leaves part of the incoming tree on disk with
 HEAD and index on the old commit — on Windows also a stale `index.lock` that
-fails every later git write (observed 2026-09-26: a fast-forward killed by the
-15 s budget on a loaded machine). So the sync's writing calls (merge, abort,
+fails every later git write (e.g. a fast-forward killed by the 15 s budget). So the sync's writing calls (merge, abort,
 add, commit) run under their own ceiling — `DEVOPS_GIT_SYNC_WRITE_TIMEOUT_MS`,
 default 5 min; reads keep 15 s — and a failed merge without conflicted files
 goes through `hooks/lib/git-sync-recover.js`: a path whose content is exactly
