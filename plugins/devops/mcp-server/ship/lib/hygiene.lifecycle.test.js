@@ -4,9 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
-  scanRepo, planAutoClean, executeAutoClean, runHygiene, cardLines, landedVia, landingState,
+  scanRepo, planAutoClean, executeAutoClean, runHygiene as runHygieneAsync, cardLines, landedVia, landingState,
   reachableFromMerged, classifyUnits, findStalePrs, startOrphanScan, BACKUP_EXPIRY_DAYS, BACKUP_PATTERNS,
 } from "./hygiene.js";
+
+const runHygiene = (p) => runHygieneAsync({ sync: true, ...p });
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
