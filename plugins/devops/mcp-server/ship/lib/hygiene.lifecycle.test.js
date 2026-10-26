@@ -309,8 +309,7 @@ describe("main checkout on a landed local-only branch (#879) and landed worktree
     const { dir } = makeRepo();
     expect(scanRepo(dir, NOW).units.some((u) => u.kind === "main-checkout")).toBe(false);
     git(dir, "checkout", "-q", "-b", "feat/open");
-    commitAt(dir, "b.txt", "x
-", daysAgo(1));
+    commitAt(dir, "b.txt", "x\n", daysAgo(1));
     const cls = classify(dir, scanRepo(dir, NOW));
     expect(cls.mainOnLanded).toEqual([]);
     expect(cls.atRisk).toEqual([]);
@@ -342,8 +341,7 @@ describe("main checkout on a landed local-only branch (#879) and landed worktree
     fs.writeFileSync(path.join(wt, "new.txt"), "x\n");
     const wt2 = path.join(mkTmp("hylife-sib-"), "wt");
     git(dir, "worktree", "add", "-q", wt2, "-b", "feat/ahead", c1);
-    commitAt(wt2, "c.txt", "y
-", daysAgo(1));
+    commitAt(wt2, "c.txt", "y\n", daysAgo(1));
     const cls = classify(dir, scanRepo(dir, NOW));
     expect(cls.landedOutside).toEqual([]);
     expect(cls.removable).toEqual([]);

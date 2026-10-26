@@ -329,7 +329,7 @@ export function scanRepo(cwd, now = Date.now(), { tmpDir = os.tmpdir() } = {}) {
   // branches, so a landed one stayed invisible for weeks (#879). Reported, never removed.
   const mainWt = worktrees[0];
   if (mainWt && mainWt.branch && !mainWt.detached && !NEVER_DELETE.has(mainWt.branch) && mainWt.branch !== defaultBranch
-    && (gone.has(mainWt.branch) || gitOut(["rev-parse", "--verify", "-q", `refs/heads/${mainWt.branch}@{upstream}`], cwd) === null)) {
+    && (gone.has(mainWt.branch) || gitOut(["config", "--get", `branch.${mainWt.branch}.merge`], cwd) === null)) {
     units.push({ kind: "main-checkout", key: `main-checkout:${mainWt.branch}`, path: mainWt.path, branch: mainWt.branch, head: mainWt.head, ageDays: 0 });
   }
 
