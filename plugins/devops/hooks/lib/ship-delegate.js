@@ -159,6 +159,20 @@ function delegatedSpawnTooSmall({ prompt, tokens, env = process.env }) {
 }
 
 /**
+ * Does this Agent prompt hand the subagent a ship (an invocation shape, not a
+ * passing mention like "do not run do-ship") without the delegated protocol?
+ * A hand-rolled ship subagent runs without the brief/relay/card contract and
+ * without the Shipping title (#892). `--delegated` / `--resume` pass.
+ * @param {string} prompt
+ * @returns {boolean}
+ */
+function bareShipSpawn(prompt) {
+  const p = String(prompt || '');
+  const invokes = /Skill\(\s*["']?(?:devops:)?do-ship\b/i.test(p) || /(?:^|[\s"'`(])\/(?:devops:)?do-ship\b/im.test(p);
+  return invokes && !/--delegated\b/.test(p) && !/--resume\b/.test(p);
+}
+
+/**
  * The instruction block that replaces the inline ship mandate.
  * @param {{ tokens: number, skillArgs?: string, pluginRoot: string, env?: NodeJS.ProcessEnv }} o
  *   skillArgs — the do-ship argument the inline mandate would have passed
@@ -271,5 +285,5 @@ function shipResumeInstruction({ resume, delegate, pluginRoot, sessionId = '', n
 module.exports = {
   DEFAULT_THRESHOLD, SUBAGENT_FLOOR, SHIP_CALLS, INLINE,
   threshold, shipSavingEstimate, shouldDelegate, shipDelegateInstruction, shipResumeInstruction,
-  promotionOfArgs, shouldDelegateSkillCall, delegatedSpawnTooSmall, wantsCardData, CARD_DATA,
+  promotionOfArgs, shouldDelegateSkillCall, delegatedSpawnTooSmall, bareShipSpawn, wantsCardData, CARD_DATA,
 };

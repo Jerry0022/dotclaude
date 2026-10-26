@@ -244,12 +244,14 @@ function modelGateWillRefuse(input, cwd, transcriptPath, toolUseId) {
   }
 }
 
-/** True when pre.ship.delegate refuses this spawn (a delegated ship below the threshold). */
+/** True when pre.ship.delegate refuses this spawn (a bare ship spawn, or a delegated ship below the threshold). */
 function shipDelegateWillRefuse(prompt, transcriptPath) {
   try {
+    const D = require('../lib/ship-delegate');
+    if (D.bareShipSpawn(prompt)) return true;
     if (!/devops:do-ship/.test(prompt)) return false;
     const tokens = require('../lib/context-size').currentContextTokens(transcriptPath);
-    return require('../lib/ship-delegate').delegatedSpawnTooSmall({ prompt, tokens });
+    return D.delegatedSpawnTooSmall({ prompt, tokens });
   } catch {
     return false;
   }
