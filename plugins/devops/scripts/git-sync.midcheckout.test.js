@@ -29,6 +29,10 @@ import {
 
 afterAll(cleanupWorlds);
 
+const LAUNCHER = process.platform === "win32"
+  ? [path.join(process.env.ProgramFiles || "C:\\Program Files", "Git", "cmd", "git.exe")].find(f => fs.existsSync(f))
+  : undefined;
+
 const FILTER_JS = `
 const fs = require("fs");
 const [, , mode, marker, file] = process.argv;
@@ -113,10 +117,22 @@ describe("a merge that dies mid-checkout is never left half-applied", () => {
     await expectNextSyncLands(w);
   }, 180_000);
 
-  test("killed by the write timeout: no half-applied tree, no stale lock, the timeout named", async () => {
+  test("killed by the write timeout: no half-applied tree, no stale lock, the timeout named", () => killedByTimeout({}), 180_000);
+
+  // Git for Windows' cmd\git.exe is a launcher that runs mingw64\bin\git.exe as
+  // a child. The timeout killed only the launcher; the real git kept the index
+  // lock and the checkout going, and the recovery reported "another process
+  // holds index.lock" (the flake this test showed under load, whenever PATH
+  // resolved git to the launcher).
+  test.skipIf(!LAUNCHER)("killed through the cmd\\git.exe launcher: the real git is stopped too", () => {
+    const pathKey = Object.keys(process.env).find(k => k.toLowerCase() === "path") || "PATH";
+    return killedByTimeout({ [pathKey]: `${path.dirname(LAUNCHER)}${path.delimiter}${process.env[pathKey]}` });
+  }, 180_000);
+
+  async function killedByTimeout(env) {
     const w = await stage("block");
 
-    const report = await runSync(w.wt, path.join(w.root, "result"), { DEVOPS_GIT_SYNC_WRITE_TIMEOUT_MS: "4000" });
+    const report = await runSync(w.wt, path.join(w.root, "result"), { DEVOPS_GIT_SYNC_WRITE_TIMEOUT_MS: "4000", ...env });
 
     // The 55 s read budget (world env) does not bound the merge; the write one does.
     expect(report).toContain("✗ origin/main → feature: merge timed out after 4 s");
@@ -130,5 +146,5 @@ describe("a merge that dies mid-checkout is never left half-applied", () => {
     }
     await expectNothingHalfApplied(w);
     await expectNextSyncLands(w);
-  }, 180_000);
+  }
 });

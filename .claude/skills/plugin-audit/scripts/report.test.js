@@ -73,6 +73,15 @@ describe('plugin-audit report fragment', () => {
     }
   }, 60000);
 
+  it('shows blocked ship attempts per rule as frequencies, and nothing without the field', () => {
+    const withBlocks = { ...results, benefit: { ...results.benefit, shipBlocksByRule: { kind: 'frequency', note: 'nur Häufigkeit', byRule: { 'manual-pr-tools-deferred': 2, untagged: 1 }, total: 3 } } };
+    const out = renderFragment(withBlocks, sugg, []);
+    expect(out).toContain('Blockierte Ship-Versuche nach Regel');
+    expect(out).toMatch(/<code>manual-pr-tools-deferred<\/code><\/td><td>2</);
+    expect(out).toMatch(/<code>untagged<\/code><\/td><td>1</);
+    expect(renderFragment(results, sugg, [])).not.toContain('Blockierte Ship-Versuche');
+  });
+
   it('falls back to rule-based suggestions for red/yellow checks', () => {
     const fb = fallbackSuggestions(results);
     expect(fb.map((s) => s.id)).toEqual(['fix-ci', 'fix-references']);

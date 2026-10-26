@@ -14,74 +14,13 @@ the old version and the next session lands in a stale state ("devops nicht verf�
 > clone by forcing it onto `main`; the pin resets it by design. See the memory
 > `project_ring_model_local_stays_stable` for the full symptom/diagnosis note.
 
-## Why a post-ship self-update is needed here (and nowhere else)
+## Why, paths, path resolution
 
-A normal consumer project shipping its app has nothing to do with the devops plugin
-version, so the stock `/do-ship` never self-updates. This repo is the exception:
-the artifact it ships *is* the plugin running the ship.
-
-Without a post-ship sync, the update is left to the next `SessionStart`
-(`ss.plugin.update` hook). That path has two failure modes we keep hitting:
-
-1. **Double restart.** When `ss.plugin.update` discovers a *version change* at session
-   start, it rebuilds the cache to a new `installPath` and writes
-   `~/.claude/plugins/.mcp-stale.json`. The MCP servers were already spawned from the
-   old path → `pre.mcp.health` blocks every `ship_*` / completion-card / issues call
-   until the user restarts **again**. So: ship → restart → blocked → restart. Two restarts.
-2. **Cache/registry drift in worktree/autonomous sessions.** Observed on 2026-06-22:
-   marketplace clone pulled to `0.104.1`, but `installed_plugins.json` still pointed at
-   `cache\…\devops\0.104.0` (SHA of the previous commit) with **no** stale sentinel — so
-   the MCP tools silently ran against the old version. SessionStart did not reconcile it.
-
-Running the sync **at ship time** (in the session that is about to be discarded) moves
-the version-change rebuild into that throwaway session. The user's *next* restart then
-finds nothing to do (`ss.plugin.update` clears the sentinel when nothing moved) and lands
-directly on a clean, upgraded session. **Two restarts collapse into one.**
-
-## Single source of truth
-
-The finalizer delegates to the **same hook** as `/auto-update`:
-
-```
-node "${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js"
-```
-
-No update logic is duplicated here. The hook does: `git pull --ff-only` on every
-marketplace clone → cache rebuild (`fs.cpSync`, archive-mode for dotfiles) →
-`installed_plugins.json` registry update → MCP-stale sentinel on a real version move.
-For the detailed verify/report contract, see `skills/auto-update/SKILL.md`.
-
-## Paths
-
-| What | Path |
-|---|---|
-| Update hook | `${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js` |
-| Marketplace clone | `~/.claude/plugins/marketplaces/dotclaude` |
-| Plugin subdir in clone | `plugins/devops/.claude-plugin/plugin.json` |
-| Cache root | `~/.claude/plugins/cache/dotclaude/devops/<version>` |
-| Registry | `~/.claude/plugins/installed_plugins.json` (`devops@dotclaude`) |
-| Stale sentinel | `~/.claude/plugins/.mcp-stale.json` |
-
-## Path resolution — why Step 8 must not trust `${CLAUDE_PLUGIN_ROOT}`
-
-`${CLAUDE_PLUGIN_ROOT}` resolves to the **version-pinned** cache dir of the plugin
-the session was *started* with. A ship bumps the version, and any cache rebuild in
-between (parallel session's `ss.plugin.update`, or this repo's own finalizer) deletes
-the old version dir — the pinned path then points into the void (`MODULE_NOT_FOUND`,
-observed 2026-07-03 after shipping 0.107.0, where the cache had already moved
-0.106.0 → 0.107.0 mid-session). Step 8 therefore globs
-`~/.claude/plugins/cache/dotclaude/devops/*/…` fresh and falls back to the
-marketplace clone. Sync-already-done signature (another session raced ahead —
-nothing left to do): registry `installed_plugins.json`, marketplace
-`plugin.json`, and the cache dir all report the shipped version AND no
-`.mcp-stale.json` sentinel exists.
-
-## "falls vorhanden" — only when devops is actually installed
-
-If `~/.claude/plugins/marketplaces/dotclaude` does not exist, there is no installed
-devops to sync (e.g. running from a bare checkout without the plugin installed). The
-hook already no-ops in that case (`if (!existsSync(marketplacesDir)) exit 0`) — the
-finalizer just runs it and stays silent.
+Why this repo (and no other) self-updates after a ship, the double-restart and
+cache/registry-drift failure modes, the paths involved, and why Step 8 resolves the
+hook fresh instead of trusting `${CLAUDE_PLUGIN_ROOT}`:
+`deep-knowledge/self-update-rationale.md`. The finalizer delegates to the same hook as
+`/auto-update` (`hooks/session-start/ss.plugin.update.js`); no update logic lives here.
 
 ## deliver / verify
 
@@ -95,8 +34,8 @@ deliver: git+gh
 
 Adds one project-specific step to `/do-ship`: a **post-ship self-update** of the
 installed devops plugin. This repo ships the plugin that runs the ship, so the local
-install must be reconciled with what was just merged. See the sections above
-for the full rationale (double-restart problem, observed cache/registry drift).
+install must be reconciled with what was just merged. Full rationale (double-restart
+problem, observed cache/registry drift): `deep-knowledge/self-update-rationale.md`.
 
 This extension is **additive** — every plugin-default step still runs unchanged.
 
@@ -227,38 +166,10 @@ done
 echo "[finalizer] installed: $(installed)"
 ```
 
-**Verify, then retry — never trust one silent run.** Observed 2026-09-21 twice: the hook
-run seconds after `ship_release` returned (tag verified on the remote) exited 0 with no
-output and moved nothing — its `git fetch origin --tags` had not yet delivered the new
-tag (propagation delay, or a concurrent fetch/lock from the post-merge watcher or
-another session's SessionStart), so the resolved channel tag equalled HEAD and the hook
-had nothing to report. A second run a minute later synced. The loop above reads the
-clone's `plugin.json` after every run, refetches the tags explicitly and tries up to
-three times; the last `[finalizer] installed:` line is what Step 6.5's `userFinalTest`
-item must be based on (synced vs. the honest miss). Since 0.183.11 the hook itself
-prints one stderr line when the fetch fails or when `--force` resolves to the tag it is
-already on, so a no-op is diagnosable in the tool result. Since the channel-pin fix
-(2026-10-08) it also clears an orphaned 0-byte `.git/index.lock` before the pin and
-says so: any age ≥ 5 s when the process list shows no git that could own it, the
-10-min age rule only as the fallback when processes cannot be listed, and a pin that leaves HEAD off the tag
-prints one `pin to <tag> failed — HEAD stays on <tag>: <git error>` line. When the loop
-ends on a miss, carry that line into the card's honest-miss item — it is the cause.
-
-`--force` is mandatory here: since #324 the hook sits behind a 6 h cooldown at
-SessionStart (boot discipline — it must not race the MCP servers' connect
-window). The post-ship sync is the explicit path and bypasses that cooldown,
-exactly like `/auto-update`; without the flag a ship inside the window would be
-silently skipped and the local install would stay on the previous version.
-
-If the cache/registry/marketplace already report the just-shipped version and no
-`~/.claude/plugins/.mcp-stale.json` exists, another session raced ahead and the sync
-already happened — the first hook run then reports `already at HEAD` on stderr and the
-loop exits on its first check; verify the three paths (see the sections above) instead of
-treating the earlier `MODULE_NOT_FOUND`-style failure as fatal.
-
-The hook handles `git pull --ff-only` on the marketplace clone, cache rebuild to the
-shipped version, `installed_plugins.json` update, and the MCP-stale sentinel on a real
-version move.
+**Verify, then retry — never trust one silent run;** `--force` is mandatory (it bypasses
+the SessionStart cooldown); a pin failure prints `pin to <tag> failed …` — carry that line
+into the honest-miss item. Why, and the already-synced race signature:
+`deep-knowledge/step8-finalizer.md`.
 
 **Then deliver the card — and nothing after it.** The completion card (with the restart
 item from Step 6.5) is the last thing the user sees: call `show_widget` (Desktop) or output
