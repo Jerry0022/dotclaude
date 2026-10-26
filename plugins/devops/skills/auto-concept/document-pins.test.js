@@ -136,6 +136,36 @@ describe("document pins · set, save, payload", () => {
   }, BOOT_TIMEOUT);
 });
 
+describe("document pins · editor placement (#902)", () => {
+  test("the editor opens inside the clipping content column, not the viewport", async () => {
+    const { window, document } = await boot(fixture("decision"));
+    const sec = live(document);
+    sec.style.overflow = "auto";
+    const rect = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top });
+    const COL = rect(0, 0, 600, 500), PX = 560, PY = 440, W = 200, H = 100;
+    const orig = window.Element.prototype.getBoundingClientRect;
+    window.Element.prototype.getBoundingClientRect = function () {
+      if (this === sec) return rect(0, 0, 600, 500);
+      if (this.classList.contains("upin")) return rect(PX, PY, 26, 26);
+      if (this.classList.contains("upin-editor")) {
+        const wrap = this.parentElement;
+        const left = this.style.left ? PX + parseFloat(this.style.left) : wrap.dataset.flipX ? PX - 32 - W : PX + 32;
+        const top = wrap.dataset.flipY ? PY - 30 - H : PY;
+        return rect(left, top, W, H);
+      }
+      return orig.call(this);
+    };
+    window.innerWidth = 1400;
+    window.innerHeight = 900;
+    ctrlClick(window, sec.querySelector("section[id]:not([data-iteration]) p"));
+    const r = editorOf(document).getBoundingClientRect();
+    window.Element.prototype.getBoundingClientRect = orig;
+    expect(r.right).toBeLessThanOrEqual(COL.right - 8);
+    expect(r.left).toBeGreaterThanOrEqual(8);
+    expect(r.bottom).toBeLessThanOrEqual(COL.bottom - 8);
+  }, BOOT_TIMEOUT);
+});
+
 describe("document pins · eye, ? badges, frozen, design regression", () => {
   test("the eye shows once a pin exists and toggles body.anno-hidden", async () => {
     const { window, document } = await boot(fixture("decision"));

@@ -388,7 +388,7 @@ returns — the single-design page is untouched.
   }
   function writeState(it, st) {
     const ta = storeOf(it);
-    if (!ta) return;
+    if (!ta) return false;
     ta.value = JSON.stringify(normalise(st));
     ta.setAttribute('data-touched', 'true');
     // The `input` listeners of § State Persistence (saveState → bridge
@@ -396,6 +396,7 @@ returns — the single-design page is untouched.
     ta.dispatchEvent(new Event('input', { bubbles: true }));
     if (typeof _userInteracted !== 'undefined') { try { _userInteracted = true; } catch (e) {} }
     refresh();
+    return true;
   }
   // The favourite exists only where the designs are alternatives for the
   // same thing: `data-design-set="alternatives"` on the iteration. Unmarked
@@ -1343,8 +1344,8 @@ returns — the single-design page is untouched.
     // (and with it Esc-to-overview) only where there is something to
     // compare; the favourite only where the round says they are alternatives.
     metas = all.map(metaOf);
+    ensureStore(it);   // pins live in the store — single-design rounds too
     if (all.length >= 2) {
-      ensureStore(it);
       const ov = el('div', 'design-ov');
       ov.dataset.designOverview = '';
       ov.hidden = true;
@@ -1668,6 +1669,9 @@ returns — the single-design page is untouched.
     if (!t) { if (idx >= 0) st.pins.splice(idx, 1); }
     else if (idx >= 0) st.pins[idx].text = t;
     else st.pins.push({ ...pin, text: t });
+    // The write re-renders, so the draft must be gone by then — but it stays
+    // (and its editor with the typed note) when there is no store to take it.
+    if (!storeOf(it)) return;
     if (draft && draft.id === pin.id) draft = null;
     writeState(it, st);
   }
