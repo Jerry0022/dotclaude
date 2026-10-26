@@ -249,7 +249,7 @@ function shipDelegateWillRefuse(prompt, transcriptPath) {
   try {
     const D = require('../lib/ship-delegate');
     if (D.bareShipSpawn(prompt)) return true;
-    if (!/devops:do-ship/.test(prompt)) return false;
+    if (!D.mentionsShip(prompt)) return false;
     const tokens = require('../lib/context-size').currentContextTokens(transcriptPath);
     return D.delegatedSpawnTooSmall({ prompt, tokens });
   } catch {

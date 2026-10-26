@@ -119,6 +119,11 @@ describe("pre.ship.delegate — bare ship subagent (#892)", () => {
   });
   test("a passing mention of do-ship is no ship", () => {
     expect(run("Agent", { prompt: "QA brief: review the diff, don't run do-ship or ship anything." }, 450_000).code).toBe(0);
+    expect(run("Agent", { prompt: "Implement #12. Do not run /do-ship — the runner ships." }, 450_000).code).toBe(0);
+    expect(run("Agent", { prompt: "Fix the bug, ohne /devops:do-ship zu starten." }, 450_000).code).toBe(0);
+  });
+  test("a prefix-less delegated spawn still gets the below-threshold refusal", () => {
+    expect(run("Agent", { prompt: 'Use Skill("do-ship") with args "--delegated".' }, 115_000).code).toBe(2);
   });
   test("a resume spawn passes", () => {
     expect(run("Agent", { prompt: 'Use Skill("devops:do-ship") with args "--resume".' }, 450_000).code).toBe(0);

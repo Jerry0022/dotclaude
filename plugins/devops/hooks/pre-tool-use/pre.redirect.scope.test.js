@@ -45,6 +45,11 @@ describe("pre.redirect.scope — outsideTargets", () => {
   test("stripHeredocs keeps the command line", () => {
     expect(stripHeredocs("cat <<EOF > a.log\nbody > ../z\nEOF\necho done")).toBe("cat <<EOF > a.log\necho done");
   });
+
+  test("a here-string has no body: the following lines stay", () => {
+    const cmd = 'cat <<< "$x" > a.log\necho y > b.log';
+    expect(stripHeredocs(cmd)).toBe(cmd);
+  });
 });
 
 describe("pre.redirect.scope — hook process", () => {

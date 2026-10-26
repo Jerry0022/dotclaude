@@ -29,7 +29,8 @@ function stripHeredocs(cmd) {
   for (const line of String(cmd).split('\n')) {
     if (end !== null) { if (line.trim() === end) end = null; continue; }
     out.push(line);
-    const m = /<<-?\s*(?:"([^"]+)"|'([^']+)'|\\?([A-Za-z_]\w*))/.exec(line);
+    // (?<!<) / (?!<): a here-string `<<<` has no body to skip
+    const m = /(?<!<)<<(?!<)-?\s*(?:"([^"]+)"|'([^']+)'|\\?([A-Za-z_]\w*))/.exec(line);
     if (m) end = m[1] || m[2] || m[3];
   }
   return out.join('\n');

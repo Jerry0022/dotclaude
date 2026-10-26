@@ -56,7 +56,7 @@ function main(hook) {
         ].join('\n'),
       };
     }
-    if (!/devops:do-ship/.test(prompt)) return null;
+    if (!D.mentionsShip(prompt)) return null;
     if (D.delegatedSpawnTooSmall({ prompt, tokens })) return { block: tooSmallText(tokens, D.threshold(), formatTokens) };
     if (/--delegated\b/.test(prompt) && !/--resume\b/.test(prompt)) return { context: titleText() };
     return null;
