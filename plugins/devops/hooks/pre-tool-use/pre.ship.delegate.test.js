@@ -157,3 +157,44 @@ describe("pre.ship.delegate — concept finalize ship returns card data", () => 
     expect(r.stderr).not.toContain("--card-data");
   });
 });
+
+// Backlog run 2026-10-26: the Shipping-title context arrived with the spawn
+// result, so a delegated ship never showed Shipping in the sidebar.
+describe("pre.ship.delegate — Shipping title before a delegated spawn", () => {
+  const SET = "mcp__ccd_session_mgmt__set_session_title";
+  function titled(title, extra = []) {
+    const file = path.join(dir, "titled.jsonl");
+    fs.writeFileSync(file, [
+      JSON.stringify({ type: "user", message: { content: "ship it" } }),
+      JSON.stringify({ type: "custom-title", customTitle: title }),
+      JSON.stringify({ type: "assistant", message: { id: "m1", usage: { input_tokens: 2, cache_read_input_tokens: 450_000, cache_creation_input_tokens: 0, output_tokens: 50 } } }),
+      ...extra.map((e) => JSON.stringify(e)),
+    ].join("\n") + "\n");
+    return file;
+  }
+  function spawn(file) {
+    const r = spawnSync(process.execPath, [HOOK], {
+      cwd: dir, encoding: "utf8",
+      input: JSON.stringify({ cwd: dir, session_id: "s1", tool_name: "Agent", tool_input: { prompt: SPAWN }, transcript_path: file }),
+    });
+    return { code: r.status, stderr: r.stderr || "", stdout: r.stdout || "" };
+  }
+
+  test("a known non-Shipping title refuses the spawn with the exact set call", () => {
+    const r = spawn(titled("⏳ ➜ 🤖 Team ┃ Backlog"));
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("[pre.ship.delegate:title]");
+    expect(r.stderr).toContain(`${SET} {session_id:"self", title:"⏳ ➜ 🚀 Shipping ┃ Backlog"}`);
+  });
+
+  test("a set call to the Shipping title in the same message passes", () => {
+    const set = { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: SET, input: { session_id: "self", title: "⏳ ➜ 🚀 Shipping ┃ Backlog" } }] } };
+    expect(spawn(titled("⏳ ➜ 🤖 Team ┃ Backlog", [set])).code).toBe(0);
+  });
+
+  test("an already-Shipping title passes; a second refusal in one turn never happens", () => {
+    expect(spawn(titled("⏳ ➜ 🚀 Shipping ┃ Backlog")).code).toBe(0);
+    const refused = { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "a1", content: "[pre.ship.delegate:title] ..." }] } };
+    expect(spawn(titled("⏳ ➜ 🤖 Team ┃ Backlog", [refused])).code).toBe(0);
+  });
+});

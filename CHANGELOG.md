@@ -15,6 +15,18 @@ Follow-ups of the 0.320.0 plugin audit: leaner per-session context, fewer false 
 ### Dependencies
 - undici 7.30.1 and zod 4.6.7 (security fixes), eslint 10, @eslint/js 10, globals 17 and jsdom 30. jsdom 30 no longer focuses elements that are not rendered, the same as real browsers do. Three auto-concept tests now open their panel before they focus into it.
 
+## [0.324.1] — 2026-10-26
+
+Pins in the concept overview, no more parking of stale checkouts, and a ship that actually shows "Shipping" in the sidebar.
+
+### Added
+- **Pins in the concept overview (#887).** Ctrl+click (or an armed pin) on the overview's centre preview places an own pin: the spot is measured on the inert clone, the deepest node under it names the target, and the design opens on that page with the draft editor at the same relative position.
+- **Stale-checkout park guard (#877).** New `hooks/lib/stale-revert.js`: a changed path whose content (or deletion) only restores an earlier `origin/<default>` state within the last 300 commits counts as a revert; a change set of reverts without own content is stale (pure deletions never are). Session autosave never snapshots such files, and the new `scripts/park-check.js` gates the auto-cleanup WIP report's `commit` action with a factual subject (`wip: N file(s) differ from <base>`). Files are never discarded automatically. Rejected: `git apply -R --check` (misses partial reverts, needs a commit range).
+
+### Fixed
+- **Shipping title during a delegated ship.** `pre.ship.delegate` only added the title instruction after the spawn, so it arrived with the spawn result and the sidebar never showed Shipping. A delegated spawn under a known non-Shipping title, with no Shipping `set_session_title` in the same turn, is now refused once per turn with the exact call (`session_id: "self"`); an unknown title passes.
+- **Released title on the card.** An input-validation error of the title call (missing `session_id`) is the caller's: resend once with `session_id: "self"` instead of skipping silently.
+
 ## [0.324.0] — 2026-10-26
 
 Backlog batch of 18 issues. The completion card and its stop guard stop misreading the end of a turn, branch hygiene finds what was left behind after a landed ship without deleting anything unproven, and a handful of plugin surfaces (Quiet style, do-run questions, web guide, concepts) lose small papercuts. Everywhere a check could delete or deny, it nudges or warns instead (#875, #878, #874).

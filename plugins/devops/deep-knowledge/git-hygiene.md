@@ -267,5 +267,8 @@ branch whose tip subject says `ARCHIVED` counts as decided. A safety copy (autos
 `wip/`/`backup/`/`salvage/`/`salvage-land/`/`rescue/` ref) is a crash net,
 never a decision: after 3 days it counts until someone ships, parks it with a
 reason (`parked/<topic>`) or discards it. The autosave Stop line asks for that
-decision on the turn it saves (unless the turn shipped). See
+decision on the turn it saves (unless the turn shipped). Dirty files that only
+restore an older base state (a stale checkout) are never parked — not by the
+autosave, not by a cleanup commit (`hooks/lib/stale-revert.js`,
+`scripts/park-check.js`, #877). See
 `scheduled-tasks/orphan-scan/SKILL.md`.

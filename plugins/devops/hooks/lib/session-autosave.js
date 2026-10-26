@@ -1,6 +1,6 @@
 /**
  * @module session-autosave
- * @version 0.2.0
+ * @version 0.3.0
  * @description Safety net for a session worktree (.claude/worktrees/<name>)
  *   that ends a turn with uncommitted work or unpushed commits and no open PR.
  *
@@ -20,7 +20,9 @@
  *   checked first, stamped only after the save), and — for unpushed commits —
  *   an upstream that is gone, a landed HEAD or a merged PR for this head.
  *   Secrets, build output, tooling state and big files are left out (and
- *   reported in the message). Global deadline 35 s (hook timeout 45 s).
+ *   reported in the message). Dirty files that only restore an older state of
+ *   the default branch (a stale checkout, lib/stale-revert.js) are never
+ *   snapshotted: parking them preserved a pure revert of a release (#877). Global deadline 35 s (hook timeout 45 s).
  */
 
 const fs = require('fs');
@@ -29,6 +31,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { loadHygiene } = require('./integration-check');
 const { snapshotCommit, savablePaths, inProgress, isProtected, defaultBranch, git } = require('./wip-commit');
+const { staleRevert } = require('./stale-revert');
 
 const THROTTLE_MS = 10 * 60 * 1000;
 const FAIL_RETRY_MS = 2 * 60 * 1000;
@@ -156,6 +159,11 @@ async function autosave(o) {
     if (landed) unpushed = 0;
   }
   if (!paths.length && !unpushed) { stamp(true); return null; }
+
+  if (paths.length && !unpushed && def && staleRevert(top, paths, `origin/${def}`).stale) {
+    stamp(true);
+    return { message: `[devops] not autosaved: the ${paths.length} changed file(s) only restore an older origin/${def} state (stale checkout) — nothing to park.` };
+  }
 
   const ref = `refs/heads/parked/autosave/${m[1]}`;
   const short = ref.replace('refs/heads/', '');
