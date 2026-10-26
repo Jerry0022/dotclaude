@@ -40,6 +40,26 @@ export function shipBump(params) {
   } catch { return null; }
 }
 
+/**
+ * Where this ship's FULL suite runs: the param, else the checkpoint's
+ * ship_build step (ship_build reports fullSuiteVia "ci" | "local"). null when unknown.
+ */
+export function shipFullSuiteVia(params) {
+  if (params.fullSuiteVia) return params.fullSuiteVia;
+  try {
+    const { openCheckpoint } = createRequire(import.meta.url)("../../../hooks/lib/ship-checkpoint.js");
+    return openCheckpoint(params.cwd)?.steps?.build?.fullSuiteVia || null;
+  } catch { return null; }
+}
+
+/** The CI aggregator job that vouches for the full suite (.github/workflows/ci-suite.yml). */
+export const CI_SUITE_CHECK = "suite";
+
+/** Did the PR's `suite` check run AND pass? Absent, skipped, neutral or pending all read false. */
+export function ciSuitePassed(checks) {
+  return (Array.isArray(checks) ? checks : []).some((c) => c && c.name === CI_SUITE_CHECK && c.bucket === "pass");
+}
+
 /** Interactive = the caller says so AND no AFK lockout marker is live for this checkout. */
 export function isInteractiveShip(params) {
   if (params.interactive !== true) return false;
@@ -80,6 +100,7 @@ export const schema = z.object({
   ).describe("The requirements this ship delivers (same items as the completion card). The merge is REFUSED while one is still your own work: no status, partial/unmet without waitsOn, or waitsOn pending. Close the gap and call again; waitsOn user/deploy/external may ship. delivered-but-only-user-verifiable is met (check goes in userTest), not partial. Omitted: the not-met items of the last card for this cwd (≤ 12 h) are checked; pass current items once gaps are closed."),
   landingLock: z.boolean().default(true).describe("Serialize the landing (final base check to merge+tag) with other ships of the SAME repo via a per-repo lock in the git common dir. Fail-open: after landingLockWaitSec the ship proceeds without the lock. false (or env DEVOPS_SHIP_LANDING_LOCK=0) disables it. Result: landingLock { waitedMs, outcome }."),
   landingLockWaitSec: z.number().int().min(0).max(1800).default(600).describe("Max seconds to wait for another ship of this repo to finish landing before proceeding without the lock."),
+  fullSuiteVia: z.enum(["ci", "local"]).optional().describe("What ship_build reported as fullSuiteVia. \"ci\" → the merge needs the PR's `suite` check to have run and passed; absent/skipped/neutral (or a quota bypass) → only a green FULL local suite on exactly HEAD's tree lets it through, else reason \"full-suite-required\". Omitted → read from this ship's checkpoint."),
   acceptGaps: z.boolean().default(false).describe("Ship despite open own gaps. Only when the USER explicitly asked to ship as-is — never on your own judgement."),
 });
 
@@ -518,6 +539,8 @@ export async function handler(params) {
     }
     // Set when CI cannot vouch for the tree because of an account limit (M6).
     let quotaBypass = false;
+    let ciChecks = [];
+    const checksStartedAt = Date.now();
     if (!checksBypassed) {
       // #752: shared CI-quota memory. A record means some session already saw
       // the Actions minutes run out — probe briefly instead of waiting 10+ min.
@@ -541,7 +564,17 @@ export async function handler(params) {
       let checkResult = watchPRChecks(pr.number, opts, quota
         ? { timeoutSec: Math.min(checksTimeoutSec, 60), noChecksGraceMs: 0 }
         : { timeoutSec: checksTimeoutSec });
-      if (quota && (checkResult.status === "timeout" || checkResult.status === "no-checks")) {
+      let earlyQuotaSkip = false;
+      if (quota && quota.decision?.value !== "wait" && (checkResult.status === "timeout" || checkResult.status === "no-checks")) {
+        // A recorded block (early probe or an earlier ship) and no verdict in the
+        // short probe: do NOT sit in a 600 s watch for checks that cannot start.
+        // Take the account-limited path at once — the M6 gate below then lets the
+        // merge through only with a green FULL local suite on exactly this tree.
+        earlyQuotaSkip = true;
+        quotaBypass = true;
+        result.checksSkippedByQuota = true;
+        checkResult = { status: "passed", checks: [] };
+      } else if (quota && (checkResult.status === "timeout" || checkResult.status === "no-checks")) {
         // Checks are running or queued after all, or not registered yet right
         // after the push (the short probe has no #508 grace) — fall back to the
         // full wait, so a quota record never merges past an unseen check.
@@ -590,6 +623,8 @@ export async function handler(params) {
         // No stored decision: interactive ships ask first (A2); autonomous ones
         // take the #768 path below (account-limited, local gate → skipChecks).
         if (!decision && isInteractiveShip(params)) askQuotaDecision = true;
+      } else if (earlyQuotaSkip) {
+        quotaNote = { status: "skipped", quota: describeRecord(quota), reason: "CI-quota block recorded — checks not awaited (no 600 s wait); merge requires a green full local suite on this tree" };
       } else if (quota && (checkResult.status === "passed" || checkResult.status === "failed")) {
         // A check ran for real again (not a minutes block) — the block is over.
         // This PR's checks ran over main incl. every ship merged without CI —
@@ -602,7 +637,9 @@ export async function handler(params) {
         failed: checkResult.failed?.length || 0,
         pending: checkResult.pending?.length || 0,
         ...quotaNote,
+        waitedMs: Date.now() - checksStartedAt,
       };
+      ciChecks = checkResult.checks || [];
       // #508: watchPRChecks only reaches "no-checks" after riding out its grace
       // window when the initial probe found nothing — `noChecksReason` says so
       // instead of a silent verdict on a head that simply hasn't reported yet.
@@ -654,15 +691,24 @@ export async function handler(params) {
     // M6 hard invariant: never merge a tree no full suite vouched for. With the
     // CI suite workflow present, an account limit means CI cannot run it - then
     // only a green FULL local run on exactly this tree lets the merge through.
-    if (quotaBypass && hasCiSuite(cwd)) {
+    // Second leg: ship_build deferred the full suite to CI (fullSuiteVia "ci") — then
+    // the PR's `suite` check must have run AND passed. Absent, skipped, neutral or a
+    // quota bypass (checks replaced) → the same local-green fallback, else no merge.
+    const suiteViaCi = shipFullSuiteVia(params) === "ci";
+    const suiteOk = suiteViaCi && !quotaBypass && ciSuitePassed(ciChecks);
+    if (suiteOk) result.fullSuiteCi = { check: CI_SUITE_CHECK, passed: true };
+    if ((quotaBypass && hasCiSuite(cwd)) || (suiteViaCi && !suiteOk)) {
       const green = await localFullGreen(cwd);
       if (!green) {
+        const why = quotaBypass
+          ? `CI cannot run the "suite" check (GitHub account limit)`
+          : `ship_build left the full suite to CI, but the PR's "suite" check did not run and pass (${checksBypassed ? "checks skipped" : "absent, skipped or neutral"})`;
         result.success = false;
         result.reason = "full-suite-required";
         result.fullSuiteRequired = true;
         result.delivered = "none";
         result.error =
-          `CI cannot run the "suite" check (GitHub account limit) and no green FULL local suite exists for this tree. ` +
+          `${why} and no green FULL local suite exists for this tree. ` +
           `PR #${pr.number} left OPEN, NOT merged. Run ship_build with testScope:"full" on the current HEAD, then call ship_release again.`;
         return result;
       }

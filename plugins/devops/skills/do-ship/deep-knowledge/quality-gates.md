@@ -103,3 +103,43 @@ artifacts). Same source = same hash. Used for:
 - Test deduplication
 - Completion card title
 - Build log entry
+
+## Early CI-quota probe (before the test scope is chosen)
+
+Exhausted GitHub Actions minutes are detected up front, not after a 10-minute
+wait. `lib/ci-quota-probe.js` (`probeCiQuota`) runs as the first stage of
+`ship_run` after preflight, before `ship_build` picks its test scope:
+
+- It reads the repo's newest workflow runs (`actions/runs?per_page=5`), their
+  jobs and each failed job's annotations, and classifies them with the same
+  markers `ship_release` uses after the wait (`ci-account-limits.js`
+  `LIMIT_PATTERNS`, kind `actions-minutes`: "job was not started because",
+  spending limit, failed account payments, billing lock).
+- **exhausted** → `recordBlock` in the shared CI-quota store
+  (`~/.claude/devops-ci-quota.json`). `ship_build` then runs the FULL local
+  suite (`testScope: "full"`, `fullSuiteVia: "local"`), and `ship_release`
+  does not sit in the CI watch (see release-results.md § Account-limited CI).
+- **healthy** → a run that started normally. When it is newer than a recorded
+  block, the block is cleared: CI comes back on its own (the monthly reset in
+  `ci-quota.js` still applies too).
+- **unknown** → `gh` missing, offline, no runs, any API error: never a block.
+- The verdict is cached 10 minutes per account (`readProbe` / `writeProbe`).
+  `DEVOPS_CI_QUOTA_PROBE=0` switches the probe off.
+- **Early-push re-probe.** When the build ran related-only tests
+  (`fullSuiteVia: "ci"`) and preflight opened the early draft PR, `ship_run`
+  probes again (cache bypassed, that branch's runs only). If the draft PR's
+  first runs came back billing-blocked, the block is recorded and the build
+  reruns as the full local suite before release.
+- The billing endpoint is not used: it needs a user-scoped token and cannot
+  see spending limits, so run evidence is the only reliable signal.
+
+## Full-suite invariant at the merge
+
+Never a merge without one green full suite on the exact tree. When
+`ship_build` reported `fullSuiteVia: "ci"` (param `fullSuiteVia` of
+`ship_release`, else the checkpoint's build step), `ship_release` requires
+the PR's aggregator check `suite` to have run and passed. Absent, skipped,
+neutral or pending, `skipChecks`, or a quota bypass → only `findFullGreen`
+for HEAD's tree lets the merge through; otherwise `reason:
+"full-suite-required"`, PR left open. `ship_run` answers that once itself
+(one full local build, then release again).

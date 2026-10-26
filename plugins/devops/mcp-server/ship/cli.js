@@ -43,6 +43,7 @@ import { schema as releaseSchema, handler as releaseHandler } from "./tools/rele
 import { schema as promoteSchema, handler as promoteHandler } from "./tools/promote.js";
 import { schema as cleanupSchema, handler as cleanupHandler } from "./tools/cleanup.js";
 import { schema as hygieneSchema, handler as hygieneHandler } from "./tools/hygiene.js";
+import { schema as runSchema, handler as runHandler } from "./tools/run.js";
 
 export const TOOLS = {
   ship_preflight: [preflightSchema, preflightHandler],
@@ -52,6 +53,7 @@ export const TOOLS = {
   ship_promote: [promoteSchema, promoteHandler],
   ship_cleanup: [cleanupSchema, cleanupHandler],
   ship_hygiene: [hygieneSchema, hygieneHandler],
+  ship_run: [runSchema, runHandler],
 };
 
 function fail(code, message) {

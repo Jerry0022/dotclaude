@@ -18,7 +18,7 @@ describe("ship-delegate — when", () => {
 
   test("at or above the threshold it is delegated — every time, no second prompt", () => {
     expect(shouldDelegate({ tokens: DEFAULT_THRESHOLD, prompt: "/do-ship", env })).toBe(true);
-    expect(shouldDelegate({ tokens: 434_000, prompt: "ship", env })).toBe(true);
+    expect(shouldDelegate({ tokens: 734_000, prompt: "ship", env })).toBe(true);
   });
 
   test("--inline and the old --no-compact keep one ship inline", () => {
@@ -48,9 +48,9 @@ describe("ship-delegate — when", () => {
   // 72–75 k and writes that context to the cache once; break-even near 170 k,
   // +28 % cost at 115 k. The default keeps a margin so delegating never costs more.
   test("the default sits above break-even and counts the subagent's cache write", () => {
-    expect(DEFAULT_THRESHOLD).toBe(250_000);
+    expect(DEFAULT_THRESHOLD).toBe(600_000);
     expect(SUBAGENT_FLOOR).toBe(75_000);
-    expect(shipSavingEstimate(DEFAULT_THRESHOLD)).toBe("≈ 2.4 M");
+    expect(shipSavingEstimate(DEFAULT_THRESHOLD)).toBe("≈ 10 M");
     expect(shipSavingEstimate(800_000)).toBe("≈ 15 M");
     expect(shipSavingEstimate(140_000)).toBe("≈ 0.0 M");
     expect(shipSavingEstimate(20_000)).toBe("≈ 0.0 M");
@@ -114,8 +114,8 @@ describe("ship-delegate — Skill-tool ships", () => {
 
   test("a large-context do-ship Skill call goes to a subagent, whatever its free-text args", () => {
     expect(shouldDelegateSkillCall({ skill: "devops:do-ship", args: "", tokens: 951_000, env })).toBe(true);
-    expect(shouldDelegateSkillCall({ skill: "do-ship", args: "--queued=1/4 --keep  (backlog-runner, issue #583)", tokens: 286_000, env })).toBe(true);
-    expect(shouldDelegateSkillCall({ skill: "devops:do-ship", args: "--from=auto-concept finalize part C", tokens: 573_000, env })).toBe(true);
+    expect(shouldDelegateSkillCall({ skill: "do-ship", args: "--queued=1/4 --keep  (backlog-runner, issue #583)", tokens: 686_000, env })).toBe(true);
+    expect(shouldDelegateSkillCall({ skill: "devops:do-ship", args: "--from=auto-concept finalize part C", tokens: 873_000, env })).toBe(true);
   });
 
   test("the subagent itself, a resume, --inline, other skills and small contexts pass", () => {
@@ -139,7 +139,7 @@ describe("ship-delegate — Skill-tool ships", () => {
   test("a delegated spawn below the threshold costs more than inline and is stopped", () => {
     const spawn = 'Use Skill("devops:do-ship") with args "--delegated". session_id: s. lang: de.';
     expect(delegatedSpawnTooSmall({ prompt: spawn, tokens: 115_000, env })).toBe(true);
-    expect(delegatedSpawnTooSmall({ prompt: spawn, tokens: 400_000, env })).toBe(false);
+    expect(delegatedSpawnTooSmall({ prompt: spawn, tokens: 700_000, env })).toBe(false);
     expect(delegatedSpawnTooSmall({ prompt: spawn, tokens: null, env })).toBe(false);
     expect(delegatedSpawnTooSmall({ prompt: spawn.replace("--delegated", "--delegated --resume"), tokens: 115_000, env })).toBe(false);
     expect(delegatedSpawnTooSmall({ prompt: "Review the diff", tokens: 115_000, env })).toBe(false);

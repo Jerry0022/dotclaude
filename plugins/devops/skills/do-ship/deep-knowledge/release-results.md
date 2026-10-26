@@ -98,6 +98,17 @@ a ship. Prevention runs on every ship: `ship_preflight.workflowHygiene`
 - Stored `wait`: `success: false`, `quotaBlocked: true`, `checks.status: "quota-blocked"`; `quotaDecision: "revoke"` forgets the answer.
 - Expiry: the block at the reset date (unknown: 1st of next month 00:00 UTC) or as soon as a check on the account runs again without a minutes verdict (`checks.quotaCleared: true` — that run covered everything merged without CI); the answer at its `validUntil`. A real red check is never skipped, stored decision or not.
 
+### Recorded quota block — no CI wait
+
+With a CI-quota block on record (early probe, or an earlier ship) and no
+verdict inside the short 60 s probe, `ship_release` no longer falls back to the
+600 s `gh pr checks --watch`. It takes the account-limited path at once:
+`checks.status: "skipped"`, `checksSkippedByQuota: true`, reason "checks not
+awaited". The full-suite gate then merges only with a green full local suite
+on exactly this tree (`fullSuiteLocal`), else `reason: "full-suite-required"`.
+A stored `wait` decision keeps the old full wait. `checks.waitedMs` reports
+how long the CI watch took (M0 telemetry).
+
 ## bump "none" — no ring tag
 
 A ship whose `ship_version_bump` ran with `bump: "none"` keeps the version, and

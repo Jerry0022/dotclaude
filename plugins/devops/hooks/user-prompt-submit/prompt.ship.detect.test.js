@@ -120,10 +120,10 @@ describe("prompt.ship.detect — delegated ship on a large context", () => {
   });
 
   test("large context: the ship goes to a subagent, the user types nothing extra", () => {
-    const r = runHook({ prompt: "/do-ship", transcript_path: transcript(434_000) });
+    const r = runHook({ prompt: "/do-ship", transcript_path: transcript(734_000) });
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("[ship-delegate]");
-    expect(r.stdout).toContain("434 k");
+    expect(r.stdout).toContain("734 k");
     expect(r.stdout).toContain('subagent_type: "general-purpose"');
     expect(r.stdout).toContain('Skill("devops:do-ship") with args "--delegated"');
     expect(r.stdout).toContain("render_completion_card");
@@ -133,7 +133,7 @@ describe("prompt.ship.detect — delegated ship on a large context", () => {
   });
 
   test("an affirmation to a ship-asking card is a ship too, and is delegated the same way", () => {
-    const t = transcript(500_000);
+    const t = transcript(800_000);
     append(t, textCard("👉 📦 Ready — Shippen?"));
     const r = runHook({ prompt: "ja", transcript_path: t });
     expect(r.stdout).toContain("[ship-delegate]");
@@ -141,7 +141,7 @@ describe("prompt.ship.detect — delegated ship on a large context", () => {
 
   test("--inline (and the old --no-compact) keeps the large-context ship here", () => {
     for (const prompt of ["/do-ship --inline", "/do-ship --no-compact"]) {
-      const r = runHook({ prompt, transcript_path: transcript(434_000) });
+      const r = runHook({ prompt, transcript_path: transcript(734_000) });
       expect(r.stdout).toContain(INLINE);
       expect(r.stdout).not.toContain("[ship-delegate]");
     }
@@ -160,7 +160,7 @@ describe("prompt.ship.detect — delegated ship on a large context", () => {
   });
 
   test("delegation needs no second prompt: every large ship prompt is delegated", () => {
-    const t = transcript(434_000);
+    const t = transcript(734_000);
     expect(runHook({ prompt: "ship", transcript_path: t }).stdout).toContain("[ship-delegate]");
     expect(runHook({ prompt: "ship", transcript_path: t }).stdout).toContain("[ship-delegate]");
   });
@@ -415,7 +415,7 @@ describe("prompt.ship.detect — resume an interrupted ship", () => {
 
   test("a large context resumes it in the subagent with the stored brief and decisions", async () => {
     await checkpoint({ brief: "Intent: X", decision: "minor" });
-    const r = runHook({ prompt: "Continue from where you left off.", transcript_path: transcript(434_000) });
+    const r = runHook({ prompt: "Continue from where you left off.", transcript_path: transcript(734_000) });
     expect(r.stdout).toContain('with args "--delegated --resume"');
     expect(r.stdout).toContain("The brief is stored in the ship checkpoint");
     expect(r.stdout).toContain('"Bump?" → minor');
@@ -436,7 +436,7 @@ describe("prompt.ship.detect — resume an interrupted ship", () => {
     await checkpoint();
     const cp = (await import("../lib/ship-checkpoint.js")).default;
     cp.recordShipStep("ship_release", { cwd }, { success: true, pr: 7, merged: "main", tag: "v1.1.0", tagVerified: true });
-    const r = runHook({ prompt: "weiter", transcript_path: transcript(434_000) });
+    const r = runHook({ prompt: "weiter", transcript_path: transcript(734_000) });
     expect(r.stdout).toContain("[ship-cleanup-leftover]");
     expect(r.stdout).toContain("keep: true");
     expect(r.stdout).not.toContain("[ship-resume]");

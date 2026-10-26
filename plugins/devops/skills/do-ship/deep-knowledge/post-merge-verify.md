@@ -16,7 +16,7 @@ the browser check for the high-fidelity "is the version users see actually the
 new one" assertion before declaring done. A client-rendered SPA version, a
 `prerelease`-flagged release that leaves the prior version as `/releases/latest`,
 or a download page gated behind a DB row are all invisible to a raw HTTP probe
-but caught by the browser check. See `SKILL.md → Step 4c`.
+but caught by the browser check. See `manual-pipeline.md → Step 4c`.
 
 The post-merge watcher reads the flat `verify:` block **after** GitHub Actions on
 the merge commit have gone green, and probes the configured target. Result lands
