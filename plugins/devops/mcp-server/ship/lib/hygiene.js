@@ -293,7 +293,8 @@ export function scanRepo(cwd, now = Date.now(), { tmpDir = os.tmpdir() } = {}) {
   }
 
   const units = [];
-  const linked = worktrees.slice(1).filter((w) => !w.prunable && normPath(w.path) !== current);
+  // a registration whose folder is gone (e.g. a locked, aborted temp worktree) is not work to land
+  const linked = worktrees.slice(1).filter((w) => !w.prunable && normPath(w.path) !== current && fs.existsSync(w.path));
   const shas = [...new Set(linked.map((w) => w.head).filter(Boolean))];
   const commitTime = new Map();
   if (shas.length) {

@@ -170,6 +170,7 @@ function discoverParts(cwd, { slug, integrationRef } = {}) {
   const seen = new Set();
   for (const w of wts) {
     if (norm(w.path) === main || norm(w.path) === self) continue;
+    if (!fs.existsSync(w.path)) continue; // registration without a folder (locked leftovers)
     if (w.branch && w.branch === integ) continue;
     const isAgent = /\/worktrees\/agent-[^/]+$/.test(w.path.replace(/\\/g, '/'));
     const owned = carriesSlug(w.branch, slug);
