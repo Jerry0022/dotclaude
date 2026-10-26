@@ -6,7 +6,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { execSync, execFileSync } from "node:child_process";
-import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch } from "./github.js";
+import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch, markPRReady } from "./github.js";
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -187,6 +187,36 @@ describe("mergePR — genuinely not merged still throws", () => {
   });
 });
 
+describe("draft PRs", () => {
+  test("createPR draft:true adds --draft; default does not", () => {
+    execFileSync.mockReturnValue("https://github.com/o/r/pull/5");
+    createPR({ title: "T", body: "B", base: "main", head: "f", draft: true });
+    expect(execFileSync.mock.calls[0][1]).toContain("--draft");
+    createPR({ title: "T", body: "B", base: "main", head: "f" });
+    expect(execFileSync.mock.calls[1][1]).not.toContain("--draft");
+  });
+
+  test("findExistingPR reports isDraft", () => {
+    execFileSync.mockReturnValue(JSON.stringify([{ number: 7, url: "u", mergeable: "UNKNOWN", isDraft: true }]));
+    expect(findExistingPR({ base: "main", head: "f" }).isDraft).toBe(true);
+  });
+
+  test("markPRReady runs gh pr ready, then edits title/body via stdin", () => {
+    execFileSync.mockReturnValue("");
+    expect(markPRReady(7, { title: "NEW", body: "BODY" }, { cwd: "/r" })).toEqual({ ok: true });
+    expect(execFileSync.mock.calls[0][1]).toEqual(["pr", "ready", "7"]);
+    expect(execFileSync.mock.calls[1][1]).toEqual(["pr", "edit", "7", "--title", "NEW", "--body-file", "-"]);
+    expect(execFileSync.mock.calls[1][2].input).toBe("BODY");
+  });
+
+  test("markPRReady never throws: ready failure and edit failure are reported", () => {
+    execFileSync.mockImplementationOnce(() => { throw new Error("no gh"); });
+    expect(markPRReady(7, {}, {})).toEqual({ ok: false, error: "no gh" });
+    execFileSync.mockReturnValueOnce("").mockImplementationOnce(() => { throw new Error("edit boom"); });
+    expect(markPRReady(7, { title: "T" }, {})).toEqual({ ok: true, editError: "edit boom" });
+  });
+});
+
 describe("findExistingPR", () => {
   test("returns null when no PR matches", () => {
     execFileSync.mockReturnValue("[]");
@@ -198,7 +228,7 @@ describe("findExistingPR", () => {
       { number: 7, url: "u", mergeable: "MERGEABLE" },
     ]));
     expect(findExistingPR({ base: "main", head: "feat/x" })).toEqual({
-      number: 7, url: "u", mergeable: "MERGEABLE",
+      number: 7, url: "u", mergeable: "MERGEABLE", isDraft: false,
     });
   });
 

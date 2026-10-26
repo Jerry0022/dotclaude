@@ -1,0 +1,79 @@
+name: Full suite
+
+# The FULL vitest suite as a sharded CI check. ship_build then runs only lint +
+# the tests related to the diff locally (`testScope: "related"`), and
+# ship_release waits for the aggregate check named `suite` before merging.
+#
+# Required-check names (keep stable, release looks for them):
+#   "suite"                  aggregate over all shards - the one to require
+#   "suite (shard N/4)"      one per shard
+#
+# When GitHub Actions minutes are exhausted these jobs never start (or fail with
+# an account-limit annotation). That is NOT a pass: ship_build/ship_release then
+# fall back to a full local run on the exact tree (test-results.js findFullGreen)
+# - see plugins/devops/skills/do-ship/deep-knowledge/quality-gates.md.
+#
+# vitest.suite-lock.mjs skips its machine-wide lock when CI is set.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-suite-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shards:
+    name: suite (shard ${{ matrix.shard }}/4)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Tests build throwaway repos and commit/merge in them; a fresh runner has
+      # no git identity, and `git merge` refuses without one.
+      - name: Git identity
+        run: |
+          git config --global user.name "ci"
+          git config --global user.email "ci@users.noreply.github.com"
+          git config --global init.defaultBranch main
+
+      - name: Run suite shard
+        # The runner's TEMP is an 8.3 short path (RUNNER~1); tests compare it
+        # with realpath'd long paths. runner.temp is a long path.
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: npx vitest run --shard=${{ matrix.shard }}/4
+
+  suite:
+    name: suite
+    needs: shards
+    # always(): a skipped/cancelled/failed shard must turn this red, not skip it.
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: All shards green
+        run: |
+          if [ "${{ needs.shards.result }}" != "success" ]; then
+            echo "suite shards: ${{ needs.shards.result }}"
+            exit 1
+          fi

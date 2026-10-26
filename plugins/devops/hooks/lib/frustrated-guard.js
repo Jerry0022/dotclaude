@@ -133,7 +133,9 @@ function isAllowedWritePath(p, opts = {}) {
   // a project that itself lives in the temp dir (evals, scratch repos) keeps its source protected
   const inProject = abs === cwd || abs.startsWith(cwd + '/');
   for (const t of inProject ? [] : tmpRoots(opts)) {
-    const tr = lower(path.resolve(fromMsys(t)));
+    // resolved against the same base as `abs`: a drive-relative root ("/tmp")
+    // would otherwise land on the process's drive and the target on the repo's
+    const tr = lower(path.resolve(opts.cwd || process.cwd(), fromMsys(t)));
     if (abs === tr || abs.startsWith(tr + '/')) return true;
   }
   const segs = abs.split('/');

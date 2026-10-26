@@ -13,7 +13,9 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compareVersions } from "../lib/channels.js";
 import { findGreen, recordResult, treeKey, usualDurationMs } from "../lib/test-results.js";
+import { quotaKey, readRecord } from "../lib/ci-quota.js";
 import {
+  ciSuiteWorkflowPresent, changedVsBase, decideTestScope, hasGithubOrigin,
   buildLoad, buildPreRunWarning, classifyFailure, isEnvCleanupFailure, parseFailingTests, parseLockWait, readLockHolder, sampleCpu,
 } from "../lib/test-step.js";
 
@@ -121,6 +123,7 @@ export const schema = z.object({
   stepTimeoutSec: z.number().int().min(30).max(1800).default(DEFAULT_STEP_TIMEOUT_SEC).describe("Per-step limit (build, lint, test) in seconds. Default 300. A step stopped by it fails with failure: 'timeout' and the result names the limit (timeoutHit) — a harness stop, not a red test."),
   buildIdOnly: z.boolean().default(false).describe("Skip build, only compute build-ID"),
   reuseGreen: z.boolean().default(true).describe("Skip the test step when a green run of the same testCmd on the identical tree (git tree hash) is recorded and younger than 24 h — the result then carries testsReused. false = always run."),
+  ciSuite: z.boolean().nullable().default(null).describe("Does a CI check run the FULL suite on the PR (job `suite`)? null = detect (.github/workflows declares job `suite` + github.com origin). true = assume it, false = never. With a CI suite and no known-exhausted Actions quota, the test step runs only the tests related to the diff (result: testScope \"related\", fullSuiteVia \"ci\"); otherwise the full suite runs locally and is recorded (testScope \"full\", fullSuiteVia \"local\"). An explicit testCmd always runs as given."),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
 
@@ -224,7 +227,8 @@ function runTest(cmd, cwd, limitSec) {
  * failure, failure classification and the load signal (#762). Returns
  * { step, extra } — extra holds testsReused / load / failureKind / failingTests.
  */
-async function testStep(testCmd, cwd, limitSec, reuseGreen) {
+async function testStep(testCmd, cwd, limitSec, reuseGreen, planScope = null) {
+  const fullScope = (reason) => ({ testScope: "full", fullSuiteVia: "local", testScopeReason: reason });
   const key = treeKey(cwd);
   if (reuseGreen !== false && key) {
     const hit = findGreen(cwd, { treeHash: key.treeHash, testCmd });
@@ -234,9 +238,31 @@ async function testStep(testCmd, cwd, limitSec, reuseGreen) {
           step: "test", cmd: testCmd, success: true, reused: true,
           output: `reused green run (${hit.source}, ${hit.at}) on tree ${key.treeHash.slice(0, 12)} — not re-run`,
         },
-        extra: { testsReused: { treeHash: key.treeHash, at: hit.at, source: hit.source, testCmd: hit.testCmd } },
+        extra: { ...fullScope("reused a recorded green full run on this exact tree"), testsReused: { treeHash: key.treeHash, at: hit.at, source: hit.source, testCmd: hit.testCmd } },
       };
     }
+  }
+
+  const plan = planScope ? planScope() : null;
+  const scopeExtra = plan
+    ? { testScope: plan.scope, fullSuiteVia: plan.fullSuiteVia, testScopeReason: plan.reason, ...(plan.files ? { relatedFiles: plan.files } : {}) }
+    : fullScope("full suite run locally");
+  if (plan?.scope === "related") {
+    // Lint ran before; the full suite is the CI `suite` check. Never recorded
+    // as a full run, never reuses one.
+    if (plan.empty) {
+      return { step: { step: "test", cmd: testCmd, success: true, skipped: true, output: plan.reason }, extra: scopeExtra };
+    }
+    const relStarted = Date.now();
+    const res = runTest(plan.cmd, cwd, limitSec);
+    const { full, ...stepRes } = res;
+    const step = { step: "test", cmd: plan.cmd, ...stepRes, durationMs: Date.now() - relStarted };
+    const extra = { ...scopeExtra };
+    if (!res.success && !res.failure) {
+      extra.failingTests = parseFailingTests(full);
+      extra.failureKind = classifyFailure(full, extra.failingTests);
+    }
+    return { step, extra };
   }
 
   const holderAtStart = readLockHolder();
@@ -259,7 +285,7 @@ async function testStep(testCmd, cwd, limitSec, reuseGreen) {
   const { full, ...stepRes } = res;
   const step = { step: "test", cmd: testCmd, ...stepRes, durationMs };
   if (retried) step.retried = retried;
-  const extra = {};
+  const extra = { ...scopeExtra };
   if (preRun) extra.preRunWarning = preRun;
   if (load) extra.load = load;
 
@@ -274,6 +300,11 @@ async function testStep(testCmd, cwd, limitSec, reuseGreen) {
     extra.failureKind = classifyFailure(full, extra.failingTests);
   }
   return { step, extra };
+}
+
+/** A CI-quota record (GitHub Actions minutes out, #752) is active for this repo's account. */
+function ciQuotaExhausted(cwd) {
+  try { return !!readRecord(quotaKey(cwd)); } catch { return false; }
 }
 
 function getBuildId(cwd) {
@@ -362,7 +393,16 @@ export async function handler(params) {
 
   // Tests
   if (testCmd) {
-    const { step: testResult, extra } = await testStep(testCmd, cwd, limitSec, params.reuseGreen);
+    // Related-only locally needs the auto-detected command: an explicit testCmd runs as given.
+    const planScope = params.testCmd != null ? null : () => decideTestScope({
+      ciSuite: params.ciSuite ?? null,
+      workflowPresent: ciSuiteWorkflowPresent(cwd),
+      githubOrigin: hasGithubOrigin(cwd),
+      quotaExhausted: ciQuotaExhausted(cwd),
+      changed: changedVsBase(cwd),
+      cwd,
+    });
+    const { step: testResult, extra } = await testStep(testCmd, cwd, limitSec, params.reuseGreen, planScope);
     testExtra = extra;
     steps.push(testResult);
     if (!testResult.success) {

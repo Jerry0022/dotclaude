@@ -11,7 +11,8 @@
  * `waited 30 min — running anyway`. Repos without it simply yield no lock data.
  */
 
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { cpus, loadavg, platform, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -181,5 +182,151 @@ export function buildPreRunWarning({ holder = null, cpu = null, usualMs = null }
   return {
     holder, heldMs: holder?.heldMs ?? null, cpuBusyPct: cpu?.busyPct ?? null, usualMs: usualMs ?? null, eta,
     note: `Machine under load before the test step: ${parts.join("; ")}. ETA: ${eta}.`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Test scope: related-only locally, full suite as the CI check (M6)
+// ---------------------------------------------------------------------------
+
+/** Job key the CI full-suite workflow must declare (.github/workflows/ci-suite.yml). */
+export const CI_SUITE_JOB = "suite";
+/** A related-run command line beyond this length (Windows caps ~8191) falls back to the full suite. */
+const MAX_RELATED_CMD = 6000;
+
+function gitOut(cwd, args) {
+  return execFileSync("git", args, {
+    windowsHide: true, cwd, encoding: "utf8", timeout: 30_000, maxBuffer: 16 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+/** True when a workflow file under .github/workflows declares a top-level job named `suite`. */
+export function ciSuiteWorkflowPresent(cwd) {
+  try {
+    const dir = join(cwd, ".github", "workflows");
+    if (!existsSync(dir)) return false;
+    return readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).some((f) => {
+      const text = readFileSync(join(dir, f), "utf8");
+      const jobs = /^jobs:\s*$/m.exec(text);
+      return !!jobs && new RegExp(`^  ${CI_SUITE_JOB}:\\s*(?:#.*)?$`, "m").test(text.slice(jobs.index));
+    });
+  } catch {
+    return false;
+  }
+}
+
+/** True when the origin remote points at github.com. */
+export function hasGithubOrigin(cwd) {
+  try {
+    return /github\.com[:/]/.test(gitOut(cwd, ["remote", "get-url", "origin"]));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Files whose change can alter every test (or how tests run): the related set
+ * cannot be trusted, run the full suite.
+ */
+export function isTestConfigFile(file) {
+  const f = String(file).replace(/\\/g, "/");
+  const base = f.split("/").pop();
+  return /^(package(-lock)?|npm-shrinkwrap)\.json$/.test(base)
+    || /^(pnpm-lock\.yaml|yarn\.lock)$/.test(base)
+    || /^(vitest|vite|jest)[^/]*\.(?:[cm]?[jt]s|json)$/.test(base)
+    || /^\.npmrc$/.test(base);
+}
+
+/**
+ * Changed files of `cwd` against the merge-base with the default branch
+ * (committed, staged, unstaged and untracked-not-ignored), as
+ * `{ files, deleted }` (renames count as delete + add), or null when no base
+ * can be resolved.
+ */
+export function changedVsBase(cwd) {
+  try {
+    let base = null;
+    const candidates = [];
+    try { candidates.push(gitOut(cwd, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]).trim()); } catch { /* none */ }
+    candidates.push("origin/main", "origin/master", "main", "master");
+    for (const c of candidates.filter(Boolean)) {
+      try { base = gitOut(cwd, ["merge-base", "HEAD", c]).trim(); if (base) break; } catch { /* next */ }
+    }
+    if (!base) return null;
+    const files = new Set();
+    const deleted = new Set();
+    for (const line of gitOut(cwd, ["diff", "--name-status", "--no-renames", base]).split(/\r?\n/)) {
+      const m = /^([A-Z])\d*\t(.+)$/.exec(line);
+      if (!m) continue;
+      (m[1] === "D" ? deleted : files).add(m[2]);
+    }
+    for (const f of gitOut(cwd, ["ls-files", "--others", "--exclude-standard"]).split(/\r?\n/).filter(Boolean)) files.add(f);
+    return { files: [...files], deleted: [...deleted] };
+  } catch {
+    return null;
+  }
+}
+
+const quoteArg = (f) => (/[\s"]/.test(f) ? `"${f.replace(/"/g, '\\"')}"` : f);
+
+/**
+ * The `vitest related` command for the changed files, or `{ empty: true }`
+ * when no JS/TS file changed. A changed source file also pulls in its sibling
+ * `<name>.test.js`: scripts and hooks that tests only spawn are invisible to
+ * the import graph. Non-JS files (docs, JSON, templates) are not locally
+ * testable and are covered by the CI full-suite check.
+ */
+export function relatedCommand(files, { exists = existsSync, cwd = "." } = {}) {
+  const js = (files || []).filter((f) => /\.[cm]?[jt]sx?$/.test(f));
+  const set = new Set(js);
+  for (const f of js) {
+    const sib = f.replace(/\.([cm]?[jt]sx?)$/, ".test.$1");
+    if (sib !== f && exists(join(cwd, sib))) set.add(sib);
+  }
+  const list = [...set].filter((f) => exists(join(cwd, f)));
+  if (list.length === 0) return { empty: true, files: [] };
+  return { cmd: `npx vitest related ${list.map(quoteArg).join(" ")} --run --passWithNoTests`, files: list };
+}
+
+/**
+ * Where the full suite runs for this ship, and what ship_build runs locally.
+ *
+ * `testScope: "related"` (local = lint + tests related to the diff;
+ * `fullSuiteVia: "ci"`: the CI `suite` check is the full-suite gate) only when
+ * the project has that CI check and its quota is not known exhausted AND the
+ * diff is safely computable. Everything else is `testScope: "full"` run
+ * locally (`fullSuiteVia: "local"`) — the invariant "never merge without one
+ * full green suite on the exact tree" then rests on the local record.
+ *
+ * @param {object} p
+ * @param {boolean|null} [p.ciSuite] explicit override: true = assume the CI check, false = never
+ * @param {boolean} p.workflowPresent  .github/workflows declares job `suite`
+ * @param {boolean} p.githubOrigin     origin is on github.com
+ * @param {boolean} p.quotaExhausted   a CI-quota record (Actions minutes out) is active
+ * @param {{files: string[], deleted: string[]}|null} p.changed diff vs base
+ * @param {string} [p.cwd]
+ * @param {(f: string) => boolean} [p.exists]
+ * @returns {{scope: "related"|"full", fullSuiteVia: "ci"|"local", reason: string, cmd?: string, files?: string[], empty?: boolean}}
+ */
+export function decideTestScope({ ciSuite = null, workflowPresent, githubOrigin, quotaExhausted, changed, cwd = ".", exists } = {}) {
+  const full = (reason) => ({ scope: "full", fullSuiteVia: "local", reason });
+  if (ciSuite === false) return full("ciSuite=false — full suite runs locally");
+  if (ciSuite !== true && !(workflowPresent && githubOrigin)) {
+    return full(`no CI full-suite check (needs a \`${CI_SUITE_JOB}\` job in .github/workflows and a github.com origin) — full suite runs locally`);
+  }
+  if (quotaExhausted) return full("CI quota (GitHub Actions minutes) is exhausted — full suite runs locally");
+  if (!changed) return full("changed files vs the base branch could not be computed — full suite runs locally");
+  if (changed.files.length === 0 && changed.deleted.length === 0) return full("no changes vs the base branch — full suite runs locally");
+  if (changed.deleted.length > 0) return full(`deleted/renamed files (${changed.deleted[0]}${changed.deleted.length > 1 ? ", …" : ""}) — importers cannot be resolved, full suite runs locally`);
+  const cfg = changed.files.find(isTestConfigFile);
+  if (cfg) return full(`${cfg} changed — it can alter every test, full suite runs locally`);
+  const rel = relatedCommand(changed.files, { cwd, ...(exists ? { exists } : {}) });
+  if (rel.empty) {
+    return { scope: "related", fullSuiteVia: "ci", empty: true, files: [], reason: "no JS/TS file changed — nothing to run locally, the CI full-suite check is the gate" };
+  }
+  if (rel.cmd.length > MAX_RELATED_CMD) return full("too many changed files for one related run — full suite runs locally");
+  return {
+    scope: "related", fullSuiteVia: "ci", cmd: rel.cmd, files: rel.files,
+    reason: `lint + ${rel.files.length} related file(s) locally; the full suite is the CI \`${CI_SUITE_JOB}\` check`,
   };
 }

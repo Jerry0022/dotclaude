@@ -26,8 +26,10 @@
  *
  *   - Threshold `DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (tokens; `0` disables;
  *     the old `DOTCLAUDE_SHIP_COMPACT_THRESHOLD` is still read as a
- *     fallback), default 250 k: a clear margin above break-even, so a
- *     delegated ship never costs more than the inline one would have.
+ *     fallback), default 600 k (was 250 k until ship_run, M7): ship_run turns a
+ *     ship into ~6–10 calls instead of 20–40, so the inline re-read of a big
+ *     context costs far less and break-even moves up roughly 3×; 600 k keeps
+ *     the margin, so a delegated ship never costs more than the inline one would have.
  *   - `--inline` (or the old `--no-compact`) keeps one ship in the main
  *     context.
  *   - Never for a promotion-only run (`promotionOnly`): ~4 calls, not ~25.
@@ -44,7 +46,7 @@
 
 const { formatTokens } = require('./context-size');
 
-const DEFAULT_THRESHOLD = 250_000;
+const DEFAULT_THRESHOLD = 600_000;
 
 /** What a fresh subagent carries on its first ship call: system prompt,
  *  tool schemas, the skill and the brief (measured 72–75 k). */

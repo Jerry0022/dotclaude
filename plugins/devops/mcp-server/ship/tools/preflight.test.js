@@ -6,7 +6,7 @@ import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 // so a minimal chainable stub is enough to load the module.
 vi.mock("zod", () => {
   const node = new Proxy(() => node, { get: () => () => node });
-  return { z: { object: () => node, string: () => node, boolean: () => node, array: () => node } };
+  return { z: { object: () => node, string: () => node, boolean: () => node, array: () => node, enum: () => node, number: () => node, preprocess: () => node } };
 });
 
 // Mock every lib the handler touches so we can drive a deterministic "ready"
@@ -15,6 +15,7 @@ vi.mock("zod", () => {
 vi.mock("../lib/git.js", () => ({
   git: vi.fn(() => ""),
   gitTry: vi.fn(() => ""),
+  gitArgs: vi.fn(() => ""),
   NETWORK_TIMEOUT: 60_000,
   currentBranch: vi.fn(() => "feat/topic"),
   dirtyState: vi.fn(() => ({ dirty: false, untracked: [], modified: [], lines: [] })),
@@ -58,7 +59,14 @@ vi.mock("../lib/ci-quota.js", async (importOriginal) => ({
   quotaKey: vi.fn(() => null),
 }));
 
+vi.mock("../lib/github.js", () => ({
+  createPR: vi.fn(() => ({ number: 9, url: "https://example.com/pull/9" })),
+  findExistingPR: vi.fn(() => null),
+}));
+
 import { handler } from "./preflight.js";
+import { gitArgs } from "../lib/git.js";
+import { createPR, findExistingPR } from "../lib/github.js";
 import * as quotaLib from "../lib/ci-quota.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -362,5 +370,73 @@ describe("ship_preflight — #752 recorded CI-quota block", () => {
     expect(checkByName(result, "ci-quota").ok).toBe(true);
     expect(result.warnings.some((w) => /quota exhausted/.test(w) && /skip-checks/.test(w))).toBe(true);
     expect(result.ready).toBe(true);
+  });
+});
+
+describe("ship_preflight - early validation gate (M4)", () => {
+  const gap = { requirement: "ship it", status: "unmet" };
+  test("open own gaps are returned early as validationGaps + warning; preflight stays ready", async () => {
+    const result = await handler({ cwd: CWD, validation: [gap, { requirement: "done", status: "met" }] });
+    expect(result.validationGaps).toHaveLength(1);
+    expect(result.validationGaps[0].requirement).toBe("ship it");
+    expect(result.warnings.some((w) => /BEFORE ship_build/.test(w))).toBe(true);
+    expect(result.ready).toBe(true);
+  });
+  test("no validation param: no field; all met: empty gaps", async () => {
+    expect((await handler({ cwd: CWD })).validationGaps).toBeUndefined();
+    expect((await handler({ cwd: CWD, validation: [{ requirement: "a", status: "met" }] })).validationGaps).toEqual([]);
+  });
+});
+
+describe("ship_preflight - earlyPush (M5)", () => {
+  beforeEach(() => {
+    gitArgs.mockReset(); gitArgs.mockReturnValue("");
+    createPR.mockClear(); findExistingPR.mockReset(); findExistingPR.mockReturnValue(null);
+    gitTry.mockReturnValue("");
+  });
+  test("off by default: nothing pushed", async () => {
+    const r = await handler({ cwd: CWD });
+    expect(r.earlyPr).toBeUndefined();
+    expect(gitArgs).not.toHaveBeenCalled();
+  });
+  test("ready + no rebase: pushes with lease and opens a draft PR", async () => {
+    gitTry.mockImplementation((a) => (a[0] === "log" ? "feat: topic" : ""));
+    const r = await handler({ cwd: CWD, earlyPush: true });
+    expect(r.ready).toBe(true);
+    expect(gitArgs).toHaveBeenCalledWith(["push", "-u", "origin", "feat/topic", "--force-with-lease"], expect.any(Object));
+    expect(createPR).toHaveBeenCalledWith(expect.objectContaining({ title: "feat: topic", head: "feat/topic", base: "main", draft: true }), { cwd: CWD });
+    expect(r.earlyPr).toEqual({ number: 9, url: "https://example.com/pull/9" });
+    expect(r.earlyPush).toEqual({ pushed: true });
+  });
+  test("an existing PR is reused, no second PR", async () => {
+    findExistingPR.mockReturnValue({ number: 3, url: "u3", mergeable: "UNKNOWN", isDraft: false });
+    const r = await handler({ cwd: CWD, earlyPush: true });
+    expect(createPR).not.toHaveBeenCalled();
+    expect(r.earlyPr).toEqual({ number: 3, url: "u3", existing: true, draft: false });
+  });
+  test("push rejected: reported, never fatal, no PR", async () => {
+    gitArgs.mockImplementation(() => { throw new Error("stale info"); });
+    const r = await handler({ cwd: CWD, earlyPush: true });
+    expect(r.ready).toBe(true);
+    expect(r.earlyPr).toBeNull();
+    expect(r.earlyPush.pushed).toBe(false);
+    expect(r.earlyPush.error).toMatch(/push rejected/);
+    expect(createPR).not.toHaveBeenCalled();
+  });
+  test("gh missing: branch is pushed, error reported", async () => {
+    createPR.mockImplementationOnce(() => { throw new Error("spawn gh ENOENT"); });
+    const r = await handler({ cwd: CWD, earlyPush: true });
+    expect(r.earlyPr).toBeNull();
+    expect(r.earlyPush).toMatchObject({ pushed: true });
+    expect(r.earlyPush.error).toMatch(/draft PR not created/);
+  });
+  test("no remote / file-only / not ready: skipped without any git call", async () => {
+    detectRepoMode.mockReturnValueOnce("git-no-remote");
+    const noRemote = await handler({ cwd: CWD, earlyPush: true });
+    expect(noRemote.earlyPush).toMatchObject({ pushed: false, skipped: "no remote" });
+    detectRepoMode.mockReturnValueOnce("none");
+    const fileOnly = await handler({ cwd: CWD, earlyPush: true });
+    expect(fileOnly.earlyPr).toBeUndefined();
+    expect(gitArgs).not.toHaveBeenCalled();
   });
 });

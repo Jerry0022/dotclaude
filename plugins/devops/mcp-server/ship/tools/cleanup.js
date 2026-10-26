@@ -5,10 +5,12 @@
  */
 
 import { z } from "zod";
+import { execFileSync } from "node:child_process";
 import { git, gitArgs, gitTry, isWorktree, getWorktreeBranches, detectDefaultBranch, NETWORK_TIMEOUT } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { clearSentinel } from "../lib/sentinel.js";
 import { clearLockoutMarker } from "../lib/lockout-marker.js";
+import { releaseLandingLockFor } from "../lib/landing-lock.js";
 import { detectRepoMode, refusesGitWrites, probeTimeoutError } from "../lib/repo-mode.js";
 
 export const schema = z.object({
@@ -27,6 +29,19 @@ export const schema = z.object({
 function clearShipState(cwd) {
   clearSentinel(cwd);
   return clearLockoutMarker(cwd) ? ["sentinel", "lockout-marker"] : ["sentinel"];
+}
+
+/**
+ * `git status --porcelain` lines of the worktree (leading status column kept),
+ * timeout-bounded; null when git fails - the caller then runs its own check.
+ */
+export function porcelainLines(cwd) {
+  try {
+    const out = execFileSync("git", ["--no-optional-locks", "status", "--porcelain"], {
+      windowsHide: true, cwd, encoding: "utf8", timeout: 10_000, stdio: ["ignore", "pipe", "ignore"],
+    });
+    return out.split("\n").filter((l) => l.trim() !== "");
+  } catch { return null; }
 }
 
 export async function handler(params) {
@@ -83,6 +98,11 @@ export async function handler(params) {
     };
   }
 
+  // A landing lock this branch still holds (release crashed before its finally).
+  let landingLockReleased = false;
+  try { landingLockReleased = releaseLandingLockFor(cwd, { branch }); } catch { /* never blocks cleanup */ }
+  const lockFields = landingLockReleased ? { landingLockReleased: true } : {};
+
   // Keep-mode (also every ship-blocked exit): skip all destructive cleanup.
   // Only the per-ship state goes, so Edit/branch guards stop treating this as
   // "ship in progress" and the next ship does not inherit the lockout marker.
@@ -95,6 +115,8 @@ export async function handler(params) {
       branchBeforeCleanup: git("rev-parse --abbrev-ref HEAD", opts) || null,
       cleaned: shipState,
       warnings: [`Keep-mode: branch '${branch}' and worktree preserved for follow-up work`],
+      porcelain: porcelainLines(cwd),
+      ...lockFields,
     };
   }
 
@@ -232,5 +254,7 @@ export async function handler(params) {
     branchBeforeCleanup,
     cleaned,
     warnings,
+    porcelain: porcelainLines(cwd),
+    ...lockFields,
   };
 }

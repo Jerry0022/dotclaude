@@ -9,7 +9,7 @@
  *   transcript tail) and a few budgeted git reads (baseBranch, originMatches)
  *   through git-timeout.js's helpers; no contract state.
  *
- *   SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS   constants
+ *   SHIP_RELEASE, SHIP_RUN, isReleaseTool, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS   constants
  *   MACHINE_ARM_RE / MACHINE_TURN_RE / BACKLOG_AUTOSTART_RE   machine-prompt openers
  *     (arming: RUN_BACKLOG_AUTOSTART + AUTONOMOUS_AUTOSTART · a machine turn:
  *     those plus AUTONOMOUS_RESUME · backlog only)
@@ -61,6 +61,8 @@ const { isColourRef } = require('./issue-refs');
 const POST_BASE_BRANCH_BUDGET_MS = 6000;
 
 const SHIP_RELEASE = 'mcp__plugin_devops_dotclaude__ship_release';
+const SHIP_RUN = 'mcp__plugin_devops_dotclaude__ship_run';
+const ST = require('./ship-tool-names');
 const RENDER_CARD = 'mcp__plugin_devops_dotclaude__render_completion_card';
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
@@ -794,7 +796,8 @@ function applyGitFacts(out, at, ps, created) {
  * quoted on Windows).
  */
 function matchShipCliRelease(out, seg, rawSeg) {
-  if (/(^|\s)ship_release(\s|$)/.test(seg) && /ship[\\/]+cli\.js/i.test(rawSeg)) out.release = true;
+  const t = ST.cliShipTool(seg, rawSeg);
+  if (t === 'ship_release' || t === 'ship_run') out.release = true;
 }
 
 /** Facts of one raw segment: render-card flag, then what runs at command position. */
@@ -1053,8 +1056,12 @@ function responseText(r) {
   return '';
 }
 
-/** `{ok, merged}` of a ship_release result, or null when unreadable. */
-function releaseResult(response) {
+/** `{ok, merged}` of a ship_release / ship_run result (`tool` = MCP tool name, default ship_release), or null when unreadable. */
+function releaseResult(response, tool) {
+  if (ST.isShipTool(tool, 'run')) {
+    const r = ST.releaseResultOf(tool, response);
+    return r && { ok: r.ok, merged: r.merged };
+  }
   let obj = null;
   if (response && typeof response === 'object' && !Array.isArray(response) && typeof response.success === 'boolean') obj = response;
   if (!obj) {
@@ -1065,7 +1072,8 @@ function releaseResult(response) {
     }
   }
   if (!obj || typeof obj !== 'object') return null;
-  return { ok: obj.success === true, merged: obj.merged === true };
+  // ship_release reports the base branch name ("main") in `merged`, never a boolean
+  return { ok: obj.success === true, merged: obj.merged === true || (typeof obj.merged === 'string' && obj.merged !== '') };
 }
 
 /**
@@ -1247,7 +1255,7 @@ function routerFromTranscript(transcriptPath, sinceIso, RC, budget, info) {
 }
 
 module.exports = {
-  SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS, MCP_MERGE_RE,
+  SHIP_RELEASE, SHIP_RUN, isReleaseTool: ST.isReleaseTool, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS, MCP_MERGE_RE,
   MACHINE_ARM_RE, MACHINE_TURN_RE, BACKLOG_AUTOSTART_RE,
   commandFacts, splitSegments, commandAt, shellCallFacts, contractRoots,
   toolInput, toolFilePath, isGatedPath, isGatedEdit, closesOf, cardFacts, readCardPayload,

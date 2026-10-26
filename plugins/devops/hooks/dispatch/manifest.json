@@ -42,7 +42,8 @@
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.ship.guard.js\"", "onFailure": "block" },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.main.guard.js\"", "onFailure": "block" },
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.worktree.split-guard.js\"" }
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.worktree.split-guard.js\"" },
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.test.fullguard.js\"" }
         ],
         "matcher": "Bash|PowerShell"
       },
@@ -130,7 +131,7 @@
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.run.contract.js\"", "timeout": 20, "onFailure": "block" }
         ],
-        "matcher": "Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude__ship_release|mcp__plugin_devops_dotclaude__render_completion_card|mcp__.*__merge_pull_request"
+        "matcher": "Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude__ship_release|mcp__plugin_devops_dotclaude__ship_run|mcp__plugin_devops_dotclaude__render_completion_card|mcp__.*__merge_pull_request"
       },
       {
         "hooks": [
@@ -197,7 +198,7 @@
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.run.contract.js\"", "timeout": 10 }
         ],
-        "matcher": "AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude__ship_release|mcp__plugin_devops_dotclaude__render_completion_card|mcp__.*__merge_pull_request"
+        "matcher": "AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude__ship_release|mcp__plugin_devops_dotclaude__ship_run|mcp__plugin_devops_dotclaude__render_completion_card|mcp__.*__merge_pull_request"
       },
       {
         "hooks": [
@@ -242,6 +243,12 @@
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.worktree.enter.js\"", "timeout": 10 }
         ],
         "matcher": "EnterWorktree"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.test.record.js\"", "timeout": 40 }
+        ],
+        "matcher": "Bash|PowerShell"
       }
     ],
     "PostToolUseFailure": [

@@ -98,6 +98,17 @@ a ship. Prevention runs on every ship: `ship_preflight.workflowHygiene`
 - Stored `wait`: `success: false`, `quotaBlocked: true`, `checks.status: "quota-blocked"`; `quotaDecision: "revoke"` forgets the answer.
 - Expiry: the block at the reset date (unknown: 1st of next month 00:00 UTC) or as soon as a check on the account runs again without a minutes verdict (`checks.quotaCleared: true` — that run covered everything merged without CI); the answer at its `validUntil`. A real red check is never skipped, stored decision or not.
 
+### Recorded quota block — no CI wait
+
+With a CI-quota block on record (early probe, or an earlier ship) and no
+verdict inside the short 60 s probe, `ship_release` no longer falls back to the
+600 s `gh pr checks --watch`. It takes the account-limited path at once:
+`checks.status: "skipped"`, `checksSkippedByQuota: true`, reason "checks not
+awaited". The full-suite gate then merges only with a green full local suite
+on exactly this tree (`fullSuiteLocal`), else `reason: "full-suite-required"`.
+A stored `wait` decision keeps the old full wait. `checks.waitedMs` reports
+how long the CI watch took (M0 telemetry).
+
 ## bump "none" — no ring tag
 
 A ship whose `ship_version_bump` ran with `bump: "none"` keeps the version, and
@@ -181,6 +192,31 @@ creation when `base` is not `main`.
 The tool handles: commit (optional), rebase verification, push (explicit force-with-lease after rebase), PR create (or reuse with mergeability check), **pre-merge CI checks gate (waits for green)**, **pre-merge rebase re-check (closes the checks-window race)**, merge (squash or merge commit), **post-merge tree guard**, **alpha channel tag** (main only), GitHub release deferred to promotion.
 
 Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status, passed, failed, pending}, merged, mergeSha, mergeVerified?, mergeWarning?, mergeStrategy, intermediate, tag, channel, tagVerified, releaseDeferred, postMergeTreeMatch, postMergeWarning, postMergeError?, titleClamped }`.
+
+## Landing lock, channel state, full-suite gate
+
+- `landingLock { waitedMs, outcome, reason? }` — a per-REPO lock (file in the
+  git common dir; other repos never wait) serialises ships of one repo between
+  the final base check and merge+tag. `outcome`: `acquired` | `stolen-stale`
+  (dead holder / expired heartbeat taken over) | `timeout-proceeded` (waited
+  `landingLockWaitSec`, default 600, then shipped without the lock — the
+  old behaviour, a moved base is still caught) | `disabled` (`landingLock:false`,
+  env `DEVOPS_SHIP_LANDING_LOCK=0`, or the lock file is unusable). Never a
+  blocker: the lock is released on every exit and by `ship_cleanup`.
+- `channels { alpha, beta, stable }`, `betaLag`, `stableLag` (`{ versions, days }`)
+  — final ships only, for the promotion-gap nudge (`completion-card-payloads.md`).
+- `prLeftOpen { number, url }` — the PR was not merged and stays open (incl. a
+  draft opened by `ship_preflight earlyPush`); `draftPrReady` — the early draft
+  was marked ready.
+- `reason: "full-suite-required"` + `fullSuiteRequired: true` — the CI `suite`
+  check cannot run (GitHub account limit) and no green FULL local suite exists
+  for this exact tree. Nothing merged, PR open. Run `ship_build` with
+  `testScope: "full"` on HEAD, then call `ship_release` again; the pass is
+  reported as `fullSuiteLocal { treeHash, at }`. A merge always has one full
+  green suite on its tree: the CI `suite` check or this local run.
+- `ship_cleanup` returns `porcelain` (the worktree's `git status --porcelain`
+  lines after cleanup, `null` when git did not answer) — Step 5c needs no git
+  call of its own — and `landingLockReleased` when it dropped a leftover lock.
 
 ## autoRebased
 

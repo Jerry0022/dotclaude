@@ -553,7 +553,9 @@ stable?`, `🟩 🎊 Stable — v0.179.0 — done.`, `⏳ 🤖 Team — not done
    then shows `⚠ ungeprüft — übersprungen: <reason>`) — before it renders
    (`hooks/lib/card-pregate.js`, same rules and reason texts as the Stop gates). A failing call returns
    `isError` with `[card-pregate] Not rendered …` and nothing to show: fix the
-   payload and call again. The same findings a second time render anyway, and
+   payload and call again. The offline `--render-card` CLI runs the same check
+   (refusal on stderr, exit 3). A `cwd` that lost its backslashes
+   (`C:Users…`) is refused too — the concept link and repo mode read it. The same findings a second time render anyway, and
    the Stop gate still checks every card after the turn — the pre-check only
    saves the second render, it never replaces the gate.
 7. **The answer travels in the card (#757).** When the turn answers a

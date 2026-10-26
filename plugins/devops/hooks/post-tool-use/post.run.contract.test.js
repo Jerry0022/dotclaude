@@ -164,6 +164,32 @@ describe("recording", () => {
     expect(b).toMatchObject({ k: "release", ok: false });
   });
 
+  describe("ship_run", () => {
+    const RUN = "mcp__plugin_devops_dotclaude__ship_run";
+    const env = (o) => [{ type: "text", text: JSON.stringify(o) }];
+
+    test("a merged ship_run result records a release with ok/merged/closes", () => {
+      run(RUN, { body: "Closes #9" }, env({ ok: true, merged: "main", pr: 9 }));
+      expect(RC.events(dir)).toEqual([expect.objectContaining({ k: "release", ok: true, merged: true, closes: ["9"] })]);
+    });
+
+    test("a ship_run decision point records a release that is neither ok nor merged", () => {
+      run(RUN, { body: "Closes #9" }, env({ ok: false, stage: "build", needs: "build-red", partial: {} }));
+      const [e] = RC.events(dir);
+      expect(e).toMatchObject({ k: "release", ok: false, merged: false });
+    });
+
+    test("the offline CLI ship_run records like ship_release", () => {
+      fs.writeFileSync(path.join(dir, "params.json"), JSON.stringify({ body: "Closes #5" }));
+      const cmd = 'node "/p/mcp-server/ship/cli.js" ship_run params.json';
+      run("Bash", { command: cmd }, { stdout: JSON.stringify({ ok: true, merged: "main" }), stderr: "" });
+      run("Bash", { command: cmd }, { stdout: JSON.stringify({ ok: false, needs: "rebase-required" }), stderr: "" });
+      const evs = RC.events(dir);
+      expect(evs[0]).toMatchObject({ k: "release", ok: true, merged: true, closes: ["5"] });
+      expect(evs[1]).toMatchObject({ k: "release", ok: false, merged: false });
+    });
+  });
+
   test("a final card closes a prompt contract; a pending card does not", () => {
     run(CARD, { variant: "ready", pending: ["verify on device"] });
     expect(RC.readContract(dir)).not.toBeNull();

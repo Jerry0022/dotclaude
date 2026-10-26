@@ -131,6 +131,18 @@ describe("decide while armed", () => {
   });
 });
 
+describe("isAllowedWritePath — drive-relative temp roots", () => {
+  // REGRESSION (CI): on a runner the process sat on D: while the repo resolved
+  // on C:; "/tmp" became D:/tmp and "/tmp/x.log" C:/tmp/x.log — a false alarm.
+  test("/tmp is allowed whatever drive the repo is on", () => {
+    const other = process.platform === "win32"
+      ? `${process.cwd()[0].toUpperCase() === "Q" ? "R" : "Q"}:/repo`
+      : "/srv/repo";
+    expect(g.isAllowedWritePath("/tmp/x.log", { cwd: other })).toBe(true);
+    expect(g.isAllowedWritePath("/tmp/../x.log", { cwd: other })).toBe(false);
+  });
+});
+
 describe("hookDecision: arm / disarm through the payload", () => {
   const nodeCmd = (sub) => `node "${PLUGIN_ROOT}/scripts/frustrated-guard.js" ${sub}`;
 

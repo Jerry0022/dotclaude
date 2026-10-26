@@ -57,7 +57,27 @@ vi.mock("../lib/github.js", () => ({
   findExistingPR: vi.fn(() => null),
   watchPRChecks: vi.fn(() => ({ status: "passed", checks: [] })),
   deleteRemoteBranch: vi.fn(() => ({ ok: true, method: "gh-api" })),
+  markPRReady: vi.fn(() => ({ ok: true })),
 }));
+
+// The landing lock has its own real-fs suite (lib/landing-lock.test.js); here a
+// stub records acquire/release and lets tests pick the outcome.
+const lockStub = { refresh: vi.fn(() => true), release: vi.fn(() => true) };
+vi.mock("../lib/landing-lock.js", () => ({
+  acquireLandingLock: vi.fn(async () => ({ outcome: "acquired", waitedMs: 0, held: true, refresh: lockStub.refresh, release: lockStub.release })),
+}));
+
+// M6: the full-suite lookup. findFullGreen is the export the test-scope change adds.
+vi.mock("../lib/test-results.js", () => ({
+  treeKey: vi.fn(() => ({ treeHash: "T1", method: "head" })),
+  findFullGreen: vi.fn(() => null),
+}));
+
+// hasCiSuite looks for .github/workflows/ci-suite.yml; tests flip existsSync.
+vi.mock("node:fs", async (importOriginal) => {
+  const orig = await importOriginal();
+  return { ...orig, existsSync: vi.fn((...a) => orig.existsSync(...a)) };
+});
 
 // #752: repo key is test-controlled; the store is a temp file (DEVOPS_CI_QUOTA_FILE).
 vi.mock("../lib/ci-quota.js", async (importOriginal) => {
@@ -108,6 +128,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scanConflictMarkers } from "../lib/conflict-markers.js";
+import { acquireLandingLock } from "../lib/landing-lock.js";
+import * as testResults from "../lib/test-results.js";
+import * as nodeFs from "node:fs";
 
 function params(overrides = {}) {
   return {
@@ -1529,6 +1552,22 @@ describe("ship_release — #752 shared CI-quota block (on top of the #768 detect
     expect(ghLib.mergePR).not.toHaveBeenCalled();
   });
 
+  test("REGRESSION (review): a quota record + checks still pending in the short probe → full wait, never a skip past them", async () => {
+    // Pending checks are running checks — a minutes block fails its jobs within
+    // seconds. Skipping them merged past an unseen (possibly red) check.
+    quotaLib.recordBlock("o");
+    ghLib.watchPRChecks
+      .mockReturnValueOnce({ status: "timeout", checks: [], failed: [], pending: [{ name: "lint" }] })
+      .mockReturnValueOnce({ status: "failed", checks: [], failed: [{ name: "lint" }], pending: [], error: "1 check(s) failed" });
+    limitsLib.classifyFailedChecks.mockReturnValue({ limited: false, kinds: [], checks: [{ name: "lint", kind: null }] });
+    const res = await handler(params());
+    expect(ghLib.watchPRChecks).toHaveBeenCalledTimes(2);
+    expect(ghLib.watchPRChecks.mock.calls[0][2].timeoutSec).toBeLessThanOrEqual(60);
+    expect(res.checksSkippedByQuota).toBeUndefined();
+    expect(res.success).toBe(false);
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+  });
+
   test("ship review: a mixed minutes + artifact-quota verdict is no stored skip", async () => {
     quotaLib.recordBlock("o");
     quotaLib.setDecision("o", "skip-checks");
@@ -1575,5 +1614,202 @@ describe("ship_release — tag format gate", () => {
     expect(res.error).toMatch(/not of the form vX\.Y\.Z/);
     expect(ghLib.mergePR).not.toHaveBeenCalled();
     expect(ghLib.createPR).not.toHaveBeenCalled();
+  });
+});
+
+describe("landing lock (M4)", () => {
+  test("acquired before the base check, reported, refreshed around CI and released", async () => {
+    const res = await handler(params());
+    expect(res.success).toBe(true);
+    expect(res.landingLock).toEqual({ waitedMs: 0, outcome: "acquired" });
+    expect(acquireLandingLock).toHaveBeenCalledTimes(1);
+    expect(acquireLandingLock.mock.calls[0][1]).toMatchObject({ branch: "feature-x", enabled: true, waitMs: 600_000 });
+    expect(lockStub.refresh).toHaveBeenCalled();
+    expect(lockStub.release).toHaveBeenCalledTimes(1);
+  });
+
+  test("released on a failing exit path too", async () => {
+    gitLib.isRebasedOnto.mockReturnValue(false);
+    const res = await handler(params());
+    expect(res.rebaseRequired).toBe(true);
+    expect(lockStub.release).toHaveBeenCalledTimes(1);
+    gitLib.isRebasedOnto.mockReturnValue(true);
+  });
+
+  test("timeout-proceeded never blocks the ship; param switch is passed through", async () => {
+    acquireLandingLock.mockResolvedValueOnce({ outcome: "timeout-proceeded", waitedMs: 600_000, held: false, refresh: () => false, release: () => false });
+    const res = await handler(params({ landingLock: false, landingLockWaitSec: 5 }));
+    expect(res.success).toBe(true);
+    expect(res.landingLock.outcome).toBe("timeout-proceeded");
+    expect(acquireLandingLock.mock.calls[0][1]).toMatchObject({ enabled: false, waitMs: 5000 });
+  });
+});
+
+describe("channel state (M2)", () => {
+  test("returns channels and promotion lag from one bounded ls-remote", async () => {
+    gitLib.gitTry.mockImplementation((args) => {
+      if (args[0] === "ls-remote" && args.length === 3) {
+        return ["a\trefs/tags/alpha/v1.0.0", "b\trefs/tags/alpha/v0.9.0", "c\trefs/tags/beta/v0.8.0", "d\trefs/tags/stable/v0.7.0"].join("\n");
+      }
+      return "";
+    });
+    const res = await handler(params());
+    gitLib.gitTry.mockReset();
+    expect(res.channels).toEqual({ alpha: "1.0.0", beta: "0.8.0", stable: "0.7.0" });
+    expect(res.betaLag.versions).toBe(2);
+    expect(res.stableLag.versions).toBe(2);
+  });
+
+  test("absent when the listing is unreadable (older-server fallback in the skill)", async () => {
+    gitLib.gitTry.mockReset();
+    const res = await handler(params());
+    expect(res.success).toBe(true);
+    expect(res.channels).toBeUndefined();
+  });
+});
+
+describe("early draft PR (M5)", () => {
+  test("a draft found for the branch is marked ready with the final title/body before CI", async () => {
+    ghLib.findExistingPR.mockReturnValueOnce({ number: 7, url: "https://example.com/pull/7", mergeable: "MERGEABLE", isDraft: true });
+    const res = await handler(params());
+    expect(ghLib.createPR).not.toHaveBeenCalled();
+    expect(ghLib.markPRReady).toHaveBeenCalledWith(7, { title: "feat: thing", body: "## Summary\nCloses #1" }, { cwd: "/repo" });
+    expect(ghLib.markPRReady.mock.invocationCallOrder[0]).toBeLessThan(ghLib.watchPRChecks.mock.invocationCallOrder[0]);
+    expect(res.draftPrReady).toBe(true);
+    expect(res.prReused).toBe(true);
+  });
+
+  test("a non-draft PR is left alone", async () => {
+    ghLib.findExistingPR.mockReturnValueOnce({ number: 7, url: "u", mergeable: "MERGEABLE", isDraft: false });
+    await handler(params());
+    expect(ghLib.markPRReady).not.toHaveBeenCalled();
+  });
+
+  test("ready failure is a warning, the ship continues", async () => {
+    ghLib.findExistingPR.mockReturnValueOnce({ number: 7, url: "u", mergeable: "MERGEABLE", isDraft: true });
+    ghLib.markPRReady.mockReturnValueOnce({ ok: false, error: "boom" });
+    const res = await handler(params());
+    expect(res.draftPrReady).toBe(false);
+    expect(res.warnings.join(" ")).toMatch(/gh pr ready #7 failed: boom/);
+  });
+
+  test("a blocked ship reports the open PR as prLeftOpen", async () => {
+    ghLib.watchPRChecks.mockReturnValueOnce({ status: "failed", checks: [], failed: [{ name: "x" }], pending: [], error: "1 check(s) failed" });
+    const res = await handler(params());
+    expect(res.success).toBe(false);
+    expect(res.prLeftOpen).toEqual({ number: 42, url: "https://example.com/pull/42" });
+  });
+});
+
+describe("full-suite merge gate (M6)", () => {
+  const withSuite = (on) => nodeFs.existsSync.mockImplementation((p) => on && /ci-suite\.yml$/.test(String(p).replace(/\\/g, "/")));
+  afterEach(() => { nodeFs.existsSync.mockReset(); testResults.findFullGreen.mockReset(); testResults.findFullGreen.mockReturnValue(null); });
+
+  test("quota-bypassed checks + CI suite + no green full run: no merge", async () => {
+    withSuite(true);
+    // skipChecks alone (no quota record, full suite ran locally) is the hot-fix path - not gated
+    expect((await handler(params({ skipChecks: true, fullSuiteVia: "local" }))).success).toBe(true);
+    ghLib.mergePR.mockClear();
+    const dir = mkdtempSync(join(tmpdir(), "m6-"));
+    try {
+      const prevFile = process.env.DEVOPS_CI_QUOTA_FILE;
+      process.env.DEVOPS_CI_QUOTA_FILE = join(dir, "q.json");
+      quotaLib.quotaKey.mockReturnValue("acct-m6");
+      quotaLib.recordBlock("acct-m6");
+      const blocked = await handler(params({ skipChecks: true, fullSuiteVia: "local" }));
+      expect(blocked.success).toBe(false);
+      expect(blocked.reason).toBe("full-suite-required");
+      expect(blocked.fullSuiteRequired).toBe(true);
+      expect(blocked.error).toMatch(/testScope:"full"/);
+      expect(ghLib.mergePR).not.toHaveBeenCalled();
+      expect(blocked.prLeftOpen.number).toBe(42);
+
+      testResults.findFullGreen.mockReturnValue({ treeHash: "T1", at: "2026-10-26T10:00:00Z" });
+      const ok = await handler(params({ skipChecks: true, fullSuiteVia: "local" }));
+      expect(ok.success).toBe(true);
+      expect(ok.fullSuiteLocal.treeHash).toBe("T1");
+      expect(testResults.findFullGreen).toHaveBeenCalledWith("/repo", expect.objectContaining({ treeHash: "T1" }));
+
+      // no CI suite workflow in the repo: the gate does not apply
+      withSuite(false);
+      testResults.findFullGreen.mockReturnValue(null);
+      expect((await handler(params({ skipChecks: true, fullSuiteVia: "local" }))).success).toBe(true);
+      process.env.DEVOPS_CI_QUOTA_FILE = prevFile;
+    } finally {
+      quotaLib.quotaKey.mockReturnValue(null);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("fullSuiteVia ci: a passed `suite` check lets the merge through, waitedMs recorded", async () => {
+    ghLib.watchPRChecks.mockReturnValueOnce({ status: "passed", checks: [{ name: "suite", bucket: "pass" }, { name: "suite (shard 1/4)", bucket: "pass" }], failed: [], pending: [] });
+    const res = await handler(params({ fullSuiteVia: "ci" }));
+    expect(res.success).toBe(true);
+    expect(res.fullSuiteCi).toEqual({ check: "suite", passed: true });
+    expect(typeof res.checks.waitedMs).toBe("number");
+    expect(testResults.findFullGreen).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["absent", [{ name: "lint", bucket: "pass" }]],
+    ["skipped", [{ name: "suite", bucket: "skipping" }]],
+    ["neutral/pending", [{ name: "suite", bucket: "pending" }]],
+    ["only a shard", [{ name: "suite (shard 1/4)", bucket: "pass" }]],
+  ])("fullSuiteVia ci: `suite` %s and no green full run → full-suite-required, no merge", async (_label, checks) => {
+    ghLib.mergePR.mockClear();
+    ghLib.watchPRChecks.mockReturnValueOnce({ status: "passed", checks, failed: [], pending: [] });
+    const res = await handler(params({ fullSuiteVia: "ci" }));
+    expect(res.success).toBe(false);
+    expect(res.reason).toBe("full-suite-required");
+    expect(res.error).toMatch(/did not run and pass/);
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+  });
+
+  test("fullSuiteVia ci: suite absent but a green full local run on this tree → merge", async () => {
+    testResults.findFullGreen.mockReturnValue({ treeHash: "T1", at: "2026-10-26T10:00:00Z" });
+    ghLib.watchPRChecks.mockReturnValueOnce({ status: "no-checks", checks: [], failed: [], pending: [] });
+    const res = await handler(params({ fullSuiteVia: "ci" }));
+    expect(res.success).toBe(true);
+    expect(res.fullSuiteLocal.treeHash).toBe("T1");
+  });
+
+  test("REGRESSION (review): fullSuiteVia unknown + CI suite in the repo → treated as ci, never a merge without evidence", async () => {
+    withSuite(true);
+    ghLib.mergePR.mockClear();
+    ghLib.watchPRChecks.mockReturnValueOnce({ status: "no-checks", checks: [], failed: [], pending: [] });
+    const res = await handler(params());
+    expect(res.reason).toBe("full-suite-required");
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+    // unknown without a CI suite: the full suite always ran locally — no gate
+    withSuite(false);
+    expect((await handler(params())).success).toBe(true);
+  });
+
+  test("REGRESSION (review): the local-green lookup keys on HEAD's tree, not the working tree", async () => {
+    testResults.findFullGreen.mockReturnValue({ treeHash: "T1", at: "2026-10-26T10:00:00Z" });
+    const { localFullGreen } = await import("./release.js");
+    await localFullGreen("/repo");
+    expect(gitLib.treeOf).toHaveBeenCalledWith("HEAD", { cwd: "/repo" });
+    expect(testResults.treeKey).not.toHaveBeenCalled();
+  });
+
+  test("fullSuiteVia ci + skipChecks: the suite never ran → local green required", async () => {
+    const res = await handler(params({ fullSuiteVia: "ci", skipChecks: true }));
+    expect(res.reason).toBe("full-suite-required");
+    expect(res.error).toMatch(/checks skipped/);
+  });
+
+  test("ciSuitePassed reads only the aggregator job", async () => {
+    const { ciSuitePassed } = await import("./release.js");
+    expect(ciSuitePassed([{ name: "suite", bucket: "pass" }])).toBe(true);
+    expect(ciSuitePassed([{ name: "suite", bucket: "fail" }])).toBe(false);
+    expect(ciSuitePassed(undefined)).toBe(false);
+  });
+
+  test("a missing findFullGreen export reads as no green run", async () => {
+    // exercised via the same path: the mock lacks nothing, so assert the helper directly
+    const { localFullGreen } = await import("./release.js");
+    testResults.findFullGreen.mockReturnValue(null);
+    expect(await localFullGreen("/repo")).toBeNull();
   });
 });

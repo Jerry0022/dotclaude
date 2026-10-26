@@ -11,6 +11,7 @@
  *   - ship_promote      — re-tag a shipped version onto beta/stable
  *   - ship_cleanup      — delete branch, prune worktrees
  *   - ship_hygiene      — post-ship auto-clean of old leftovers + cleanup nudge
+ *   - ship_run          — the whole pipeline in code, one call (M7)
  *
  *   Until 0.3.0 this was its own server (`dotclaude-ship`). Now every call runs
  *   OUT of process: the server spawns the offline CLI (ship/cli.js — same
@@ -41,6 +42,8 @@ export const SHIP_TIMEOUTS_MS = {
   ship_promote: 20 * MIN,
   ship_cleanup: 10 * MIN,
   ship_hygiene: 10 * MIN,
+  // preflight + build + release + cleanup in one call (build 25 + CI watch 40 + rest)
+  ship_run: 90 * MIN,
 };
 
 const TOOLS = [
@@ -74,6 +77,10 @@ const TOOLS = [
     "suggests the cleanup page (more than 50 leftovers, at most weekly). Thresholds are user settings (devops-config). " +
     "Returns ready-made card lines: card.tests → the card's tests array, card.open ({ text, reply }) → its open array. " +
     "Never call it for a blocked ship or a queued ship (--queued)."],
+  ["ship_run", "./tools/run.js", "Ship Run",
+    "The whole ship pipeline in ONE deterministic call: preflight (early push) → conflict-free rebase → early CI-quota probe → build → CHANGELOG entry + version bump → release → cleanup → deferred hygiene. " +
+    "Resumable via the ship checkpoint (never repeats a bump, PR or tag). Returns early only at decision points ({ ok:false, stage, needs, detail, resume }) — handle the need, then call it again with the same params. " +
+    "Otherwise one final result with everything the completion card needs. Env DEVOPS_SHIP_RUN=0 disables it (manual pipeline)."],
 ];
 
 function text(obj, isError) {

@@ -4,10 +4,15 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
-  parseWorktrees, scanRepo, planAutoClean, executeAutoClean, runHygiene, cardLines, landedVia,
+  parseWorktrees, scanRepo, planAutoClean, executeAutoClean, runHygiene as runHygieneAsync, cardLines, landedVia,
   isRegenerable, isToolingState, hasLiveSession, hasMovedSession, LIVE_SESSION_MS, REMOVE_TIMEOUT, normPath,
   reachableFromMerged, dirBytes, landingState, openHeadsFromList, PR_LIST_LIMIT,
+  acquireWorkerLock, releaseWorkerLock, workerLockHeld, WORKER_LOCK_STALE_MS, startHygieneWorker, persistedAtRisk,
 } from "./hygiene.js";
+import { runWorker } from "../hygiene-worker.js";
+
+// the removal is deferred to a detached worker by default; these tests exercise the in-process path
+const runHygiene = (p) => runHygieneAsync({ sync: true, ...p });
 
 const DAY = 86_400_000;
 const NOW = Date.now();
@@ -851,6 +856,115 @@ describe("runHygiene — trigger, switches and the nudge", () => {
     const res = runHygiene({ cwd: dir, trigger: "promote", settings: SETTINGS, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: offline });
     expect(res.autoClean.ran).toBe(false);
     expect(branches(dir)).toContain("old-landed");
+  });
+
+  describe("deferred removal (default for trigger ship)", () => {
+    const deferred = (dir, extra = {}) => runHygieneAsync({
+      cwd: dir, trigger: "ship", settings: SETTINGS, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: offline, ...extra,
+    });
+
+    test("hands the removal to the worker and removes nothing in-process", () => {
+      const { dir, c1 } = makeRepo();
+      git(dir, "branch", "old-landed", c1);
+      const jobs = [];
+      const res = deferred(dir, { spawnWorker: (job) => { jobs.push(job); return true; } });
+      expect(res.autoClean).toMatchObject({ ran: false, deferred: true, running: true });
+      expect(jobs).toHaveLength(1);
+      expect(jobs[0]).toMatchObject({ cwd: dir, settings: SETTINGS });
+      expect(branches(dir)).toContain("old-landed");
+      expect(res.card.tests.result).toMatch(/Hintergrund/);
+      expect(cardLines(res, "en").tests.result).toMatch(/background/);
+    });
+
+    test("nothing to remove → no worker, no card line", () => {
+      const { dir } = makeRepo();
+      let spawned = 0;
+      const res = deferred(dir, { spawnWorker: () => { spawned++; return true; } });
+      expect(spawned).toBe(0);
+      expect(res.autoClean).toMatchObject({ ran: false, deferred: true });
+      expect(res.autoClean.running).toBeUndefined();
+      expect(res.card.tests).toBeUndefined();
+    });
+
+    test("a failed spawn shows no background line", () => {
+      const { dir, c1 } = makeRepo();
+      git(dir, "branch", "old-landed", c1);
+      const res = deferred(dir, { spawnWorker: () => false });
+      expect(res.card.tests).toBeUndefined();
+    });
+
+    test("a live worker lock suppresses a second worker; a stale one does not", () => {
+      const { dir, c1 } = makeRepo();
+      git(dir, "branch", "old-landed", c1);
+      expect(acquireWorkerLock(dir, NOW)).toBe(true);
+      expect(acquireWorkerLock(dir, NOW)).toBe(false);
+      let spawned = 0;
+      deferred(dir, { spawnWorker: () => { spawned++; return true; } });
+      expect(spawned).toBe(0);
+      expect(workerLockHeld(dir, NOW + WORKER_LOCK_STALE_MS + 1)).toBe(false);
+      releaseWorkerLock(dir);
+      deferred(dir, { spawnWorker: () => { spawned++; return true; } });
+      expect(spawned).toBe(1);
+    });
+
+    test("REGRESSION (review): a worker never deletes a live lock it did not take; a stale one is claimed once", () => {
+      const { dir } = makeRepo();
+      // Worker A holds a live lock; worker B passed its check before A wrote it.
+      expect(acquireWorkerLock(dir, NOW, process.pid)).toBe(true);
+      expect(acquireWorkerLock(dir, NOW, process.ppid)).toBe(false);
+      releaseWorkerLock(dir, process.ppid); // not B's lock — must survive
+      expect(workerLockHeld(dir, NOW)).toBe(true);
+      // Stale (old timestamp): the next worker claims it.
+      const later = NOW + WORKER_LOCK_STALE_MS + 1;
+      expect(acquireWorkerLock(dir, later, process.pid)).toBe(true);
+      expect(acquireWorkerLock(dir, later, process.ppid)).toBe(false);
+      releaseWorkerLock(dir, process.pid);
+      expect(workerLockHeld(dir, later)).toBe(false);
+    });
+
+    test("persisted at-risk items of the last worker run reach the deferred ship card (gone units dropped)", () => {
+      const { dir, c1 } = makeRepo();
+      git(dir, "branch", "old-landed", c1);
+      const head = git(dir, "rev-parse", "old-landed");
+      const statePath = path.join(mkTmp("hy-state-"), "s.json");
+      fs.writeFileSync(statePath, JSON.stringify({ repos: { [normPath(dir)]: { atRisk: { at: daysAgo(0), items: [
+        { kind: "branch", branch: "old-landed", head, commits: 2, state: "unlanded", pushed: false, dirty: 0 },
+        { kind: "branch", branch: "gone", head: "f".repeat(40), commits: 1, state: "unlanded", pushed: false, dirty: 0 },
+      ] } } } }));
+      const res = deferred(dir, { statePath, spawnWorker: () => true });
+      expect(res.atRisk.map((x) => x.branch)).toEqual(["old-landed"]);
+      expect(res.atRiskSource).toMatchObject({ from: "last-hygiene-run" });
+      expect(res.card.risk.text).toMatch(/Nicht gelandete Arbeit ohne PR: old-landed/);
+    });
+
+    test("the in-process (worker) run persists its at-risk list per repo, empty included", () => {
+      const { dir } = makeRepo();
+      const statePath = path.join(mkTmp("hy-state-"), "s.json");
+      runHygiene({ cwd: dir, trigger: "ship", settings: SETTINGS, statePath, now: NOW, fetchMerged: offline });
+      const repo = JSON.parse(fs.readFileSync(statePath, "utf8")).repos[normPath(dir)];
+      expect(Array.isArray(repo.atRisk.items)).toBe(true);
+      expect(persistedAtRisk({}, { units: [] })).toEqual([]);
+      expect(persistedAtRisk({ atRisk: { items: [{ head: "a" }, { head: "b" }] } }, { units: [{ head: "b" }] })).toEqual([{ head: "b" }]);
+    });
+
+    test("startHygieneWorker spawns detached with the job as JSON and never throws", () => {
+      const calls = [];
+      const fake = (...a) => { calls.push(a); return { pid: 0, on() {}, unref() {} }; };
+      expect(startHygieneWorker({ cwd: "x" }, "worker.js", fake)).toBe(true);
+      expect(calls[0][1]).toEqual(["worker.js", '{"cwd":"x"}']);
+      expect(calls[0][2]).toMatchObject({ detached: true, stdio: "ignore", windowsHide: true });
+      expect(startHygieneWorker({}, "w.js", () => { throw new Error("boom"); })).toBe(false);
+    });
+
+    test("the worker runs the sync path without nudge, then frees the lock", () => {
+      const { dir } = makeRepo();
+      let seen;
+      const out = runWorker({ cwd: dir, stateKey: dir, settings: SETTINGS }, (p) => { seen = p; expect(workerLockHeld(dir)).toBe(true); });
+      expect(out.ran).toBe(true);
+      expect(seen).toMatchObject({ sync: true, trigger: "ship", settings: { nudge: false } });
+      expect(workerLockHeld(dir)).toBe(false);
+      expect(runWorker(null).ran).toBe(false);
+    });
   });
 
   test("autoClean off → nothing removed", () => {

@@ -24,6 +24,9 @@
  *   (lib/cli-last-result.js) — the run-contract post hook's fallback when
  *   stdout was redirected to a file, so a CLI ship_release still counts.
  *
+ *   Every call also appends one line (start, duration, outcome, repeat) to
+ *   ~/.claude/ship-timings.jsonl (lib/ship-timings.js) — silent, never fails it.
+ *
  *   Exit codes: 0 the handler returned (its result may still say ok:false),
  *   1 the handler threw, 2 unknown tool or invalid params.
  */
@@ -31,6 +34,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { writeLastResult } from "./lib/cli-last-result.js";
+import { recordTiming } from "./lib/ship-timings.js";
 
 import { schema as preflightSchema, handler as preflightHandler } from "./tools/preflight.js";
 import { schema as buildSchema, handler as buildHandler } from "./tools/build.js";
@@ -39,6 +43,7 @@ import { schema as releaseSchema, handler as releaseHandler } from "./tools/rele
 import { schema as promoteSchema, handler as promoteHandler } from "./tools/promote.js";
 import { schema as cleanupSchema, handler as cleanupHandler } from "./tools/cleanup.js";
 import { schema as hygieneSchema, handler as hygieneHandler } from "./tools/hygiene.js";
+import { schema as runSchema, handler as runHandler } from "./tools/run.js";
 
 export const TOOLS = {
   ship_preflight: [preflightSchema, preflightHandler],
@@ -48,6 +53,7 @@ export const TOOLS = {
   ship_promote: [promoteSchema, promoteHandler],
   ship_cleanup: [cleanupSchema, cleanupHandler],
   ship_hygiene: [hygieneSchema, hygieneHandler],
+  ship_run: [runSchema, runHandler],
 };
 
 function fail(code, message) {
@@ -83,12 +89,15 @@ if (!parsed.success) {
     parsed.error.issues.map((i) => `  - ${i.path.join(".") || "(root)"}: ${i.message}`).join("\n"));
 }
 
+const startedAt = Date.now();
 try {
   const result = await handler(parsed.data);
+  recordTiming({ cwd: parsed.data.cwd || process.cwd(), tool, startedAt, durationMs: Date.now() - startedAt, result });
   recordStep(tool, parsed.data, result);
   if (process.env.DOTCLAUDE_SHIP_VIA_SERVER !== "1") writeLastResult(tool, parsed.data, result);
   // Exit only once stdout is flushed — a pipe reader (the server) must get the whole JSON.
   process.stdout.write(JSON.stringify(result, null, 2) + "\n", () => process.exit(0)); // stdout-ok — CLI result
 } catch (e) {
+  recordTiming({ cwd: parsed.data.cwd || process.cwd(), tool, startedAt, durationMs: Date.now() - startedAt, outcome: "error" });
   process.stdout.write(JSON.stringify({ error: true, message: e && e.message }) + "\n", () => process.exit(1)); // stdout-ok
 }

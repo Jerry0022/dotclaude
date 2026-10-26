@@ -26,6 +26,28 @@ what each pass checks and how its findings reach the card.
    in any repo. A fix the workflow's own comments argue against → a
    `userFinalTest` item instead.
 
+### Order: harden fixes come BEFORE ship_build
+
+Step 1e (these passes and their fixes) runs before `ship_build`, so the build
+and the test run validate the tree that is merged — a fix applied after the
+build would force a second full build. If the build still goes red because of
+a harden/polish fix, revert exactly that fix (`git checkout -- <file>` of the
+files the pass changed, listed under `changes`) and re-run the build with the
+previous green tree key — the test-result cache answers it without a second
+full run. Keep the finding on the card instead of the fix.
+
+## Early gates (fewer repeats)
+
+- `ship_preflight` accepts the same `validation` array as `ship_release` and
+  returns `validationGaps` (plus a warning) at once: close an open own
+  requirement BEFORE the build instead of learning it at release time.
+  `ship_release` stays the final authority.
+- `ship_preflight earlyPush: true` pushes the branch and opens a draft PR
+  (`earlyPr { number, url }`) so CI starts while lint/tests/Codex run.
+  `ship_release` marks it ready (`draftPrReady`) before the checks wait. A ship
+  that ends blocked leaves that PR open: the release result says so in
+  `prLeftOpen { number, url }` — mention it on the ship-blocked card.
+
 ## Findings on the card
 
 Treat what they return like the other 1d findings:

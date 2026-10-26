@@ -66,6 +66,7 @@ import { dropForeignOpenItems, foreignTokensFor } from "./lib/foreign-branches.j
 import { dropNextStepOpenItems } from "./lib/open-admission.js";
 import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending, normalizeConcept, CONCEPT_LABEL } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
+import { summarizeShip, shipDurationTest } from "./ship/lib/ship-timings.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
 import { batchGuide, conceptCloseoutOnly, conceptUrl, readBatch, readRunContractLine, sameProjectRoot, titlePrefixFor, titleInstruction, currentSessionTitle, titleStateForKey, hasMandatoryStep, TITLE_SCHEME } from "./lib/mode-state.js";
 import { staleServerLine } from "./lib/server-version.js";
@@ -2561,6 +2562,17 @@ function buildCompletionCard(params) {
     }
   }
 
+  // 0c2. Ship telemetry (ship/lib/ship-timings.js): a shipped card carries the
+  //      ship's duration as an automatic tests line when cli.js recorded one for
+  //      this cwd + branch. No data, no line.
+  if (typeof params.variant === 'string' && params.variant.startsWith('ship-successful') && params.cwd) {
+    try {
+      const dur = shipDurationTest(summarizeShip({ cwd: params.cwd, branch: params.state && params.state.branch }), params.lang);
+      const tests = Array.isArray(params.tests) ? params.tests : [];
+      if (dur && !tests.some((t) => t && t.method === dur.method)) params.tests = [...tests, dur];
+    } catch { /* telemetry never blocks a card */ }
+  }
+
   // 0d. `open` is for decisions, never the approved scope's obvious next step
   //     (ship, push, release, version bump, post — lib/open-admission.js, #751).
   //     On a test or ready card such a point displaced the steps to test. Silent
@@ -2746,6 +2758,15 @@ function runRenderCardCli(source) {
   if (localShip) {
     process.stderr.write(localShip + '\n');
     process.exit(0);
+  }
+  // Same pre-check as the tool path: without it a status word in the title
+  // rendered a card + widget that stop.flow.guard then refused, and the card
+  // was drawn a second time. Exit 3, not 2 — the payload is valid, the call
+  // only needs fixing as the refusal says.
+  const pre = cardPregate.check(params);
+  if (pre.refuse) {
+    process.stderr.write(pre.text + '\n');
+    process.exit(3);
   }
   const cardMarkdown = buildCompletionCard(params);
   // The rename and CTA-widget instructions ride on stderr so stdout stays the verbatim card.

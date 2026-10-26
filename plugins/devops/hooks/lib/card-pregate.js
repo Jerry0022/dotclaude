@@ -203,6 +203,25 @@ function buildSecurityReason(snippets) {
   ].join('\n');
 }
 
+/**
+ * A `cwd` whose path separators were lost on the way (Bash halves
+ * backslashes: `C:\Users\x` → `C:Usersx`) — a drive-relative Windows path no
+ * caller means. The card resolves the concept link, repo mode and session
+ * title from `cwd`, so such a card silently drops the concept URL line.
+ */
+function brokenCwd(input) {
+  const cwd = typeof input.cwd === 'string' ? input.cwd.trim() : '';
+  return /^[A-Za-z]:(?![\\/])./.test(cwd) ? cwd : null;
+}
+
+function buildBrokenCwdReason(cwd) {
+  return [
+    `[stop.flow.guard] \`cwd\` is not a usable path: "${cwd.slice(0, 80)}" — its separators were lost (Bash halves backslashes).`,
+    'The card reads the concept link, repo mode and session title from `cwd`; with this one they silently drop out.',
+    'Pass the path with forward slashes (`C:/Users/...`) and render again.',
+  ].join('\n');
+}
+
 function buildAnalysisWriteReason(tools) {
   return [
     `[stop.flow.guard] Variant \`analysis\` but this turn changed something: ${tools.join(', ')}.`,
@@ -265,6 +284,9 @@ function findings(input, { validationPending = false, openTasks = null, verifica
 
   const security = securityWithoutOpen(input);
   if (security.length) out.push(buildSecurityReason(security));
+
+  const cwd = brokenCwd(input);
+  if (cwd) out.push(buildBrokenCwdReason(cwd));
   return out;
 }
 

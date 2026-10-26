@@ -189,6 +189,28 @@ export function revokeDecision(key, { file } = {}) {
   return true;
 }
 
+/** How long an early quota probe verdict is reused per account (lib/ci-quota-probe.js). */
+export const PROBE_TTL_MS = 10 * 60_000;
+
+/** The cached probe verdict for the account, or null when absent/older than PROBE_TTL_MS. */
+export function readProbe(key, { now = Date.now(), file } = {}) {
+  if (!key) return null;
+  const p = load(file).probes?.[key];
+  if (!p || !(now - Date.parse(p.at) < PROBE_TTL_MS)) return null;
+  return p;
+}
+
+/** Cache a probe verdict ({ status: "exhausted"|"healthy"|"unknown", ... }). Best effort. */
+export function writeProbe(key, verdict, { now = Date.now(), file } = {}) {
+  if (!key) return null;
+  try {
+    const data = load(file);
+    data.probes = { ...(data.probes || {}), [key]: { ...verdict, at: new Date(now).toISOString() } };
+    save(data, file);
+    return data.probes[key];
+  } catch { return null; }
+}
+
 /** Drop the block (checks ran with steps again). The user's answer stays valid for its period. */
 export function clearRecord(key, { file } = {}) {
   if (!key) return false;

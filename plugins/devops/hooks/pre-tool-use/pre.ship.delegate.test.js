@@ -52,8 +52,8 @@ const SPAWN = 'Use Skill("devops:do-ship") with args "--delegated". session_id: 
 // model started through the Skill tool (concept finalize, do-run backlog, an
 // autonomous ship) ran inline at 219–951 k — half of the large-context ships.
 describe("pre.ship.delegate — Skill-tool ships on a large context", () => {
-  test("a do-run / concept / autonomous do-ship at 573 k is refused with the delegate instruction", () => {
-    const r = run("Skill", { skill: "devops:do-ship", args: "--queued=1/4 --keep" }, 573_000);
+  test("a do-run / concept / autonomous do-ship at 873 k is refused with the delegate instruction", () => {
+    const r = run("Skill", { skill: "devops:do-ship", args: "--queued=1/4 --keep" }, 873_000);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("[pre.ship.delegate]");
     expect(r.stderr).toContain("[ship-delegate]");
@@ -90,7 +90,7 @@ describe("pre.ship.delegate — a delegated spawn below the threshold", () => {
   });
 
   test("above the threshold, on unknown size, for a resume or another agent it passes", () => {
-    expect(run("Agent", { prompt: SPAWN }, 450_000).code).toBe(0);
+    expect(run("Agent", { prompt: SPAWN }, 750_000).code).toBe(0);
     expect(run("Agent", { prompt: SPAWN }, null).code).toBe(0);
     expect(run("Agent", { prompt: SPAWN.replace('"--delegated"', '"--delegated --resume"') }, 115_000).code).toBe(0);
     expect(run("Agent", { prompt: "Find every caller of x" }, 115_000).code).toBe(0);
@@ -101,32 +101,32 @@ describe("pre.ship.delegate — a delegated spawn below the threshold", () => {
 describe("pre.ship.delegate — bare ship subagent (#892)", () => {
   const BARE = 'Use Skill("devops:do-ship") with args "stable". session_id: s1.';
   test("a spawn running do-ship without --delegated is refused, at any context size", () => {
-    for (const tokens of [115_000, 450_000, null]) {
+    for (const tokens of [115_000, 750_000, null]) {
       const r = run("Agent", { prompt: BARE }, tokens);
       expect(r.code).toBe(2);
       expect(r.stderr).toContain("[ship-delegate]");
       expect(r.stderr).toContain("--delegated");
     }
-    expect(run("Agent", { prompt: "Run /do-ship now" }, 450_000).code).toBe(2);
-    expect(run("Agent", { prompt: 'Use Skill("do-ship")' }, 450_000).code).toBe(2);
+    expect(run("Agent", { prompt: "Run /do-ship now" }, 750_000).code).toBe(2);
+    expect(run("Agent", { prompt: 'Use Skill("do-ship")' }, 750_000).code).toBe(2);
   });
   test("a corrected retry passes and asks for the Shipping title; a bare repeat is refused again", () => {
-    expect(run("Agent", { prompt: BARE }, 450_000).code).toBe(2);
-    expect(run("Agent", { prompt: BARE }, 450_000).code).toBe(2);
-    const r = run("Agent", { prompt: SPAWN }, 450_000);
+    expect(run("Agent", { prompt: BARE }, 750_000).code).toBe(2);
+    expect(run("Agent", { prompt: BARE }, 750_000).code).toBe(2);
+    const r = run("Agent", { prompt: SPAWN }, 750_000);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("Shipping");
   });
   test("a passing mention of do-ship is no ship", () => {
-    expect(run("Agent", { prompt: "QA brief: review the diff, don't run do-ship or ship anything." }, 450_000).code).toBe(0);
-    expect(run("Agent", { prompt: "Implement #12. Do not run /do-ship — the runner ships." }, 450_000).code).toBe(0);
-    expect(run("Agent", { prompt: "Fix the bug, ohne /devops:do-ship zu starten." }, 450_000).code).toBe(0);
+    expect(run("Agent", { prompt: "QA brief: review the diff, don't run do-ship or ship anything." }, 750_000).code).toBe(0);
+    expect(run("Agent", { prompt: "Implement #12. Do not run /do-ship — the runner ships." }, 750_000).code).toBe(0);
+    expect(run("Agent", { prompt: "Fix the bug, ohne /devops:do-ship zu starten." }, 750_000).code).toBe(0);
   });
   test("a prefix-less delegated spawn still gets the below-threshold refusal", () => {
     expect(run("Agent", { prompt: 'Use Skill("do-ship") with args "--delegated".' }, 115_000).code).toBe(2);
   });
   test("a resume spawn passes", () => {
-    expect(run("Agent", { prompt: 'Use Skill("devops:do-ship") with args "--resume".' }, 450_000).code).toBe(0);
+    expect(run("Agent", { prompt: 'Use Skill("devops:do-ship") with args "--resume".' }, 750_000).code).toBe(0);
   });
 });
 
@@ -134,7 +134,7 @@ describe("pre.ship.delegate — bare ship subagent (#892)", () => {
 // caller renders the card after its close-out.
 describe("pre.ship.delegate — concept finalize ship returns card data", () => {
   test("--card-data in the args is kept in the delegated args", () => {
-    const r = run("Skill", { skill: "devops:do-ship", args: "--card-data beta" }, 573_000);
+    const r = run("Skill", { skill: "devops:do-ship", args: "--card-data beta" }, 873_000);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('with args "--delegated --card-data beta"');
     expect(r.stderr).toMatch(/Step 6a[\s\S]*render_completion_card with cardData/);
@@ -144,14 +144,14 @@ describe("pre.ship.delegate — concept finalize ship returns card data", () => 
   // finalize — its ship must not trigger a close-out.
   test("a concept state file alone adds no --card-data", () => {
     fs.writeFileSync(path.join(dir, ".claude", "concept-active.json"), JSON.stringify({ port: 8811, html_path: "docs/concepts/x.html" }));
-    const r = run("Skill", { skill: "devops:do-ship", args: "beta" }, 573_000);
+    const r = run("Skill", { skill: "devops:do-ship", args: "beta" }, 873_000);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('with args "--delegated beta"');
     expect(r.stderr).not.toContain("--card-data");
   });
 
   test("no concept: no --card-data", () => {
-    const r = run("Skill", { skill: "devops:do-ship", args: "beta" }, 573_000);
+    const r = run("Skill", { skill: "devops:do-ship", args: "beta" }, 873_000);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('with args "--delegated beta"');
     expect(r.stderr).not.toContain("--card-data");
@@ -167,7 +167,7 @@ describe("pre.ship.delegate — Shipping title before a delegated spawn", () => 
     fs.writeFileSync(file, [
       JSON.stringify({ type: "user", message: { content: "ship it" } }),
       JSON.stringify({ type: "custom-title", customTitle: title }),
-      JSON.stringify({ type: "assistant", message: { id: "m1", usage: { input_tokens: 2, cache_read_input_tokens: 450_000, cache_creation_input_tokens: 0, output_tokens: 50 } } }),
+      JSON.stringify({ type: "assistant", message: { id: "m1", usage: { input_tokens: 2, cache_read_input_tokens: 750_000, cache_creation_input_tokens: 0, output_tokens: 50 } } }),
       ...extra.map((e) => JSON.stringify(e)),
     ].join("\n") + "\n");
     return file;

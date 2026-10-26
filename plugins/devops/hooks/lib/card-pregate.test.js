@@ -109,6 +109,18 @@ describe('card-pregate — findings', () => {
     expect(findings({ ...ok, variant: 'ship-successful' }, { openTasks: ['devops:do-ship'] })).toEqual([]);
   });
 
+  test('REGRESSION: a cwd whose backslashes Bash halved away is refused, a real path is not', () => {
+    // The concept URL line vanished: `C:\Users\x` reached the card as `C:Usersx`
+    // and conceptUrl() found no state file under it — silently.
+    const r = findings({ ...ok, cwd: 'C:UsersJeremIdeaProjectsdotclaude' }, { openTasks: [] });
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatch(/`cwd` is not a usable path: "C:UsersJeremIdeaProjectsdotclaude"/);
+    expect(r[0]).toMatch(/forward slashes/);
+    for (const cwd of ['C:\\Users\\x', 'C:/Users/x', '/home/x', 'repo', '', 'C:']) {
+      expect(findings({ ...ok, cwd }, { openTasks: [] })).toEqual([]);
+    }
+  });
+
   test('several findings are all named at once', () => {
     const r = findings({ variant: 'ready', summary: 'wartet' }, { validationPending: true, openTasks: ['x'] });
     expect(r).toHaveLength(3);

@@ -13,7 +13,9 @@ import TITLE_SCHEME_MOD from "../../hooks/lib/title-scheme.js";
 // uses. The prefixes are pinned in mode-state.js next to the
 // concept/batch ones; these tests bind the skill prose to them.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SKILL = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
+// Frontmatter lives in SKILL.md (the ship_run driver); the step prose in deep-knowledge/manual-pipeline.md (M7).
+const DRIVER = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
+const SKILL = fs.readFileSync(path.join(__dirname, "deep-knowledge", "manual-pipeline.md"), "utf8");
 
 function section(start, end) {
   const a = SKILL.indexOf(start);
@@ -24,7 +26,7 @@ function section(start, end) {
 
 describe("ship SKILL.md — session title prefix", () => {
   test("the session-mgmt tools are allowed", () => {
-    const fm = SKILL.slice(0, SKILL.indexOf("\n---", 4));
+    const fm = DRIVER.slice(0, DRIVER.indexOf("\n---", 4));
     expect(fm).toContain("mcp__ccd_session_mgmt__get_session");
     expect(fm).toContain("mcp__ccd_session_mgmt__set_session_title");
     expect(fm).toContain("mcp__ccd_session_mgmt__archive_session");

@@ -217,6 +217,18 @@ describe("release gate", () => {
     expect(run(SHIP, { body: "" }).code).toBe(0);
   });
 
+  test("ship_run is gated exactly like ship_release (a ship_run is a release attempt)", () => {
+    const RUN = "mcp__plugin_devops_dotclaude__ship_run";
+    armPrompt({ ship: "auto", passes: [] });
+    ev({ k: "skill", name: "auto-agents" });
+    ev({ k: "edit" });
+    const r = run(RUN, { body: "" });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("never the ship_* MCP tools directly");
+    ev({ k: "skip", ob: "do-ship", reason: "user ships by hand" });
+    expect(run(RUN, { body: "" }).code).toBe(0);
+  });
+
   test("qa counts changed code files from git (backlog ≥ 1)", () => {
     armBacklog({ passes: [], ship: "manual", presence: false });
     ev({ k: "skill", name: "auto-agents" });

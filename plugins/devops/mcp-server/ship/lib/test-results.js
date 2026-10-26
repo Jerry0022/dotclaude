@@ -25,6 +25,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -149,4 +150,65 @@ export function usualDurationMs(cwd, testCmd, { file } = {}) {
   if (list.length === 0) return null;
   const s = [...list].sort((a, b) => a - b);
   return s[Math.floor(s.length / 2)];
+}
+
+/**
+ * The project's full test command, normalized (`npm run test`), or null when
+ * package.json declares no `test` script. This is the key under which a FULL
+ * suite run is recorded and looked up.
+ */
+export function fullTestCmd(cwd) {
+  try {
+    const pkg = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8"));
+    return pkg?.scripts?.test ? "npm run test" : null;
+  } catch {
+    return null;
+  }
+}
+
+const VITEST_RUN = /^(?:npx )?vitest run(?: |$)/;
+
+/**
+ * Map a full-suite command Claude ran by hand to the key ship_build uses:
+ * `npm test` / `npm t` / `npm run test` become `npm run test`; `npx vitest run`
+ * and `vitest run` (flags only, no file args) also, when the project's `test`
+ * script is itself an unfiltered `vitest run`. Anything else is returned
+ * normalized and unchanged.
+ */
+export function canonicalFullCmd(cwd, cmd) {
+  const norm = normalizeCmd(String(cmd || "").replace(/^(?:[A-Za-z_]\w*=\S*\s+)+/, ""));
+  if (norm === "npm run test") return norm;
+  const { isFullSuiteSegment } = createRequire(import.meta.url)("../../../hooks/lib/full-suite-cmd.js");
+  if (!VITEST_RUN.test(norm) || !isFullSuiteSegment(norm)) return norm;
+  try {
+    const script = String(JSON.parse(readFileSync(join(cwd, "package.json"), "utf8"))?.scripts?.test || "").trim();
+    if (VITEST_RUN.test(script) && isFullSuiteSegment(script)) return "npm run test";
+  } catch { /* no package.json */ }
+  return norm;
+}
+
+/**
+ * The record of a green FULL-suite run for exactly this tree, or null.
+ *
+ * "Full" means the project's own full test command (package.json
+ * `scripts.test`, recorded as `npm run test`) — a scoped run (`vitest related`)
+ * is never recorded and never matches. Reuse is EXACT: only an identical git
+ * tree hash counts, and the record must be younger than `maxAgeMs` (24 h).
+ * ship_build (local full run) and the post.test.record hook (manual full run)
+ * write such records. The release merge gate calls this when the CI full-suite
+ * check is unavailable (account limit / quota): no record means run or ask for
+ * the local full suite instead of merging.
+ *
+ * @param {string} cwd repo (or worktree) directory
+ * @param {{treeHash?: string, now?: number, maxAgeMs?: number, file?: string}} [opts]
+ *   treeHash defaults to the tree key of `cwd`'s current state (HEAD^{tree}
+ *   when clean). Pass HEAD's tree explicitly for the commit that gets merged.
+ * @returns {{treeHash: string, testCmd: string, passed: true, at: string, source: string, durationMs: (number|null)}|null}
+ */
+export function findFullGreen(cwd, { treeHash, now = Date.now(), maxAgeMs = REUSE_TTL_MS, file } = {}) {
+  const testCmd = fullTestCmd(cwd);
+  if (!testCmd) return null;
+  const hash = treeHash || treeKey(cwd)?.treeHash;
+  if (!hash) return null;
+  return findGreen(cwd, { treeHash: hash, testCmd, maxAgeMs, now, file });
 }

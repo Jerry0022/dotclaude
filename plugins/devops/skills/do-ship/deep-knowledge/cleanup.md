@@ -219,6 +219,18 @@ younger leftovers stay for the page. It flags unlanded work on a
 cleanup page is worth suggesting (more than 50 leftovers, at most once a
 week).
 
+**Off the critical path.** After a ship the call returns in seconds: it scans,
+decides the nudge and the stale-PR lines, and hands the removal (plus size
+measurement) to a detached, low-priority worker (`ship/hygiene-worker.js`).
+The card line reads "Aufräumen läuft im Hintergrund" only when there is
+something to remove. The worker uses the same plan and safety gates and writes
+its outcome into the hygiene state (`lastAutoClean`, `damaged`, sizes), so the
+next session's orphan nudge and the cleanup page report it. At most one worker
+runs per repo (lock `devops-hygiene-worker.lock` in the git common dir, stale
+after 30 min). `sync: true` restores the old in-process removal. The
+unlanded-work (`atRisk`) lines come from the removal plan and therefore appear
+with the next sync run or on the cleanup page, not on the ship card.
+
 ## Harness-created worktree (Step 5a)
 
 **Harness-created worktree → keep-mode, always (#442).** In a Claude Desktop (Code tab)

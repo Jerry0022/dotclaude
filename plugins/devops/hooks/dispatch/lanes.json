@@ -89,6 +89,9 @@
         "pre.worktree.split-guard"
       ],
       [
+        "pre.test.fullguard"
+      ],
+      [
         "pre.issue.guard"
       ],
       [
@@ -204,6 +207,9 @@
       ],
       [
         "post.worktree.enter"
+      ],
+      [
+        "post.test.record"
       ]
     ],
     "PostToolUseFailure": [

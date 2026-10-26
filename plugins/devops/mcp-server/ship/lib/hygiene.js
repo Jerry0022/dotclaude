@@ -1150,6 +1150,21 @@ function openDamage(repo, fresh, now) {
   return known;
 }
 
+/** How many at-risk items the state keeps for the next (deferred) ship card. */
+export const AT_RISK_KEEP = 20;
+
+/**
+ * The at-risk list the last in-process run (the worker) persisted for this repo,
+ * minus items whose unit is gone: a branch/worktree head no longer scanned and
+ * no dirty checkout left on disk.
+ */
+export function persistedAtRisk(repo, scan) {
+  const items = repo && repo.atRisk && Array.isArray(repo.atRisk.items) ? repo.atRisk.items : [];
+  if (!items.length) return [];
+  const heads = new Set((scan && scan.units ? scan.units : []).map((u) => u.head).filter(Boolean));
+  return items.filter((x) => x && (heads.has(x.head) || (x.dirty > 0 && x.path && fs.existsSync(x.path))));
+}
+
 export function defaultStatePath() {
   return path.join(os.homedir(), ".claude", "devops-hygiene.json");
 }
@@ -1244,7 +1259,12 @@ export function cardLines(result, lang = "de") {
   const de = lang !== "en";
   const out = {};
   const ac = result.autoClean;
-  if (ac && ac.ran) {
+  if (ac && ac.deferred && ac.running) {
+    out.tests = {
+      method: de ? "Aufräumen (auto)" : "Cleanup (auto)",
+      result: de ? "läuft im Hintergrund" : "running in the background",
+    };
+  } else if (ac && ac.ran) {
     const b = ac.removed.filter((x) => x.kind === "branch").length;
     const w = ac.removed.filter((x) => x.kind === "worktree").length;
     const r = ac.removed.filter((x) => x.kind === "remote").length;
@@ -1328,6 +1348,9 @@ export function cardLines(result, lang = "de") {
  * @param {number} [p.budgetMs]
  * @param {number} [p.removeTimeout]
  * @param {string|null} [p.projectsDir]  ~/.claude/projects (live-session check)
+ * @param {boolean} [p.sync]            true → remove in-process (old behaviour); default for
+ *   trigger "ship" is to hand the removal to a detached worker (startHygieneWorker)
+ * @param {Function} [p.spawnWorker]    injectable for tests: (job) => boolean
  */
 export function runHygiene(p) {
   const { cwd, trigger, settings, lang = "de" } = p;
@@ -1358,6 +1381,28 @@ export function runHygiene(p) {
     result.autoClean.reason = "promote — nudge only";
   } else if (!settings.autoClean) {
     result.autoClean.reason = "disabled (cleanup.autoClean)";
+  } else if (!p.sync) {
+    // Off the critical path: removal, size measurement and the PR lookups behind the at-risk
+    // list run in a detached worker; the card only learns that cleanup is under way.
+    result.autoClean.deferred = true;
+    result.autoClean.reason = "deferred — detached worker";
+    // The at-risk list comes from the removal plan, which now runs in the worker. It persists
+    // its list per repo; re-emit it here so the "unlanded work without a PR" warning still
+    // reaches this ship's card (dropping items whose branch/worktree is gone meanwhile).
+    const persisted = persistedAtRisk(repo, scan);
+    if (persisted.length) {
+      result.atRisk = persisted;
+      result.atRiskSource = { from: "last-hygiene-run", at: repo.atRisk.at };
+    }
+    if (scan.units.length > 0) {
+      if (workerLockHeld(cwd, now)) {
+        result.autoClean.reason = "deferred — worker already running";
+        result.autoClean.running = true;
+      } else {
+        const job = { cwd, stateKey: key, settings, statePath: p.statePath || null };
+        result.autoClean.running = (p.spawnWorker || startHygieneWorker)(job) === true;
+      }
+    }
   } else {
     const projectsDir = p.projectsDir === undefined ? defaultProjectsDir() : p.projectsDir;
     const sizeCache = repo.sizes && typeof repo.sizes === "object" ? { ...repo.sizes } : {};
@@ -1374,6 +1419,8 @@ export function runHygiene(p) {
     result.autoClean.kept = plan.keep.length;
     result.autoClean.offline = plan.offline;
     result.atRisk = plan.atRisk;
+    repo.atRisk = { at: new Date(now).toISOString(), items: plan.atRisk.slice(0, AT_RISK_KEEP) };
+    dirty = true;
     if (!plan.gateOpen) {
       result.autoClean.reason = plan.reason;
     } else {
@@ -1442,6 +1489,83 @@ export function runHygiene(p) {
 export function startOrphanScan(script = fileURLToPath(new URL("../../../scripts/orphan-scan.js", import.meta.url)), spawnFn = spawn) {
   try {
     const child = spawnFn(process.execPath, [script], { detached: true, stdio: "ignore", windowsHide: true });
+    child.on?.("error", () => { /* start failure is not the ship's problem */ });
+    try { if (child.pid) os.setPriority(child.pid, os.constants.priority.PRIORITY_LOW); } catch { /* optional */ }
+    child.unref?.();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const WORKER_LOCK = "devops-hygiene-worker.lock";
+export const WORKER_LOCK_STALE_MS = 30 * 60_000;
+
+function workerLockPath(cwd) {
+  const dir = gitOut(["rev-parse", "--git-common-dir"], cwd);
+  return dir ? path.resolve(cwd, dir, WORKER_LOCK) : null;
+}
+
+/** True while another detached worker holds a fresh lock for this repo (stale after 30 min). */
+export function workerLockHeld(cwd, now = Date.now()) {
+  try {
+    const file = workerLockPath(cwd);
+    if (!file) return false;
+    const lock = JSON.parse(fs.readFileSync(file, "utf8"));
+    return typeof lock.at === "number" && now - lock.at < WORKER_LOCK_STALE_MS && (!lock.pid || pidAlive(lock.pid));
+  } catch {
+    return false;
+  }
+}
+
+/** Takes the worker lock; false when a live one exists. Created exclusively, so two racing workers cannot both win. */
+export function acquireWorkerLock(cwd, now = Date.now(), pid = process.pid) {
+  try {
+    const file = workerLockPath(cwd);
+    if (!file || workerLockHeld(cwd, now)) return false;
+    // A stale lock is claimed by renaming it away (only one racer's rename
+    // succeeds) — never by an unconditional unlink that could delete a lock
+    // another worker created a moment ago.
+    if (fs.existsSync(file)) {
+      const claimed = `${file}.${pid}.${now}.stale`;
+      try { fs.renameSync(file, claimed); } catch { return false; }
+      let fresh = false;
+      try {
+        const lock = JSON.parse(fs.readFileSync(claimed, "utf8"));
+        fresh = typeof lock.at === "number" && now - lock.at < WORKER_LOCK_STALE_MS && (!lock.pid || pidAlive(lock.pid));
+      } catch { /* unreadable = stale */ }
+      if (fresh) {
+        // Another worker wrote a live lock after our check: put it back, we lose.
+        try { fs.renameSync(claimed, file); } catch { /* it re-created one meanwhile */ }
+        return false;
+      }
+      try { fs.unlinkSync(claimed); } catch { /* gone */ }
+    }
+    fs.writeFileSync(file, JSON.stringify({ pid, at: now }), { flag: "wx" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function releaseWorkerLock(cwd, pid = process.pid) {
+  try {
+    const file = workerLockPath(cwd);
+    if (!file) return;
+    const lock = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (lock.pid && lock.pid !== pid) return; // not ours — never delete another worker's lock
+    fs.unlinkSync(file);
+  } catch { /* best effort */ }
+}
+
+/**
+ * Starts the post-ship removal in a detached, hidden, low-priority child
+ * (ship/hygiene-worker.js) and returns at once. Any failure to start it is
+ * ignored — the next session's orphan nudge still sees the leftovers.
+ */
+export function startHygieneWorker(job, script = fileURLToPath(new URL("../hygiene-worker.js", import.meta.url)), spawnFn = spawn) {
+  try {
+    const child = spawnFn(process.execPath, [script, JSON.stringify(job)], { detached: true, stdio: "ignore", windowsHide: true });
     child.on?.("error", () => { /* start failure is not the ship's problem */ });
     try { if (child.pid) os.setPriority(child.pid, os.constants.priority.PRIORITY_LOW); } catch { /* optional */ }
     child.unref?.();
