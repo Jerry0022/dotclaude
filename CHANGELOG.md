@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.321.0] — 2026-10-26
+
+The concept close-out is readable at a glance. The final report used to be a long page with checkboxes and buttons that the FAB panel offered again, and the panel squeezed accordions, a TOC window and a journey row into the close-out. Now the report says in one sentence what came out, and the panel is a to-do inbox with two clear finish buttons. The same close-out also works without a prior concept, so `/do-run` opens it instead of the static report.
+
+### Added
+- **Final report at a glance.** Before/after pair with "▶ Selbst ausprobieren", one sentence, "Was kam raus" and "Was es aushält" (load gauges against targets Claude estimates, 3 of 7 NFR classes), a 7-level test-depth ladder and a dev fold of at most 5 lines. No checkboxes in the report body; the panel is the only place to answer.
+- **Close-out panel as a to-do inbox.** Phase icon in the head (🧭 Runde N / 🏁 Abschluss), groups 🧭 Du entscheidest / 🧪 Du testest / 👉 Du machst danach (at most 3 each, a Sammel-Issue beyond that, a bottom sheet per find) and a footer with the disposition line and two buttons, "🏁🚀 Abschließen & shippen" and "🏁 Nur abschließen, nicht shippen". Accordion, "Weiter", TOC window and journey row are gone from the close-out. The finalize payload gains `tests[]` / `handoffs[]` with `skip | guide | self` and a guide kind (web → auto-guide, desktop help, inline).
+- **Close-out without a prior concept.** `concept-build.js init --report` and `auto-concept --report` create a report-only page; `/do-run` Step 7 opens it (only when something is open) instead of the static `AUTONOMOUS-REPORT.html`.
+- **Placeholder warning.** The gate warns (advisory) about `{n}` / `{{key}}` placeholders left in a final report.
+
+### Changed
+- **Pre-selection rules.** Findings lean to "Jetzt umsetzen" (cosmetics included); an issue only when the fix is risky or needs concepting first (size alone is no criterion); "Ignorieren" only when there is no workaround. For 🧪/👉 the criticality decides skip vs. needed; "Mit Anleitung" is pre-selected only when the step is guidable, and "nicht führbar" is never shown.
+
+### Fixed
+- **Locale keys with digits** (`final.level_1` … `7`) were never substituted by `concept-build`; renamed to word keys, with a test.
+- **The build kept the final-report gate findings out of its block reason**, also when the page had only chrome collisions or a re-asked design choice.
+- **The final-report gate region ran past the report** into the engine scripts; it now ends at the report section's own closing tag.
+- **An unfilled report-only skeleton built and opened as an empty report.** Its `<!-- TODO: … -->` markers now block the build, with their own guidance.
+
 ## [0.320.0] — 2026-10-26
 
 The session title now shows the finger whenever the user has to allow something, also while a background agent waits on a tool permission dialog. Before, only the main thread could rename the session, `pre.ask.title` stayed silent inside subagents and no PermissionRequest hook was registered, so nothing woke the idle main thread and the title kept its ⏳ while work stood still.
