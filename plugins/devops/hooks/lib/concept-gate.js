@@ -147,6 +147,13 @@ function findFinalReportIssues(html) {
   const region = finalReportRegion(html);
   if (!region || !(html || '').includes('function collectTodos')) return [];
   const issues = [];
+  // The report-only skeleton (`concept-build.js init --report`) marks every
+  // part still to be written with a `<!-- TODO: … -->` comment. They are
+  // invisible on the page, so an unfilled skeleton would build and open as an
+  // empty report — block it until each one is replaced.
+  if (/<!--\s*TODO:/.test(region.html)) {
+    issues.push({ kind: 'final-report-skeleton', why: 'the final report still carries the skeleton\'s <!-- TODO: … --> markers — write the report (templates-final-report.md) before the build', at: region.at });
+  }
   const body = region.html.replace(/<!--[\s\S]*?-->/g, '');
   const oqStart = body.search(/\sdata-open-questions\b/);
   if (oqStart >= 0) {

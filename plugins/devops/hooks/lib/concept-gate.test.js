@@ -1007,6 +1007,11 @@ describe("final report (templates-final-report.md, validation-gate.md 33b / 37b)
     expect(findFinalReportIssues(report("<!-- never write nicht führbar --><p>ok</p>"))).toEqual([]);
   });
 
+  test("an unfilled report-only skeleton (<!-- TODO: … -->) blocks", () => {
+    expect(findFinalReportIssues(report("<p><!-- TODO: one sentence --></p>")).map((i) => i.kind)).toEqual(["final-report-skeleton"]);
+    expect(findFinalReportIssues(report("<!-- a note --><p>ok</p>"))).toEqual([]);
+  });
+
   test("the rules read the report section only — not the engine after it, not an earlier round", () => {
     const html = report('<section data-tests hidden><ul><li data-crit="mid">x</li></ul></section><p>ok</p>')
       .replace("</body>", "<script>// \"nicht führbar\" is never shown</script>\n</body>");
