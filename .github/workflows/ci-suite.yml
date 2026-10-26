@@ -47,7 +47,20 @@ jobs:
       - name: Install
         run: npm ci
 
+      # Tests build throwaway repos and commit/merge in them; a fresh runner has
+      # no git identity, and `git merge` refuses without one.
+      - name: Git identity
+        run: |
+          git config --global user.name "ci"
+          git config --global user.email "ci@users.noreply.github.com"
+          git config --global init.defaultBranch main
+
       - name: Run suite shard
+        # The runner's TEMP is an 8.3 short path (RUNNER~1); tests compare it
+        # with realpath'd long paths. runner.temp is a long path.
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
         run: npx vitest run --shard=${{ matrix.shard }}/4
 
   suite:
