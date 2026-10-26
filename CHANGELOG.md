@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.319.1] — 2026-10-26
+
+A git write that timed out on Windows no longer leaves the real git running behind the recovery. `execFileSync`'s timeout kills only Git for Windows' `cmd\git.exe` launcher; the `mingw64` git it started kept the index lock and kept writing the checkout, so the mid-checkout recovery reported "another process holds index.lock" for a lock that was its own git's.
+
+### Fixed
+- **git-sync stops the whole git process tree on a write timeout (Windows).** The recovery walks the timed-out child's descendants by parent pid, stops them and waits (bounded) until they are gone before it touches `index.lock`. `powershell.exe` is resolved from `SystemRoot`, not `PATH`. POSIX is unchanged.
+
+### Changed
+- **Plugin audit report shows blocked ship attempts per rule.** The `shipBlocksByRule` frequencies the mining already collected now render as their own table next to the gate hits (frequencies only, no savings claim).
+- **do-ship project reference under its size budget.** The self-update rationale and the Step 8 verify detail moved to `deep-knowledge/self-update-rationale.md` and `step8-finalizer.md`; every rule is kept.
+
 ## [0.319.0] — 2026-10-26
 
 Unlanded work can no longer pile up unnoticed. Nothing forced a decision before: the autosave Stop hook silently snapshotted unlanded session work to `parked/autosave/*`, and the 2026-10-19 cleanup pushed rescue and salvage copies. The SessionStart nudge only counted at-risk branches and left out every parked entry, autosave included. `rescue/` and `salvage-land/` were not recognized as parked at all. So about 150 safety copies were invisible, and work in repos the user rarely opens never surfaced.
