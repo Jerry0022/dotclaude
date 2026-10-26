@@ -1,4 +1,4 @@
-# Concept templates, part 09 of 42: Template: design — views, variant overview
+# Concept templates, part 09 of 46: Template: design — views, variant overview
 
 ## Views (optional)
 
@@ -426,6 +426,15 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
   `mappings[]` entry back into the spec as `submitted` (§ Information
   Mapping (engine) → Freezing) — the frozen view then shows the user's
   submission read-only, never the proposal.
+
+### View kind `analysis`
+
+`<section data-view="…" data-view-kind="analysis" data-analysis="lite" data-nav-label="…" hidden>`
+holds a Lite analysis (L1 + L3, ≤ 5 `data-decision-mode` decisions, one at a
+time with progress dots). Markup, modes and payload are in
+`templates-analysis.md`; the engine enhances the view itself into the Lite
+card (the view stays the scroll box, no `.view-frame`), and the view
+decisions are collected by the design branch through `collectModeDecision()`.
 
 ## Variant overview (≥2 designs)
 

@@ -1,4 +1,4 @@
-# Concept templates, part 15 of 42: Template: design — screen patterns, decision schema, collectDecisions
+# Concept templates, part 15 of 46: Template: design — screen patterns, decision schema, collectDecisions
 
 ## Screen-pattern markup
 
@@ -422,6 +422,14 @@ function collectDesignDecisions() {
   if (active) {
     active.querySelectorAll('section[data-view]').forEach(view => {
       view.querySelectorAll('[data-decision]').forEach(group => {
+        // Lite analysis decisions (templates-analysis.md): typed value per mode.
+        if (group.hasAttribute('data-decision-mode') && typeof collectModeDecision === 'function') {
+          const typed = collectModeDecision(group);
+          typed.view = view.dataset.view;
+          if (view.dataset.viewFor) typed.design = view.dataset.viewFor;
+          decisions.push(typed);
+          return;
+        }
         const checked = group.querySelector('input[type="radio"]:checked');
         if (!checked) return;
         // The adjacent {decisionId}-note textarea is mandatory (§ View kind

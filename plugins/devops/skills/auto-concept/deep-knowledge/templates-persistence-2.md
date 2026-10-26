@@ -1,4 +1,4 @@
-# Concept templates, part 28 of 42: Shared systems — state persistence (continued 2)
+# Concept templates, part 28 of 46: Shared systems — state persistence (continued 2)
 
 ```javascript
 // `text:iN:` keys with N below the live round = drafts of a submitted

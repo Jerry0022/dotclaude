@@ -8,10 +8,16 @@
  *
  *     **Before executing this step, Read `deep-knowledge/<file>.md` § <section> completely** — <what it holds>.
  *
+ *   A guide outside the step files (decision-modes.md, analysis-palette.md)
+ *   is named whole, without a section:
+ *
+ *     **Before executing this step, Read `deep-knowledge/<file>.md` completely** — <what it holds>.
+ *
  *   Step 5 pointers say "Re-Read … completely on every round — even if read
  *   earlier in this session" instead: a long session compacts earlier reads.
  *
- *   readSkill() replaces each pointer with the body of that `## <section>`, so
+ *   readSkill() replaces each pointer with the body of that `## <section>` (or
+ *   with the whole file for a whole-file pointer), so
  *   the result is the procedure exactly as it read before the split — what the
  *   text tests assert against. A pointer whose file or section is missing, or a
  *   section named twice, throws instead of silently dropping part of a step.
@@ -22,7 +28,7 @@ const path = require('path');
 
 const SKILL = path.join(__dirname, 'SKILL.md');
 const DK = path.join(__dirname, 'deep-knowledge');
-const POINTER = /^\*\*Before executing this step, (?:Read|Re-Read) `deep-knowledge\/([a-z0-9-]+\.md)` § (.+?) completely(?: on every round — even if read earlier in this session)?\*\* — .+\.$/;
+const POINTER = /^\*\*Before executing this step, (?:Read|Re-Read) `deep-knowledge\/([a-z0-9-]+\.md)`(?: § (.+?))? completely(?: on every round — even if read earlier in this session)?\*\* — .+\.$/;
 
 /** The `## <name>` sections of one deep-knowledge file, body lines only. */
 function sectionsOf(file) {
@@ -71,6 +77,11 @@ function readSkill() {
       continue;
     }
     const [, file, name] = m;
+    if (name === undefined) {
+      if (!fs.existsSync(path.join(DK, file))) throw new Error(`SKILL.md points at missing deep-knowledge/${file}`);
+      out.push(...fs.readFileSync(path.join(DK, file), 'utf8').replace(/\s+$/, '').split(/\r?\n/));
+      continue;
+    }
     if (!cache.has(file)) {
       if (!fs.existsSync(path.join(DK, file))) throw new Error(`SKILL.md points at missing deep-knowledge/${file}`);
       cache.set(file, sectionsOf(file));

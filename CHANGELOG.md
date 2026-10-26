@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.323.0] — 2026-10-26
+
+Analysis results and decisions on concept pages are guided now. A pure analysis concept opens with a briefing (what was examined, why, what it could bring), walks through at most three topics and asks one decision per stage; a lighter variant embeds the same flow in any concept for a handful of questions. Decisions are typed by what they decide instead of include/discard for everything, and the recommendation is always preselected. An analysis of 200 recent decisions found 117 with an ill-fitting control (74 were really a single choice, 310 negated statements under toggles); 20 analysis pages had no "x of n" orientation, a TOC that listed 10 of 17 decisions and not one chart.
+
+### Added
+- **Full analysis view.** Briefing → ≤ 3 topics → one decision per stage on a 66/33 stage with a three-level animated analysis column, a clickable stepper, a review and a next round.
+- **Lite analysis view.** `data-view-kind="analysis"` embedded in any concept, at most five decisions.
+- **Seven decision modes.** single, multi, yes/no/alternative, slider, order, verify and wording, each with a consequence per option; the recommendation (★) is always preselected and `collectDecisions` sends a typed payload. Legacy include/discard pages keep working.
+- **Eight visual renderers** (`CONCEPT_VIZ`) for analysis results.
+- **Authoring guides.** `analysis-palette.md` (35 display types, exactly one pure text type), `decision-modes.md` (7 modes, when Claude uses which) and the Full/Lite rules in step 1.
+- **Gate A1–A8.** Briefing and recommendation required; warnings for more than three topics or seven decisions per topic, timing posed as a decision and N bi-states that are really one choice.
+
+### Changed
+- **Bridge polling backs off** from 5 s to 60 s while no bridge answers.
+- **Close-out sheet rows wrap to two lines**, and the visible labels of Funde, 🧪 and 👉 items are capped at 48 characters (gate 33c, blocking).
+- `templates-analysis.md` is split into a contract, a CSS and two JS parts to stay within the part budget.
+
+### Fixed
+- **Design and mixed pages lost their title and subtitle** in `concept-build.js`.
+- **The TOC counted only top-level decisions**; nested decisions and findings are counted now ("Entscheidungen" / "Befunde").
+- **Gate attribute parsing** accepts a value that contains the other quote character, a slider without a `value` no longer passes as preselected, and the `data-tests` / `data-handoffs` anchor no longer matches longer attribute names.
+
 ## [0.322.1] — 2026-10-26
 
 The card's Web-Guide button fires for real manual website steps and no longer for phantom ones. An arrow path in one test item plus a provider URL in another used to produce a bogus "Web-Guide … Vercel" button; setup steps in web UIs the detector did not know (Enable Banking, Home Assistant) got no guide at all.

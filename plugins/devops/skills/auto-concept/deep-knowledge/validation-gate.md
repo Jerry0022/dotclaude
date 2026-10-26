@@ -84,7 +84,7 @@ from `templates.md` § Layout before opening the tab.
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 81 patterns, regardless of template
+Every concept page must contain these 82 patterns, regardless of template
 (the numbering carries `b` suffixes where a pattern was added next to a
 related one — count the rows, not the highest number):
 
@@ -133,6 +133,7 @@ related one — count the rows, not the highest number):
 | 32 | `panel-dispose-concept` AND `closeout-dispose-edit` | Disposition fieldset behind the 🤖 group's "🧹 Diese Seite wird gelöscht · ändern" line. Carries the discard / keep / gitignore radio group + optional `moveTo` input. See templates-final-report.md § Disposition Control. |
 | 33 | `renderCloseout` AND `renderDecideGroup` AND `renderTodoGroup` AND `openRouteSheet` AND `closeoutFundeSplit` AND `setCloseoutButtonState` | The inbox renderers: the 🧭 rows with their pre-selected route pill + reason chip and the bottom sheet, the max-three cap with the Sammel-Issue row, the 🧪/👉 rows with Muss nicht · Mit Anleitung · Mach ich selbst, the done state, and the clicked button's post-click states (running/stalled, done = `#closeout-close`). |
 | 33b | `data-oq-origin="deferred"` or `data-oq-origin="found"` on EVERY Fund (element with `data-issue-title`) inside `[data-open-questions]` — plus `data-route-default` (`now` / `issue` / `ignore`) and a one-word `data-route-reason` — and NO `input[type="checkbox"]` inside that block; checked only when a `data-final-report` section carries it | The open-points admission gate made structural (`SKILL.md` § Open points admission gate): a Fund is admissible only as a point the user deferred during this concept or as something found on the way and unrelated to its scope. A Fund without an origin — or with any other value — skipped the gate, typically a piece of approved scope that was not built and got re-labelled as a follow-up. A Fund without a route default is one Claude did not pre-answer (the panel then falls back to 📌 Issue). A checkbox in the report body is the old interaction — the FAB is the only place to answer now. Hard fail on the final-report section. A report with no `[data-open-questions]` block passes — that is the normal case, not a gap. |
+| 33c | On a final report: the visible label of every Fund (`.oq-label`) and the text of every `<li>` in `[data-tests]` / `[data-handoffs]` (`.todo-text` when present) is at most **48 characters** | The close-out sheet clamps a row title to two lines (`.closeout-todo-title`, `line-clamp: 2`); a label that long still fits, a sentence is cut. Short noun phrase in the label, details in `data-issue-body` / the report body. Gate kind `final-report-label-length` (blocks, like 33b / 37b). 48 is an estimate for ~24 characters per line at the panel's narrowest title width (not browser-measured). |
 | 34 | `collectIssueItems` AND `collectImplementItems` AND `collectTodos` | The two disjoint buckets the sheet produces from the Funde — `finalize.issues.items[]` (file it, incl. the one Sammel-Issue) and `finalize.implement.items[]` (build it now) — and the `tests[]` / `handoffs[]` lists with `mode` (`skip` / `guide` / `self`) and `guide` (`web` / `desktop` / `inline` / null). Without them the close-out ships empty lists and silently drops the user's answers. |
 | 35 | `collectDisposition` | Reads the disposition fieldset (`dispose-mode` radio + optional `dispose-move-to` input) into the `{ mode, moveTo }` shape the `finalize` payload requires. Without this, submit throws. |
 | 36 | `body.viewing-final .panel-status` AND `body.viewing-final .panel-nav-scroll` (both CSS rules, `display: none`) — and NO `id="status-channel"`, NO `applyNavWindow`, NO `mountFinalJourney` anywhere in the file | The final-report panel is the close-out inbox and nothing else: no status line, no TOC window, no journey row — the panel head's phase icon ("🏁 Abschluss" instead of "🧭 Runde N") says where the session is, and the clicked button says the rest (a disconnected bridge is its "· wird zwischengespeichert" label, a running close-out its state). A page still carrying any of the three is an older skeleton and fails this entry. See templates-final-report.md § Final Report Panel. |
@@ -407,5 +408,27 @@ data-template>` not matching the active iteration's
 run before first paint (see § Frozen/Active Mismatch below). The submit
 payload MUST include an `action` field with value `"iterate"` or
 `"implement"`.
+
+## Analysis & decision modes (A1–A8, deterministic)
+
+Enforced by `hooks/lib/concept-gate-analysis.js` (called from
+`concept-gate.js` `evaluate()`, so the post-write hook and
+`concept-build.js build` both run it). Applies only to pages that carry
+`data-analysis` or `data-decision-mode` elements; contract in
+`templates-analysis.md`. Markup inside `<script>`, `<style>` and comments is
+ignored.
+
+| # | Severity | Rule |
+|---|---|---|
+| A1 | **fail** | `data-analysis="full"` without a briefing: `[data-analysis-briefing]` with non-empty `[data-briefing-what]`, `[data-briefing-why]` and `[data-briefing-potential]` (a value or `data-viz-spec`) |
+| A2 | **fail** | a `[data-decision-mode]` without `data-rec`, or whose preselected control is not the recommendation (checked radio / checked boxes / range value / initial order) |
+| A3 | **fail** | unknown `data-decision-mode` (single, multi, yesnoalt, slider, order, verify, wording) or a mode decision without `data-decision` id |
+| A4 | warn | more than 3 `[data-topic]` per Full, or more than 7 decisions in one topic |
+| A5 | warn | a Lite with more than 5 decisions (belongs in a Full) |
+| A6 | warn | a quantitative finding (L3 block with numbers/units, or `data-finding-quant="true"`) without a palette visual (`data-viz` other than `text`) |
+| A7 | warn | 3 or more legacy include/discard groups in one section on an analysis page: an exclusive choice built as N bi-states, use `data-decision-mode="single"` |
+| A8 | warn | timing as a decision ("Welle", "wann umsetzen", "when to ship" in a label or question): default is implement now, offer "Als Issue anlegen" |
+
+Warnings surface in the `concept-build.js` build report; they never block.
 
 > Phase 2 (template-specific patterns) and Failure handling continue in [validation-gate-phase2.md](validation-gate-phase2.md).
