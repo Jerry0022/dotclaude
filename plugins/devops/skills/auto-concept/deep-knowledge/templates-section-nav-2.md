@@ -296,9 +296,22 @@ function updateSectionNavState() {
   const labels = { include: 'Miteinbeziehen', discard: 'Verwerfen' };
   document.querySelectorAll('.section-nav-item[data-variant]').forEach(link => {
     const id = link.dataset.sectionId;
+    const stateEl = link.querySelector('.section-nav-state');
+    // Mode decisions (templates-analysis.md) have no include/discard: a dot
+    // names decided / open / issue, read from the same typed entry the payload uses.
+    const modeSec = document.getElementById(id);
+    if (modeSec && modeSec.hasAttribute('data-decision-mode') && typeof collectModeDecision === 'function') {
+      if (!stateEl) return;
+      const entry = collectModeDecision(modeSec);
+      const key = entry.issue ? 'issue' : entry.untouched ? 'open' : 'decided';
+      const de = String(document.documentElement.lang || 'en').slice(0, 2) === 'de';
+      const text = { issue: de ? 'Issue' : 'Issue', open: de ? 'offen' : 'open', decided: de ? 'entschieden' : 'decided' }[key];
+      stateEl.textContent = (key === 'open' ? '○ ' : '● ') + text;
+      stateEl.className = 'section-nav-state state-' + key;
+      return;
+    }
     const checked = document.querySelector(`input[name="eval-${id}"]:checked`);
     const currentState = checked ? checked.value : 'include';
-    const stateEl = link.querySelector('.section-nav-state');
     if (stateEl) {
       stateEl.textContent = labels[currentState] || currentState;
       stateEl.className = 'section-nav-state state-' + currentState;
