@@ -250,6 +250,7 @@ process.stdin.on('end', () => {
 
   const toolName = hook.tool_name || '';
   const toolInput = hook.tool_input || {};
+  try { require('../lib/guard-followup').check(cwd, toolName, toolInput, logSaving); } catch { /* never blocks */ }
   const cfg = loadConfig();
   const LIMIT = cfg.estimatedLimitTokens;
   // Sub-agent calls carry `agent_id` (and `agent_type`); the main thread has
@@ -523,6 +524,7 @@ process.stdin.on('end', () => {
   // First time — block and warn
   try { fs.writeFileSync(flag, Date.now().toString()); } catch {}
   logSaving('blocked', estimatedTokens, { tool: toolName, kind: guardKind });
+  try { require('../lib/guard-followup').mark(cwd, toolName, toolInput, estimatedTokens, guardKind); } catch { /* never blocks */ }
 
   const W = 54;
   const line = '─'.repeat(W);
