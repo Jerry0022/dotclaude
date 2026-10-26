@@ -7,6 +7,8 @@ import {
   ENGINE,
   ENGINE_DESIGN,
   ENGINE_DOCUMENT,
+  ENGINE_FINAL,
+  findFinalReportIssues,
   isConceptHtml,
   findMissing,
   findStaleEngine,
@@ -949,5 +951,63 @@ describe("findChromeCollisions (P32, #400)", () => {
     const templates = readTemplates();
     for (const c of ENGINE_CLASSES) expect(templates, c).toMatch(new RegExp(`class="[^"]*\\b${c}\\b|\\.${c}\\b`));
     expect(templates).not.toContain('class="concept-decision-panel overlay"');
+  });
+});
+
+
+// The final report — after a concept, or as the page's ONLY round (report-only
+// entry). The gate must accept the latter as a complete page and enforce the
+// close-out authoring rules on both: no checkboxes in the body, an admissible
+// origin on every Fund, never "nicht führbar".
+describe("final report (templates-final-report.md, validation-gate.md 33b / 37b)", () => {
+  const FINAL_ENGINE_STUB = `<button id="closeout-ship"></button><button id="closeout-noship"></button>
+<script>function collectTodos(){} async function submitFinalize(){}</script>`;
+  const FUND = `<li data-oq-id="oq-a" data-issue-title="[BUG] A" data-issue-type="bug" data-oq-origin="found" data-route-default="issue" data-route-reason="riskant"><span class="oq-label">A</span></li>`;
+  const report = (body) => VALID
+    .replace(/<section data-iteration="1"[^>]*><\/section>/,
+      `<section id="iter-1" data-iteration="1" data-iteration-template="free" data-final-report data-active>${body}</section>`)
+    .replace("</body>", `${FINAL_ENGINE_STUB}\n</body>`);
+
+  test("a page whose only round is a final report passes", () => {
+    const html = report(`<div class="fr-head"><h2 class="fr-title">X</h2></div><details class="fr-fold" data-open-questions><ul>${FUND}</ul></details>`);
+    expect(html).not.toMatch(/data-iteration="(?!1")/);
+    const r = evaluate("docs/concepts/2026-10-25-report.html", html);
+    expect(r, JSON.stringify(r)).toMatchObject({ applicable: true, ok: true });
+    expect(r.finalReport).toEqual([]);
+  });
+
+  test("a final report without the to-do-inbox engine is stale", () => {
+    const html = report("<p>x</p>").replace(FINAL_ENGINE_STUB, "");
+    const stale = findStaleEngine(html).map((e) => e.token);
+    for (const e of ENGINE_FINAL) expect(stale).toContain(e.token);
+    // …and a page without a final report never asks for it.
+    expect(findStaleEngine(VALID).map((e) => e.token)).not.toContain('id="closeout-ship"');
+  });
+
+  test("a checkbox among the Funde blocks", () => {
+    const html = report(`<section data-open-questions><label><input type="checkbox" name="oq-a" data-issue-title="[BUG] A" data-oq-origin="found"></label></section>`);
+    const r = evaluate("docs/concepts/x.html", html);
+    expect(r.ok).toBe(false);
+    expect(r.finalReport.map((i) => i.kind)).toContain("final-report-checkbox");
+    const reason = buildBlockReason("x.html", r.missing, r.forbidden, r.structural, r.mapping, r.overlap, r.stale, r.collisions, r.finalReport);
+    expect(reason).toMatch(/breaks the close-out authoring rules/);
+  });
+
+  test("a Fund without an admissible origin blocks; a routed one is exempt", () => {
+    const bad = FUND.replace(' data-oq-origin="found"', ' data-oq-origin="scope"');
+    const r = evaluate("docs/concepts/x.html", report(`<details data-open-questions><ul>${bad}</ul></details>`));
+    expect(r.finalReport.map((i) => i.kind)).toEqual(["final-report-origin"]);
+    const routed = FUND.replace(' data-oq-origin="found"', "").replace("<li ", "<li data-routed ");
+    expect(findFinalReportIssues(report(`<details data-open-questions><ul>${routed}</ul></details>`))).toEqual([]);
+  });
+
+  test('"nicht führbar" on the report blocks — comments do not count', () => {
+    expect(findFinalReportIssues(report("<p>Spiel ansehen · nicht führbar</p>")).map((i) => i.kind)).toEqual(["final-report-not-guidable"]);
+    expect(findFinalReportIssues(report("<!-- never write nicht führbar --><p>ok</p>"))).toEqual([]);
+  });
+
+  test("the final-report anchors exist in templates.md — the list cannot drift from the reference", () => {
+    const md = readTemplates();
+    for (const e of ENGINE_FINAL) expect(md, e.token).toContain(e.token);
   });
 });

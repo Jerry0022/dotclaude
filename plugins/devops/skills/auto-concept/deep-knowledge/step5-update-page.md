@@ -111,33 +111,62 @@ lives in the single built `{date}-{slug}.html` and its source folder
    context. The build makes it the live round. The `data-final-report` flag switches the panel to
    `panel-final-report` mode (no iterate/implement buttons — see
    `deep-knowledge/templates-final-report.md` § Final Report Panel). The template is
-   **always `free`** and is never omitted: a report is a document with a TOC,
+   **always `free`** and is never omitted: a report is a document,
    the `design` layout is built for a mockup, and a section that declares no
    template used to inherit whatever tab the reader came from — the same
    report rendered two different ways depending on the route taken to it.
    The ☰ panel does not move with that choice (§ Panel Chrome (all
    templates)), so the reader keeps the menu they have used all session.
-3. Inside, render a structured report with several `<section id data-nav-label>`
-   blocks so the existing TOC auto-populates. Recommended structure
-   (Claude picks which sections actually fit the concept):
-   - **Zusammenfassung** — what was implemented in one paragraph + commit hash
-   - **Geänderte Dateien** — bulleted list with brief rationale per file
-   - **Tests / Verifikation** — what was run, what passed, what was skipped
-   - **Offene Punkte** *(optional — usually absent, see § Open points
-     admission gate below)* — checkbox list of the points that passed the
-     gate: either explicitly deferred by the user during this concept, or
-     found on the way and unrelated to the concept's scope
-   - **Danach von Hand** (`<section id="handoffs"
-     data-nav-label="{{final.handoffs}}" data-handoffs>`, *only when there
-     is something*) — the steps the user has to take by hand after the merge
-     (flip a cron, rotate a key, watch the first run), as a numbered list.
-     `data-handoffs` paints the section, marks its TOC entry in the warning
-     colour and mirrors the list onto the close-out sheet, where it is the
-     one block that stays visible after the close-out — as a plain paragraph
-     it vanished among the others. Omit the section when there is nothing to
-     hand over. Never a place for recommendations: work that is worth doing
-     and in scope was built; work that is out of scope goes through the gate
-     below or nowhere
+3. Inside, write the report in **plain language** with the engine's report
+   classes (`fr-*`, § Final Report Panel → Report body — no round
+   stylesheet, no checkboxes). Top → bottom, copy the example HTML in
+   `deep-knowledge/templates-final-report.md` § Final-report section HTML:
+   - **Heading, always on top** — `.fr-head`: "🏁 Abschluss" + the topic as
+     `<h2 class="fr-title">`. After the close-out the done banner
+     `.fr-banner` ("🏁 Abgeschlossen · 🚀 live als vX") goes UNDER it.
+   - **Vorher / Nachher** — `.fr-ba`: two screenshots from browser QA
+     (before / after, in the source folder) with **"▶ Selbst ausprobieren"**
+     (`.fr-try`, the local / preview / live URL) centred over them; after a
+     ship "▶ Live-Version öffnen". Nothing visual changed → a short
+     `.fr-flow` sequence instead.
+   - **One sentence "Was getan wurde"** — `.fr-sentence`. One sentence, not a
+     paragraph.
+   - **"Was kam raus"** (`.fr-wins`) — the top three functional results, each
+     with its own glyph and one bold key phrase. Lively, never overloaded:
+     one line each, no sub-bullets.
+   - **"Was es aushält"** (`.fr-meters`) — the top three non-functional
+     results as Belastungs-Balken. Pick the three most relevant of seven
+     classes — Performance, Sicherheit, Stabilität, Datenintegrität,
+     Kompatibilität, Barrierefreiheit, Wartbarkeit (a login weighs security,
+     most topics performance). Per meter: one big measured value, a bar
+     "getestet bis X" against the tick "Ziel Y" (`--fr-tested` /
+     `--fr-target` in percent of the bar), `data-met="true"` / `"false"`, and
+     one context sentence. **Estimate the target yourself, always** — never
+     leave it blank or ask; say "(geschätzt)" when it is an estimate. No
+     badges or tags as decoration.
+   - **Prüftiefe-Leiter** (`.fr-depth`) — the 7 levels, each `data-state`
+     `done` / `open` / `na` (`you` for level 7 while it waits on the user):
+     1 Code-Check · 2 Trockentest · 3 Zusammenspiel · 4 Lokal durchgespielt ·
+     5 Prod-Build geprüft · 6 Live vertestet · 7 Von dir abgenommen. Name the
+     strongest reached level big ("Stufe 5 von 7"); one foot line on the
+     gaps. Test counts never go here — they go in the 🛠 fold.
+   - **🔍 N Funde unterwegs** (`<details class="fr-fold" data-open-questions>`,
+     *optional — usually absent, see § Open points admission gate below*) —
+     one plain `<li>` per Fund with was / wo / warum vorbelegt and the data
+     attributes the panel reads.
+   - **🧪 / 👉 data lists** (`<section data-tests hidden>` /
+     `<section data-handoffs hidden>`, *only when there is something*) — at
+     most three each, one short line: 🧪 what you could not verify yourself,
+     👉 what the user has to do by hand after the merge (flip a cron, rotate
+     a key). Each `<li>` carries `data-todo-id`, `data-crit` and `data-guide`
+     (§ Funde, 🧪 and 👉 defaults below). The panel shows them as
+     "🧪 Du testest" / "👉 Du machst danach"; they are the only items left in
+     it after the close-out. Never a place for recommendations: work that is
+     worth doing and in scope was built; work that is out of scope goes
+     through the gate below or nowhere.
+   - **🛠 Für Entwickler** (`<details class="fr-fold">`) — **at most five short
+     lines** (every line costs output tokens): commit, areas + at most three
+     key files, tests in one line, CI link. The only place for jargon.
 4. `build`. The build generates the final-report chip:
    **tab label `iteration.final_tab`** (locale: "Abschlussbericht" /
    "Final report"), never "{{iteration.tab}} N+1", with `aria-selected="true"` and
@@ -155,34 +184,29 @@ lives in the single built `{date}-{slug}.html` and its source folder
 it (it is part of the engine) — this directive binds whatever assembles the
 page, and is why a fragment never carries its own close-out JS.
 The final-report JS block — `refreshCloseout`, `renderCloseout`,
-`renderHandoffs`, `openQuestionBoxes`, `followUpRoute`, `followUpItem`, `collectFollowUps`,
-`collectIssueItems`, `collectImplementItems`, `collectDisposition`,
-`closeoutShipChoice`, `buildFollowUpList`,
-`setCloseoutFrozen`, `restoreCloseoutToReady`, `submitFinalize`, the accordion
-half — `closeoutStorageKey`, `loadCloseoutAnswered`, `saveCloseoutAnswered`,
-`closeoutRows`, `closeoutOpenRow`, `closeoutAllAnswered`, `openCloseoutRow`,
-`closeoutRowSummary`, `isCloseoutRowLocked`, `updateCloseoutRowSummary`,
-`updateCloseoutProgress`, `updateCloseoutButton`, `setCloseoutButtonState`,
-`refreshCloseoutRows`, `initCloseoutRows`, `layoutCloseoutRowHeads`,
-`closeoutRowClick`, `closeoutButtonClick` — plus the `closeout-execute` click
-wiring (bound to `closeoutButtonClick`, never directly to `submitFinalize`),
-the delegated row-head click listener (bound to `closeoutRowClick`, never
-straight to `openCloseoutRow` — that is what keeps the accordion sequential),
-the `change` listener and the
-`DOMContentLoaded` wiring — MUST be copied verbatim from
+`openQuestionBoxes`, `followUpRoute`, `routeDefault`, `followUpItem`,
+`closeoutFundeSplit`, `sammelItem`, `collectFollowUps`, `collectIssueItems`,
+`collectImplementItems`, `todoItems`, `todoDefaultMode`, `todoMode`,
+`collectTodos`, `collectDisposition`, `renderGroup`, `renderDecideGroup`,
+`renderTodoGroup`, `openRouteSheet`, `closeRouteSheet`, `chooseRoute`,
+`renderCloseoutPlan`, `renderDisposeLine`, `toggleDisposeEdit`,
+`updateCloseoutButton`, `setCloseoutButtonState`, `setCloseoutFrozen`,
+`restoreCloseoutToReady`, `submitFinalize`, `restoreInFlightCloseout`,
+`markCloseoutStalled` — plus the delegated `closeoutSheetClick` wiring (the
+two buttons submit through it with `ship.run` true / false), the `change` /
+`input` listeners and the `DOMContentLoaded` wiring — MUST be copied verbatim from
 `deep-knowledge/templates.md` (the block starting at the comment
 `// --- Final-report close-out sheet (action: "finalize") ---`). Do NOT
-inline a simplified sheet, collapse it back into separate buttons, re-introduce
-a step chain, a "Gewählt: …" plan line or a status paragraph under the button,
-wire the button straight to `submitFinalize`, or omit the event-listener
-wiring; any omission leaves a visible-but-inert control or a flow the user
-cannot finish. After writing, the post-generation validation
+inline a simplified sheet, bring back the accordion, a "Weiter ›", a progress
+counter, a ship row or a files row, add a third button, or omit the
+event-listener wiring; any omission leaves a visible-but-inert control or a
+flow the user cannot finish. After writing, the post-generation validation
 gate (`deep-knowledge/validation-gate.md` Phase 1) MUST find the panel-state
 and close-out patterns (28–38b) in the generated file.
 
 ## Open points admission gate
 
-The `<section data-open-questions>` block is the exception, not a closing
+The `[data-open-questions]` block (the 🔍 Funde fold) is the exception, not a closing
 ritual. The normal final report has NO open points: the user approved a
 scope, the scope was built, the report says so. Every row on that list asks
 the user for a decision they did not ask to make, so a row has to earn its
@@ -203,8 +227,8 @@ Exactly two origins are admissible, and every item declares its origin with
 - **Anything in the approved scope.** If the user clicked implement on a
   round that contained it, it is scope: build it (see § `action:
   "implement"` step 2 — the approved scope is built in full). If it could
-  not be built, that is a shortfall and belongs in the *Zusammenfassung* /
-  *Tests* as "nicht umgesetzt, weil …" — moving it to the open points
+  not be built, that is a shortfall and belongs in "Was getan wurde" / the
+  Prüftiefe foot line as "nicht umgesetzt, weil …" — moving it to the open points
   quietly turns a shortfall into a request for the user's signature.
 - **The no-brainer next step of the scope** — "add the tests", "update the
   README for this change", "phase 4 of the same plan". If it is obvious, it
@@ -215,7 +239,7 @@ Exactly two origins are admissible, and every item declares its origin with
 - **Generic best-practice nudges** nobody asked for — "consider
   monitoring", "could use a cache", "re-evaluate on <date>".
 - **Reality-check drift** that broke no contract — that is a mention in the
-  *Zusammenfassung* (`deep-knowledge/reality-check.md`), not a row.
+  🛠 fold (`deep-knowledge/reality-check.md`), not a row.
 
 Self-check before writing a row: *would the user be surprised to see this
 here?* A row they would expect ("of course phase 4 is next") is scope or a
@@ -224,19 +248,45 @@ new concept, never a row. A row they would not have thought of themselves
 
 When no candidate survives, omit the section entirely — do NOT render an
 empty stub, a "keine offenen Punkte" line, or a single padding row. The
-sheet handles the absence: the follow-up block simply does not appear.
+panel handles the absence: the 🧭 group simply does not appear.
 
-Each surviving item becomes one row on the close-out sheet, where the user
-routes it to a GitHub issue, to "jetzt umsetzen" (built during the close-out,
-part B), or to nothing. Write `data-issue-body` for every item as if it were
-BOTH: an issue read cold in three months and a brief handed to an
-implementing agent ten minutes later. The presence of this section is what
-adds the follow-up block to the close-out sheet — see
-`deep-knowledge/templates-final-report.md` § Final Report Panel for the HTML pattern.
-Default each `<input type="checkbox">` to `checked` so the user opts items
-OUT rather than IN. The validation gate rejects a final report whose open
-points lack `data-oq-origin` (`deep-knowledge/validation-gate.md` pattern
-33b).
+Each surviving item becomes one 🧭 row in the panel, pre-answered: the user
+sees the route you chose and a one-word reason, and only taps it to change
+the route (GitHub issue, "jetzt umsetzen" — built during the close-out, part
+B — or nothing). Write `data-issue-body` for every item as if it were BOTH:
+an issue read cold in three months and a brief handed to an implementing
+agent ten minutes later. The presence of the block is what adds the 🧭 group
+— see `deep-knowledge/templates-final-report.md` § Final Report Panel for the
+HTML pattern. Funde are plain `<li>` elements, **never checkboxes** — the
+panel is the only place to answer. More than three Funde: the panel keeps two
+rows and folds the rest into ONE Sammel-Issue row, so list the ones that most
+need a decision first. The validation gate rejects a final report whose Funde
+lack `data-oq-origin`, or that carries a checkbox among them
+(`deep-knowledge/validation-gate.md` pattern 33b).
+
+### Funde, 🧪 and 👉 defaults
+
+Claude pre-selects every answer in the panel; the user only corrects.
+
+**Funde — `data-route-default` + `data-route-reason` (one word):**
+
+| Route | `data-route-default` | When | Typical reason |
+|---|---|---|---|
+| ⚡ Jetzt umsetzen | `now` | **The default tendency.** Small and inside this repo — **cosmetics included**. | `klein`, `kosmetisch`, `im Repo` |
+| 📌 Issue | `issue` | Only when it is **risky**, or **needs more preparation than a guide** (e.g. a concept first), or lies **outside the repo**. Size alone is NOT a reason. | `riskant`, `braucht Concept`, `außerhalb Repo` |
+| ✕ Ignorieren | `ignore` | The rarest: the current state works as is, is not a workaround, and the alternative would just be another way of doing the same. | `nur anders` |
+
+**🧪 / 👉 — `data-crit` first, then `data-guide`:**
+
+1. **Criticality** (`data-crit` = `low` / `mid` / `high`): `low` → the panel
+   pre-selects **Muss nicht**. `mid` / `high` → it is needed, go on.
+2. **Guidable?** (`data-guide`): a web task → `web` (Web-Guide via
+   `auto-guide`); a task on the PC → `desktop` (desktop scripts / takeover
+   help) → pre-selected **Mit Anleitung**. Otherwise leave `data-guide=""`
+   → pre-selected **Mach ich selbst**. When the user picks "Mit Anleitung"
+   on such an item, they get written steps (`guide: "inline"`).
+3. **Never write or show "nicht führbar"** — Claude can always explain what
+   to do. The gate rejects the phrase on a final report (pattern 37b).
 
 **No further iterations from the final report.** The panel deliberately
 omits the iterate/implement buttons. If the user wants more work after

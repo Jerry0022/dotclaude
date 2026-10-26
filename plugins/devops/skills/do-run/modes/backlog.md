@@ -432,8 +432,7 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
 
 ## Step 5 — Completion & Blocked Handling
 
-1. **Report** — first run `node "{PLUGIN_ROOT}/scripts/integration-check.js" --integration <base> --slug <run-slug> --remove`; its `ungelandet: N Teile` line goes into the report as `parked`. Then write a self-contained `BACKLOG-REPORT.html` (dark theme, per
-   `skills/do-run/modes/autonomous/deep-knowledge/html-report.md`) to the project root: per item
+1. **Report** — first run `node "{PLUGIN_ROOT}/scripts/integration-check.js" --integration <base> --slug <run-slug> --remove`; its `ungelandet: N Teile` line goes into the report as `parked`. Then write a self-contained `BACKLOG-REPORT.html` (dark theme, self-contained) to the project root: per item
    `shipped` / `parked` / `blocked` (+ reason + branch), milestone progress, the
    list of shipped PRs, and a separate `🚫 fremd` section listing every open issue
    dropped by the Step 1 trust gate, each with its review verdict and
@@ -458,6 +457,11 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
    (2026-10-25) ended with 16 open decisions and 10 proposed issues delivered
    only as report + card — the user had to ask for the concept page (Quiet
    output style rule 3: analysis that ends in a choice → `/auto-concept`).
+1c. **Abschluss after implementation.** Shipped items that leave Funde outside
+   their tasks, 🧪 tests or 👉 hand-offs for the user get the report-only
+   Abschluss page (`/auto-concept --report`, `modes/autonomous.md` Step 7b) —
+   the step after implementation only. It never carries issue decisions or
+   proposed follow-up issues; those stay the concept page of 1b.
 2. **Blocked / parked → chat thread** — for each blocked or parked item, emit
    ONE non-blocking `⏸ Rückfrage` status block into the session thread: the item,
    the reason, and the concrete question for the user. This is **not** a modal

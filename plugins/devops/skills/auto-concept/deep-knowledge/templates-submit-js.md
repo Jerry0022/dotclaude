@@ -377,55 +377,79 @@ document.addEventListener('change', e => {
 }, true);
 
 // --- Final-report close-out sheet (action: "finalize") ---
-// The final report used to hand the user four independent controls at once —
-// Shippen, Issues erstellen, Concept beenden, Runden ansehen — each with
-// its own submit and an execution order nobody could see. A four-step wizard
-// fixed the ordering but bought a new confusion: every "Weiter" looked like it
-// might already have done something, and the consequence list — the thing
-// that makes one irreversible click legitimate — sat three steps deep.
+// The panel of a final report is a TO-DO INBOX, not a questionnaire. Its
+// history, in short: four buttons at once (no order, no way to want more than
+// one), a four-step wizard (every "Weiter" looked like it already did
+// something), a wall of questions, and a sequential accordion with "n von N"
+// and "Weiter ›" (one line per question, still a staged form). What the user
+// actually has to do at the end of a concept is smaller than any of those:
+//   🧭 Du entscheidest  the Funde — each PRE-SELECTED (⚡ / 📌 / ✕) with a
+//                       one-word reason; a tap opens a bottom sheet to change it
+//   🧪 Du testest       what Claude could not verify — Muss nicht · Mit
+//                       Anleitung · Mach ich selbst, pre-selected
+//   👉 Du machst danach the manual hand-offs — the same three-way choice
+// and under the divider the 🤖 group (what Claude does on the click, the
+// disposition as one editable line) plus TWO buttons that ARE the ship answer:
+// "🏁🚀 Abschließen & shippen" / "🏁 Nur abschließen, nicht shippen". Both
+// submit `finalize`; there is nothing else to confirm, so there is no
+// progress counter and no "Weiter ›". Claude runs the parts in a fixed order
+// (issues → implement → ship → cleanup, § One submission, four consequences).
 //
-// This is ONE sheet, an ACCORDION of rows in the order Claude executes them
-// (open points → ship → this page → hand-offs), one open at a time, a live
-// plan BELOW the single button, and nothing that commits anything before that
-// button. Claude then runs the parts in that same fixed order (SKILL.md
-// Step 5b · finalize).
+// Pre-selection is AUTHORED, not guessed here: Claude writes
+// data-route-default / data-route-reason on every Fund and data-crit /
+// data-guide on every 🧪/👉 item (step5-update-page.md § Final-report append).
+// The engine only falls back to the harmless choice when an attribute is
+// missing: 📌 Issue for a Fund (writes no code), and "Mach ich selbst" for a
+// to-do whose criticality is not low.
 const CLOSEOUT_DEFAULT_ROUTE = 'issue';
-// The rows in accordion/execution order. 'plan' is deliberately not one of
-// them — it is the readout of the rows above, never a thing to answer.
-const CLOSEOUT_ROW_KINDS = ['followups', 'ship', 'files', 'handoffs'];
+const CLOSEOUT_ROUTES = ['implement', 'issue', 'ignore'];
+const CLOSEOUT_MODES = ['skip', 'guide', 'self'];
+// At most three rows per group — the inbox must stay readable at a glance.
+// More than three Funde: the first two keep their own row and the rest
+// become ONE Sammel-Issue row (closeoutFundeSplit()).
+const CLOSEOUT_GROUP_MAX = 3;
+const CLOSEOUT_SAMMEL_KEY = '__sammel';
+// The user's choices on the sheet, in memory only. Never localStorage and
+// never a named, persisted radio: saveState() restores named radios
+// document-wide, and a remembered "⚡ Jetzt umsetzen" would sail through a
+// later close-out and write code nobody re-authorised. A reload falls back to
+// what Claude authored; a tab switch (refreshCloseout({ reset: true })) keeps
+// the choices, keyed by item id.
+const _closeoutChoices = { route: {}, mode: {} };
 
 function finalReportSection() {
   const active = document.querySelector('section[data-iteration][data-active]');
   return (active && active.hasAttribute('data-final-report')) ? active : null;
 }
 
-// The [data-open-questions] checkboxes in the REPORT BODY stay the single
-// source of truth for which points are still open. Already-routed items carry
-// `disabled` (Claude sets it when it writes the [Issue #NNN] link or the
-// implemented note), so they drop out here and the whole block disappears
-// once everything is routed.
+// The Funde are NON-INTERACTIVE elements in the report body — any element in
+// the [data-open-questions] block that carries data-issue-title (normally the
+// <li> of the 🔍 fold). The report body has no checkboxes any more: the FAB
+// is the only place to answer. A Fund Claude has already routed carries
+// data-routed (it writes the issue link / "umgesetzt" note at the same time)
+// and drops out here; once every Fund is routed the 🧭 group disappears.
+// A legacy report's checkbox still counts while it is enabled.
 function openQuestionBoxes() {
   const active = finalReportSection();
   const block = active ? active.querySelector('[data-open-questions]') : null;
-  return block
-    ? Array.from(block.querySelectorAll('input[type="checkbox"]:not(:disabled)'))
-    : [];
+  if (!block) return [];
+  return Array.from(block.querySelectorAll('[data-issue-title]'))
+    .filter(el => !el.disabled && !el.hasAttribute('data-routed'));
 }
 
 // The id Claude gets back in the payload: whatever the report declared.
-function followUpId(el) { return el.name || el.id || ''; }
+function followUpId(el) {
+  return el.dataset.oqId || el.getAttribute('name') || el.id || '';
+}
 
-// The key the ROW's radio group is named after — which is not the same thing.
-// `name`/`id` are mandatory on an open-question checkbox and unique in
-// practice, but a hand-written report breaks both assumptions, and a radio
-// group is keyed by name document-wide: two rows sharing one make choosing a
-// route on the second silently un-choose the first, and every nameless row
-// would answer with the default no matter what the user clicked. So the key
-// is the declared id when it is usable, and a disambiguated one when it is
-// not — the payload keeps the declared value either way.
-function followUpKeys(boxes) {
+// The key the in-memory choice is stored under — which is not the same thing.
+// A hand-written report can repeat an id or leave it off; two Funde sharing a
+// key would answer for each other. So the key is the declared id when it is
+// usable and a disambiguated one when it is not — the payload keeps the
+// declared value either way.
+function followUpKeys(items) {
   const seen = {};
-  return boxes.map((el, i) => {
+  return items.map((el, i) => {
     const raw = followUpId(el);
     if (!raw) return 'pos-' + i;
     seen[raw] = (seen[raw] || 0) + 1;
@@ -433,34 +457,43 @@ function followUpKeys(boxes) {
   });
 }
 
-// Which of the three routes the user picked for one open point. Before the
-// radios exist (first render) — and for any row whose group somehow lost its
-// selection — the answer is the harmless default: file an issue, write no
-// code.
-function followUpRoute(key) {
-  if (!key) return CLOSEOUT_DEFAULT_ROUTE;
-  const host = document.getElementById('closeout-followup-list');
-  const el = host && host.querySelector('input[name="fu-' + CSS.escape(key) + '"]:checked');
-  return el ? el.value : CLOSEOUT_DEFAULT_ROUTE;
+// What Claude pre-selected. `now` is the authored spelling of ⚡ (the
+// payload bucket is `implement`); a legacy unchecked checkbox meant "drop".
+function routeDefault(el) {
+  if (el.type === 'checkbox' && !el.checked) return 'ignore';
+  const raw = String(el.dataset.routeDefault || '').toLowerCase();
+  if (raw === 'now' || raw === 'implement') return 'implement';
+  if (raw === 'issue' || raw === 'ignore') return raw;
+  return CLOSEOUT_DEFAULT_ROUTE;
+}
+function followUpRoute(key, el) {
+  const chosen = _closeoutChoices.route[key];
+  if (CLOSEOUT_ROUTES.includes(chosen)) return chosen;
+  return el ? routeDefault(el) : CLOSEOUT_DEFAULT_ROUTE;
+}
+
+// The short, plain-language name of a Fund: the visible .oq-label, else the
+// issue title without its "[TYPE] " prefix.
+function followUpLabel(el) {
+  const labelEl = el.querySelector('.oq-label') || el.closest('label')?.querySelector('.oq-label');
+  if (labelEl) return labelEl.textContent.trim();
+  return String(el.dataset.issueTitle || '').replace(/^\[[A-Z]+\]\s*/, '').trim();
 }
 
 // One payload item. `description` = explicit data-issue-body, else the
-// visible .oq-label text. Either is enough for Claude to skip the
-// auto-issue AskUserQuestion path — the user committed against the plan on
-// screen, so we MUST NOT ask again. The same shape feeds both buckets: an
-// item the user routed to "jetzt umsetzen" carries exactly the context an
-// implementing agent needs.
+// visible label. Either is enough for Claude to skip the auto-issue
+// AskUserQuestion path — the user committed against the plan on screen, so
+// we MUST NOT ask again. The same shape feeds both buckets: a Fund routed to
+// ⚡ carries exactly the context an implementing agent needs.
 function followUpItem(el) {
-  const labelEl = el.closest('label')?.querySelector('.oq-label');
-  const labelText = labelEl ? labelEl.textContent.trim() : '';
+  const labelText = followUpLabel(el);
   return {
     id: followUpId(el),
     title: el.dataset.issueTitle || labelText,
     type: el.dataset.issueType || 'chore',
     description: el.dataset.issueBody || labelText,
     // Optional project-specific label hints — picked up by Claude when
-    // present, silently ignored when absent. Concept HTML is generated by
-    // Claude, so these are populated from concept context.
+    // present, silently ignored when absent.
     role: el.dataset.issueRole || null,
     module: el.dataset.issueModule || null,
     milestone: el.dataset.issueMilestone || null,
@@ -468,18 +501,101 @@ function followUpItem(el) {
   };
 }
 
+// ≤ 3 Funde: one row each. More: the first two keep their row, the rest are
+// ONE Sammel-Issue row — the order is the report's, so Claude lists the Funde
+// that most need a decision first.
+function closeoutFundeSplit() {
+  const items = openQuestionBoxes();
+  const keys = followUpKeys(items);
+  const all = items.map((el, i) => ({ el, key: keys[i] }));
+  if (all.length <= CLOSEOUT_GROUP_MAX) return { rows: all, rest: [] };
+  return { rows: all.slice(0, CLOSEOUT_GROUP_MAX - 1), rest: all.slice(CLOSEOUT_GROUP_MAX - 1) };
+}
+// The Sammel row is an issue or nothing — building a bundle of unrelated
+// Funde in one go is not a route this sheet offers.
+function sammelRoute() {
+  return _closeoutChoices.route[CLOSEOUT_SAMMEL_KEY] === 'ignore' ? 'ignore' : 'issue';
+}
+function sammelItem(rest) {
+  const sheet = document.getElementById('closeout-sheet');
+  const tpl = (sheet && sheet.dataset.labelSammelTitle) || '{n}';
+  return {
+    id: CLOSEOUT_SAMMEL_KEY,
+    title: tpl.replace('{n}', String(rest.length)),
+    type: 'chore',
+    description: rest.map(r => {
+      const it = followUpItem(r.el);
+      return '- ' + it.title + (it.description && it.description !== it.title ? ': ' + it.description : '');
+    }).join('\n'),
+    role: null,
+    module: null,
+    milestone: null,
+    selected: true,
+    collected: rest.map(r => followUpItem(r.el))
+  };
+}
+
 function collectFollowUps(route) {
-  const boxes = openQuestionBoxes();
-  const keys = followUpKeys(boxes);
-  return boxes
-    .filter((el, i) => el.checked && followUpRoute(keys[i]) === route)
-    .map(followUpItem);
+  const { rows, rest } = closeoutFundeSplit();
+  const out = rows.filter(r => followUpRoute(r.key, r.el) === route).map(r => followUpItem(r.el));
+  if (rest.length && sammelRoute() === route) out.push(sammelItem(rest));
+  return out;
 }
 
 // Two buckets out of one list. They are disjoint by construction — a row has
-// exactly one route — so an item can never be filed AND built.
+// exactly one route — so a Fund can never be filed AND built.
 function collectIssueItems() { return collectFollowUps('issue'); }
 function collectImplementItems() { return collectFollowUps('implement'); }
+
+// --- 🧪 / 👉 to-dos ---
+// 🧪 = what Claude could not verify ([data-tests]), 👉 = what the user does by
+// hand afterwards ([data-handoffs]). One <li> each, non-interactive, with
+// data-crit (low | mid | high) and data-guide (web | desktop | empty).
+const CLOSEOUT_TODO_BLOCK = { tests: '[data-tests]', handoffs: '[data-handoffs]' };
+function todoItems(kind) {
+  const section = finalReportSection();
+  const block = section && section.querySelector(CLOSEOUT_TODO_BLOCK[kind]);
+  return block ? Array.from(block.querySelectorAll('li')) : [];
+}
+function todoId(kind, el, i) {
+  return el.dataset.todoId || el.id || (kind + '-' + (i + 1));
+}
+function todoKey(kind, el, i) { return kind + ':' + todoId(kind, el, i); }
+// Criticality decides first: low → "Muss nicht". Needed and guidable (a web
+// task → auto-guide, a PC task → desktop scripts / takeover help) → "Mit
+// Anleitung"; needed and not guidable → "Mach ich selbst". An explicit
+// data-mode-default wins. "Not guidable" is never shown — choosing "Mit
+// Anleitung" there simply means written steps (guide: "inline").
+function todoDefaultMode(el) {
+  const explicit = el.dataset.modeDefault;
+  if (CLOSEOUT_MODES.includes(explicit)) return explicit;
+  if (String(el.dataset.crit || '').toLowerCase() === 'low') return 'skip';
+  const g = el.dataset.guide;
+  return (g === 'web' || g === 'desktop') ? 'guide' : 'self';
+}
+// Chosen on the sheet, else what Claude stamped after the close-out
+// (data-mode, the done state), else the authored default.
+function todoMode(kind, el, i) {
+  const chosen = _closeoutChoices.mode[todoKey(kind, el, i)];
+  if (CLOSEOUT_MODES.includes(chosen)) return chosen;
+  if (CLOSEOUT_MODES.includes(el.dataset.mode)) return el.dataset.mode;
+  return todoDefaultMode(el);
+}
+function todoGuide(el, mode) {
+  if (mode !== 'guide') return null;
+  const g = el.dataset.guide;
+  return (g === 'web' || g === 'desktop') ? g : 'inline';
+}
+function todoText(el) {
+  const t = el.querySelector('.todo-text');
+  return (t ? t.textContent : el.textContent).trim().replace(/\s+/g, ' ');
+}
+function collectTodos(kind) {
+  return todoItems(kind).map((el, i) => {
+    const mode = todoMode(kind, el, i);
+    return { id: todoId(kind, el, i), text: todoText(el), mode, guide: todoGuide(el, mode) };
+  });
+}
 
 function collectDisposition() {
   const sheet = document.getElementById('closeout-sheet');
@@ -489,36 +605,6 @@ function collectDisposition() {
   const mode = radio ? radio.value : 'discard';
   const moveTo = (moveEl && moveEl.value.trim()) ? moveEl.value.trim() : null;
   return { mode, moveTo };
-}
-
-function closeoutShipChoice() {
-  // Scoped to the sheet: every one of these controls is the panel's own, and
-  // a same-named control in the report body would otherwise win by document
-  // order and answer for the user.
-  const sheet = document.getElementById('closeout-sheet');
-  const el = sheet && sheet.querySelector('input[name="closeout-ship"]:checked');
-  return el ? el.value : null;
-}
-
-// --- Accordion rows: open/answered state, one row open at a time ---
-// "Answered" survives a reload within the SAME session (sessionStorage,
-// never localStorage — the route/ship radios stay data-no-persist by design,
-// see § above, and this must not smuggle their choices back in). Keyed by
-// iteration so a later final report (a resumed/second close-out on the same
-// page) starts fresh rather than inheriting a prior round's progress.
-function closeoutStorageKey() {
-  const section = finalReportSection();
-  const iter = section ? section.dataset.iteration : '0';
-  return (typeof STORAGE_KEY !== 'undefined' ? STORAGE_KEY : 'concept') + '-closeout-answered-' + iter;
-}
-function loadCloseoutAnswered() {
-  try {
-    const raw = sessionStorage.getItem(closeoutStorageKey());
-    return raw ? JSON.parse(raw) : {};
-  } catch (e) { return {}; }
-}
-function saveCloseoutAnswered(map) {
-  try { sessionStorage.setItem(closeoutStorageKey(), JSON.stringify(map)); } catch (e) { /* best effort */ }
 }
 ```
 

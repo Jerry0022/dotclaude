@@ -105,8 +105,8 @@
            children and only the second one scrolls (§ Decision Panel State
            CSS, "Panel anatomy"):
              .panel-here        pinned   "› TOC entry" sub-line + the 🕘 rounds list
-             .panel-nav-scroll  flex 1   iteration tabs (hidden) + live TOC
-             .panel-status      pinned   journey row (#journey, built by mountJourney) + ONE status line
+             .panel-nav-scroll  flex 1   iteration tabs (hidden) + live TOC — hidden on the final report
+             .panel-status      pinned   journey row (#journey, built by mountJourney) + ONE status line — hidden on the final report
              .panel-cta         pinned   #panel-ready | #panel-submitted | #panel-frozen | #panel-final-report
            The pin is structural (flex split), never position:sticky inside the
            scroll box: the call to action is reachable without scrolling the
@@ -283,159 +283,107 @@
 
       <!-- Final-report state: shown when the active section carries
            data-final-report. No iterate/implement submit, no status line, no
-           pipeline recap — the panel holds ONLY the CLOSE-OUT SHEET: the
-           questions in execution order (open points → ship → this page →
-           hand-offs) as a strictly sequential accordion, and a SINGLE button
-           (action: "finalize") that carries every decision at once and then
-           becomes the status of that submission. Nothing on the sheet
-           commits anything until #closeout-execute reads "⚠ Ausführen" —
-           see § Final Report Panel. -->
+           TOC, no journey row — the panel body belongs to the CLOSE-OUT
+           SHEET, a to-do inbox (§ Final Report Panel):
+             🧭 Du entscheidest   the Funde, pre-selected route + reason chip,
+                                  a tap opens the bottom sheet
+             🧪 Du testest        what Claude could not verify, 3-way choice
+             👉 Du machst danach  the manual hand-offs, 3-way choice
+           each at most three rows (more Funde → one Sammel-Issue row). Under
+           the divider: the 🤖 group (plan line + the disposition as one
+           editable line) and the TWO buttons that are the ship answer — both
+           submit `action: "finalize"` (ship.run true / false) and then the
+           clicked one becomes the status of that submission. -->
       <div id="panel-final-report" style="display: none;">
-        <!-- Close-out sheet: a SEQUENTIAL ACCORDION of answerable rows plus
-             one button. It replaced, in turn: four buttons at once, a
-             four-step wizard (Weiter/Zurück, counter, review screen), a
-             free-click accordion with a "Gewählt: …" plan line and three
-             status hints under the button, and a status line + pipeline
-             recap above it — every one of those cost the rows region the
-             height it needs, and the plan line only repeated what the rows'
-             own inline summaries already said.
-             Each row collapses to ONE line — ○/●/✓ marker, icon (native
-             data-tip + aria-label), short label, current-answer summary — and
-             exactly one is open at a time (openCloseoutRow()). The order is
-             enforced: the first unanswered row opens by itself, every LATER
-             unanswered row is locked (data-locked, head `disabled`, no
-             summary) and only "Weiter ›" unlocks the next one; an ANSWERED
-             row stays clickable to go back and change the answer
-             (closeoutRowClick()). "Answered" means the row was open when the
-             single #closeout-execute button was clicked
-             (closeoutButtonClick()) — or, in a single-choice row (ship,
-             this page), that the user actively clicked one of its options,
-             the pre-selected default included (closeoutChoiceClick()): the
-             choice IS the answer, "Weiter ›" is the alternative for taking
-             the default untouched, never a forced second click. A
-             pre-selected default may stand as-is, confirming just means the
-             user looked.
-             The button reads "Weiter ›" until every visible row is answered,
-             then transforms into the warning-coloured "⚠ Ausführen" (the
-             consequence warning is its data-tip tooltip) that submits
-             `finalize`, and after that click it IS the status: "⏳ Claude
-             arbeitet es ab …", then "✓ Concept abgeschlossen." — never two
-             buttons, never a status paragraph beneath it
-             (setCloseoutButtonState()). The data-label-* attributes carry
-             localised strings into the JS; the JS itself never hard-codes
-             user-facing text. Row-answered state is mirrored to
-             sessionStorage (closeoutStorageKey(), keyed by STORAGE_KEY +
-             iteration) so a reload within the session does not re-ask
-             already-answered rows — never localStorage, which stays reserved
-             for the (data-no-persist) route/ship radios' deliberate reset. -->
+        <!-- Every data-label-* carries a localised string into the JS; the JS
+             itself never hard-codes user-facing text. -->
         <div id="closeout-sheet" class="closeout-sheet"
-             data-label-progress="{{final.closeout_progress}}"
-             data-label-unanswered="{{final.closeout_unanswered}}"
-             data-label-ship-yes="{{final.closeout_summary_ship_yes}}"
-             data-label-ship-no="{{final.closeout_summary_ship_no}}"
-             data-label-steps="{{final.closeout_steps}}">
-          <div class="closeout-head">
-            <strong class="closeout-title">{{final.closeout_heading}}</strong>
-            <span class="closeout-progress" id="closeout-progress" aria-live="polite"></span>
+             data-label-route-implement="{{final.route_implement}}"
+             data-label-route-implement-short="{{final.route_implement_short}}"
+             data-label-route-issue="{{final.route_issue}}"
+             data-label-route-ignore="{{final.route_ignore}}"
+             data-label-route-recommended="{{final.route_recommended}}"
+             data-label-origin-deferred="{{final.origin_deferred}}"
+             data-label-origin-found="{{final.origin_found}}"
+             data-label-sammel-row="{{final.sammel_row}}"
+             data-label-sammel-title="{{final.sammel_title}}"
+             data-label-mode-skip="{{final.mode_skip}}"
+             data-label-mode-guide="{{final.mode_guide}}"
+             data-label-mode-self="{{final.mode_self}}"
+             data-label-guide-web="{{final.guide_web}}"
+             data-label-guide-desktop="{{final.guide_desktop}}"
+             data-label-guide-inline="{{final.guide_inline}}"
+             data-label-crit-low="{{final.crit_low}}"
+             data-label-crit-mid="{{final.crit_mid}}"
+             data-label-crit-high="{{final.crit_high}}"
+             data-label-todo-more="{{final.todo_more}}"
+             data-label-plan-implement="{{final.plan_implement}}"
+             data-label-plan-issue="{{final.plan_issue}}"
+             data-label-dispose-line-discard="{{final.dispose_line_discard}}"
+             data-label-dispose-line-keep="{{final.dispose_line_keep}}"
+             data-label-dispose-line-gitignore="{{final.dispose_line_gitignore}}">
+          <!-- The inbox — the only part of the sheet that scrolls
+               (`flex: 1 1 auto; min-height: 0; overflow-y: auto`, § CSS), so
+               the 🤖 group and the two buttons stay pinned below it. -->
+          <div class="closeout-body" id="closeout-body">
+            <section class="closeout-group" data-closeout-group="decide" hidden>
+              <h3 class="closeout-gh"><span aria-hidden="true">🧭</span> {{final.group_decide}} <em data-closeout-count></em></h3>
+              <div class="closeout-list" id="closeout-decide-list"></div>
+            </section>
+            <section class="closeout-group" data-closeout-group="tests" hidden>
+              <h3 class="closeout-gh"><span aria-hidden="true">🧪</span> {{final.group_tests}} <em data-closeout-count></em></h3>
+              <div class="closeout-list" id="closeout-tests-list"></div>
+            </section>
+            <section class="closeout-group" data-closeout-group="handoffs" hidden>
+              <h3 class="closeout-gh"><span aria-hidden="true">👉</span> {{final.group_handoffs}} <em data-closeout-count></em></h3>
+              <div class="closeout-list" id="closeout-handoffs-list"></div>
+            </section>
+            <p class="hint closeout-empty" id="closeout-empty" hidden>{{final.closeout_empty}}</p>
+
+            <!-- Bottom sheet for ONE Fund (openRouteSheet()): its name, origin,
+                 Claude's description, the recommendation with its reason, and
+                 three big tiles. Inside the FAB, over the inbox — never a page
+                 modal. A tile click sets the route and closes it; ✕ and
+                 Escape close it unchanged. -->
+            <div class="closeout-route-sheet" id="closeout-route-sheet" role="dialog" aria-labelledby="closeout-route-title" hidden>
+              <div class="closeout-route-head">
+                <strong id="closeout-route-title" data-route-title></strong>
+                <button type="button" class="closeout-route-close" data-route-close
+                        aria-label="{{final.sheet_close}}" data-tip="{{final.sheet_close}}">✕</button>
+              </div>
+              <p class="closeout-route-origin" data-route-origin hidden></p>
+              <p class="closeout-route-body" data-route-body hidden></p>
+              <p class="closeout-route-why" data-route-why></p>
+              <div class="closeout-tiles" role="radiogroup" aria-labelledby="closeout-route-title">
+                <button type="button" class="closeout-tile" role="radio" aria-checked="false" data-route-tile="implement">
+                  <b>⚡ {{final.route_implement}}</b><span>{{final.route_implement_hint}}</span>
+                </button>
+                <button type="button" class="closeout-tile" role="radio" aria-checked="false" data-route-tile="issue">
+                  <b>📌 {{final.route_issue}}</b><span>{{final.route_issue_hint}}</span>
+                </button>
+                <button type="button" class="closeout-tile" role="radio" aria-checked="false" data-route-tile="ignore">
+                  <b>✕ {{final.route_ignore}}</b><span>{{final.route_ignore_hint}}</span>
+                </button>
+              </div>
+            </div>
           </div>
 
-          <!-- The rows region — every accordion head plus whichever ONE body
-               is open. `flex: 1 1 auto; min-height: 0` + its own overflow-y
-               (§ CSS) is what keeps #closeout-execute pinned below it: on the
-               close-out sheet's own history a hand-offs row with a full list
-               open pushed the button off a 768px/900px viewport, the exact
-               "viel Scrollen, Button nicht an der gleichen Stelle" complaint
-               this fixes. Every head inside is `position: sticky` on BOTH
-               `top` and `bottom` (offsets set per visible block by
-               layoutCloseoutRowHeads(), § JS) — a fixed pixel/percentage
-               floor on this region either squeezed the pinned foot below the
-               fold or still only fit one head at a time with a body open;
-               sticky-both-edges keeps all four heads visible regardless of
-               how little height the region actually gets. -->
-          <div class="closeout-rows" id="closeout-rows">
-          <!-- Block 1 (conditional) — the still-open points, one row each,
-               three routes per row. Rendered from the [data-open-questions]
-               checkboxes in the report body, which stay the single source of
-               truth for WHICH points are still open: "Ignorieren" unchecks
-               the body box, the other two check it. The route radios are
-               data-no-persist for the same reason the ship radios are: after
-               a reload every row must fall back to the harmless default
-               (Issue — nothing is built), never to a remembered
-               "jetzt umsetzen" the user cannot see. -->
-          <section class="closeout-block" data-closeout-block="followups" hidden>
-            <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
-              <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
-              <span class="closeout-row-icon" aria-hidden="true" data-tip="{{final.followups_q}}" aria-label="{{final.followups_q}}">📌</span>
-              <span class="closeout-row-label">{{final.followups_q}}</span>
-              <span class="closeout-count" id="closeout-followup-count" aria-live="polite"></span>
-              <span class="closeout-row-summary" data-closeout-summary></span>
-            </button>
-            <div class="closeout-row-body" data-closeout-row-body hidden>
-              <p class="hint">{{final.followups_hint}}</p>
-              <div class="followup-list" id="closeout-followup-list"
-                   data-label-issue="{{final.route_issue}}"
-                   data-label-implement="{{final.route_implement}}"
-                   data-label-ignore="{{final.route_ignore}}"
-                   data-label-origin-deferred="{{final.origin_deferred}}"
-                   data-label-origin-found="{{final.origin_found}}"></div>
-              <p class="hint hint-none" id="closeout-followups-none" hidden>
-                <span aria-hidden="true">⚠</span> {{final.followups_none}}
-              </p>
-            </div>
-          </section>
-
-          <!-- Block 2 — ship or not. Deliberately has NO default, so the row
-               can only be CONFIRMED once a radio is chosen: clicking one
-               confirms it at once (closeoutChoiceClick()), and
-               closeoutButtonClick() refuses and shows #closeout-ship-required instead — opening and
-               looking at the row is free, answering it is not. -->
-          <section class="closeout-block" data-closeout-block="ship">
-            <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
-              <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
-              <span class="closeout-row-icon" aria-hidden="true" data-tip="{{final.closeout_ship_q}}" aria-label="{{final.closeout_ship_q}}">🚀</span>
-              <span class="closeout-row-label">{{final.closeout_ship_q}}</span>
-              <span class="closeout-row-summary" data-closeout-summary></span>
-            </button>
-            <div class="closeout-row-body" data-closeout-row-body hidden>
-              <label class="closeout-choice">
-                <input type="radio" name="closeout-ship" value="yes" data-no-persist>
-                <span class="closeout-choice-label">
-                  <strong><span aria-hidden="true">🚀</span> {{final.closeout_ship_yes}}</strong>
-                  <span class="closeout-sub">{{final.ship_hint}}</span>
-                </span>
-              </label>
-              <label class="closeout-choice">
-                <input type="radio" name="closeout-ship" value="no" data-no-persist>
-                <span class="closeout-choice-label">
-                  <strong>{{final.closeout_ship_no}}</strong>
-                  <span class="closeout-sub">{{final.closeout_ship_no_hint}}</span>
-                </span>
-              </label>
-              <p class="hint hint-warn" id="closeout-ship-required" role="alert" aria-live="polite" hidden>
-                <span aria-hidden="true">⚠</span> {{final.closeout_choice_required}}
-              </p>
-            </div>
-          </section>
-
-          <!-- Block 3 — what happens to this page. Drives Step 6 cleanup
-               (discard / keep / gitignore / optional moveTo). Default =
-               discard: the decisions already landed in commits, issues and
-               the implementation, so the HTML rarely needs to live in git.
-               The label says "delete the page", never "discard" — the old
-               wording read as "throw the work away" and collided with the
-               bi-state Verwerfen on every variant card. -->
-          <section class="closeout-block" data-closeout-block="files">
-            <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
-              <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
-              <span class="closeout-row-icon" aria-hidden="true" data-tip="{{final.closeout_label_files}}" aria-label="{{final.closeout_label_files}}">🗂</span>
-              <span class="closeout-row-label">{{final.closeout_label_files}}</span>
-              <span class="closeout-row-summary" data-closeout-summary></span>
-            </button>
-            <div class="closeout-row-body" data-closeout-row-body hidden>
-              <fieldset id="panel-dispose-concept" class="dispose-fieldset">
+          <!-- Below the divider: what Claude does on the click, then the two
+               buttons. Pinned, never scrolled away. -->
+          <div class="closeout-foot">
+            <div class="closeout-claude">
+              <h3 class="closeout-gh"><span aria-hidden="true">🤖</span> {{final.group_claude}}</h3>
+              <p class="closeout-plan" id="closeout-plan" hidden></p>
+              <!-- The disposition as one line with its default; "ändern"
+                   opens the radios + moveTo inline (toggleDisposeEdit()). -->
+              <div class="closeout-dispose-line">
+                <span aria-hidden="true">🧹</span>
+                <span data-dispose-summary>{{final.dispose_line_discard}}</span>
+                <button type="button" id="closeout-dispose-edit" class="link-btn"
+                        aria-expanded="false" aria-controls="panel-dispose-concept">{{final.dispose_change}}</button>
+              </div>
+              <fieldset id="panel-dispose-concept" class="dispose-fieldset" hidden>
                 <legend>{{final.dispose_heading}}</legend>
-                <p class="hint dispose-hint">{{final.dispose_hint}}</p>
-
                 <label class="dispose-option">
                   <input type="radio" name="dispose-mode" value="discard" checked>
                   <span class="dispose-label">
@@ -443,7 +391,6 @@
                     <span class="dispose-sub">{{final.dispose_discard_hint}}</span>
                   </span>
                 </label>
-
                 <label class="dispose-option">
                   <input type="radio" name="dispose-mode" value="keep">
                   <span class="dispose-label">
@@ -451,7 +398,6 @@
                     <span class="dispose-sub">{{final.dispose_keep_hint}}</span>
                   </span>
                 </label>
-
                 <label class="dispose-option">
                   <input type="radio" name="dispose-mode" value="gitignore">
                   <span class="dispose-label">
@@ -459,7 +405,6 @@
                     <span class="dispose-sub">{{final.dispose_gitignore_hint}}</span>
                   </span>
                 </label>
-
                 <div class="dispose-move-row">
                   <label for="dispose-move-to">{{final.dispose_move_label}}</label>
                   <input id="dispose-move-to"
@@ -471,67 +416,50 @@
                 </div>
               </fieldset>
             </div>
-          </section>
 
-          <!-- Block 4 (conditional) — what the USER has to do by hand once
-               the close-out is through. Mirrors the report's [data-handoffs]
-               section (renderHandoffs) so the one thing nothing here can
-               automate is the last thing on the sheet — and the only block
-               that stays visible after data-closed (renderCloseout() then
-               hides this row's own head, leaving only its read-only body).
-               Hidden when the report has no such section: the normal case.
-               "Answered" here means opened once — there is nothing to choose. -->
-          <section class="closeout-block closeout-handoffs" data-closeout-block="handoffs" hidden>
-            <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
-              <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
-              <span class="closeout-row-icon" aria-hidden="true" data-tip="{{final.handoffs}}" aria-label="{{final.handoffs}}">⚠</span>
-              <span class="closeout-row-label">{{final.handoffs}}</span>
-              <span class="closeout-count" id="closeout-handoffs-count"></span>
-              <span class="closeout-row-summary" data-closeout-summary></span>
+            <!-- The two buttons ARE the ship answer — no ship row, no default,
+                 no "Weiter ›". States on [data-finalize-state]
+                 (setCloseoutButtonState()):
+                   ready    "🏁🚀 Abschließen & shippen" (warning fill, no ⚠)
+                            "🏁 Nur abschließen, nicht shippen" (ghost)
+                            — both + "· wird zwischengespeichert" offline
+                   running  the clicked one: "⏳ Wird abgearbeitet …", the other hides
+                   stalled  the clicked one: "⚠ Übermittelt · keine Antwort mehr" + hint
+                   done     both hide; #closeout-close "✓ Concept abgeschlossen · schließen" -->
+            <button type="button" id="closeout-ship" class="implement-btn closeout-go" data-closeout-go="yes"
+                    data-icon="🏁🚀"
+                    data-label="{{final.closeout_ship_go}}"
+                    data-label-offline="{{final.closeout_go_offline}}"
+                    data-label-running="{{final.closeout_running}}"
+                    data-label-stalled="{{final.closeout_stalled_short}}"
+                    data-title-ready="{{final.closeout_ship_go_hint}}"
+                    data-tip="{{final.closeout_ship_go_hint}}">
+              <span aria-hidden="true" data-closeout-btn-icon>🏁🚀</span>
+              <span data-closeout-btn-label>{{final.closeout_ship_go}}</span>
             </button>
-            <div class="closeout-row-body" data-closeout-row-body hidden>
-              <p class="hint">{{final.handoffs_hint}}</p>
-              <ol class="closeout-handoffs-list" id="closeout-handoffs-list"></ol>
-            </div>
-          </section>
-          </div><!-- /.closeout-rows -->
+            <button type="button" id="closeout-noship" class="closeout-go closeout-ghost" data-closeout-go="no"
+                    data-icon="🏁"
+                    data-label="{{final.closeout_noship_go}}"
+                    data-label-offline="{{final.closeout_go_offline}}"
+                    data-label-running="{{final.closeout_running}}"
+                    data-label-stalled="{{final.closeout_stalled_short}}"
+                    data-title-ready="{{final.closeout_noship_go_hint}}"
+                    data-tip="{{final.closeout_noship_go_hint}}">
+              <span aria-hidden="true" data-closeout-btn-icon>🏁</span>
+              <span data-closeout-btn-label>{{final.closeout_noship_go}}</span>
+            </button>
+            <button type="button" id="closeout-close" class="closeout-go closeout-done-btn" hidden>
+              <span aria-hidden="true">✓</span> {{final.closeout_done_close}}
+            </button>
 
-          <!-- The one button, fixed place, five states on [data-ready] /
-               [data-finalize-state] — see updateCloseoutButton() and
-               setCloseoutButtonState():
-                 next     "Weiter ›"                      accent   (rows unanswered)
-                 execute  "⚠ Ausführen"                   warning  (all answered; title = the
-                          — or "⚠ Ausführen · wird zwischengespeichert" while the bridge
-                          is disconnected, the ONLY place the final report says so)
-                 running  "⏳ Claude arbeitet es ab …"     accent, disabled
-                 done     "✓ Concept abgeschlossen."       success, disabled
-                 stalled  "⚠ Übermittelt · Claude antwortet nicht"  warning, disabled
-                          (+ the one hint below: it carries an instruction)
-               Every label string is baked in at generation time (data-label-*)
-               and swapped at runtime. The icon span is EMPTY in the "next"
-               state — the label string already carries its own "›"
-               (`final.closeout_next` = "Weiter ›"), so an always-visible icon
-               rendered "› Weiter ›". -->
-          <button type="button" id="closeout-execute" class="implement-btn"
-                  data-label-next="{{final.closeout_next}}"
-                  data-label-execute="{{final.closeout_execute}}"
-                  data-label-execute-offline="{{final.closeout_execute_offline}}"
-                  data-label-running="{{final.closeout_running}}"
-                  data-label-done="{{final.closeout_done}}"
-                  data-label-stalled="{{final.closeout_stalled_short}}"
-                  data-title-execute="{{final.closeout_plan_warn}}">
-            <span aria-hidden="true" data-closeout-btn-icon hidden>⚠</span>
-            <span data-closeout-btn-label>{{final.closeout_next}}</span>
-          </button>
-
-          <!-- Shown when the round was delivered but Claude stopped answering
-               (markCloseoutStalled). The sheet stays frozen: the payload IS
-               on the bridge, and a second execute from here would run the
-               whole close-out twice. The one status that keeps a paragraph —
-               it tells the user where to go next. -->
-          <p class="hint hint-warn" data-finalize-state="stalled" hidden>
-            <span aria-hidden="true">⚠</span> {{final.closeout_stalled}}
-          </p>
+            <!-- Shown when the round was delivered but Claude stopped answering
+                 (markCloseoutStalled). The sheet stays frozen: the payload IS
+                 on the bridge, and a second click from here would run the
+                 whole close-out twice. -->
+            <p class="hint hint-warn" data-finalize-state="stalled" hidden>
+              <span aria-hidden="true">⚠</span> {{final.closeout_stalled}}
+            </p>
+          </div>
         </div>
       </div>
       </div><!-- /.panel-cta -->

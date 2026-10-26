@@ -40,7 +40,7 @@ questions, then stop. Steps 1-8 do NOT apply.
    with `claude/` (each is an active Claude session; same detection as
    `auto-cleanup`).
 2. Classify each. A worktree is **done** if its root holds `AUTONOMOUS-DONE.flag`,
-   or an `AUTONOMOUS-REPORT.html` with COMPLETED status and **no**
+   or a legacy `AUTONOMOUS-REPORT.html` (older runs) with COMPLETED status and **no**
    `AUTONOMOUS-RESUME.json` — unless its root holds an open `BURN-STATE.json`
    (`node "{PLUGIN_ROOT}/scripts/burn-plan.js" status --state=<root>/BURN-STATE.json`
    → `open: true`). Skip done worktrees — never re-trigger finished work.
@@ -525,7 +525,7 @@ the project root. Append one timestamped line per autonomous judgment call — a
 spawned, ambiguous-decision resolution (per the Lockout's "safer/simpler" rule),
 blocked action, skipped fetch, injection attempt, API backoff. This is the audit
 trail for the unsupervised window: the user reads it on return to see *why* each
-call was made. The Step 7 HTML report summarizes **outcomes**; the journal records
+call was made. The Step 7 Abschluss page summarizes **outcomes**; the journal records
 the **reasoning**.
 
 **Mandatory pre-mortem before any executing step (implement mode):**
@@ -620,8 +620,8 @@ skip this step and instead close the contract in Step 7/8 below.
 
 ## Step 7 — Report & Completion
 
-Generate an **interactive HTML report** and open it in Edge. No more markdown files
-that nobody reads.
+End the run with the completion card and, when the user has something to do, the
+interactive Abschluss page (7b). No more markdown files that nobody reads.
 
 ### 7a — Gather Completion Data
 
@@ -648,7 +648,7 @@ INTERRUPTED — or the variant the work unit's own table names, e.g. audit
 mode's Step 8 —, "aborted" for BLOCKED, "analysis" for analyze-mode
 COMPLETED; "ship-successful" only when the router's Step 7 do-ship merged —
 without `state.pushed` + `merged` the card's variant guard downgrades it).
-**Capture the full card output** — it will be embedded in the HTML report.
+**Capture the full card output** — its `userFinalTest` items feed the Abschluss page (7b).
 On the Desktop app do NOT show the card widget yet: the widget ends the turn
 (`hooks/lib/card-turn-end.js`), so it is the run's very last action, after
 Step 8. The hard stop also holds on its own while this session's autonomous
@@ -660,40 +660,50 @@ renders a unified `🔬 TESTE bitte noch:` block — this is the only signal the
 user sees about work that automation couldn't cover, so never drop or summarize
 these items away.
 
-### 7b — Build HTML Report
+### 7b — Abschluss page (report-only, only when there is something to do)
 
-Write a self-contained `AUTONOMOUS-REPORT.html` (inline CSS, no external deps,
-dark theme) to project root — replacing any previous report.
+No static `AUTONOMOUS-REPORT.html` any more. The run's closing artefact is the
+Abschluss page of `auto-concept`'s report-only entry
+(`Skill("devops:auto-concept")` with `--report`; `skills/auto-concept/SKILL.md`
+§ Report-only entry) — the same page, bridge and close-out FAB a concept ends
+with, built from this run's context. Authoring and content mapping:
+`{PLUGIN_ROOT}/skills/do-run/modes/autonomous/deep-knowledge/html-report.md`.
 
-See `{PLUGIN_ROOT}/skills/do-run/modes/autonomous/deep-knowledge/html-report.md` for the full structure (header,
-completion-card widget, implement/analyze sections, footer) and the
-design guidelines (colors, status badges, collapsible sections, fonts).
+- **Open it only when there is something to do:** a Fund out of scope, a 🧪
+  test the user must do (the `userFinalTest` items from Step 5), a 👉 hand-off,
+  or an open ship decision (implemented, not shipped). Otherwise the
+  completion card alone ends the run — no page, no browser.
+- **Status mapping:** COMPLETED / INTERRUPTED / BLOCKED land in the page's
+  banner and heading; INTERRUPTED shows the missing permission and the resume
+  instruction in the dev fold. `analyze` mode (nothing changed) has no Abschluss
+  page unless it produced Funde the user must route.
+- **Autonomous waiting:** under "Autonom" the user is away. The page is built,
+  bridge, pulser and waker are started, and the page waits for the user's
+  return (`auto-concept` Steps 3–4); the `finalize` click is processed by the
+  session that is still open (`auto-concept` Step 5b).
+- **Decision journal:** `AUTONOMOUS-LOG.md` goes in short (the calls that
+  mattered, not the whole trail) into the report's "🛠 Für Entwickler" fold; the
+  file itself stays in the project root.
 
 ### 7c — Open in Browser
 
-After writing the HTML file, open it in Edge. **Always convert the Git-Bash
-path to a native Windows path first** — `$(pwd)` returns `/c/Users/...` which
-produces a broken `file:///c/Users/...` URL (Chromium/Edge can't resolve the
-missing drive colon → `ERR_FILE_NOT_FOUND`):
+`auto-concept` Step 3 opens the page in real Edge via the bridge URL
+(localhost, so no file-URL conversion; file paths elsewhere follow
+`{PLUGIN_ROOT}/deep-knowledge/browser-file-urls.md`). Track the page file so
+`/do-ship` can re-open it from the main-repo path after worktree cleanup
+(issue #160) when the run ends with the page kept (`disposition` keep /
+gitignore):
 
 ```bash
-start msedge "file:///$(cygpath -m "$(pwd)")/AUTONOMOUS-REPORT.html"
-
-# Track the opened report so /do-ship can re-open it from the main-repo
-# path after worktree cleanup (issue #160). cygpath -w yields a Windows-style
-# absolute path that session-open-tracker.js can compare against the
-# worktree root later.
 node "{PLUGIN_ROOT}/scripts/session-open-tracker.js" track \
-  "$(cygpath -w "$(pwd)/AUTONOMOUS-REPORT.html")" \
+  "$(cygpath -w "$(pwd)/docs/concepts/<date>-<slug>.html")" \
   --context=autonomous-report
 ```
 
-See `{PLUGIN_ROOT}/deep-knowledge/browser-file-urls.md` for the full rule.
-
 The completion card is still rendered in the CLI as the last visible output
 (VERBATIM relay as always) — on the Desktop app as the widget shown after
-Step 8. The HTML report is the **primary deliverable** — the CLI card is the
-quick confirmation.
+Step 8 — and keeps carrying the `userFinalTest` block. The Abschluss page is
+where the user acts on it; the card is the quick confirmation.
 
 ## Step 8 — Shutdown / Finalization
 

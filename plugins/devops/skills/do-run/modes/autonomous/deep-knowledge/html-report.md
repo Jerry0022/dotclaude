@@ -1,44 +1,37 @@
-# Autonomous HTML Report — Structure & Design
+# Autonomous Abschluss page — report-only authoring
 
-Save `AUTONOMOUS-REPORT.html` to project root (replaces any previous report).
+The static `AUTONOMOUS-REPORT.html` is gone. Step 7b builds the **report-only
+Abschluss page** through `auto-concept --report` (`skills/auto-concept/SKILL.md`
+§ Report-only entry): a concept page whose only round is the final report, with
+the same bridge, FAB and close-out as after a concept. Structure, visual rules
+and gate are the engine's, not this file's — see
+`skills/auto-concept/deep-knowledge/templates-final-report.md` and
+`step5-update-page.md` § Final-report append. This file only says what an
+autonomous run puts in it.
 
-The HTML file must be a **self-contained single file** (inline CSS, no
-external deps). Use a clean, modern dark-theme design.
+## When
 
-## Structure
+Only when there is something for the user to do: a Fund out of scope, a 🧪 test
+(`userFinalTest`), a 👉 hand-off, or an open ship decision. Nothing → no page,
+the completion card alone. Under "Autonom" the page waits for the user's return.
 
-**Header section:**
-- Task goal, mode (Implement/Analyze), status badge (green/yellow/red)
-- Duration, branch name (implement mode), timestamp
+## Content mapping (run context → report)
 
-**Completion Card section:**
-- Embed the full completion card data in a styled card widget
-- Include: summary, changes, test results, build-ID, usage/battery info
-- Present it visually (not raw markdown) — use the card's data fields
+| Report part | From the run |
+|---|---|
+| Heading + banner | Status: COMPLETED (🏁 Abgeschlossen), INTERRUPTED / BLOCKED (amber / red banner, what is missing) |
+| Vorher/Nachher + "Selbst ausprobieren" | Live-test screenshots and the preview/live URL from Step 5; a short flow when nothing visual changed |
+| One sentence "Was getan wurde" | The task goal (`implement`); for `analyze`, the one-line finding |
+| Was kam raus / Was es aushält | Verification results from Step 5 (build, tests, live test) |
+| Prüftiefe-Leiter | Levels actually reached; gaps stay hollow |
+| Funde | Related fixes, blocked actions, warnings and open questions outside the task — each with its pre-selected route (`step5-finalize.md` § E) |
+| 🧪 / 👉 | `userFinalTest` items and manual hand-offs, each with its pre-selected mode |
+| 🛠 Für Entwickler (≤ 5 lines) | Branch/commit, areas + key files, tests in one line, **decision journal in short** (the calls from `AUTONOMOUS-LOG.md` that mattered), INTERRUPTED resume instruction |
 
-**`implement` mode — additional sections:**
-- **Changes** — collapsible table: file, action, summary
-- **Verification** — build status, test results, live test results
-- **Related Fixes / Blocked Actions / Warnings** — if any
+Analyze mode: findings and recommendations that need routing become Funde;
+screenshots go into the Vorher/Nachher slot or the dev fold. A run that only
+analysed and found nothing to route has no page.
 
-**`analyze` mode — additional sections:**
-- **Findings** — key observations as styled cards or list
-- **Architecture / Code Quality** — insights with visual hierarchy
-- **Recommendations** — priority-sorted table: priority, area, recommendation, effort
-- **Visual Verification** — embedded screenshots (base64 data URIs if taken)
-
-**Both modes — footer:**
-- Open questions (if any)
-- **Decision journal** — embed `AUTONOMOUS-LOG.md` in a collapsible, monospace
-  `<details>` block (the timestamped reasoning trail for the unsupervised window).
-  The sections above show *outcomes*; this shows *why* each autonomous call was made.
-- Timestamp, branch info, git status summary
-
-## Design Guidelines
-
-- Dark background (#1a1a2e or similar), accent colors for status
-- Collapsible sections via `<details>/<summary>`
-- Status badge: COMPLETED = green, INTERRUPTED = amber, PARTIAL = amber, BLOCKED = red
-- INTERRUPTED section: show missing permission, saved progress, resume instructions
-- Responsive layout, readable on any screen size
-- Monospace font for code/file paths, sans-serif for prose
+Backlog issue decisions and audit proposals are NOT this page — they stay
+concept pages with decision rounds (`modes/backlog.md` Step 5 · 1b,
+`modes/audit.md` Step 7b). This page is the step after an implementation.

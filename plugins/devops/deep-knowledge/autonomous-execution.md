@@ -96,7 +96,7 @@ polls or scans exactly that path:
 | Artifact | Written by | Read by |
 |----------|------------|---------|
 | `AUTONOMOUS-LOG.md` | Steps 4e/5 (decision journal) | user on return; embedded in report |
-| `AUTONOMOUS-REPORT.html` | Step 7b | browser; re-opened post-ship |
+| Abschluss page (`docs/concepts/...`, report-only `auto-concept`) | Step 7b, only when something is open | browser via bridge; replaces the former `AUTONOMOUS-REPORT.html` |
 | `AUTONOMOUS-DONE.flag` | Step 8c | external watchdog (`$PWD` poll); Step 0.2 resume scan |
 | `AUTONOMOUS-RESUME.json` | late-permission / bail protocol | Step 0.5 resume detection |
 | `AUTONOMOUS-STALLED.txt` | notify-mode watchdog | user (visible stall signal) |

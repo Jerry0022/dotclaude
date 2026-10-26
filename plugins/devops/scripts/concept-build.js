@@ -29,6 +29,7 @@
  *
  *   Commands:
  *     init   <dir> --title T [--subtitle S] [--locale de] [--mode decision|design|mixed|free]
+ *            [--report]  report-only page: round 01 is the final-report skeleton
  *     build  <dir> [--out <file>] [--force]
  *                                       assemble + gate; writes atomically and only when
  *                                       it passes and the page on disk is the last build
@@ -628,19 +629,41 @@ function build(dir, opts = {}) {
   return { ok, out, head: head.source, bytes: res.html.length, rounds: res.rounds, live: res.liveN, template: res.liveTemplate, problems, gate: g.reason, warnings: g.warnings || [], html: res.html };
 }
 
+/**
+ * Round 01 of a report-only page (Abschluss without a prior concept): the
+ * final-report section skeleton. It is the only and therefore live round, so
+ * the page opens straight on the close-out FAB. Claude replaces the TODO
+ * placeholders with the authored report (templates-final-report.md) before
+ * the first build; the gate blocks a page that still carries them.
+ */
+const REPORT_SKELETON = `<section id="iter-1" data-iteration="1" data-iteration-template="free" data-final-report data-active>
+  <div class="iteration-intro">
+    <h2>{{iteration.final_tab}}</h2>
+    <p><!-- TODO: one sentence — what was done --></p>
+  </div>
+
+  <!-- TODO: before/after pair, results, resilience, test ladder, findings (data-oq-origin items), dev fold — see templates-final-report.md -->
+</section>
+`;
+
 function init(dir, opts) {
   if (fs.existsSync(path.join(dir, 'page.json')) && !opts.force) throw new Error(`${dir}/page.json exists — refusing to overwrite (pass --force)`);
   fs.mkdirSync(path.join(dir, 'rounds'), { recursive: true });
+  const reportOnly = !!opts.report || opts.mode === 'report';
   const page = {
     title: opts.title || 'Concept',
     subtitle: opts.subtitle || '',
     locale: opts.locale || 'en',
-    mode: opts.mode || 'decision',
+    mode: reportOnly ? 'free' : (opts.mode || 'decision'),
     // Kept for the life of the concept: reload detection and the draft store
     // key on it, so a rebuild must never change it.
     pageVersion: stamp(),
   };
   writePage(dir, page);
+  if (reportOnly) {
+    const first = path.join(dir, 'rounds', '01.html');
+    if (!fs.existsSync(first) || opts.force) fs.writeFileSync(first, REPORT_SKELETON);
+  }
   return page;
 }
 
@@ -774,6 +797,7 @@ function report(r, dry) {
 
 const USAGE = `usage:
   concept-build.js init   <dir> --title T [--subtitle S] [--locale de] [--mode decision|design|mixed|free] [--allow-main]
+  concept-build.js init   <dir> --report --title T [--locale de]   (report-only: round 01 = final-report skeleton)
   concept-build.js build  <dir> [--out file.html] [--force]
   concept-build.js check  <dir>
   concept-build.js bake   <dir> --round N (--payload decisions.json | --unanswered)
