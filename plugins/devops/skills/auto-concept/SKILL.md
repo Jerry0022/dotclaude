@@ -164,7 +164,15 @@ every section you append (regular round, reality-check round, final report).
 
 ### 1b. If template is `decision`: pick a content variant
 
-**Before executing this step, Read `deep-knowledge/step1-templates.md` § 1b · Content variants completely** — pick analysis / plan / concept / comparison / dashboard / creative by content — recommendations, hybrids allowed; design and free have no sub-variants.
+**Before executing this step, Read `deep-knowledge/step1-templates.md` § 1b · Content variants completely** — pick analysis / plan / concept / comparison / dashboard / creative by content — recommendations, hybrids allowed; design and free have no sub-variants; every question is a decision in its mode.
+
+### 1b-ii. If the round shows analysis results or asks any decision: Full or Lite, mode, display
+
+**Before executing this step, Read `deep-knowledge/step1-templates.md` § 1b · Analysis results and decisions — Full vs Lite completely** — Full (a concept that is analysis + decisions: briefing, ≤ 3 Themenfelder × ≤ 7) vs Lite (≤ 5 questions inside another concept), the briefing order, kurz / lang per level.
+
+**Before executing this step, Read `deep-knowledge/decision-modes.md` completely** — the seven modes and when each fits, the mandatory fields of every decision, label rules, preselection = recommendation, timing is never a decision.
+
+**Before executing this step, Read `deep-knowledge/analysis-palette.md` completely** — the 35 display types by content shape, slot budgets, the one text type, style rules and profiles for custom displays.
 
 ### 1c. If the iteration carries a mapping: author the spec
 

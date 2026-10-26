@@ -265,8 +265,8 @@ checkable before the round is built.
 6. **Accessible.** `role="img"` plus an `aria-label` that states the finding
    (the spec's `"text"`). Never colour alone: form, glyph or word
    distinguishes too. Text contrast ≥ 4.5 : 1 in both themes. A hover detail
-   is keyboard-reachable and uses the app-styled tooltip
-   (`{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md`), never a bare `title=`.
+   is keyboard-reachable and uses the app-styled tooltip (`data-tip`,
+   `templates-utilities.md` § App Tooltips), never a bare `title=`.
 7. **No script.** Inline SVG or CSS only — no JavaScript, no `<canvas>`, no
    external library. Motion only when it shows a change, and none under
    `prefers-reduced-motion: reduce`. SVG uses `viewBox` and `width: 100%` so

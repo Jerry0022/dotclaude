@@ -22,7 +22,7 @@ describe("auto-concept SKILL.md pointers", () => {
 
   test("every step*.md section is named by exactly one pointer", () => {
     const named = new Map();
-    for (const p of skillPointers()) {
+    for (const p of skillPointers().filter((x) => x.section !== undefined)) {
       const key = `${p.file} § ${p.section}`;
       named.set(key, (named.get(key) || 0) + 1);
     }
@@ -34,6 +34,16 @@ describe("auto-concept SKILL.md pointers", () => {
     }
     for (const key of named.keys()) {
       expect(stepFiles).toContain(key.split(" § ")[0]);
+    }
+  });
+
+  test("whole-file pointers name existing guides, never a step file, each once", () => {
+    const whole = skillPointers().filter((p) => p.section === undefined).map((p) => p.file);
+    expect(whole).toEqual(expect.arrayContaining(["decision-modes.md", "analysis-palette.md"]));
+    expect(new Set(whole).size).toBe(whole.length);
+    for (const file of whole) {
+      expect(stepFiles, file).not.toContain(file);
+      expect(fs.existsSync(path.join(DK, file)), file).toBe(true);
     }
   });
 
