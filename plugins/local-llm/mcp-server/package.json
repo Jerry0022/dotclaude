@@ -6,6 +6,6 @@
   "description": "MCP server that delegates code generation to a local AnythingLLM Desktop workspace.",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "^3.25.0"
+    "zod": "^4.6.7"
   }
 }
