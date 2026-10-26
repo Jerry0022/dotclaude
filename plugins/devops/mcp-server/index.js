@@ -2759,6 +2759,15 @@ function runRenderCardCli(source) {
     process.stderr.write(localShip + '\n');
     process.exit(0);
   }
+  // Same pre-check as the tool path: without it a status word in the title
+  // rendered a card + widget that stop.flow.guard then refused, and the card
+  // was drawn a second time. Exit 3, not 2 — the payload is valid, the call
+  // only needs fixing as the refusal says.
+  const pre = cardPregate.check(params);
+  if (pre.refuse) {
+    process.stderr.write(pre.text + '\n');
+    process.exit(3);
+  }
   const cardMarkdown = buildCompletionCard(params);
   // The rename and CTA-widget instructions ride on stderr so stdout stays the verbatim card.
   const titleNote = sessionTitleNote(params);

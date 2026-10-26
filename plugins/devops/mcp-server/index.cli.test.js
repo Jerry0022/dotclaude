@@ -26,7 +26,10 @@ const ENTRY = join(dirname(fileURLToPath(import.meta.url)), "index.js");
 // terminal entrypoint: a run started from a Desktop session inherits
 // `claude-desktop`, where stdout stays empty (the widget is the card, § 4) — the
 // Desktop cases override it explicitly.
-const CHILD_ENV = { ...process.env, DEVOPS_COMPLETION_NO_USAGE: "1", CLAUDE_CODE_ENTRYPOINT: "cli" };
+// These cards carry gaps on purpose, so the card pre-check is off — the
+// pre-check cases switch it back on (DEVOPS_CARD_PREGATE: "1").
+const CHILD_ENV = { ...process.env, DEVOPS_COMPLETION_NO_USAGE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", DEVOPS_CARD_PREGATE: "0" };
+const PREGATE_ON = { DEVOPS_CARD_PREGATE: "1" };
 
 // Session ids carry a per-run tag: every dotclaude worktree runs this suite
 // against the same OS tmpdir, and a concurrent run (another session) would
@@ -501,6 +504,37 @@ describe("--render-card CLI fallback", () => {
     });
     expect(res.stderr).toMatch(/ignored unknown top-level key\(s\): links, validationNotes/);
     expect(res.stdout).toMatch(/✨✨✨ Fremde Keys ✨✨✨/);
+  });
+
+  // The offline path skipped the card pre-check: a status word in the title
+  // rendered card + widget, stop.flow.guard refused it after the turn, and the
+  // card was drawn a second time. Now it refuses before anything renders.
+  test("REGRESSION: the pre-check refuses a status-word title with exit 3 before rendering, then renders on the retry", async () => {
+    const sid = S("pregate-title");
+    const payload = { variant: "ready", summary: "Suite läuft noch", lang: "de", session_id: sid, changes: [{ area: "x", description: "y" }] };
+    try {
+      const err = await renderCardFull(payload, PREGATE_ON).then(() => null, (e) => e);
+      expect(err).not.toBeNull();
+      expect(err.code).toBe(3);
+      expect(err.stderr).toMatch(/^\[card-pregate\] Not rendered/);
+      expect(err.stderr).toMatch(/Title carries a status word/);
+      expect(err.stdout).toBe("");
+      expect(existsSync(flagFile(sid))).toBe(false);
+      // Same findings twice: never a lock-out.
+      expect((await renderCardFull(payload, PREGATE_ON)).stdout).toMatch(/✨✨✨ Suite läuft noch ✨✨✨/);
+    } finally {
+      try { unlinkSync(flagFile(sid)); } catch { /* gone */ }
+    }
+  });
+
+  test("REGRESSION: a cwd that lost its backslashes is refused, naming the path", async () => {
+    const err = await renderCardFull({
+      variant: "ready", summary: "Concept-Link fehlt", session_id: S("pregate-cwd"),
+      cwd: "C:UsersJeremIdeaProjectsdotclaude", changes: [{ area: "x", description: "y" }],
+    }, PREGATE_ON).then(() => null, (e) => e);
+    expect(err).not.toBeNull();
+    expect(err.code).toBe(3);
+    expect(err.stderr).toMatch(/`cwd` is not a usable path: "C:UsersJeremIdeaProjectsdotclaude"/);
   });
 
   test("exits 2 with a diagnostic when the payload is unreadable", async () => {
