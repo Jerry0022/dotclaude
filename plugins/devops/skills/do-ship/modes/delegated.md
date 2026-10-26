@@ -5,7 +5,7 @@ runs at the end of a session, when that context is largest: measured
 2026-09-21, the average was 434 k tokens per call, about 24 % of a session's
 tokens. No hook or skill can compact the context. The pipeline does not need
 the conversation, only a brief of it. So above
-`DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (default 250 k tokens, `0` turns it off)
+`DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (default 600 k tokens since ship_run — a ship is ~6–10 calls now, not ~25; `0` turns it off)
 `prompt.ship.detect` emits a `[ship-delegate]` block instead of the inline
 mandate, and `pre.ship.delegate` refuses a do-ship Skill call with the same
 block. The main session writes the brief once. A general-purpose subagent
@@ -19,7 +19,7 @@ at 72–75 k, grows to 150–195 k and makes 20–39 calls. Weighted by price
 (cache read 0.1, 1 h cache write 2.0, output 5) they cost 8.3 M against
 about 13.1 M inline: 45–55 % less at 400 k and more, only 13 % less at
 about 225 k, and 28 % more at 115 k. Break-even is near 170 k, so the
-threshold sits at 250 k and `pre.ship.delegate` refuses a delegated spawn
+threshold sits at 600 k and `pre.ship.delegate` refuses a delegated spawn
 below it.
 
 A ship the model starts through the Skill tool (concept finalize,
