@@ -9,7 +9,9 @@ import { fileURLToPath } from "node:url";
 // and do-ship runs auto-harden + auto-polish diff-scoped at ship. These tests
 // bind the skill prose to that contract.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SKILL = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
+// The step-by-step pipeline moved to deep-knowledge/manual-pipeline.md (M7): SKILL.md drives
+// ship_run, the fallback keeps every gate — these pins guard that file now (driver: driver-contract.test.js).
+const SKILL = fs.readFileSync(path.join(__dirname, "deep-knowledge", "manual-pipeline.md"), "utf8");
 const PROMOTE = fs.readFileSync(path.join(__dirname, "modes", "promote.md"), "utf8");
 
 function section(text, start, end) {
@@ -169,7 +171,8 @@ describe("do-ship — harden + polish at ship (Step 1e)", () => {
   });
 
   test("the frontmatter declares both calls", () => {
-    const fm = SKILL.slice(0, SKILL.indexOf("\n---", 4));
+    const DRIVER = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
+    const fm = DRIVER.slice(0, DRIVER.indexOf("\n---", 4));
     expect(fm).toMatch(/invokes: \[auto-harden, auto-polish\]/);
   });
 });

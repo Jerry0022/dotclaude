@@ -8,7 +8,9 @@ import { fileURLToPath } from "node:url";
 // step a project extension hooks into, or lose a `cwd`. They pin decisions and
 // identifiers, not prose: change one only together with the gate it guards.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SKILL = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
+// The step-by-step pipeline moved to deep-knowledge/manual-pipeline.md (M7): SKILL.md drives
+// ship_run, the fallback keeps every gate — these pins guard that file now (driver: driver-contract.test.js).
+const SKILL = fs.readFileSync(path.join(__dirname, "deep-knowledge", "manual-pipeline.md"), "utf8");
 const ALL = [SKILL, ...["modes", "deep-knowledge"].flatMap((d) =>
   fs.readdirSync(path.join(__dirname, d)).filter((f) => f.endsWith(".md"))
     .map((f) => fs.readFileSync(path.join(__dirname, d, f), "utf8")))].join("\n");
