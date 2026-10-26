@@ -167,7 +167,7 @@ describe("pre.ship.delegate — Shipping title before a delegated spawn", () => 
     fs.writeFileSync(file, [
       JSON.stringify({ type: "user", message: { content: "ship it" } }),
       JSON.stringify({ type: "custom-title", customTitle: title }),
-      JSON.stringify({ type: "assistant", message: { id: "m1", usage: { input_tokens: 2, cache_read_input_tokens: 450_000, cache_creation_input_tokens: 0, output_tokens: 50 } } }),
+      JSON.stringify({ type: "assistant", message: { id: "m1", usage: { input_tokens: 2, cache_read_input_tokens: 750_000, cache_creation_input_tokens: 0, output_tokens: 50 } } }),
       ...extra.map((e) => JSON.stringify(e)),
     ].join("\n") + "\n");
     return file;
