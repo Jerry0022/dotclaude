@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process"
+import { statSync } from "node:fs"
 import path from "node:path"
 
 // No cache: long-lived MCP server could see git init / remote changes
@@ -44,9 +45,20 @@ export function probeTimeoutError(cwd) {
   )
 }
 
-/** Compare two filesystem paths for identity, tolerating separator + case differences. */
+/**
+ * Compare two filesystem paths for identity. A mapped drive (H:) and the UNC
+ * path git reports for it differ as strings but are one directory, so the
+ * filesystem identity (dev + ino) decides first; the normalized string compare
+ * is the fallback when either path cannot be stat'ed. On Windows ino can be 0
+ * (not provided) — then identity proves nothing and the string compare applies.
+ */
 function samePath(a, b) {
   if (!a || !b) return false
+  try {
+    const sa = statSync(String(a))
+    const sb = statSync(String(b))
+    if (sa.ino && sb.ino) return sa.dev === sb.dev && sa.ino === sb.ino
+  } catch { /* fall back to the string compare */ }
   const norm = (p) => {
     const resolved = path.resolve(String(p)).replace(/[\\/]+$/, "")
     return process.platform === "win32" ? resolved.toLowerCase() : resolved

@@ -21,6 +21,13 @@ describe("correctShipVariant", () => {
     expect(correctShipVariant("ship-successful", { merged: "main" }).variant).toBe("ready");
   });
 
+  it("turns ship-successful into ship-blocked for a foreign git root, even with merge proof (#871)", () => {
+    const r = correctShipVariant("ship-successful", { mode: "git-foreign-root", pushed: true, merged: "main" });
+    expect(r.variant).toBe("ship-blocked");
+    expect(r.downgraded).toBe(true);
+    expect(renderDowngradeNote("en", r.reason)).toContain("Nothing was released");
+  });
+
   it("reports the missing-proof flags in reason", () => {
     expect(correctShipVariant("ship-successful", { pushed: false, merged: false }).reason)
       .toBe("pushed=false, merged=false");
