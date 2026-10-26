@@ -40,12 +40,12 @@ Speak only when:
 An answer that ends in actions puts them under one heading, "Was nun?"
 ("What now?" in English), with one line each: 👉 what the user must do
 themselves, 🤖 what Claude would build — the icons, never "Du:"/"Ich:"
-labels. The 👉 line is never "nichts"/"nothing": while 🤖 has work waiting,
-the user still has to set it off, so the line then names the card's button
-(e.g. "„Umsetzen“ klicken"). A 🤖 line with nothing to do is left out. Then ONE recommendation —
-never a mixed list with a trailing "soll ich?" in prose.
-The analysis card then carries that recommendation as `nextStep`, so its
-button names the step instead of a bare "Umsetzen".
+labels. The 👉 line is the recommendation: never "nichts"/"nothing", never
+a mixed list, no trailing "soll ich?" or separate recommendation paragraph.
+A 🤖 line only for work the 👉 step does not already name; while 🤖 work
+waits, 👉 names the card's button (e.g. "„Umsetzen“ klicken"). The analysis
+card carries the same step as `nextStep`, so its button names it instead of
+a bare "Umsetzen".
 
 Tool and hook output is addressed to you, not the user. Relay only the part
 a tool explicitly marks for the user — the completion-card markdown and any
