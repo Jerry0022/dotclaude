@@ -20,7 +20,6 @@
 
 require('../lib/plugin-guard');
 
-const { parseHookInput } = require('../lib/hook-input');
 const { containsFullSuite } = require('../lib/full-suite-cmd');
 
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);

@@ -33,6 +33,24 @@ Run the full test suite only if:
 If the full suite already passed on the **same build-ID** earlier in the
 session → skip. Log: `Tests skipped — already passed on build <hash>`.
 
+### Full suite: CI check first, local fallback on quota exhaustion
+
+Hard invariant: **never merge without one full green suite on the exact tree** —
+either the CI `suite` check (`.github/workflows/ci-suite.yml`: 4 `suite (shard N/4)`
+jobs + the aggregate `suite`) or a local full run recorded for that tree.
+
+- CI suite declared + Actions quota not exhausted: `ship_build` runs lint + only the
+  tests related to the diff and returns `testScope: "related"`, `fullSuiteVia: "ci"`;
+  the PR's `suite` check is the full-suite gate.
+- No CI suite, quota exhausted (GitHub Actions minutes ran out — it happens regularly),
+  or the diff touches package.json / lockfiles / vitest config: `ship_build` runs the full
+  suite locally (`testScope: "full"`, `fullSuiteVia: "local"`) and records it.
+- If the `suite` check never ran or failed because of an account limit, a related-only
+  build is not enough: the merge needs `findFullGreen(cwd, { treeHash })` for HEAD's tree
+  (lib/test-results.js); without a record, run the full suite locally first.
+
+Details and result fields: [build-reuse.md](build-reuse.md) § Test scope.
+
 ### Step time limit
 
 `ship_build` stops each step (build, lint, test) after `stepTimeoutSec`

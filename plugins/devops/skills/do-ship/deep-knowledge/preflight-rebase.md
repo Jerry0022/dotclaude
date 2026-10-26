@@ -47,7 +47,13 @@ Step 1b, only when `needsRebase: true`:
 
 5. **Push**: `git push --force-with-lease` to update the remote branch.
 
-6. **Verification test**: Run the full test suite to confirm nothing broke. If tests fail, diagnose and fix before proceeding.
+6. **No suite run here.** Do not run the full test suite after the rebase:
+   `ship_build` (Step 2) runs it on exactly the rebased tree and is the gate, and
+   the pre-flight sentinel makes the `pre.test.fullguard` hook refuse a hand-run
+   full suite during a ship anyway. A second run on the same tree costs ~3 min
+   and proves nothing new. A filtered run (`npx vitest run <files>`) of the files
+   a conflict touched is fine for diagnosing a resolution. If `ship_build` goes
+   red, diagnose and fix then.
 
 ## Rebase conflict resolution
 

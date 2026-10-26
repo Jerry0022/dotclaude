@@ -97,7 +97,9 @@ export function release(file = LOCK_FILE) {
 }
 
 export default async function setup() {
-  if (process.env.DOTCLAUDE_SUITE_LOCK === "0" || !isFullRun()) return;
+  // CI (GitHub Actions sets CI=true) runs on its own VM, one shard per job:
+  // there is no other session to queue behind.
+  if (process.env.DOTCLAUDE_SUITE_LOCK === "0" || (process.env.CI && process.env.DOTCLAUDE_SUITE_LOCK !== "1") || !isFullRun()) return;
   const start = Date.now();
   let told = false;
   while (!tryAcquire()) {
