@@ -265,6 +265,10 @@ became of each Fund (issue link / "umgesetzt").
   <details class="fr-fold" data-open-questions>
     <summary>🔍 {{final.funde_fold}}</summary>
     <ul class="fr-funde">
+      <!-- Visible label (.oq-label, and the text of a 🧪 / 👉 item): a short noun
+           phrase of AT MOST 48 characters — the close-out sheet shows two lines
+           and nothing more. Details belong in data-issue-body and the report
+           body. The gate blocks a longer one (validation-gate.md 33c). -->
       <li data-oq-id="oq-saml"
           data-issue-title="[BUG] Auth fails for SAML users"
           data-issue-type="bug"

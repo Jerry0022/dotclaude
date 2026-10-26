@@ -26,10 +26,11 @@ function decideRow(key, el) {
   row.type = 'button';
   row.dataset.routeOpen = key;
   row.dataset.followup = followUpId(el) || key;
-  // One line per row: the full name is the tooltip, so an ellipsis never
-  // hides anything for good.
-  row.dataset.tip = followUpLabel(el);
+  // Two lines at most (CSS line-clamp): the full name becomes the tooltip
+  // only when the clamp really cuts it (syncClampTips()).
+  row.dataset.tipFull = followUpLabel(el);
   row.appendChild(closeoutEl('span', 'closeout-todo-title', followUpLabel(el)));
+  queueClampTips();
   const reason = el.dataset.routeReason;
   if (reason) row.appendChild(closeoutEl('span', 'closeout-why', reason));
   const pill = closeoutEl('span', 'closeout-pill');
@@ -37,6 +38,22 @@ function decideRow(key, el) {
   row.appendChild(pill);
   return row;
 }
+// data-tip only on a title the two-line clamp actually cuts. Rows are built
+// before they are attached, so measure after the render and on resize.
+function syncClampTips() {
+  document.querySelectorAll('.closeout-sheet [data-tip-full]').forEach(host => {
+    const t = host.classList.contains('closeout-todo-title') ? host : host.querySelector('.closeout-todo-title');
+    if (t && t.scrollHeight > t.clientHeight + 1) host.dataset.tip = host.dataset.tipFull;
+    else delete host.dataset.tip;
+  });
+}
+let _clampTipsQueued = false;
+function queueClampTips() {
+  if (_clampTipsQueued) return;
+  _clampTipsQueued = true;
+  requestAnimationFrame(() => { _clampTipsQueued = false; syncClampTips(); });
+}
+window.addEventListener('resize', queueClampTips);
 function sammelRow(rest) {
   const row = closeoutEl('button', 'closeout-todo closeout-decide closeout-sammel');
   row.type = 'button';
@@ -78,8 +95,9 @@ function todoRow(kind, el, i) {
   row.dataset.todoKey = key;
   const head = closeoutEl('div', 'closeout-todo-head');
   const title = closeoutEl('span', 'closeout-todo-title', todoText(el));
-  title.dataset.tip = title.textContent;
+  title.dataset.tipFull = title.textContent;
   head.appendChild(title);
+  queueClampTips();
   const crit = String(el.dataset.crit || '').toLowerCase();
   if (crit === 'low' || crit === 'mid' || crit === 'high') {
     const chip = closeoutEl('span', 'closeout-crit',

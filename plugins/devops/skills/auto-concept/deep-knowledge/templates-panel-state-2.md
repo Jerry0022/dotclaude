@@ -64,7 +64,7 @@
 }
 .closeout-sheet .closeout-decide {
   flex-direction: row;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.45rem;
   cursor: pointer;
   /* border only: a background transition on a color-mix() of page tokens
@@ -82,15 +82,22 @@
   outline: 2px solid var(--accent-color, #58a6ff);
   outline-offset: 2px;
 }
-.closeout-sheet .closeout-todo-head { display: flex; align-items: center; gap: 0.45rem; min-width: 0; }
-/* One line per row: the full name is the row's data-tip (decideRow() /
-   todoRow()), so the ellipsis never hides anything for good. */
+.closeout-sheet .closeout-todo-head { display: flex; align-items: flex-start; gap: 0.45rem; min-width: 0; }
+/* At most TWO lines per row title, never a one-line ellipsis: the title wraps
+   (overflow-wrap: anywhere breaks even an unbroken string), the chips and the
+   pill stay top-right (align-items: flex-start). Authoring caps the visible
+   label at 48 characters (templates-final-report.md, validation-gate.md 33c),
+   so the clamp is only a safety net; when it does cut, syncClampTips() puts
+   the full text on the row's data-tip. */
 .closeout-sheet .closeout-todo-title {
   flex: 1 1 auto;
   min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   line-height: var(--pill-line-height, 1.3);
   font-size: 0.82rem;
 }

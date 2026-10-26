@@ -994,6 +994,19 @@ describe("final report (templates-final-report.md, validation-gate.md 33b / 37b)
     expect(reason).toMatch(/breaks the close-out authoring rules/);
   });
 
+  test("a visible label over 48 characters blocks (Fund, 🧪, 👉); 48 passes (33c)", () => {
+    const L48 = "x".repeat(48), L49 = "x".repeat(49);
+    const fund = (l) => FUND.replace(">A</span>", ">" + l + "</span>");
+    const kinds = (body) => evaluate("docs/concepts/x.html", report(body)).finalReport.map((i) => i.kind);
+    expect(kinds(`<details data-open-questions><ul>${fund(L48)}</ul></details>`)).toEqual([]);
+    expect(kinds(`<details data-open-questions><ul>${fund(L49)}</ul></details>`)).toEqual(["final-report-label-length"]);
+    const li = (l, a) => `<section data-${a} hidden><ul><li data-crit="mid" data-guide=""><span class="todo-text">${l}</span> <small>lange Details sind erlaubt, weil nur der Text zählt</small></li></ul></section>`;
+    expect(kinds(li(L48, "tests"))).toEqual([]);
+    expect(kinds(li(L49, "tests"))).toEqual(["final-report-label-length"]);
+    expect(kinds(li(L49, "handoffs"))).toEqual(["final-report-label-length"]);
+    expect(kinds(`<section data-tests hidden><ul><li>${L49}</li></ul></section>`)).toEqual(["final-report-label-length"]);
+  });
+
   test("a Fund without an admissible origin blocks; a routed one is exempt", () => {
     const bad = FUND.replace(' data-oq-origin="found"', ' data-oq-origin="scope"');
     const r = evaluate("docs/concepts/x.html", report(`<details data-open-questions><ul>${bad}</ul></details>`));

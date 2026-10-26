@@ -144,6 +144,7 @@ function finalReportRegion(html) {
  * current final-report engine — an older page is the stale-engine finding's
  * job, not this one.
  */
+const FR_LABEL_MAX = 48;
 function findFinalReportIssues(html) {
   const region = finalReportRegion(html);
   if (!region) return [];
@@ -171,6 +172,27 @@ function findFinalReportIssues(html) {
         const title = /\sdata-issue-title=["']([^"']*)["']/.exec(tag);
         issues.push({ kind: 'final-report-origin', why: `Fund "${title ? title[1] : '?'}" has no data-oq-origin="deferred" | "found" — it skipped the open-points admission gate (validation-gate.md 33b)`, at: region.at });
       }
+    }
+  }
+  // Visible label length (validation-gate.md 33c): the close-out sheet shows a
+  // row title in two lines at most, and a longer one is cut by the clamp.
+  const tooLong = (kind, text) => {
+    const t = text.replace(/<[^>]*>/g, '').replace(/&[a-z#0-9]+;/gi, 'x').replace(/\s+/g, ' ').trim();
+    if ([...t].length > FR_LABEL_MAX) {
+      issues.push({ kind: 'final-report-label-length', why: `${kind} "${t.slice(0, 40)}…" is ${[...t].length} characters — the visible label is a noun phrase of at most ${FR_LABEL_MAX} (the sheet shows two lines); details go into data-issue-body / the report body (validation-gate.md 33c)`, at: region.at });
+    }
+  };
+  if (oqStart >= 0) {
+    for (const m of body.slice(oqStart).matchAll(/<[a-z]+\b[^>]*\sclass=["'][^"']*\boq-label\b[^"']*["'][^>]*>([\s\S]*?)<\/[a-z]+>/gi)) tooLong('Fund label', m[1]);
+  }
+  for (const attr of ['data-tests', 'data-handoffs']) {
+    const at = body.search(new RegExp('\\s' + attr + '\\b'));
+    if (at < 0) continue;
+    const end = body.indexOf('</section>', at);
+    const seg = body.slice(at, end < 0 ? undefined : end);
+    for (const m of seg.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)) {
+      const todo = /<[a-z]+\b[^>]*class=["'][^"']*\btodo-text\b[^"']*["'][^>]*>([\s\S]*?)<\/[a-z]+>/i.exec(m[1]);
+      tooLong(attr === 'data-tests' ? '🧪 item' : '👉 item', todo ? todo[1] : m[1]);
     }
   }
   if (/nicht führbar|not guidable/i.test(body)) {
