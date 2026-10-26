@@ -599,7 +599,7 @@ function runGate(outPath, html) {
   const r = gate.evaluate(outPath, html);
   return {
     ok: r.ok,
-    reason: r.ok ? '' : gate.buildBlockReason(outPath, r.missing, r.forbidden, r.structural, r.mapping, r.overlap, r.stale, r.collisions),
+    reason: r.ok ? '' : gate.buildBlockReason(outPath, r.missing, r.forbidden, r.structural, r.mapping, r.overlap, r.stale, r.collisions, r.finalReport),
     warnings: (r.warnings || []).map(w => w.why),
   };
 }

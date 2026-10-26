@@ -123,9 +123,17 @@ function finalReportRegion(html) {
   const src = html || '';
   const open = /<section\b(?:[^>"']|"[^"]*"|'[^']*')*\sdata-final-report\b(?:[^>"']|"[^"]*"|'[^']*')*>/i.exec(src);
   if (!open) return null;
+  // Up to the section's own closing tag: the report is the last round, so
+  // "until the next round" ran into the engine scripts after it.
   const rest = src.slice(open.index + open[0].length);
-  const next = /<section\b(?:[^>"']|"[^"]*"|'[^']*')*\sdata-iteration=/i.exec(rest);
-  return { at: open.index, html: open[0] + (next ? rest.slice(0, next.index) : rest) };
+  const tags = /<(\/?)section\b[^>]*>/gi;
+  let depth = 1;
+  let m;
+  while ((m = tags.exec(rest))) {
+    depth += m[1] ? -1 : 1;
+    if (depth === 0) return { at: open.index, html: open[0] + rest.slice(0, m.index) };
+  }
+  return { at: open.index, html: open[0] + rest };
 }
 
 /**

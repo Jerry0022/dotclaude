@@ -1006,6 +1006,17 @@ describe("final report (templates-final-report.md, validation-gate.md 33b / 37b)
     expect(findFinalReportIssues(report("<!-- never write nicht führbar --><p>ok</p>"))).toEqual([]);
   });
 
+  test("the rules read the report section only — not the engine after it, not an earlier round", () => {
+    const html = report('<section data-tests hidden><ul><li data-crit="mid">x</li></ul></section><p>ok</p>')
+      .replace("</body>", "<script>// \"nicht führbar\" is never shown</script>\n</body>");
+    expect(findFinalReportIssues(html)).toEqual([]);
+  });
+
+  test("the build feedback names the final-report finding", () => {
+    const r = evaluate("docs/concepts/x.html", report("<p>nicht führbar</p>"));
+    expect(buildBlockReason("x.html", r.missing, r.forbidden, r.structural, r.mapping, r.overlap, r.stale, r.collisions, r.finalReport)).toMatch(/final-report-not-guidable/);
+  });
+
   test("the final-report anchors exist in templates.md — the list cannot drift from the reference", () => {
     const md = readTemplates();
     for (const e of ENGINE_FINAL) expect(md, e.token).toContain(e.token);
