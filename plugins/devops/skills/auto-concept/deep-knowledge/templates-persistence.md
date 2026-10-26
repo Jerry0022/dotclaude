@@ -68,6 +68,13 @@ function _guardedSetItem(key, value) {
 // write.
 const DRAFT_SLUG = STORAGE_KEY.replace(/^concept-state-/, '');
 const DRAFT_DEBOUNCE_MS = 1000;
+// Failed mirror POSTs (404 / unreachable) stretch the debounce 5 s → 10 → … →
+// 60 s (same curve as makeBackoff, § Claude Connection Heartbeat); the first
+// ack resets it (_draftFailures counts consecutive failures, _setDraftHealth).
+// The localStorage copy is written on every edit regardless.
+function _draftDelayMs() {
+  return _draftFailures ? Math.max(DRAFT_DEBOUNCE_MS, Math.min(60000, 5000 * Math.pow(2, _draftFailures - 1))) : DRAFT_DEBOUNCE_MS;
+}
 // A page opened as a file:// URL has no bridge by construction — every POST
 // would fail and the "no durable mirror" strip would be permanent noise.
 const DRAFT_ENABLED = /^https?:$/.test(location.protocol);
@@ -200,7 +207,7 @@ function queueDraftSync() {
   if (!DRAFT_ENABLED) return;
   if (_draftTimer) clearTimeout(_draftTimer);
   _setDraftPhase('saving');   // "… Speichert" until flushDraft's ack lands
-  _draftTimer = setTimeout(flushDraft, DRAFT_DEBOUNCE_MS);
+  _draftTimer = setTimeout(flushDraft, _draftDelayMs());
 }
 
 // Teardown path. sendBeacon is queued by the browser itself and survives the

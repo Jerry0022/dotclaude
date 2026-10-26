@@ -87,6 +87,29 @@ let _disconnectStreak = 0;
 let _lastState        = 'connecting';
 let _pollInFlight     = null;
 
+// Bridge back-off. Served from a plain static server (no bridge) every poll
+// is a 404 or a refused connection, and a fixed 3-5 s cadence made one open
+// tab fire hundreds of requests in a few minutes. Each polling loop owns one
+// back-off: the first failure waits 5 s, then 10, 20, 40, capped at 60 s; the
+// first success restores the normal cadence. The loops keep their timers and
+// only skip the network call while not due, so the indicator logic
+// (checkClaudeConnection, ms-since-epoch timestamps) is untouched.
+function makeBackoff(baseMs, capMs) {
+  const cap = capMs || 60000;
+  let fails = 0, nextAt = 0;
+  const bo = {
+    fails: () => fails,
+    delay: () => (fails ? Math.min(cap, baseMs * Math.pow(2, fails - 1)) : baseMs),
+    due: (now) => now >= nextAt,
+    ok: () => { fails = 0; nextAt = 0; },
+    fail: (now) => { fails++; nextAt = now + bo.delay(); },
+  };
+  return bo;
+}
+const _hbBackoff     = makeBackoff(5000);   // GET /heartbeat (main thread)
+const _decBackoff    = makeBackoff(5000);   // GET /decisions (pollProcessedState)
+const _reloadBackoff = makeBackoff(5000);   // GET /reload (pollReload, pollProcessedState)
+
 // Per-load tab identity (#397). Rides on every browser-only poll as
 // `?tab=<id>` so the bridge can tell two tabs apart and notice when THIS one
 // leaves (see sendTabBye). Random per document on purpose: a reload is a new
@@ -118,13 +141,16 @@ function applyHeartbeat(data) {
 // Single-flight: a wake-up can fire the visibility handler, the main-thread
 // interval and the worker's first message within the same second — one poll
 // answers all of them.
-function pollHeartbeat() {
+function pollHeartbeat(force) {
   if (_pollInFlight) return _pollInFlight;
+  if (!force && !_hbBackoff.due(Date.now())) return Promise.resolve();
   _pollInFlight = (async () => {
     try {
       const res = await fetch('/heartbeat' + _tabQuery, { cache: 'no-store' });
+      if (!res.ok) throw new Error('heartbeat ' + res.status);
       applyHeartbeat(await res.json());
-    } catch (e) { /* server unreachable — leave _everPolled unchanged */ }
+      _hbBackoff.ok();
+    } catch (e) { _hbBackoff.fail(Date.now()); /* server unreachable — leave _everPolled unchanged */ }
     finally { _pollInFlight = null; }
   })();
   return _pollInFlight;
@@ -142,7 +168,8 @@ function startHeartbeatWorker() {
   try {
     if (_hbWorker) { try { _hbWorker.terminate(); } catch (e) {} _hbWorker = null; }
     const url = JSON.stringify(location.origin + '/heartbeat' + _tabQuery);
-    const src = 'const u=' + url + ';async function p(){try{const r=await fetch(u,{cache:"no-store"});postMessage(await r.json())}catch(e){}}p();setInterval(p,5000);';
+    // Same back-off as makeBackoff(5000): 5 s normally, 5 → 10 → … → 60 s while failing.
+    const src = 'const u=' + url + ';let f=0;async function p(){let ok=false;try{const r=await fetch(u,{cache:"no-store"});if(r.ok){postMessage(await r.json());ok=true}}catch(e){}f=ok?0:f+1;setTimeout(p,f?Math.min(60000,5000*Math.pow(2,f-1)):5000)}p();';
     const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
     w.onmessage = (ev) => { applyHeartbeat(ev.data); checkClaudeConnection(); };
     w.onerror = () => { _hbWorker = null; };   // main-thread interval takes over
@@ -203,18 +230,22 @@ window.addEventListener('pagehide', sendTabBye);
 const PROCESSED_SAFETY_MS = 5 * 60 * 1000;
 
 async function pollProcessedState() {
+  if (!_decBackoff.due(Date.now())) return;   // bridge away — back off (makeBackoff)
   if (!_submittedAt) {
     // Not submitted from this tab — still follow the server so the tab-title
     // glyph of a second open tab flips to ⏳ without a reload.
     if (typeof noteServerRound !== 'function') return;
     try {
       const r = await fetch('/decisions', { cache: 'no-store' });
-      if (r.ok) noteServerRound(await r.json());
-    } catch (e) { /* bridge away — keep the last glyph */ }
+      if (r.ok) { _decBackoff.ok(); noteServerRound(await r.json()); }
+      else _decBackoff.fail(Date.now());
+    } catch (e) { _decBackoff.fail(Date.now()); /* bridge away — keep the last glyph */ }
     return;
   }
   try {
     const res = await fetch('/decisions', { cache: 'no-store' });
+    if (!res.ok) { _decBackoff.fail(Date.now()); return; }
+    _decBackoff.ok();
     const data = await res.json();
     if (typeof noteServerRound === 'function') noteServerRound(data);
     // Advance the submit-panel progress list based on the per-submission
@@ -261,7 +292,7 @@ async function pollProcessedState() {
         showSubmitWarning('{{panel.processed_no_round}}');
       }
     }
-  } catch (e) { /* retry next tick */ }
+  } catch (e) { _decBackoff.fail(Date.now()); /* retry when due */ }
 }
 
 function _setCacheHints(visible) {
@@ -584,7 +615,7 @@ function checkClaudeConnection() {
 // "connected" within one network RTT instead of sitting on "connecting" for
 // the full 5 s interval. The shorter the connecting window, the less the user
 // notices the bootstrap at all.
-pollHeartbeat().then(checkClaudeConnection);
+pollHeartbeat(true).then(checkClaudeConnection);
 startHeartbeatWorker();
 
 // Coming back to the tab is the moment the user looks at the status line —
@@ -593,7 +624,7 @@ startHeartbeatWorker();
 // which handles the frozen case itself; this only shortens the wait.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
-  pollHeartbeat().then(checkClaudeConnection);
+  pollHeartbeat(true).then(checkClaudeConnection);
 });
 
 // Main-thread cadence. When the worker is alive it owns the /heartbeat fetch

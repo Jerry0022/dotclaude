@@ -419,9 +419,11 @@ mid-session.
 ```javascript
 let _bootReloadCounter = null;
 async function pollReload() {
+  if (!_reloadBackoff.due(Date.now())) return;   // § Claude Connection Heartbeat: makeBackoff
   try {
     const res = await fetch('/reload' + _tabQuery, { cache: 'no-store' });
-    if (!res.ok) return;
+    if (!res.ok) { _reloadBackoff.fail(Date.now()); return; }
+    _reloadBackoff.ok();
     const { counter } = await res.json();
     if (_bootReloadCounter === null) { _bootReloadCounter = counter; return; }
     if (counter > _bootReloadCounter) {
@@ -429,7 +431,7 @@ async function pollReload() {
       try { sessionStorage.setItem('_concept_jumpTop', '1'); } catch (_) {}
       location.reload();
     }
-  } catch (e) { /* bridge offline */ }
+  } catch (e) { _reloadBackoff.fail(Date.now()); /* bridge offline */ }
 }
 setInterval(pollReload, 3000);
 document.addEventListener('DOMContentLoaded', pollReload);
