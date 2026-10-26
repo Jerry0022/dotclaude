@@ -15,7 +15,7 @@ detect -> offer -> read-only analysis -> plan -> approval -> hand-off
 3. **Read-only analysis** - the `auto-frustrated` skill (entry on yes: `Read {PLUGIN_ROOT}/skills/auto-frustrated/SKILL.md`; also the explicit slash command). Tests may run and test artifacts, snapshots and caches may be written; the app's source and config must not change.
 4. **Plan** - presented by the existing concept-vs-card rules: non-trivial -> `/auto-concept` page, trivial -> inline text above the completion card.
 5. **Approval** - any interpretable yes in the next prompt, no fixed phrase.
-6. **Hand-off** - preset run or fix; it never ships and never asks to ship.
+6. **Hand-off** - preset run or fix; it never ships and never asks to ship (only a concept close-out sheet may include a ship choice).
 
 ## Config
 
@@ -23,18 +23,12 @@ detect -> offer -> read-only analysis -> plan -> approval -> hand-off
 |---|---|---|
 | `frustratedMode.suggest` | `true` | `false` silences the prompt detector: no stuck-session notice reaches Claude, nothing is offered. The explicit slash entry stays available. Set with `/devops-config` or in `.claude/devops-config.json` (project) / `~/.claude/devops-config.json` (global). |
 
-## Never ships
-
-The hand-off stops before ship. Only a concept close-out sheet may include a ship choice.
-
 ## Detector log
 
 `~/.claude/devops-frustration.log` holds one marker line per non-silent verdict
 (time, short session id, `suggest` or `band`, rounds, score, signal markers such
 as `T1s`/`T2`) and never any prompt text. Every append cuts the file back to its
-newest 300 lines, so the cleanup runs with the log itself. Delete it by hand any
-time; it is removed with the feature when Frustrated Mode graduates or is
-dropped (the log module goes with it). `scripts/frustration-replay.js
+newest 300 lines, so the cleanup runs with the log itself. It goes with the feature when Frustrated Mode graduates or is dropped. `scripts/frustration-replay.js
 <transcript.jsonl|dir>` replays transcripts through the scorer for tuning.
 
 ## Session flag
@@ -47,7 +41,7 @@ The detector keeps per-session state in the temp dir (2 h expiry).
 
 The frustrated analysis ends in a plan. The plan is recorded beside the run contract (`<project>/.claude/run-contract.plan.json`), and nothing executes until the user's approval of exactly that plan is recorded. A pending record is inert: "Nur Analyse" is the default, silence is never approval. Code: `hooks/lib/run-contract-plan.js`, CLI in `hooks/lib/run-contract-cli.js`. All subcommands exit 126 (`{"ok":false,"disabled":true,"error":"not available"}`) when the `frustrated-mode` feature is off.
 
-Always pass `--cwd` when calling it from a script or a smoke test; a bare call acts on this session's live project.
+Always pass `--cwd` from a script or smoke test; a bare call acts on this session's live project.
 
 | Call | Does | Output (JSON, one line) |
 |---|---|---|
@@ -72,8 +66,7 @@ While an analysis runs, the session's guard marker is armed
 its own). Subagent hook payloads carry the parent's `session_id`, so the guard
 covers the main thread and every analyst; frontmatter `tools:` is only defence
 in depth. Code: `hooks/lib/frustrated-guard.js`, CLI `scripts/frustrated-guard.js arm [--target …] | disarm | status`
-(session from `--session` or `$CLAUDE_CODE_SESSION_ID`; the hook also applies
-`arm` / `disarm` itself with the payload's session id; a subagent cannot disarm).
+(session from `--session` or `$CLAUDE_CODE_SESSION_ID`; the hook applies `arm` / `disarm` itself; a subagent cannot disarm).
 
 | Allowed while armed | Denied (exit 2, with the reason) |
 |---|---|
@@ -113,15 +106,13 @@ any interpretable yes → `plan approve` → disarm → hand-off per step
 `do-learn`, `auto-guide`). A no → `plan clear` and disarm. Never ships, never
 asks to ship; no Ultracode field in the report.
 
-Developer notes: `docs/dev/feature-flags.md`.
-
 ## Hand-off
 
 Entered as `/do-run --from=frustrated --plan=<id>@<short> [--step=<n>] <payload>` after `plan approve`. do-run finds it through `scripts/run-extras.js from frustrated` (`{known:true, doc, section}` only where the feature is allowed; the ungated router names no feature, it just reads the doc the helper returns). Read this section before anything else; it replaces the router's presets and questions.
 
 1. **Verify first.** Run `node "{PLUGIN_ROOT}/scripts/run-extras.js" handoff --plan <id>@<short>` (add `--cwd` from scripts). It checks through `plan status` that the record exists, is `approved`, is not expired (2 h) and matches id and hash. Exit 1 / `ok:false` -> stop, print its `error`, execute nothing, arm nothing.
 2. **Presets (answers in advance, nothing asked):** Q1 = Prompt umsetzen with the step payload as the task, verbatim; Q2 = **Interaktiv · Ship manuell**; Q3 = Strikt, scope = the approved plan's steps (`objects` are the closed scope, `out_of_scope` is off limits); Q4 dropped (no Rethink, no burn, no analysis option); passes as the plan's `checks` say, Harden/Polish as always. Q2 is not asked either: plan approval is not ship approval, and the hand-off never asks about shipping.
-3. **Never ships.** No ship question, no `ship: auto`, no `do-ship` call, no `ship_*` tool. A ship wish in the payload is ignored and reported as out of scope. Only a concept close-out sheet can add ship.
+3. **Never ships.** No ship question, no `ship: auto`, no `do-ship` call, no `ship_*` tool. A ship wish in the payload is ignored and reported as out of scope.
 4. **Run.** Implementation goes through `auto-agents` (`--from=do-run --via=frustrated --mode=interactive --ship=manual --plan=<id>@<short> --step=<n>`: pass `--via`, `--plan` and `--step` through verbatim, § Hand-off in auto-agents); the plan approval was its confirmation, the plan card is still shown. Several `implement` steps run in plan order; `concept`, `learn` and `webguide` steps go to `auto-concept`, `do-learn` and `auto-guide` with the same `--from=frustrated --plan=… --step=n` args. **After a `concept` step** the plan may have moved to v+1 (§ Hand-off in auto-concept): re-read `plan status`, continue with its new short, and skip every `implement` step the concept's implement click already built — never build a step twice, never resume with the old short (it fails `handoff`).
 5. **Single-bug plans** stay in do-run -> `auto-agents`. `auto-fix` is not an entry for the hand-off (it is mandated for failures and only ever gets a log-only hint); it takes no `--from=frustrated`.
 6. Anything unclear about the plan -> stop and say so; never fall back to the router's default questions.
@@ -131,7 +122,7 @@ Entered as `/do-run --from=frustrated --plan=<id>@<short> [--step=<n>] <payload>
 auto-agents names no feature: its Step 3 skips the second confirmation (spec G5) only for `--via` plus a `--plan=<ref>` that `run-extras.js handoff --plan <ref>` confirms (rc 0; rc 126 off alpha or `ok:false` -> it asks as usual) — never for a bare `--via`; the plan card is still shown, once. Everything else rides in the **task text** the caller hands over, because auto-agents passes it verbatim into every agent prompt. So the caller (do-run's hand-off above, or auto-concept under § Hand-off in auto-concept) first verifies with `run-extras.js handoff --plan <id>@<short>` (`ok:false` -> stop, spawn nothing) and then writes this block into the task, filled from the approved step:
 
 1. **Scope is the step.** Build only step `<n>` (`--step`, else every `implement` step in order). Its `objects` are the closed file scope of every agent prompt, `out_of_scope` goes into each prompt as off limits, its `checks` run first in the QA wave. A needed file outside `objects` is a material deviation: stop that agent and return it as `needs-decision` ("Plan-Abweichung: <file> — neue Version freigeben?"); never widen silently.
-2. `ship` in the result stays `manual`; the hand-off never ships.
+2. `ship` in the result stays `manual`.
 
 ## Hand-off in auto-concept
 

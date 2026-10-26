@@ -6,7 +6,7 @@ A hook records the answers to `do-run`'s questions and refuses the tool call tha
 
 ## Why
 
-An audit of 2026-09-24 sessions found the same failure three times: the user made a choice in `do-run` and the model walked past it — chosen Harden/Polish never ran, `ship_*` MCP tools were called directly instead of `devops:do-ship`, `auto-agents` / `devops:qa` / backlog triage+refine were skipped, and a `do-batch` fire was implemented without ever handing off to `do-run`. Every obligation lived only in skill prose; nothing checked it.
+Failure this prevents: the user made a choice in `do-run` and the model walked past it (Harden/Polish skipped, `ship_*` called directly instead of `devops:do-ship`, `auto-agents` / `devops:qa` / backlog triage skipped, `do-batch` never handed to `do-run`). Obligations that live only in skill prose are not checked.
 
 ## What is recorded
 

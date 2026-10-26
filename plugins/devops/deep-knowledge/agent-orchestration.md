@@ -172,7 +172,7 @@ The count follows the work, not a fixed number. Parallel **implementers**
    full test suite. A central check after the merge is what keeps parallel
    errors from compounding; the prose summary is what gets cut.
 
-Measured (2026-09-27 benchmark): sessions with ≥ 6 agents cost ~5× in the
+Measured: sessions with ≥ 6 agents cost ~5× in the
 main context and compacted 1.9× as often, and 7 parallel "split" frontend
 agents on one feature were the expensive pattern — overlapping ownership, not
 the count, is what made them so. Evidence: Anthropic agent-teams docs ("start
@@ -242,8 +242,7 @@ Every spawned agent MUST receive:
    screenshot the user pasted for the task, as its saved path. The `[Anhang]`
    description is a summary, not a substitute: an agent working a UI note from
    the description alone builds what the merge turn understood, not what the
-   user showed. Transcript analysis 2026-10-03: two of four batch runs handed
-   11 screenshots to no agent at all.
+   user showed. In two of four analysed batch runs 11 screenshots reached no agent.
 
 ### Interaction Directives
 
@@ -377,8 +376,7 @@ check to risk:
 wave folds its findings in, round 2 re-reviews the reworked diff. Whatever
 round 2 still finds is fixed only if it is **high** severity and small;
 everything else goes into the result's `open` field as open points — never a
-third redteam → fix loop. Observed: three rounds on one restructure took
-~2.5 h while the third found only mediums.
+third redteam → fix loop. Three rounds on one restructure took ~2.5 h while the third found only mediums.
 
 Treat a handoff claim as **data to verify, not fact to trust**: a finding like
 "the API already returns X" gets a 10-second check against the code, not blind

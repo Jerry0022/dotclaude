@@ -14,7 +14,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { run, git, walk, readText, readJson, rel, cmpSemver, check, timed } = require('./util');
+const { hookCommandPath, run, git, walk, readText, readJson, rel, cmpSemver, check, timed } = require('./util');
 const { frontmatter } = require('./footprint');
 
 const MAX_FINDINGS = 40;
@@ -35,9 +35,26 @@ function mdFiles(root) {
 function lineOf(text, index) { return text.slice(0, index).split('\n').length; }
 
 // ---------------------------------------------------------------- 1 tests+lint
+// MCP server dirs (plugins/<name>/mcp-server) that declare a package.json but have no node_modules.
+function mcpDepsMissing(root) {
+  return plugins(root)
+    .map((p) => path.join(root, 'plugins', p, 'mcp-server'))
+    .filter((d) => fs.existsSync(path.join(d, 'package.json')) && !fs.existsSync(path.join(d, 'node_modules')));
+}
+
 function testsLint(root, { skipTests }) {
   if (skipTests) return check('tests-lint', 'Tests + Lint', 'skipped', [{ msg: 'skipped by --skip-tests' }]);
   const findings = [];
+  const missingDeps = mcpDepsMissing(root);
+  if (missingDeps.length) {
+    if (!run('npm', ['--version'], { cwd: root, timeout: 30000 }).ok) {
+      return check('tests-lint', 'Tests + Lint', 'skipped', [{ msg: `MCP server dependencies missing (${missingDeps.map((d) => rel(root, d)).join(', ')}) and npm is unavailable to install them` }]);
+    }
+    for (const d of missingDeps) {
+      const inst = run('npm', ['install', '--prefix', d, '--no-audit', '--no-fund'], { cwd: root, timeout: 300000 });
+      if (!inst.ok) return check('tests-lint', 'Tests + Lint', 'skipped', [{ msg: `MCP server dependencies missing in ${rel(root, d)} and npm install failed (exit ${inst.code}); tests would fail on imports, not on code` }]);
+    }
+  }
   const lint = run('npm', ['run', 'lint'], { cwd: root, timeout: 300000 });
   const test = run('npm', ['test'], { cwd: root, timeout: 900000 });
   if (!lint.ok) findings.push({ msg: `npm run lint failed (exit ${lint.code}): ${(lint.stdout + lint.stderr).trim().split('\n').slice(-6).join(' | ')}` });
@@ -57,7 +74,9 @@ function generated(root) {
   if (!readme.ok) findings.push({ msg: 'README / architecture marker blocks are stale (gen-readme-sections --check)', file: 'README.md' });
   const trig = node(['plugins/devops/scripts/gen-trigger-evals.js', '--check']);
   if (!trig.ok) findings.push({ msg: 'evals/triggers differs from cases.json (gen-trigger-evals --check)', file: 'plugins/devops/evals/triggers' });
-  // gen-dk-index and gen-project-map have no check mode: generate into a copy and compare.
+  const pmap = node(['plugins/devops/scripts/gen-project-map.mjs', '--check', root]);
+  if (!pmap.ok) findings.push({ msg: '.claude/project-map.md is stale (gen-project-map --check)', file: '.claude/project-map.md' });
+  // gen-dk-index has no check mode: generate into a copy and compare.
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-audit-dk-'));
   try {
     const dk = path.join(dev, 'deep-knowledge');
@@ -67,9 +86,7 @@ function generated(root) {
     if (!g.ok || a === null) findings.push({ msg: 'gen-dk-index could not run on a copy', file: 'plugins/devops/deep-knowledge/INDEX.md' });
     else if (a !== b) findings.push({ msg: 'deep-knowledge/INDEX.md is stale (regeneration differs)', file: 'plugins/devops/deep-knowledge/INDEX.md' });
   } finally { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ } }
-  const r = check('generated', 'Generated artefacts current', findings.length ? 'red' : 'green', findings);
-  r.notes = ['gen-project-map has no check mode and is not verified'];
-  return r;
+  return check('generated', 'Generated artefacts current', findings.length ? 'red' : 'green', findings);
 }
 
 // ------------------------------------------------------------------- 3 manifest
@@ -175,10 +192,10 @@ function wiring(root) {
     for (const groups of cfgs.flatMap((c) => Object.values(c.hooks))) {
       for (const g of groups) {
         for (const h of g.hooks || []) {
-          const m = /\$\{CLAUDE_PLUGIN_ROOT\}\/(\S+)/.exec(h.command || '');
-          if (!m) continue;
-          registered.add(path.join(base, m[1]));
-          if (!fs.existsSync(path.join(base, m[1]))) findings.push({ msg: `hooks.json registers ${m[1]} but the file is missing`, file: rel(root, path.join(base, 'hooks/hooks.json')) });
+          const hp = hookCommandPath(h.command);
+          if (!hp) continue;
+          registered.add(path.join(base, hp));
+          if (!fs.existsSync(path.join(base, hp))) findings.push({ msg: `hooks.json registers ${hp} but the file is missing`, file: rel(root, path.join(base, 'hooks/hooks.json')) });
         }
       }
     }
@@ -399,4 +416,4 @@ async function runIntegrity({ root = process.cwd(), skipTests = false, previousS
   return out;
 }
 
-module.exports = { runIntegrity, checkReferences, references, staleKnowledge, sizeMetrics, sizeTrend, wiring, manifest, frontmatter, git };
+module.exports = { runIntegrity, checkReferences, references, staleKnowledge, sizeMetrics, sizeTrend, wiring, manifest, frontmatter, git, mcpDepsMissing };

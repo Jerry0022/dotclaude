@@ -179,6 +179,7 @@ describe("mapping engine — matrix interaction (review additions)", () => {
   });
   test("arrow keys, Home and End move focus between cells and keep exactly one tabindex=0 per table", () => {
     const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
+    p.document.querySelector('[data-mapping="veh"] .map-view-btn[data-map-mode="matrix"]').click();   // a hidden matrix cannot take focus (jsdom 30, as in browsers)
     const table = p.document.querySelector('[data-map-matrix="card@phone"] table');
     const key = (target, k) => target.dispatchEvent(new p.window.KeyboardEvent("keydown", { key: k, bubbles: true }));
     const entry = box(p.document, "plate", "card.header", "phone");

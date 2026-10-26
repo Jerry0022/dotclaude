@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
  * @hook ss.knowledge.index
- * @version 0.9.0
+ * @version 0.10.0
  * @event SessionStart
  * @plugin devops
  * @description Inject the always-on policy docs in full (ALWAYS_ON below)
  *   plus a compact deep-knowledge index at session start. Order and size
  *   follow lib/context-cap: plugin root, delegation switch and budget class
  *   first, then the policy, the index last and only in the richest form that
- *   keeps the whole payload under the harness limit (file + topic, else file
- *   names, else a pointer to INDEX.md). Before 0.8.0 the full index table
+ *   keeps the whole payload under the harness limit (file names, else a
+ *   pointer to INDEX.md). Before 0.8.0 the full index table
  *   came first and the payload reached 15.9 KB — the harness showed a 2 KB
  *   preview and the policy never arrived. The index gives
  *   Claude awareness of all reference docs before message #1; the always-on
@@ -114,16 +114,15 @@ function buildContext(pluginRoot, sessionId = null, cwd = process.cwd()) {
     );
   }
 
-  // The index last, in the richest form that still fits: file + topic, then
-  // file names only, then the pointer alone. The one-line summaries stay in
-  // INDEX.md — prompt.knowledge.dispatch injects the matching doc per prompt.
+  // The index last: file names only (0.10.0 — the topics cost ~900 tokens per
+  // session and the names carry them), else the pointer alone. Topics and
+  // one-line summaries stay in INDEX.md — prompt.knowledge.dispatch injects the matching doc per prompt.
   const rows = indexRows(fs.readFileSync(indexPath, 'utf8')).filter(r => !isGated(r.file));
   for (const r of extraRows) if (!isGated(r.file) && !rows.some(x => x.file === r.file)) rows.push(r);
   const root = String(pluginRoot).replace(/\\/g, '/');
   // The root once, not twice: every char here is one the index list below cannot use.
   const pointer = `[deep-knowledge] Reference docs: ${root}/deep-knowledge/INDEX.md has a one-line summary of each — read one when its topic comes up.`;
   const variants = [
-    rows.map(r => `${r.file} (${r.topic})`).join(' · '),
     rows.map(r => r.file).join(' · '),
     '',
   ];

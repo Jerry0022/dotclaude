@@ -13,7 +13,8 @@
  *           estTokens, ...extra }
  *   token-guard ops: 'blocked' (estTokens = the call's estimated cost, only
  *   avoided if the retry is narrower), 'released' (the same call went ahead -
- *   cancels a block). local-llm op: 'delegated' (estTokens = output Claude
+ *   cancels a block), 'narrowed' (the next call was measurably narrower -
+ *   estimate:false, see guard-followup.js; estTokens an upper bound). local-llm op: 'delegated' (estTokens = output Claude
  *   did not have to generate).
  *
  *   The local-llm plugin ships an identical copy (separate plugin, no shared
@@ -52,4 +53,9 @@ function record(source, op, estTokens, extra = {}) {
   }
 }
 
-module.exports = { record, logPath, MAX_BYTES };
+/** local-llm delegation: output Claude did not write (~3.5 chars/token). */
+function recordDelegated(content, tokensUsed, extra = {}) {
+  return record('local-llm', 'delegated', Math.ceil(String(content || '').length / 3.5), { localTokensUsed: tokensUsed ?? null, ...extra });
+}
+
+module.exports = { record, recordDelegated, logPath, MAX_BYTES };

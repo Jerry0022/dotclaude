@@ -159,11 +159,8 @@ unambiguous source confirms it exists under exactly that name and location:
 | lokal | `git for-each-ref refs/heads --format=%(refname)` | `git branch` output, `%(refname:short)` |
 | nur-remote / remote half | `git ls-remote --heads origin` (the server's answer) | `refs/remotes/*` — it also holds `origin/HEAD` |
 
-- **Why:** `%(refname:short)` shortens `refs/remotes/origin/HEAD` to the name
-  `origin`. A sweep that listed `refs/remotes/origin` that way filtered out
-  `HEAD` and put a "remote branch" called `origin` — the pointer to main — on
-  a repo-health page as löschbar, pre-checked, in four repos at once
-  (2026-09-17). Nothing was deleted, but only because the user read the list.
+- **Why:** `%(refname:short)` shortens `refs/remotes/origin/HEAD` to `origin`,
+  which once showed the pointer to main as a pre-checked, deletable "remote branch".
 - **Hard negative list in classification AND execution:** `main`, `master`,
   `HEAD`, `origin`, the repo's default branch, and any name ending in
   `/main`, `/master` or `/HEAD` never become candidates — filtered when the
@@ -185,8 +182,7 @@ unambiguous source confirms it exists under exactly that name and location:
 `git worktree remove` on a checkout with a big `node_modules/` can take many
 minutes on Windows. A synchronous call with a short timeout (120 s) kills git
 mid-delete. The registration is gone after the next `worktree prune`, and a
-directory is left on disk with no `.git` file and tens of thousands of files
-(observed 2026-09-23: three worktrees of a consumer repo, ~40k files each).
+directory is left on disk with no `.git` file and tens of thousands of files.
 
 - **Run the removal so it can finish:** in the background or with a timeout of
   at least 15 min, never under a 120 s ceiling.
@@ -194,8 +190,8 @@ directory is left on disk with no `.git` file and tens of thousands of files
   `git -C <path> status --porcelain` (must be empty), delete the folder
   natively (`cmd /c rmdir /s /q "<path>"` on Windows, `rm -rf "<path>"`
   elsewhere), one worktree per command with a progress line, then ONE
-  `git worktree prune` at the end (`git worktree remove` took ~40 s per
-  worktree with `node_modules`: 31 in ~20 min). During `/auto-cleanup` the `pre.cleanup.gate` hook
+  `git worktree prune` at the end (`git worktree remove` takes ~40 s per
+  worktree with `node_modules`). During `/auto-cleanup` the `pre.cleanup.gate` hook
   allows the native delete only for paths the confirmed Dry-Run names.
 - **Finish an orphan left anyway, don't hand it to the user.** It qualifies
   when **all** of these hold:
@@ -206,8 +202,7 @@ directory is left on disk with no `.git` file and tens of thousands of files
     `dist`, …).
 
   Then delete the directory yourself (`rm -rf`) and report it as done. The
-  content is in main, and the removal was already decided; handing "delete
-  manually" to the user leaves the cleanup half done. Any entry outside that
+  content is in main and the removal was already decided. Any entry outside that
   list (an untracked file, a local note) → keep the folder and name that
   entry. Uncommitted work is never deleted.
 

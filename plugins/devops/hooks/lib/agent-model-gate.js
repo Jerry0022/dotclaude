@@ -91,10 +91,10 @@ function refusalText(input) {
     ? ' Locating or a sweep → `devops:scout` (haiku · medium) instead of Explore.'
     : '';
   return (
-    `${MARKER} \`${type}\` has no model of its own and would silently inherit the session model. ` +
-    'Name the model in the spawn — `model: "sonnet"` for locating and routine work, `"opus"` only ' +
-    `when the task needs the depth — even when it equals the session's.${locate} ` +
-    'To keep the session model on purpose, repeat this exact spawn unchanged; it goes through.'
+    `${MARKER} Spawn refused once: \`${type}\` has no model of its own. Repeat the SAME Agent call now ` +
+    `with \`model: "sonnet"\` added (\`"opus"\` only for design-heavy work, \`"haiku"\` only for scout) — ` +
+    `every spawn names its model, even when it equals the session's.${locate} ` +
+    'To keep the session model on purpose, repeat the exact spawn unchanged; it goes through.'
   );
 }
 

@@ -2,7 +2,7 @@
 'use strict';
 /**
  * @script plugin-audit/audit
- * @version 0.1.0
+ * @version 0.2.0
  * @description Deterministic collection of the plugin audit (0 model tokens):
  *   static footprint, transcript mining, 12 integrity checks, 8 hygiene
  *   checks, net cost/benefit estimate. Writes <out>/results.json and prints one
@@ -15,7 +15,11 @@
  *                                    last.json, clear a matching report-pending.json
  *
  *   `--trigger ship` additionally writes report-pending.json into the state
- *   dir: if no live session opens the report, the next session does.
+ *   dir: if no live session opens the report, the next session does. It also
+ *   prints the next step as an instruction after the summary line: the
+ *   ship's background task reaches the session as a task notification, and
+ *   on 0.320.0 that session only OFFERED the report as an open point instead
+ *   of opening it (2026-10-26) — the report must open without a question.
  */
 
 const fs = require('fs');
@@ -116,6 +120,16 @@ function summaryLine(r, out) {
   return `plugin-audit: v${r.version} | footprint ~${r.footprint.totalTokens} tok | integrity ${fmt(i)} | hygiene ${fmt(h)} | cost ~${r.net.costTokens} tok / ${r.net.comparable ? `benefit incl. estimates ~${r.net.benefitTokens} tok (net ~${r.net.estimate} tok, estimate)` : `measured benefit ~${r.net.benefitTokens} tok (not comparable)`} | ${out}`;
 }
 
+/**
+ * The instruction a ship-triggered run prints after its summary line: open
+ * the report now (SKILL.md steps 2–5), never ask first.
+ */
+function nextStepLine(out) {
+  return `[plugin-audit] Next, in this session, WITHOUT asking: run .claude/skills/plugin-audit/SKILL.md steps 2-5 for ${out} ` +
+    '(currency agent, synthesis agent, report.js, open the concept page via auto-concept Step 3, then --record). ' +
+    'Never put it on the card as an open point or offer — the decade audit opens on its own.';
+}
+
 /** Step 5: record the finished run (after cc-currency merge + report). */
 function record(a) {
   if (!a.in) return { error: '--record needs --in DIR' };
@@ -150,8 +164,9 @@ async function main(argv) {
   }
   const { results, out } = await collectAll(a);
   process.stdout.write(`${summaryLine(results, out)}\n`);
+  if (a.trigger === 'ship') process.stdout.write(`${nextStepLine(out)}\n`);
   return 0;
 }
 
-module.exports = { parseArgs, netEstimate, summaryLine, tally, record, collectAll, sizeMetrics, UNCERTAINTY };
+module.exports = { parseArgs, netEstimate, summaryLine, nextStepLine, tally, record, collectAll, sizeMetrics, UNCERTAINTY };
 if (require.main === module) main(process.argv.slice(2)).then((c) => { process.exitCode = c; }, (e) => { process.stderr.write(`plugin-audit: ${e && e.stack || e}\n`); process.exitCode = 0; });

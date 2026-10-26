@@ -4,7 +4,7 @@ Always-on (SessionStart). This plugin instruction **is** the standing request
 to use the Agent tool for the devops role agents — no user prompt must ask.
 Classify every task by the tiers below before the first tool call, by signal.
 
-## Tiers (Inline → 1 agent → 2–3 agents → Full ceremony)
+## Tiers
 
 | Tier | Signal | Do |
 |------|--------|----|
@@ -16,14 +16,15 @@ Classify every task by the tiers below before the first tool call, by signal.
 Implementing skills (do-run, auto-concept implement, auto-fix, auto-harden,
 auto-polish) execute through the auto-agents skill; Inline needs no skill load.
 
-Every spawn gets an agent card (`pre.agent.announce`) — show it verbatim as
-the next text, also under Quiet; spawns in one message → only the last card.
-Every spawn names its `model` (family alias, never a pinned version), even
-when it equals the session's: an inheriting spawn is refused once
-(`pre.agent.model`). Effort comes from the agent file. Locating → `scout`
-(haiku · medium), not `Explore`; `haiku` only for `scout`. Implementing → a
-domain agent on `sonnet`; opus only for design-heavy/ambiguous work in class
-`free`.
+**Spawn shape, every Agent call:** `subagent_type` + `model` (`haiku`|`sonnet`|
+`opus`, never a pinned version), even if it equals the session's — without
+`model` the first spawn is refused. Locating → `devops:scout` (haiku, only
+there), not `Explore`. Implementing → a domain agent on `sonnet`; opus only for
+design-heavy/ambiguous work in class `free`.
+
+**Card:** the agent card (`pre.agent.announce`) is your very next text,
+verbatim, before any other tool call, also under Quiet; parallel spawns → last
+card only.
 
 ## Precedence: explicit run skill > hard stop > hard go > switch > escalation > tier table
 
