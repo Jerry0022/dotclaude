@@ -83,8 +83,9 @@ process.stdin.on('end', () => {
     'mcp__plugin_devops_dotclaude__ship_build,' +
     'mcp__plugin_devops_dotclaude__ship_version_bump,' +
     'mcp__plugin_devops_dotclaude__ship_release,' +
+    'mcp__plugin_devops_dotclaude__ship_run,' +
     'mcp__plugin_devops_dotclaude__ship_cleanup,' +
-    'mcp__plugin_devops_dotclaude__ship_hygiene", max_results: 6 })',
+    'mcp__plugin_devops_dotclaude__ship_hygiene", max_results: 7 })',
   );
 
   if (!shipAlive) {

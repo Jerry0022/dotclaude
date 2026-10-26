@@ -4,7 +4,7 @@
  * @version 0.6.0
  * @event PreToolUse
  * @plugin devops
- * @matcher Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude__ship_release|mcp__plugin_devops_dotclaude__render_completion_card|mcp__.*__merge_pull_request
+ * @matcher Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude__ship_release|mcp__plugin_devops_dotclaude__ship_run|mcp__plugin_devops_dotclaude__render_completion_card|mcp__.*__merge_pull_request
  * @description Refuse (exit 2) the tool call that would walk past an open
  *   obligation of the do-run RUN CONTRACT, or past a pending do-batch
  *   hand-off. Spec: docs/superpowers/specs/2026-09-24-run-contract-design.md
@@ -95,7 +95,7 @@ function classify(hook, root, cwd, C, budget) {
     const RC = require('../lib/run-contract');
     return RC.skillName(input.skill || input.name) === 'auto-agents' ? { gates: ['auto-agents'], batch: false } : null;
   }
-  if (tool === C.SHIP_RELEASE) {
+  if (C.isReleaseTool(tool)) {
     return { gates: ['release'], batch: false, closes: C.closesOf(input.body), base: input.base };
   }
   if (tool === C.RENDER_CARD) {

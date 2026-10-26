@@ -51,6 +51,20 @@ describe("commandFacts", () => {
     expect(C.commandFacts("node other.js ship_release").release).toBe(false);
   });
 
+  test("the offline ship CLI's ship_run is a release like ship_release", () => {
+    expect(C.commandFacts('node "C:/p/mcp-server/ship/cli.js" ship_run "C:/t/r.json"').release).toBe(true);
+    expect(C.commandFacts('grep "ship/cli.js ship_run" notes.md').release).toBe(false);
+    expect(C.commandFacts("node other.js ship_run").release).toBe(false);
+  });
+
+  test("releaseResult reads a ship_run final result and a decision point", () => {
+    const env = (o) => ({ content: [{ type: "text", text: JSON.stringify(o) }] });
+    expect(C.releaseResult(env({ ok: true, merged: "main" }), C.SHIP_RUN)).toEqual({ ok: true, merged: true });
+    expect(C.releaseResult(env({ ok: false, needs: "build-red" }), C.SHIP_RUN)).toEqual({ ok: false, merged: false });
+    expect(C.isReleaseTool(C.SHIP_RUN)).toBe(true);
+    expect(C.isReleaseTool(C.SHIP_RELEASE)).toBe(true);
+  });
+
   test("AUD-008: --render-card inside a quoted string (unrelated command) is never mistaken for the renderer", () => {
     expect(C.commandFacts('grep "index.js --render-card x" file.txt').renderCard).toBeNull();
     expect(C.commandFacts('echo "run node index.js --render-card /tmp/c.json manually"').renderCard).toBeNull();
