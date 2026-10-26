@@ -1552,6 +1552,17 @@ describe("ship_release — #752 shared CI-quota block (on top of the #768 detect
     expect(ghLib.mergePR).not.toHaveBeenCalled();
   });
 
+  test("early quota record + no verdict in the short probe: no 600 s wait, account-limited path at once", async () => {
+    quotaLib.recordBlock("o");
+    ghLib.watchPRChecks.mockReturnValueOnce({ status: "timeout", checks: [], failed: [], pending: [{ name: "suite" }] });
+    const res = await handler(params());
+    expect(ghLib.watchPRChecks).toHaveBeenCalledTimes(1);
+    expect(ghLib.watchPRChecks.mock.calls[0][2].timeoutSec).toBeLessThanOrEqual(60);
+    expect(res.checksSkippedByQuota).toBe(true);
+    expect(res.checks.status).toBe("skipped");
+    expect(res.checks.reason).toMatch(/no 600 s wait/);
+  });
+
   test("ship review: a mixed minutes + artifact-quota verdict is no stored skip", async () => {
     quotaLib.recordBlock("o");
     quotaLib.setDecision("o", "skip-checks");
