@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.326.0] — 2026-10-26
+
+Faster ships without giving up determinism: one orchestrated `ship_run`, the full suite once per tree (on CI when available), cleanup after the card, and a hard merge gate.
+
+### Added
+- **`ship_run` orchestrator.** One call runs preflight → build → bump → release → cleanup and stops only at real decision points. Every ship-aware hook treats it as a release.
+- **Ship timings.** Each step's duration is written to `~/.claude/ship-timings.jsonl` and shown on the card, as the baseline for the speed target.
+- **CI suite workflow.** `.github/workflows/ci-suite.yml` runs the full suite in 4 Windows shards behind one aggregator check `suite`. With it, `ship_build` runs only the tests related to the diff locally.
+- **Early CI-quota probe.** Exhausted GitHub Actions minutes are detected before the ship waits on CI; the full suite then runs locally at once.
+- **Per-repo landing lock.** Parallel ships of one repo land one after another (lock in the git common dir, dead or expired owners are taken over, a timeout proceeds without the lock).
+
+### Changed
+- **Post-ship hygiene runs in the background** after the card instead of before it.
+
+### Fixed
+- **Merge gate: never merge without one full green suite on the exact tree.** Either the PR's `suite` check passed, or a green full local run exists for HEAD's tree. Pending checks are never skipped on a quota record, and an unknown suite location counts as CI.
+- **Quota probe** clears a recorded block only on a successful run; an unreadable annotation or a skipped run is "unknown".
+- **Lock races.** The landing-lock heartbeat swaps atomically and re-checks its token; the hygiene worker lock claims a stale lock by rename and releases only its own.
+- **Completion card.** The offline `--render-card` path runs the same pre-check as the tool (no second render after a guard refusal), and a `cwd` that lost its backslashes is refused instead of silently dropping the concept link.
+- **Run contract** counts `ship_release`'s base-branch `merged` value as a merge.
+
 ## [0.325.0] — 2026-10-26
 
 Follow-ups of the 0.320.0 plugin audit: leaner per-session context, fewer false alarms in the audit itself, and current dependencies.
