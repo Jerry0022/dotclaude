@@ -155,7 +155,11 @@ work exactly the same either way:
   `data-anno-summary`, `data-annotation`, `data-attach-slot`'s `anno-{id}`
   suffix) MUST be unique **page-wide**. Prefix them with the screen id —
   `d1-s2-a1`, `d2-s1-a1` — which makes uniqueness structural instead of
-  something the author has to remember.
+  something the author has to remember. Screen ids repeat across rounds,
+  so from round 2 on add the round as well: `r2-d1-s1-a1`. A repeated id
+  once opened the frozen twin with the live bubble and hid every live
+  bubble of the round (the engine now scopes its lookups to the visible
+  round, but persistence keys still collide).
   Do NOT number them `a1`, `a2` per screen. That reads harmless and is not:
   `saveState()` keys the answer as `text:anno-{id}`, so two screens both
   using `a1` share ONE storage slot — the last field saved wins, the other

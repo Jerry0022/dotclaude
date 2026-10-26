@@ -43,7 +43,10 @@ bridge protocol and every message to the user.
 4. Write `rounds/NN.html`, where `NN` is N zero-padded to two digits. It holds
    one root `<section data-iteration="N" data-iteration-template="…">`
    with nothing outside it. Write in the user's language, with no
-   `data-active`, `hidden` or `data-baked`.
+   `data-active`, `hidden` or `data-baked`. Every annotation, view and
+   decision id carries the round prefix `r{N}-` (`r3-d1-s1-a1`): an id
+   repeated from an earlier round collides with its frozen twin
+   (`templates-design-screens.md` § Annotated screen).
 5. Check it against `validation-gate.md` Phase 0 and the Phase 2 block of
    its template, then run
    `node "{PLUGIN_ROOT}/scripts/concept-build.js" build "docs/concepts/{name}"`.
