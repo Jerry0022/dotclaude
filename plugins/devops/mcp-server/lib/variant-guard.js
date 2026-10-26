@@ -32,6 +32,11 @@ export const NO_REMOTE_NOTE = {
   en: 'ℹ️ **Variant corrected to `ready`** — this repo has no remote (`state.mode: "git-no-remote"`), so the ship ends at the local commit. There is no push, PR or merge here.',
 };
 
+export const FOREIGN_ROOT_NOTE = {
+  de: 'ℹ️ **Variante auf `ship-blocked` korrigiert** — das Repo gehört einem übergeordneten Verzeichnis (`state.mode: "git-foreign-root"`); ship_release verweigert dort Merge und Release. Nichts wurde released.',
+  en: 'ℹ️ **Variant corrected to `ship-blocked`** — the repo belongs to a parent directory (`state.mode: "git-foreign-root"`); ship_release refuses to merge or release there. Nothing was released.',
+};
+
 /**
  * Decide the effective completion-card variant. Only `ship-successful` is policed.
  * @param {string} variant - the requested variant
@@ -51,6 +56,15 @@ export function correctShipVariant(variant, state) {
         variant: 'ready-files',
         downgraded: true,
         reason: 'file-only: no remote to push to, no PR to merge',
+      };
+    }
+    // ship_release refuses a repo rooted above the project, so no merge or
+    // release happened — never claim one (#871). Plain ship-blocked.
+    if (s.mode === 'git-foreign-root') {
+      return {
+        variant: 'ship-blocked',
+        downgraded: true,
+        reason: 'git-foreign-root: the repo belongs to a parent directory, ship_release refused',
       };
     }
     // A git repo without a remote merges LOCALLY (ship_release): `merged` is
@@ -83,6 +97,7 @@ export function correctShipVariant(variant, state) {
 export function renderDowngradeNote(lang, reason) {
   const table = (reason && reason.startsWith('file-only')) ? FILE_ONLY_NOTE
     : (reason && reason.startsWith('git-no-remote')) ? NO_REMOTE_NOTE
-      : DOWNGRADE_NOTE;
+      : (reason && reason.startsWith('git-foreign-root')) ? FOREIGN_ROOT_NOTE
+        : DOWNGRADE_NOTE;
   return table[lang] || table.de;
 }

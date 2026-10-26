@@ -124,7 +124,7 @@ page without the overlay (it navigated between two calls) they return
 | `text` | Plain text with three inline marks only: `**bold**`, `` `code` ``, and `\n` line breaks. **No HTML.** The overlay escapes everything first, then applies marks. |
 | `note` | Optional, 1-400 chars, no HTML, same `**bold**`/`` `code` `` formatting as `text`. Claude's answer to a `comment` (or a `help` question), rendered as a 💬 block above the step text. Sent on a re-send of the **same** `id`; drop it again with the next new step. |
 | `location` | Optional, 1-80 chars, no HTML. The navigation breadcrumb ("Wo: …"), rendered as its own prominent block at the top of the step — never buried inline in `text`. |
-| `copy` | Optional, non-empty array of `{ "value": string (1-200 chars), "label"?: string (1-40 chars) }`. Renders as chips with a clipboard button (`navigator.clipboard.writeText`, called only inside the click handler). The user still pastes the value in themselves — see § the user always submits. |
+| `copy` | Optional, non-empty array of `{ "value": string (1-200 chars), "label"?: string (1-40 chars) }`. Renders as chips with a clipboard button (`navigator.clipboard.writeText`, called only inside the click handler; on plain-HTTP pages without the Clipboard API it falls back to an offscreen textarea + `document.execCommand("copy")`, and if both fail the chip text is selected so Ctrl+C works). The user still pastes the value in themselves — see § the user always submits. |
 | `checklist` | Optional, **2-4** strings (1-140 chars each, no HTML). Locally tickable sub-actions for one screen that needs more than one click; purely client-side UI state, never emitted as an event, and it does not participate in verification. |
 | `input` | Optional. Types: `text`, `secret`, `choice`, `confirm`. `secret` renders `<input type="password">` — value is still returned in the event (see § Secrets). `choice` renders one button per `options[]` entry; clicking one is the event (no separate Weiter). `confirm` is a checkbox the user must tick before Weiter. `required: true` disables Weiter until non-empty; `secret` and `confirm` are always required, and a secret is trimmed (whitespace alone never enables Weiter). |
 | `done` | `true` on the final step: panel shows a ✅ state, primary button reads **Fertig**, the hint says „Klicke **Fertig** — danach kannst du den Tab schließen." |
@@ -215,7 +215,7 @@ forever — it always gets a definitive (if unobserved) resolution.
 ### State
 
 ```json
-{ "version": "1.14.0", "stepId": "3", "collapsed": false, "edgeTab": false, "queued": 0, "url": "https://…", "pendingWaiter": false, "lastDeliveredId": null, "lastDeliveredStepId": null, "sent": false, "destroyed": false }
+{ "version": "1.14.1", "stepId": "3", "collapsed": false, "edgeTab": false, "queued": 0, "url": "https://…", "pendingWaiter": false, "lastDeliveredId": null, "lastDeliveredStepId": null, "sent": false, "destroyed": false }
 ```
 
 `pendingWaiter` is `true` while a `wait()` call is currently armed (waiting

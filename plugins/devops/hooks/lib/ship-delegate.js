@@ -153,9 +153,42 @@ function shouldDelegateSkillCall({ skill, args = '', tokens, promotionOnly = fal
  */
 function delegatedSpawnTooSmall({ prompt, tokens, env = process.env }) {
   const p = String(prompt || '');
-  if (!/devops:do-ship/.test(p) || !/--delegated\b/.test(p) || /--resume\b/.test(p)) return false;
+  if (!mentionsShip(p) || !/--delegated\b/.test(p) || /--resume\b/.test(p)) return false;
   const limit = threshold(env);
   return Boolean(limit) && tokens != null && tokens < limit;
+}
+
+/**
+ * Does this Agent prompt hand the subagent a ship (an invocation shape, not a
+ * passing mention like "do not run do-ship") without the delegated protocol?
+ * A hand-rolled ship subagent runs without the brief/relay/card contract and
+ * without the Shipping title (#892). `--delegated` / `--resume` pass.
+ * @param {string} prompt
+ * @returns {boolean}
+ */
+function bareShipSpawn(prompt) {
+  const p = String(prompt || '');
+  let invokes = /Skill\(\s*["']?(?:devops:)?do-ship\b/i.test(p);
+  const slash = /(?:^|[\s"'`(])\/(?:devops:)?do-ship\b/gim;
+  for (let m; !invokes && (m = slash.exec(p));) {
+    // "do not run /do-ship" is a passing mention, not an invocation
+    if (!NEGATED_MENTION.test(p.slice(Math.max(0, m.index - 60), m.index + 1))) invokes = true;
+  }
+  return invokes && !/--delegated\b/.test(p) && !/--resume\b/.test(p);
+}
+
+/** A negation right before a slash mention, in the same sentence. */
+const NEGATED_MENTION = /\b(?:don'?t|do not|never|not|no|without|nicht|nie|kein\w*|ohne)\b[^.\n]{0,40}$/i;
+
+/**
+ * Does this Agent prompt name do-ship at all, with or without the `devops:`
+ * prefix? Gates the below-threshold refusal and the Shipping-title context, so a
+ * prefix-less `--delegated` spawn cannot slip past both.
+ * @param {string} prompt
+ * @returns {boolean}
+ */
+function mentionsShip(prompt) {
+  return /(?:devops:)?do-ship\b/.test(String(prompt || ''));
 }
 
 /**
@@ -271,5 +304,5 @@ function shipResumeInstruction({ resume, delegate, pluginRoot, sessionId = '', n
 module.exports = {
   DEFAULT_THRESHOLD, SUBAGENT_FLOOR, SHIP_CALLS, INLINE,
   threshold, shipSavingEstimate, shouldDelegate, shipDelegateInstruction, shipResumeInstruction,
-  promotionOfArgs, shouldDelegateSkillCall, delegatedSpawnTooSmall, wantsCardData, CARD_DATA,
+  promotionOfArgs, shouldDelegateSkillCall, delegatedSpawnTooSmall, bareShipSpawn, mentionsShip, wantsCardData, CARD_DATA,
 };

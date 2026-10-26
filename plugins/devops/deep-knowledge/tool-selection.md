@@ -14,6 +14,7 @@ Always prefer Claude Code's dedicated tools over Bash equivalents:
 - Reserve Bash exclusively for system commands and terminal operations that require shell execution.
 - Batch Bash calls with `&&` when multiple sequential commands are needed.
 - Use Unix shell syntax (forward slashes, /dev/null) even on Windows.
+- Temp files and command output (logs, `> x.log`) go to the session scratchpad or %TEMP%, never next to or above the repo (`../x.log` lands in the shared projects folder). `pre.redirect.scope` warns on it.
 
 ## cmd.exe Caret Trap (Node `execSync`/`exec`)
 

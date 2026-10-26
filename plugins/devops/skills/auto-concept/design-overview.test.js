@@ -501,6 +501,24 @@ describe("Ctrl + click user pins", () => {
     window.Element.prototype.getBoundingClientRect = orig;
   }, BOOT_TIMEOUT);
 
+  test("a single-design round keeps a pin: store exists, payload and reload carry it (#907)", async () => {
+    const html = page(1, { attrs: false });
+    const p = await boot(html);
+    const { window, document } = p;
+    const id = document.querySelector("section[data-iteration][data-active] > section[data-design]").dataset.design;
+    window.showDesign(id);
+    expect(document.querySelector('textarea[data-engine-store="design-overview"]')).not.toBeNull();
+    document.querySelector(`section[data-design="${id}"] h1`).dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true, clientX: 10, clientY: 10 }));
+    const ta = [...document.querySelectorAll(".upin-editor")].find((e) => !e.hidden).querySelector("textarea");
+    ta.value = "Solo note";
+    key(window, ta, { key: "Enter", code: "Enter" });
+    expect(window.designOverviewState().pins.map((x) => x.text)).toEqual(["Solo note"]);
+    expect(window.collectDecisions("iterate").userPins.map((x) => x.text)).toEqual(["Solo note"]);
+    const saved = stateOf(window);
+    const b = await boot(html, saved);
+    expect(b.window.collectDecisions("iterate").userPins.map((x) => x.text)).toEqual(["Solo note"]);
+  }, BOOT_TIMEOUT);
+
   test("persisted like an annotation answer: restored on reload, under a text: key the bridge mirrors", async () => {
     const html = page(2);
     const a = await boot(html);

@@ -60,6 +60,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { register as registerHeartbeat } from "./lib/heartbeat.js";
 import { ensureDeps } from "./lib/ensure-deps.js";
+import { detectRepoMode } from "./ship/lib/repo-mode.js";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
 import { dropForeignOpenItems, foreignTokensFor } from "./lib/foreign-branches.js";
 import { dropNextStepOpenItems } from "./lib/open-admission.js";
@@ -520,6 +521,13 @@ function withDetectedRepoMode(params) {
     params.state = { ...state, mode: 'file-only' };
     return;
   }
+  // A repo rooted above the project: ship_release refused it, so a
+  // ship-successful claim is false (#871). Probed only for that variant.
+  // Needs a cwd: without one git would probe the server's own directory.
+  if (params.variant === 'ship-successful' && params.cwd && detectRepoMode(params.cwd) === 'git-foreign-root') {
+    params.state = { ...state, mode: 'git-foreign-root' };
+    return;
+  }
   const names = remoteNames(params.cwd);
   if (state.delivered === 'local-commit-only' || (names && !names.includes('origin'))) {
     params.state = { ...state, mode: 'git-no-remote' };
@@ -735,9 +743,12 @@ function buildResultLines(input, lang, { clamp = true } = {}) {
 // they carry a finding.
 // ---------------------------------------------------------------------------
 
-/** A result text without its "0 rot" / "0 failed" counts — those name a green count, never a red one. */
+/** "0 rot" / "0 failed" / "0 Lint-Fehler" / "0 TS errors": a zero count, an optional short qualifier, a verdict word. */
+const ZERO_RED_RE = /\b0\s*(?:\p{L}+[-\s]+)?(?:rot|red|fail\w*|fehler|errors?)\b/giu;
+
+/** A result text without its zero red counts — those name a green count, never a red one. */
 function withoutZeroRed(text) {
-  return String(text || '').replace(/\b0\s*(rot|red|fail\w*|fehler|errors?)\b/gi, '');
+  return String(text || '').replace(ZERO_RED_RE, '');
 }
 
 /** The first non-zero red count a result names ("120 passed, 0 failed, 2 errors" → "2"), else null. */
@@ -750,7 +761,7 @@ function redCountOf(text) {
 function glyphForResult(result) {
   const r = String(result || '').toLowerCase();
   // "0 rot" / "0 failed" is a green result that merely names the count.
-  const zeroed = r.replace(/\b0\s*(rot|red|fail\w*|fehler|errors?)\b/g, '');
+  const zeroed = withoutZeroRed(r);
   // A verdict word next to a count is the verdict: "3 rot" fails, while
   // "7663 grün · 1 Flake (auch auf main rot) behoben" stays green — a failure
   // word elsewhere in the prose never overrides the counted verdict.
@@ -2519,6 +2530,12 @@ function buildCompletionCard(params) {
     params.variant = shipGuard.variant;
     params._downgraded = true;
     params._downgradeReason = shipGuard.reason;
+    if (shipGuard.variant === 'ship-blocked' && !(params.cta && params.cta.reason)) {
+      const reason = params.lang === 'en'
+        ? 'Repo belongs to a parent directory (git-foreign-root)'
+        : 'Repo gehört einem übergeordneten Verzeichnis (git-foreign-root)';
+      params.cta = { ...(params.cta || {}), reason };
+    }
   }
 
   // 0b. A branch checked out in another worktree belongs to the session there,
@@ -2918,6 +2935,8 @@ server.registerTool(
       "On the Desktop app the result carries a CARD WIDGET block instead of markdown: that " +
       "show_widget call IS the card — mandatory, the LAST action of the turn, no text after it, " +
       "and the app's one no-output nudge that follows gets an empty reply; " +
+      "mcp__ccd_turn__wrap_up goes BEFORE the render in an earlier message, never after the card, and background tasks are stopped/checked before it — " +
+      "the card replaces wrap_up's closing message (side sessions too), nothing follows it; " +
       "the visible title line is only for a failed call, never a shortcut. " +
       "WHEN: call it once ALL work of the turn is done — as the first action of the closing step; pass " +
       "`session_id` (the one the hook context names), `cwd` (without it PR/commit/branch render as dead " +

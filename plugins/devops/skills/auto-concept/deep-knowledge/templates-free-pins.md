@@ -221,14 +221,35 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
       wrap.style.setProperty('--upin-y', Math.round(r.top - ir.top + (pin.y / 100) * r.height) + 'px');
     });
   }
+  // Nearest clipping ancestors (overflow != visible) intersected with the viewport.
+  function visibleBounds(el) {
+    let b = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (!/(auto|scroll|hidden|clip)/.test(cs.overflowX + ' ' + cs.overflowY)) continue;
+      const r = p.getBoundingClientRect();
+      b = { left: Math.max(b.left, r.left), top: Math.max(b.top, r.top),
+        right: Math.min(b.right, r.right), bottom: Math.min(b.bottom, r.bottom) };
+    }
+    return b;
+  }
   function placeEditor(wrap) {
     const ed = wrap.querySelector('.upin-editor');
     if (!ed || ed.hidden) return;
+    const gap = 8;
+    const b = visibleBounds(wrap);
     delete wrap.dataset.flipX;
     delete wrap.dataset.flipY;
+    ['left', 'right'].forEach(p => { ed.style[p] = ''; });
     let r = ed.getBoundingClientRect();
-    if (r.right > innerWidth - 8) { wrap.dataset.flipX = 'true'; r = ed.getBoundingClientRect(); }
-    if (r.bottom > innerHeight - 8 && r.height < wrap.getBoundingClientRect().top) wrap.dataset.flipY = 'true';
+    if (r.right > b.right - gap) { wrap.dataset.flipX = 'true'; r = ed.getBoundingClientRect(); }
+    if (r.left < b.left + gap || r.right > b.right - gap) {
+      const left = Math.max(Math.min(r.left, b.right - gap - r.width), b.left + gap);
+      ed.style.left = (left - wrap.getBoundingClientRect().left) + 'px';
+      ed.style.right = 'auto';
+    }
+    r = ed.getBoundingClientRect();
+    if (r.bottom > b.bottom - gap && r.height < wrap.getBoundingClientRect().top - b.top) wrap.dataset.flipY = 'true';
   }
   function setEditing(wrap, on) {
     if (on) wrap.dataset.editing = 'true'; else delete wrap.dataset.editing;

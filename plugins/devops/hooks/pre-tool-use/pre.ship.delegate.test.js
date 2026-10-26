@@ -43,7 +43,7 @@ function run(toolName, toolInput, tokens, extra = {}) {
     res = spawnSync(process.execPath, [HOOK], { cwd: dir, input: payload, encoding: "utf8", env });
     if (res.status !== null) break;
   }
-  return { code: res.status, stderr: res.stderr || "" };
+  return { code: res.status, stderr: res.stderr || "", stdout: res.stdout || "" };
 }
 
 const SPAWN = 'Use Skill("devops:do-ship") with args "--delegated". session_id: s1. lang: de.\nBrief:\n...';
@@ -94,6 +94,39 @@ describe("pre.ship.delegate — a delegated spawn below the threshold", () => {
     expect(run("Agent", { prompt: SPAWN }, null).code).toBe(0);
     expect(run("Agent", { prompt: SPAWN.replace('"--delegated"', '"--delegated --resume"') }, 115_000).code).toBe(0);
     expect(run("Agent", { prompt: "Find every caller of x" }, 115_000).code).toBe(0);
+  });
+});
+
+// #892: a hand-rolled ship subagent skipped the protocol and the Shipping title.
+describe("pre.ship.delegate — bare ship subagent (#892)", () => {
+  const BARE = 'Use Skill("devops:do-ship") with args "stable". session_id: s1.';
+  test("a spawn running do-ship without --delegated is refused, at any context size", () => {
+    for (const tokens of [115_000, 450_000, null]) {
+      const r = run("Agent", { prompt: BARE }, tokens);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain("[ship-delegate]");
+      expect(r.stderr).toContain("--delegated");
+    }
+    expect(run("Agent", { prompt: "Run /do-ship now" }, 450_000).code).toBe(2);
+    expect(run("Agent", { prompt: 'Use Skill("do-ship")' }, 450_000).code).toBe(2);
+  });
+  test("a corrected retry passes and asks for the Shipping title; a bare repeat is refused again", () => {
+    expect(run("Agent", { prompt: BARE }, 450_000).code).toBe(2);
+    expect(run("Agent", { prompt: BARE }, 450_000).code).toBe(2);
+    const r = run("Agent", { prompt: SPAWN }, 450_000);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("Shipping");
+  });
+  test("a passing mention of do-ship is no ship", () => {
+    expect(run("Agent", { prompt: "QA brief: review the diff, don't run do-ship or ship anything." }, 450_000).code).toBe(0);
+    expect(run("Agent", { prompt: "Implement #12. Do not run /do-ship — the runner ships." }, 450_000).code).toBe(0);
+    expect(run("Agent", { prompt: "Fix the bug, ohne /devops:do-ship zu starten." }, 450_000).code).toBe(0);
+  });
+  test("a prefix-less delegated spawn still gets the below-threshold refusal", () => {
+    expect(run("Agent", { prompt: 'Use Skill("do-ship") with args "--delegated".' }, 115_000).code).toBe(2);
+  });
+  test("a resume spawn passes", () => {
+    expect(run("Agent", { prompt: 'Use Skill("devops:do-ship") with args "--resume".' }, 450_000).code).toBe(0);
   });
 });
 

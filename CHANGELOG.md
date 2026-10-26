@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.324.0] — 2026-10-26
+
+Backlog batch of 18 issues. The completion card and its stop guard stop misreading the end of a turn, branch hygiene finds what was left behind after a landed ship without deleting anything unproven, and a handful of plugin surfaces (Quiet style, do-run questions, web guide, concepts) lose small papercuts. Everywhere a check could delete or deny, it nudges or warns instead (#875, #878, #874).
+
+### Added
+- **Redirect-scope warning (#874).** New PreToolUse hook `pre.redirect.scope`: a Bash/PowerShell command whose output is redirected outside the repo and the temp roots gets a one-time warning per target and session. It never denies.
+- **Landed-work nudges at SessionStart (#879, #875).** The orphan nudge names a main checkout parked on a landed local-only branch (upstream read from `branch.<b>.merge`) and clean landed worktrees outside `.claude/worktrees`. Nudge only, nothing is removed.
+- **Sub-branch sweep on the final ship (#876).** After the final ship of an integration branch, `<branch>-*` refs whose tip is contained in the shipped head are deleted, remote and local; a remote one only while origin still points at the proven tip, a local one only when no worktree has it checked out. Documented in do-ship `hierarchical-merge.md`.
+- **do-run asks single-select when only one pass applies (#883).**
+
+### Changed
+- **Quiet output style (#872).** "Was nun?" no longer echoes the 🤖 line or appends a trailing recommendation.
+- **Ship subagents (#892).** A bare do-ship subagent spawn (no `--delegated`) is refused with the delegate instruction; a delegated spawn gets the Shipping title instruction. A negated mention ("do not run /do-ship") is no spawn, and a prefix-less `Skill("do-ship")` spawn is held to the same threshold.
+- **claude-ignore (#878)** warns about a hand-written `docs/concepts` ignore instead of rewriting it.
+
+### Fixed
+- **Card order in side sessions (#885).** `wrap_up` goes before the card and nothing follows it, also in side sessions.
+- **Text after the card (#886)** is named as such instead of as a "missing pending".
+- **Zero counts with a qualifier (#881).** "0 Lint-Fehler" and similar are a passed gate, not a failure.
+- **Refused release on a foreign root (#871).** A release refused with `git-foreign-root` renders `ship-blocked` with a localized reason, never "Released".
+- **Mapped drive vs UNC path (#870).** The same repo opened through a mapped drive and its UNC path counts as one repo (file identity).
+- **Locked worktrees whose folder is gone (#912)** are no unpushed work; **stale devops-parity temp registrations (#913)** are swept on the next run.
+- **Web-guide copy chip (#910)** falls back to `execCommand` on plain-HTTP pages (overlay 1.14.1); registry and docs links (npmjs, docs.*) no longer offer a web guide (#905 follow-up).
+- **Concept pins (#907, #902)** persist in single-design rounds, and the free-pin editor stays inside the content column.
+- **pre.redirect.scope** spawns git hidden and keeps the lines after a here-string (`<<<`).
+
 ## [0.323.0] — 2026-10-26
 
 Analysis results and decisions on concept pages are guided now. A pure analysis concept opens with a briefing (what was examined, why, what it could bring), walks through at most three topics and asks one decision per stage; a lighter variant embeds the same flow in any concept for a handful of questions. Decisions are typed by what they decide instead of include/discard for everything, and the recommendation is always preselected. An analysis of 200 recent decisions found 117 with an ill-fitting control (74 were really a single choice, 310 negated statements under toggles); 20 analysis pages had no "x of n" orientation, a TOC that listed 10 of 17 decisions and not one chart.

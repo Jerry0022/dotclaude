@@ -352,6 +352,35 @@ describe("temp worktree registration cleanup", () => {
     expect(git(["worktree", "list", "--porcelain"], dir).match(/^worktree /gm)).toHaveLength(1);
   }, SPAWN_TEST_MS);
 
+  describe("sweepStaleParityWorktrees (#913)", () => {
+    function staleRegistration() {
+      initRepo({ "a.txt": "a" });
+      const tmpRoot = mkdtempSync(join(tmpdir(), "devops-parity-"));
+      const workdir = join(tmpRoot, "src");
+      git(["worktree", "add", "--detach", "--quiet", workdir, "HEAD"], dir);
+      git(["worktree", "lock", "--reason", "initializing", workdir], dir);
+      const admin = P.findAdminDir(dir, workdir);
+      rmSync(workdir, { recursive: true, force: true });
+      return { tmpRoot, admin };
+    }
+    const count = () => git(["worktree", "list", "--porcelain"], dir).match(/^worktree /gm).length;
+
+    test("an old registration with a missing temp folder is unlocked and removed", () => {
+      const { tmpRoot, admin } = staleRegistration();
+      expect(P.sweepStaleParityWorktrees(dir, { now: Date.now() + 11 * 60 * 1000 })).toBe(1);
+      expect(existsSync(admin)).toBe(false);
+      expect(existsSync(tmpRoot)).toBe(false);
+      expect(count()).toBe(1);
+    }, SPAWN_TEST_MS);
+
+    test("a fresh registration (parallel run) is never swept", () => {
+      const { tmpRoot, admin } = staleRegistration();
+      expect(P.sweepStaleParityWorktrees(dir)).toBe(0);
+      expect(existsSync(admin)).toBe(true);
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }, SPAWN_TEST_MS);
+  });
+
   test("findAdminDir is null for a path that was never registered", () => {
     initRepo({ "a.txt": "a" });
     expect(P.findAdminDir(dir, join(tmpdir(), "parity-never"))).toBeNull();

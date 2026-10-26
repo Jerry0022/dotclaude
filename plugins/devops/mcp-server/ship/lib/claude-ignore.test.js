@@ -60,4 +60,11 @@ describe("ship_preflight claude-ignore check", () => {
     expect(res.warning).toBeUndefined();
     expect(res.policy).toEqual([".claude/settings.json ignores .claude/settings.json (versioned by policy)"]);
   });
+
+  test("a hand-written docs/concepts ignore warns, naming the line and the removal", () => {
+    const res = claudeIgnoreCheck({ cwd: CWD, files: [".gitignore"], read: reader({ "/repo/.gitignore": ri.applyBlock("docs/concepts/\n") }) });
+    expect(res.issues).toEqual([]);
+    expect(res.warning).toContain('"docs/concepts/"');
+    expect(res.warning).toContain("delete the line from .gitignore");
+  });
 });

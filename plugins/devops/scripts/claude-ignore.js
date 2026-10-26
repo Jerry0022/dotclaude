@@ -175,7 +175,10 @@ function main(argv) {
       if (json) process.stdout.write(JSON.stringify(r, null, 2) + '\n');
       else {
         process.stdout.write(r.ok ? `[claude-ignore] OK — ${r.root}\n` : r.issues.map((i) => `[claude-ignore] ${i.code}: ${i.detail}`).join('\n') + '\n');
-        for (const d of r.policy) process.stdout.write(`[claude-ignore] info: "${d.line}" ignores ${d.path}, which the policy versions\n`);
+        for (const d of r.policy) {
+          if (/^docs\/concepts(\/|$)/.test(d.path)) process.stdout.write(`[claude-ignore] warn: "${d.line}" ignores ${d.path}, which the policy versions — concept pages and decisions exist on this machine only; delete that line from .gitignore (migrate keeps it)\n`);
+          else process.stdout.write(`[claude-ignore] info: "${d.line}" ignores ${d.path}, which the policy versions\n`);
+        }
       }
       return r.ok ? 0 : 1;
     }

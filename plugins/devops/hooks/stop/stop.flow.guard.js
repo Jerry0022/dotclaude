@@ -90,6 +90,7 @@ const {
   isSubstantialAnswer,
   cardDelivered,
   deliveredCardText,
+  textAfterCard,
   lastUserEntryIsNotification,
   safeReadTranscript,
   showWidgetCalledThisTurn,
@@ -258,6 +259,7 @@ process.stdin.on('end', () => {
     openTasksKnown: silent ? false : Boolean(transcript),
     openTaskNames: openTasks,
     pendingAttested,
+    textAfterCard: (!silent && cardRendered) ? textAfterCard(transcript) : false,
     // Active install root — the block reason names the offline renderer under it
     // for the case where the MCP server never connected this session.
     pluginRoot: process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..'),

@@ -84,6 +84,17 @@ describe("orphan-scan", () => {
     expect(entry.landedLeftovers).toBe(1);
   });
 
+  test("main checkout on a landed local-only branch and a landed sibling worktree are reported, not removable", async () => {
+    const root = mkRoot();
+    const r = repoIn(root, "app");
+    git(r, "worktree", "add", "-q", "-b", "sib", path.join(root, "app-sib"), "main");
+    git(r, "checkout", "-q", "-b", "feat/linux");
+    const { entry } = await scanOne(r, opts);
+    expect(entry.mainOnLanded).toBe("feat/linux");
+    expect(entry.landedOutside).toBe(1);
+    expect(entry.landedLeftovers).toBe(0);
+  });
+
   test("a landed branch is never listed as parked", async () => {
     const root = mkRoot();
     const r = repoIn(root, "app");

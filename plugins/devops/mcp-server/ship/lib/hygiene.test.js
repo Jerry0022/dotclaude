@@ -422,6 +422,18 @@ describe("unlanded work at risk (#573)", () => {
     expect(fs.existsSync(wt)).toBe(true);
   });
 
+  test("a locked worktree whose folder is gone is not reported as unlanded work (#912)", () => {
+    const { dir, c1 } = makeRepo();
+    const tip = branchWithCommit(dir, "pre-squash", c1, "w.txt", "wip\n", daysAgo(2));
+    const wt = path.join(dir, ".claude", "worktrees", "agent-gone01");
+    git(dir, "worktree", "add", "-q", "--detach", wt, tip);
+    git(dir, "worktree", "lock", "--reason", "initializing", wt);
+    fs.rmSync(wt, { recursive: true, force: true });
+    const res = runAt(dir);
+    expect(res.atRisk.filter((r) => r.kind === "worktree")).toEqual([]);
+    expect(JSON.stringify(res.card.risk || "")).not.toContain("agent-gone01");
+  });
+
   test("tooling-only changes in a worktree do not count as dirty", () => {
     const { dir, c3 } = makeRepo();
     const wt = path.join(dir, ".claude", "worktrees", "agent-abc124");

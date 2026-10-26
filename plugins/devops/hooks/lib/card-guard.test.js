@@ -5,6 +5,7 @@ import {
   isSubstantialAnswer,
   cardDelivered,
   deliveredCardText,
+  textAfterCard,
   isCardRenderCall,
   buildNotRelayedReason,
   buildWidgetSkippedReason,
@@ -605,6 +606,24 @@ describe("decideAction — pending gate", () => {
     });
     expect(d.action).toBe("pass");
     expect(d.resetFlags).toBe(true);
+  });
+
+  test("card carried pending + prose after it → names the text, not a missing pending (#886)", () => {
+    const d = decideAction({
+      workHappened: true, cardRendered: true, stopHookActive: false, substantial: false,
+      openTaskNames: ["devops:concept-author"], pendingAttested: true, textAfterCard: true,
+    });
+    expect(d.action).toBe("block");
+    expect(d.reason).toMatch(/Text after the card/);
+    expect(d.reason).not.toMatch(/has no `pending` field/);
+  });
+
+  test("card carried pending, nothing after it → pass (#886)", () => {
+    const d = decideAction({
+      workHappened: true, cardRendered: true, stopHookActive: false, substantial: false,
+      openTaskNames: ["devops:concept-author"], pendingAttested: true, textAfterCard: false,
+    });
+    expect(d.action).toBe("pass");
   });
 
   test("nothing open → a card-rendered turn passes (back-compat)", () => {
@@ -1379,6 +1398,17 @@ describe("cardDelivered / deliveredCardText — the card shown after the last re
   test("Desktop: a tool call after the widget keeps the card too", () => {
     expect(cardDelivered(jsonl(userMsg("go"), render, renderResult, cardWidget("T"), widgetResult,
       toolUse("mcp__ccd_session_mgmt__set_session_title"), toolResult()))).toBe(true);
+  });
+
+  test("textAfterCard: prose under the widget is detected, an empty/tool-only tail is not (#886)", () => {
+    const tx = (...tail) => jsonl(userMsg("go"), render, renderResult, cardWidget("T"), widgetResult, ...tail);
+    expect(textAfterCard(tx(assistantMsg({ type: "text", text: "Kurzfassung: alles fertig." })))).toBe(true);
+    expect(textAfterCard(tx(nudge, assistantMsg({ type: "text", text: "  " })))).toBe(false);
+    expect(textAfterCard(tx(toolUse("TaskStop"), toolResult()))).toBe(false);
+    expect(textAfterCard(tx())).toBe(false);
+    expect(textAfterCard(jsonl(userMsg("go"), cardWidget("T"), widgetResult,
+      assistantMsg({ type: "text", text: "x" }), userMsg("next"),
+      assistantMsg({ type: "text", text: "ok" })))).toBe(false);
   });
 
   test("a render and its card may straddle a Stop-hook block", () => {

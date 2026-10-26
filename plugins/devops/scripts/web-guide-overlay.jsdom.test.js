@@ -86,7 +86,7 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
     expect(d.configurable).toBe(false);
     expect(Object.isFrozen(a.api())).toBe(true);
     a.w.eval('window.claudeGuide = { version: "x" }; try { window.claudeGuide.wait = function () {}; } catch (e) {}');
-    expect(a.api().version).toBe("1.14.0");
+    expect(a.api().version).toBe("1.14.1");
     expect(a.api().wait.length).toBe(2);
   });
 
@@ -107,7 +107,7 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
   });
 
   test("a page-predefined same-version global yields already-injected (hostile on a fresh document)", () => {
-    const a = page({ pageScript: 'window.claudeGuide = { version: "1.14.0" };' });
+    const a = page({ pageScript: 'window.claudeGuide = { version: "1.14.1" };' });
     expect(a.result).toBe("already-injected");
     expect(a.w.document.querySelector("[id^=wg-host-]")).toBeNull();
   });
@@ -115,7 +115,7 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
   test("a page-defined configurable global of another version is replaced", () => {
     const a = page({ pageScript: 'window.claudeGuide = { version: "0.0.1", destroy: function () {} };' });
     expect(a.result).toBe("injected");
-    expect(a.api().version).toBe("1.14.0");
+    expect(a.api().version).toBe("1.14.1");
   });
 
   test("the token never reaches page-readable storage", () => {
