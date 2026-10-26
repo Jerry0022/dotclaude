@@ -68,6 +68,8 @@ function page({ funde = [], tests = [], handoffs = [], closed = false } = {}) {
   });
   const { window } = dom;
   const { document } = window;
+  // The final-report tab shows this panel (templates-rounds.md); a hidden one cannot take focus (jsdom 30, as in browsers).
+  document.getElementById("panel-final-report").style.display = "flex";
 
   const sec = document.createElement("section");
   sec.dataset.iteration = "2";
