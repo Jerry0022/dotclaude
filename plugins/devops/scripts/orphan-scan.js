@@ -13,6 +13,8 @@
  *   parked   = deliberately set-aside unlanded branches (park-register.js);
  *              older than 30 days they carry a nudge
  *   landedLeftovers = landed branches/worktrees hygiene may remove
+ *   mainOnLanded = branch the main checkout is parked on although it landed (nudge only)
+ *   landedOutside = clean landed worktrees outside .claude/worktrees (nudge only)
  *   The SessionStart hook ss.orphan.nudge reads the report (no git calls).
  *
  *   Read-only except `git fetch --prune` (timeout, offline-tolerant) and the
@@ -153,6 +155,8 @@ async function scanOne(repo, opts = {}) {
       parked,
       stashes: parkRegister.listStashes(repo, now).length,
       landedLeftovers: cls.removable.length,
+      mainOnLanded: cls.mainOnLanded[0] ? cls.mainOnLanded[0].branch : null,
+      landedOutside: cls.landedOutside.length,
       offline: cls.merged === null,
     },
   };

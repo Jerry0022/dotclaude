@@ -325,6 +325,14 @@ export function scanRepo(cwd, now = Date.now(), { tmpDir = os.tmpdir() } = {}) {
     });
   }
 
+  // the main checkout parked on a local-only feature branch: hygiene skips checked-out
+  // branches, so a landed one stayed invisible for weeks (#879). Reported, never removed.
+  const mainWt = worktrees[0];
+  if (mainWt && mainWt.branch && !mainWt.detached && !NEVER_DELETE.has(mainWt.branch) && mainWt.branch !== defaultBranch
+    && (gone.has(mainWt.branch) || gitOut(["rev-parse", "--verify", "-q", `refs/heads/${mainWt.branch}@{upstream}`], cwd) === null)) {
+    units.push({ kind: "main-checkout", key: `main-checkout:${mainWt.branch}`, path: mainWt.path, branch: mainWt.branch, head: mainWt.head, ageDays: 0 });
+  }
+
   for (const line of refs.split("\n")) {
     const [ref, sha, ts] = line.trim().split("\t");
     if (!ref || !ref.startsWith("refs/heads/")) continue;
@@ -703,6 +711,15 @@ function keepReason(unit, ctx) {
   return landingState(unit.head, unit.branch, ctx).state === "landed" ? null : "not-landed";
 }
 
+/** A non-session linked worktree whose work landed and that holds nothing: no lock, live session, nested checkout or changes. */
+function isLandedOutside(u, ctx) {
+  if (u.locked || !u.head) return false;
+  if (landingState(u.head, u.branch, ctx).state !== "landed") return false;
+  if (nestedCheckout(u.path, ctx.paths, ctx.current)) return false;
+  if (hasLiveSession(u.path, ctx.projectsDir) || hasMovedSession(u.path, ctx.mainPath, ctx.projectsDir)) return false;
+  return !worktreeContentReason(u.path, ctx.mainPath) && uncommittedCount(u.path) === 0;
+}
+
 /** Commits on `sha` that neither `baseRef` nor a merged PR carried (0 when unreadable). */
 function ownCommits(sha, ctx) {
   const out = gitOut(["rev-list", "--no-merges", sha, "--not", ctx.baseRef], ctx.cwd) || "";
@@ -827,8 +844,20 @@ export function classifyUnits(scan, io) {
   const keep = [];
   let atRisk = [];
   const parkedUnits = [];
+  const mainOnLanded = [];
+  const landedOutside = [];
   for (const u of scan.units) {
+    // never removable, never at risk: the user stands on it; landed ones are only reported (#879)
+    if (u.kind === "main-checkout") {
+      if (landingState(u.head, u.branch, ctx).state === "landed") mainOnLanded.push(u);
+      continue;
+    }
     const reason = keepReason(u, ctx);
+    // a clean, landed linked worktree outside .claude/worktrees: reported, not auto-removed (#875)
+    if (reason === "not-a-session-worktree" && isLandedOutside(u, ctx)) {
+      landedOutside.push(u);
+      continue;
+    }
     if (!reason) removable.push(u);
     else keep.push({ ...u, reason });
 
@@ -859,7 +888,7 @@ export function classifyUnits(scan, io) {
   const dirtyHeads = new Set(atRisk.filter((r) => r.dirty > 0).map((r) => r.head));
   const idOf = (r) => (r.dirty > 0 ? `d:${normPath(r.path)}` : `h:${r.head}`);
   atRisk = atRisk.filter((r, i) => (r.dirty > 0 || !dirtyHeads.has(r.head)) && atRisk.findIndex((x) => idOf(x) === idOf(r)) === i);
-  return { ctx, removable, keep, atRisk, parkedUnits, merged, open };
+  return { ctx, removable, keep, atRisk, parkedUnits, mainOnLanded, landedOutside, merged, open };
 }
 
 /**
