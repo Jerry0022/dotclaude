@@ -95,6 +95,9 @@
         "pre.crawl.guard"
       ],
       [
+        "pre.redirect.scope"
+      ],
+      [
         "pre.cleanup.gate"
       ],
       [
