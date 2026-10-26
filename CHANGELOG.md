@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.322.0] — 2026-10-26
+
+Concept notes read cleaner and follow the user. The note bubble is one quiet line with a clear origin, every other note dims while one is open, a note set while everything is hidden still shows up, own notes also work on design-round question views and on the final report, and the notes dock is driven by keys without ever submitting by accident. Auto notes in later rounds open again.
+
+### Added
+- **Own notes on more pages.** Ctrl + click notes now also work on the question views of a design round and on the final report (its finalize payload carries `userPins`; the frozen tab bakes them like any other round's). The variant overview stays without them.
+- **Fresh notes while hidden.** A note set while all notes are hidden stays visible (`data-upin-fresh`, per pin, runtime-only, never persisted); the older ones come back only when everything is shown again.
+- **Notes dock keys.** Ctrl + Enter jumps to the next field and closes the dock on the last one, Ctrl + Space closes it.
+
+### Changed
+- **Note bubble redesign.** One-line pill with a left accent stripe and glow, no number circle and no chevron; the origin is a pin shaped like the user's own note pin, in blue, pulsing once on open; the bubble opens animated. The improvement hint is a soft green wash instead of a "Verbessert" label, and clicking it on a collapsed bubble opens it.
+- **Dimming instead of hiding.** While a note is open every other note (auto and own) stays visible at 35 % opacity; the whole-layer fade of auto notes while an own note was edited is gone.
+- **No submit by keyboard.** Ctrl + Enter no longer submits the tips or "Umsetzen"; implementing is a click in the FAB panel only.
+
+### Fixed
+- **Auto notes could not be expanded in later rounds.** Annotation ids repeat across rounds by construction (screen ids repeat on purpose and anno ids are prefixed with them). `openBubble()` opened every bubble with that id page-wide, the frozen twin included, and `syncNoteEditing()` took the frozen round's bubble as the edited note, so CSS hid every live bubble. Lookups are now scoped to the visible round, and rounds 2+ prefix anno ids with `r{N}-` (`templates-design-screens.md`, `concept-author`). Regression test `anno-round-scope.test.js`.
+
+### Known gaps
+- `templates-design-css.md` (666 lines) and `templates-design-wiring.md` (641 lines) are over the 600-line deep-knowledge budget; not split on purpose, because block order matters for the build.
+
 ## [0.321.0] — 2026-10-26
 
 The concept close-out is readable at a glance. The final report used to be a long page with checkboxes and buttons that the FAB panel offered again, and the panel squeezed accordions, a TOC window and a journey row into the close-out. Now the report says in one sentence what came out, and the panel is a to-do inbox with two clear finish buttons. The same close-out also works without a prior concept, so `/do-run` opens it instead of the static report.

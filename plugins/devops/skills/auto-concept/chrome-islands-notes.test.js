@@ -149,7 +149,7 @@ describe("C · header islands and FABs", () => {
     window.updateAnnoUI();
     expect(eye.hidden).toBe(false);
     // everything the eye hides, it hides (and nothing but header + FABs survive)
-    expect(css()).toMatch(/body\.anno-hidden \.upin-layer, body\.anno-hidden \.design-ov-overlay, body\.anno-hidden \.design-ov-change \{ display: none !important; \}/);
+    expect(css()).toMatch(/body\.anno-hidden \.upin-layer \.upin:not\(\[data-upin-fresh\]\), body\.anno-hidden \.design-ov-overlay, body\.anno-hidden \.design-ov-change \{ display: none !important; \}/);
     document.body.classList.remove("anno-hidden");
     // the overview always has its info box to hide
     window.showOverview();
@@ -303,7 +303,7 @@ describe("D · pins", () => {
     expect(pins[0].attachments.map((a) => a.id)).toEqual(["abc123"]);
   }, BOOT_TIMEOUT);
 
-  test("while a pin's input is open every other note loses its connector and its pin fades", async () => {
+  test("while a pin's input is open every other note stays, dimmed", async () => {
     const { window, document } = await withPin();
     const screen = screenOf(document);
     const layer = addAnnos(window, document, screen);
@@ -322,8 +322,10 @@ describe("D · pins", () => {
     click(window, document.body);
     window.syncNoteEditing();
     expect(document.body.dataset.noteEditing).toBeUndefined();
-    expect(css()).toMatch(/body\[data-note-editing="true"\] \.anno:not\(\[data-editing="true"\]\) \.anno-bubble \{ display: none; \}/);
-    expect(css()).toMatch(/\.upin:not\(\[data-editing="true"\]\) \.upin-pin \{ opacity: 0\.35/);
+    // dimmed into the background, never removed — auto and own notes alike
+    expect(css()).not.toMatch(/body\[data-note-editing="true"\][^{]*\{[^}]*display: none/);
+    expect(css()).toMatch(/body\[data-note-editing="true"\] \.anno:not\(\[data-editing="true"\]\) \.anno-bubble,/);
+    expect(css()).toMatch(/\.upin:not\(\[data-editing="true"\]\) \.upin-editor \{ opacity: 0\.35/);
   }, BOOT_TIMEOUT);
 
   test("the whole own pin is draggable (no handle) and the spot is persisted", async () => {

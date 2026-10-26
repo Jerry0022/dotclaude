@@ -15,11 +15,22 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
   const toggle = document.getElementById('anno-toggle');
   if (!toggle) return; // no eye pill mounted — layer not used on this page
 
+  // Annotation ids are only unique per round: a later round may repeat a
+  // frozen round's id (screen ids repeat on purpose, and anno ids are
+  // prefixed with them). Every id lookup therefore resolves inside the
+  // visible iteration. Unscoped, opening a live bubble also opened its frozen
+  // twin, syncNoteEditing() took that twin (first in document order) as the
+  // note being edited, and body[data-note-editing] hid every live bubble —
+  // no auto note of the round could be expanded any more.
+  function annoRoot() {
+    return document.querySelector('section[data-iteration]:not([hidden])') || document;
+  }
+
   // While one note's input is open, body[data-note-editing] makes the CSS hide
   // the connectors and summaries of all others and fade their pins.
   function syncNoteEditing() {
     const open = document.querySelector('.upin-editor:not([hidden])');
-    const bubble = document.querySelector('[data-anno-bubble][data-open="true"]');
+    const bubble = annoRoot().querySelector('[data-anno-bubble][data-open="true"]');
     document.querySelectorAll('.upin[data-editing], .anno[data-editing]').forEach(n => n.removeAttribute('data-editing'));
     const owner = (open && open.closest('.upin')) || (bubble && bubble.closest('.anno'));
     if (owner) { owner.dataset.editing = 'true'; document.body.dataset.noteEditing = 'true'; }
@@ -57,15 +68,17 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
   // left open under a screen the user has since navigated away from would
   // otherwise reappear open on return.
   function openBubble(id) {
+    const root = annoRoot();
     // Opened once = seen: the eye's counter drops it (see updateAnnoUI()).
-    document.querySelectorAll('[data-anno]').forEach(a => {
+    root.querySelectorAll('[data-anno]').forEach(a => {
       if (a.dataset.anno === id && a.dataset.annoSeen !== 'true') { a.dataset.annoSeen = 'true'; paintEyeCount(); }
     });
+    // Every other bubble closes page-wide; only the visible round's opens.
     document.querySelectorAll('[data-anno-bubble]').forEach(b => {
-      b.dataset.open = String(b.dataset.annoBubble === id);
+      b.dataset.open = String(b.dataset.annoBubble === id && root.contains(b));
     });
     document.querySelectorAll('[data-anno-pin], [data-anno-summary]').forEach(el => {
-      const owns = el.dataset.annoPin === id || el.dataset.annoSummary === id;
+      const owns = (el.dataset.annoPin === id || el.dataset.annoSummary === id) && root.contains(el);
       el.setAttribute('aria-expanded', String(owns));
     });
     openBubbleAt(id);
@@ -331,7 +344,7 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
   }
 
   function openBubbleAt(id) {
-    const anno = document.querySelector(`[data-anno="${CSS.escape(id)}"]`);
+    const anno = annoRoot().querySelector(`[data-anno="${CSS.escape(id)}"]`);
     if (!anno) return;
     const all = annotationsInScreen(activeScreen());
     if (all.includes(anno)) layoutAnnos(all); else layoutAnno(anno);
@@ -421,11 +434,16 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     const trigger = e.target.closest('[data-anno-pin], [data-anno-summary]');
     if (trigger) {
       const id = trigger.dataset.annoPin || trigger.dataset.annoSummary;
-      const bubble = document.querySelector(`[data-anno-bubble="${CSS.escape(id)}"]`);
+      const owner = trigger.closest('[data-anno]');
+      const bubble = owner && owner.querySelector('[data-anno-bubble]');
       const isOpen = bubble && bubble.dataset.open === 'true';
       if (isOpen) closeAllBubbles(); else openBubble(id);
       return;
     }
+    // The improved hint on a collapsed bubble is part of its one line: a
+    // click there opens the bubble like the question does.
+    const hint = e.target.closest('.anno-bubble:not([data-open="true"]) .anno-bubble-improved');
+    if (hint) { openBubble(hint.closest('[data-anno-bubble]').dataset.annoBubble); return; }
     // Clicking anywhere else in the bubble (the textarea, the attach slot)
     // must never close it; clicking anywhere outside the layer does.
     if (e.target.closest('.anno-bubble')) return;

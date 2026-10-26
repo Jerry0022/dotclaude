@@ -276,12 +276,13 @@ must see their own language. The locale hint is authoritative.
 | `design.change_rethought` | Rethought | Neugedacht |
 | `design.change_improved` | Improved | Verbessert |
 | `design.keys_dock` | Notes dock open / closed | Notiz-Dock auf / zu |
+| `design.keys_dock_next` | In a note field: next field, last one closes the dock | Im Notizfeld: nächstes Feld, im letzten schließt der Dock |
+| `design.keys_dock_close` | Close the notes dock | Notiz-Dock schließen |
 | `design.keys_level` | Level up / down (overview, variant) | Ebene hoch / runter (Übersicht, Variante) |
 | `nudge.keys` | Press ? to see all hotkeys | ? zeigt alle Hotkeys |
 | `nudge.variants` | Keys 1–{n} switch the variant | Tasten 1–{n} wechseln die Variante |
 | `nudge.pages` | Keys ←/→ flip between pages | Tasten ←/→ blättern zwischen Seiten |
 | `nudge.dock` | Space opens your notes | Leertaste öffnet deine Notizen |
-| `nudge.submit` | Ctrl + Enter starts the next round | Strg + Enter startet die nächste Runde |
 | `nudge.dismiss` | Hide this tip for 30 days | Tipp 30 Tage ausblenden |
 | `design.questions`             | Questions                       | Fragen |
 | `design.questions_open`        | {n} questions still open        | {n} Fragen noch offen |

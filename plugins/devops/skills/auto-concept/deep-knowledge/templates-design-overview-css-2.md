@@ -23,14 +23,29 @@
 }
 .design-ov-improved strong { margin-right: 0.35rem; color: var(--warning-color, #d29922); }
 
-/* Improved line inside an annotation bubble (rounds 2+): same look as the
-   overview line; one ellipsised line collapsed, wrapped when open. */
+/* Improved line inside an annotation bubble (rounds 2+): no visible label —
+   the phrase is a hint, marked by a soft green wash BEHIND the text (green =
+   improved; orange stays the question colour). Collapsed it shares the one
+   line with the question, ellipsised; open it wraps in full above it. The
+   <strong> label stays in the markup for screen readers only. */
 .anno-bubble-improved {
-  margin: 0 0 0.35rem; font-size: 0.82rem; line-height: 1.3;
+  position: relative;
+  flex: 0 1 auto; max-width: 48%; min-width: 0; box-sizing: border-box;
+  margin: 0 0 0 0.45rem; padding: 0.1rem 0.45rem; border-radius: 6px;
+  font-size: 0.8rem; line-height: 1.3;
+  color: color-mix(in srgb, #56d364 35%, var(--text-color, #c9d1d9));
+  background: linear-gradient(90deg, rgba(63, 185, 80, 0.26), rgba(86, 211, 100, 0.1) 70%, rgba(86, 211, 100, 0.03));
+  box-shadow: 0 0 12px rgba(63, 185, 80, 0.18);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  cursor: pointer;
 }
-.anno-bubble[data-open="true"] .anno-bubble-improved { white-space: normal; }
-.anno-bubble-improved strong { margin-right: 0.35rem; color: var(--warning-color, #d29922); }
+.anno-bubble[data-open="true"] .anno-bubble-improved {
+  max-width: none; margin: 0.55rem 0.7rem 0.1rem; white-space: normal; cursor: auto;
+}
+.anno-bubble-improved strong {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
 
 /* ── User pins (Ctrl + click) ── */
 .upin-hint {
@@ -75,11 +90,11 @@ body.upin-armed section[data-screen][data-screen-active="true"] * { cursor: cros
 .upin[data-flip-y="true"] .upin-editor { top: auto; bottom: 30px; }
 .upin-editor[hidden] { display: none; }
 /* While an own note is open its layer rises above the annotation layer
-   (z-index 40) and the auto pins underneath fade out of the way — nothing
-   draws over the editor. */
+   (z-index 40) — nothing draws over the editor. Every other note, auto and
+   own, dims per note via body[data-note-editing] (templates-design-css.md),
+   never by fading a whole layer, so both kinds look the same. */
 .upin-layer:has(.upin[data-editing="true"]) { z-index: 45; }
 .upin[data-editing="true"] { z-index: 4; }
-body[data-note-editing="true"]:has(.upin[data-editing="true"]) .anno-layer { opacity: 0.25; transition: opacity 0.15s ease; }
 .upin-editor-head { font-size: 0.72rem; color: var(--text-secondary, #8b949e); margin-bottom: 0.35rem; }
 .upin-editor textarea {
   width: 100%; min-height: 56px; box-sizing: border-box; resize: vertical;
