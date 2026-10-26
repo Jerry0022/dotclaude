@@ -2918,6 +2918,8 @@ server.registerTool(
       "On the Desktop app the result carries a CARD WIDGET block instead of markdown: that " +
       "show_widget call IS the card — mandatory, the LAST action of the turn, no text after it, " +
       "and the app's one no-output nudge that follows gets an empty reply; " +
+      "mcp__ccd_turn__wrap_up goes BEFORE the render in an earlier message, never after the card, and background tasks are stopped/checked before it — " +
+      "the card replaces wrap_up's closing message (side sessions too), nothing follows it; " +
       "the visible title line is only for a failed call, never a shortcut. " +
       "WHEN: call it once ALL work of the turn is done — as the first action of the closing step; pass " +
       "`session_id` (the one the hook context names), `cwd` (without it PR/commit/branch render as dead " +

@@ -668,6 +668,9 @@ export function cardWidgetInstruction(model, repoUrl, env = process.env, { widge
     "call mcp__visualize__show_widget with title \"completion_card_body\", " +
     "loading_messages [\"Card wird geladen\"], widget_code = EXACTLY the block below (verbatim). " +
     "No text after it; reply nothing to the app's one \"no visible output\" nudge.\n" +
+    "mcp__ccd_turn__wrap_up (if the app requires it) runs BEFORE render_completion_card, in an earlier message — never alongside or after the widget; " +
+    "stop/check background tasks before the render too, no tool call after the widget. The widget REPLACES wrap_up's \"write your closing message now\" " +
+    "(also in side sessions: the wrap_up recap already reaches the parent) — no closing message, no recap under it.\n" +
     "The answer to the user's question belongs in render_completion_card's `answer` field (#757) — drawn inside this widget; " +
     "prose before the widget can be collapsed by the app; no recap of the card.\n" +
     `Only if the call fails or the tool is missing (no retry): output \`### **✨✨✨ ${model.title || ""} ✨✨✨**\`.\n` +

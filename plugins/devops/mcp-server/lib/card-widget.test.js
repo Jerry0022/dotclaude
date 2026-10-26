@@ -889,6 +889,16 @@ describe("cardWidgetInstruction", () => {
     expect(inline).toContain("----- widget_code -----\n" + cardWidgetHtml(model, "") + "\n----- end widget_code -----");
   });
 
+  // #885: wrap_up's "write your closing message now" put a recap under the card.
+  test("names the wrap_up ordering: before the card, never after, card replaces the closing message", () => {
+    const text = cardWidgetInstruction(baseModel(), "", desktop);
+    expect(text).toMatch(/mcp__ccd_turn__wrap_up .*runs BEFORE render_completion_card, in an earlier message/);
+    expect(text).toMatch(/never alongside or after the widget/);
+    expect(text).toMatch(/stop\/check background tasks before the render/);
+    expect(text).toMatch(/REPLACES wrap_up's "write your closing message now"/);
+    expect(text).toMatch(/side sessions/);
+  });
+
   // Regression 2026-09-24: the app nudges once for visible output after a
   // widget-only turn; "answer with ONE short line" put a stray line under the
   // card every time. The empty reply ends the turn with the card last.
