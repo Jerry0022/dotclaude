@@ -412,7 +412,14 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
         delivery: { ship: { version: "1.2.3" } },
       });
       expect(text).toContain("git-foreign-root");
+      expect(text).toContain("Repo belongs to a parent directory");
       expect(text).not.toMatch(/Released|Merged/);
+      const de = await cardText({
+        variant: "ship-successful", summary: "Fertig", lang: "de", session_id: "test-anatomy-foreign-root-de", cwd: sub,
+        state: { pushed: true, merged: "main", commit: "abc1234", branch: "main" },
+        delivery: { ship: { version: "1.2.3" } },
+      });
+      expect(de).toContain("Repo gehört einem übergeordneten Verzeichnis");
     } finally {
       fs.rmSync(outer, { recursive: true, force: true });
     }

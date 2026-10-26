@@ -2531,7 +2531,10 @@ function buildCompletionCard(params) {
     params._downgraded = true;
     params._downgradeReason = shipGuard.reason;
     if (shipGuard.variant === 'ship-blocked' && !(params.cta && params.cta.reason)) {
-      params.cta = { ...(params.cta || {}), reason: 'Repo gehört einem übergeordneten Verzeichnis (git-foreign-root)' };
+      const reason = params.lang === 'en'
+        ? 'Repo belongs to a parent directory (git-foreign-root)'
+        : 'Repo gehört einem übergeordneten Verzeichnis (git-foreign-root)';
+      params.cta = { ...(params.cta || {}), reason };
     }
   }
 
