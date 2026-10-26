@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.322.1] — 2026-10-26
+
+The card's Web-Guide button fires for real manual website steps and no longer for phantom ones. An arrow path in one test item plus a provider URL in another used to produce a bogus "Web-Guide … Vercel" button; setup steps in web UIs the detector did not know (Enable Banking, Home Assistant) got no guide at all.
+
+### Fixed
+- **Bogus Web-Guide button across card items (#900).** `detectCardHandoff` now reads card items one by one: the arrow-chain, service and credential-sentence shapes need everything in the same item. Only a numbered list is still read across items.
+- **No Web-Guide for setup steps in unknown web UIs (#905).** New `setupStepHandoff`: a setup verb (hinterlegen, eintragen, installieren, verbinden, freigeben, anlegen, aktivieren, hinzufügen, registrieren, add, configure, install, connect, register) together with a URL, a UI path of two or more arrows or a quoted UI label („…“) in one item is a web hand-off. The service is a known service, else the place after bei/in/im/unter/auf/at/on, else the URL host. "enable" is left out on purpose (it matched the name "Enable Banking"); a bare "In HACS … installieren" without URL, path or label stays quiet.
+
+### Changed
+- **Card authors declare manual website steps.** `completion-card-design.md` and `do-ship/modes/delegated.md` ask for every manual website step as an `open` item with the reply "Führ mich per Web-Guide durch <X>".
+
 ## [0.322.0] — 2026-10-26
 
 Concept notes read cleaner and follow the user. The note bubble is one quiet line with a clear origin, every other note dims while one is open, a note set while everything is hidden still shows up, own notes also work on design-round question views and on the final report, and the notes dock is driven by keys without ever submitting by accident. Auto notes in later rounds open again.
