@@ -20,6 +20,7 @@
  */
 
 const path = require('path');
+const { findAnalysisIssues } = require('./concept-gate-analysis');
 
 // Live decision-panel + bridge-submit markers that MUST be present.
 // Each label doubles as the grep token and the human-readable reason line.
@@ -143,6 +144,7 @@ function finalReportRegion(html) {
  * current final-report engine — an older page is the stale-engine finding's
  * job, not this one.
  */
+const FR_LABEL_MAX = 48;
 function findFinalReportIssues(html) {
   const region = finalReportRegion(html);
   if (!region) return [];
@@ -170,6 +172,27 @@ function findFinalReportIssues(html) {
         const title = /\sdata-issue-title=["']([^"']*)["']/.exec(tag);
         issues.push({ kind: 'final-report-origin', why: `Fund "${title ? title[1] : '?'}" has no data-oq-origin="deferred" | "found" — it skipped the open-points admission gate (validation-gate.md 33b)`, at: region.at });
       }
+    }
+  }
+  // Visible label length (validation-gate.md 33c): the close-out sheet shows a
+  // row title in two lines at most, and a longer one is cut by the clamp.
+  const tooLong = (kind, text) => {
+    const t = text.replace(/<[^>]*>/g, '').replace(/&[a-z#0-9]+;/gi, 'x').replace(/\s+/g, ' ').trim();
+    if ([...t].length > FR_LABEL_MAX) {
+      issues.push({ kind: 'final-report-label-length', why: `${kind} "${t.slice(0, 40)}…" is ${[...t].length} characters — the visible label is a noun phrase of at most ${FR_LABEL_MAX} (the sheet shows two lines); details go into data-issue-body / the report body (validation-gate.md 33c)`, at: region.at });
+    }
+  };
+  if (oqStart >= 0) {
+    for (const m of body.slice(oqStart).matchAll(/<[a-z]+\b[^>]*\sclass=["'][^"']*\boq-label\b[^"']*["'][^>]*>([\s\S]*?)<\/[a-z]+>/gi)) tooLong('Fund label', m[1]);
+  }
+  for (const attr of ['data-tests', 'data-handoffs']) {
+    const at = body.search(new RegExp('\\s' + attr + '(?=[\\s=>/])'));
+    if (at < 0) continue;
+    const end = body.indexOf('</section>', at);
+    const seg = body.slice(at, end < 0 ? undefined : end);
+    for (const m of seg.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)) {
+      const todo = /<[a-z]+\b[^>]*class=["'][^"']*\btodo-text\b[^"']*["'][^>]*>([\s\S]*?)<\/[a-z]+>/i.exec(m[1]);
+      tooLong(attr === 'data-tests' ? '🧪 item' : '👉 item', todo ? todo[1] : m[1]);
     }
   }
   if (/nicht führbar|not guidable/i.test(body)) {
@@ -916,7 +939,7 @@ function findDesignAuthoringWarnings(html) {
  */
 function evaluate(filePath, html) {
   if (!isConceptHtml(filePath, html)) {
-    return { applicable: false, ok: true, missing: [], forbidden: [], structural: [], mapping: [], overlap: [], stale: [], finalReport: [], warnings: [] };
+    return { applicable: false, ok: true, missing: [], forbidden: [], structural: [], mapping: [], overlap: [], stale: [], finalReport: [], analysis: [], warnings: [] };
   }
   const missing = findMissing(html);
   const forbidden = findForbidden(html);
@@ -926,9 +949,10 @@ function evaluate(filePath, html) {
   const stale = findStaleEngine(html);
   const collisions = findChromeCollisions(html);
   const finalReport = findFinalReportIssues(html);
+  const a = findAnalysisIssues(html);
   return {
     applicable: true,
-    ok: missing.length === 0 && forbidden.length === 0 && structural.length === 0 && mapping.length === 0 && overlap.length === 0 && stale.length === 0 && collisions.length === 0 && finalReport.length === 0,
+    ok: missing.length === 0 && forbidden.length === 0 && structural.length === 0 && mapping.length === 0 && overlap.length === 0 && stale.length === 0 && collisions.length === 0 && finalReport.length === 0 && a.errors.length === 0,
     missing,
     forbidden,
     structural,
@@ -937,13 +961,15 @@ function evaluate(filePath, html) {
     stale,
     collisions,
     finalReport,
+    analysis: a.errors,
     // Advisory, never part of `ok`.
-    warnings: [...findDesignAuthoringWarnings(html), ...findFinalReportPlaceholders(html)],
+    warnings: [...findDesignAuthoringWarnings(html), ...findFinalReportPlaceholders(html), ...a.warnings],
   };
 }
 
 /** Build the blocking feedback shown to Claude (stderr, exit 2). */
-function buildBlockReason(filePath, missing, forbidden, structural, mapping, overlap, stale = [], collisions = [], finalReport = []) {
+function buildBlockReason(filePath, missing, forbidden, structural, mapping, overlap, stale = [], collisions = [], finalReport = [], analysis = []) {
+  analysis = analysis || [];
   missing = missing || [];
   forbidden = forbidden || [];
   structural = structural || [];
@@ -953,7 +979,7 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
   collisions = collisions || [];
   finalReport = finalReport || [];
   const name = path.basename(filePath || 'concept.html');
-  const onlyFinal = finalReport.length > 0 && !missing.length && !forbidden.length && !structural.length && !mapping.length && !overlap.length && !stale.length && !collisions.length;
+  const onlyFinal = finalReport.length > 0 && !analysis.length && !missing.length && !forbidden.length && !structural.length && !mapping.length && !overlap.length && !stale.length && !collisions.length;
   if (onlyFinal) {
     const lines = [`BLOCKED: the final report in "${name}" breaks the close-out authoring rules.`, ''];
     finalReport.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
@@ -971,7 +997,18 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
     lines.push('The rest of the page passed — re-write the file and open it once this gate passes.');
     return lines.join('\n');
   }
-  const onlyCollisions = collisions.length > 0 && !finalReport.length && !missing.length && !forbidden.length && !structural.length && !mapping.length && !overlap.length && !stale.length;
+  const onlyAnalysis = analysis.length > 0 && !missing.length && !forbidden.length && !structural.length && !mapping.length && !overlap.length && !stale.length && !collisions.length && !finalReport.length;
+  if (onlyAnalysis) {
+    const lines = [`BLOCKED: the analysis / decision markup in "${name}" breaks its contract.`, ''];
+    analysis.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
+    lines.push('');
+    lines.push('A Full analysis opens with a briefing (what / why / potential); every decision names its');
+    lines.push('recommended option (data-rec) and ships it preselected. See templates-analysis.md § Markup');
+    lines.push('contract and validation-gate.md § Analysis & decision modes (A1-A3).');
+    lines.push('The rest of the page passed - re-write the file and open it once this gate passes.');
+    return lines.join('\n');
+  }
+  const onlyCollisions = collisions.length > 0 && !finalReport.length && !analysis.length && !missing.length && !forbidden.length && !structural.length && !mapping.length && !overlap.length && !stale.length;
   if (onlyCollisions) {
     const lines = [`BLOCKED: mock CSS in "${name}" collides with the engine chrome (P32).`, ''];
     collisions.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
@@ -1004,6 +1041,11 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
   if (finalReport.length) {
     lines.push('Final-report authoring rules (validation-gate.md 33b / 37b):');
     finalReport.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
+    lines.push('');
+  }
+  if (analysis.length) {
+    lines.push('Analysis / decision markup breaks its contract (templates-analysis.md):');
+    analysis.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
     lines.push('');
   }
   if (collisions.length) {

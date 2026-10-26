@@ -41,7 +41,9 @@ inline that way, the largest at 951 k.
      causes found and alternatives rejected. They feed the PR body and the
      CHANGELOG.
    - the tests that ran and their results, and manual final tests still left
-     to the user (`userFinalTest`)
+     to the user (`userFinalTest`); a manual website step also goes in as an
+     `open` item whose `reply` reads "Führ mich per Web-Guide durch <X>"
+     (#905), so the card offers the web guide
    - `validation` (requirement → how met → how confirmed)
    - open points and issue refs
    - anything the ship must know: a bump hint, known risks, files that must

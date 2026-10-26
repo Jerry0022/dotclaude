@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.323.0] — 2026-10-26
+
+Analysis results and decisions on concept pages are guided now. A pure analysis concept opens with a briefing (what was examined, why, what it could bring), walks through at most three topics and asks one decision per stage; a lighter variant embeds the same flow in any concept for a handful of questions. Decisions are typed by what they decide instead of include/discard for everything, and the recommendation is always preselected. An analysis of 200 recent decisions found 117 with an ill-fitting control (74 were really a single choice, 310 negated statements under toggles); 20 analysis pages had no "x of n" orientation, a TOC that listed 10 of 17 decisions and not one chart.
+
+### Added
+- **Full analysis view.** Briefing → ≤ 3 topics → one decision per stage on a 66/33 stage with a three-level animated analysis column, a clickable stepper, a review and a next round.
+- **Lite analysis view.** `data-view-kind="analysis"` embedded in any concept, at most five decisions.
+- **Seven decision modes.** single, multi, yes/no/alternative, slider, order, verify and wording, each with a consequence per option; the recommendation (★) is always preselected and `collectDecisions` sends a typed payload. Legacy include/discard pages keep working.
+- **Eight visual renderers** (`CONCEPT_VIZ`) for analysis results.
+- **Authoring guides.** `analysis-palette.md` (35 display types, exactly one pure text type), `decision-modes.md` (7 modes, when Claude uses which) and the Full/Lite rules in step 1.
+- **Gate A1–A8.** Briefing and recommendation required; warnings for more than three topics or seven decisions per topic, timing posed as a decision and N bi-states that are really one choice.
+
+### Changed
+- **Bridge polling backs off** from 5 s to 60 s while no bridge answers.
+- **Close-out sheet rows wrap to two lines**, and the visible labels of Funde, 🧪 and 👉 items are capped at 48 characters (gate 33c, blocking).
+- `templates-analysis.md` is split into a contract, a CSS and two JS parts to stay within the part budget.
+
+### Fixed
+- **Design and mixed pages lost their title and subtitle** in `concept-build.js`.
+- **The TOC counted only top-level decisions**; nested decisions and findings are counted now ("Entscheidungen" / "Befunde").
+- **Gate attribute parsing** accepts a value that contains the other quote character, a slider without a `value` no longer passes as preselected, and the `data-tests` / `data-handoffs` anchor no longer matches longer attribute names.
+
+## [0.322.1] — 2026-10-26
+
+The card's Web-Guide button fires for real manual website steps and no longer for phantom ones. An arrow path in one test item plus a provider URL in another used to produce a bogus "Web-Guide … Vercel" button; setup steps in web UIs the detector did not know (Enable Banking, Home Assistant) got no guide at all.
+
+### Fixed
+- **Bogus Web-Guide button across card items (#900).** `detectCardHandoff` now reads card items one by one: the arrow-chain, service and credential-sentence shapes need everything in the same item. Only a numbered list is still read across items.
+- **No Web-Guide for setup steps in unknown web UIs (#905).** New `setupStepHandoff`: a setup verb (hinterlegen, eintragen, installieren, verbinden, freigeben, anlegen, aktivieren, hinzufügen, registrieren, add, configure, install, connect, register) together with a URL, a UI path of two or more arrows or a quoted UI label („…“) in one item is a web hand-off. The service is a known service, else the place after bei/in/im/unter/auf/at/on, else the URL host. "enable" is left out on purpose (it matched the name "Enable Banking"); a bare "In HACS … installieren" without URL, path or label stays quiet.
+
+### Changed
+- **Card authors declare manual website steps.** `completion-card-design.md` and `do-ship/modes/delegated.md` ask for every manual website step as an `open` item with the reply "Führ mich per Web-Guide durch <X>".
+
 ## [0.322.0] — 2026-10-26
 
 Concept notes read cleaner and follow the user. The note bubble is one quiet line with a clear origin, every other note dims while one is open, a note set while everything is hidden still shows up, own notes also work on design-round question views and on the final report, and the notes dock is driven by keys without ever submitting by accident. Auto notes in later rounds open again.
