@@ -224,3 +224,31 @@ describe('autosave', () => {
     expect(remoteHas('claude/sess1')).toBe(false);
   });
 });
+
+// #877: a checkout whose branch moved forward but whose files did not shows
+// the shipped commits in reverse; parking that preserved a revert of a release.
+describe('autosave — stale checkout (#877)', () => {
+  function staleCheckout() {
+    fs.writeFileSync(path.join(main, 'a.txt'), 'a v2');
+    fs.writeFileSync(path.join(main, 'CHANGELOG.md'), '# v2');
+    g(main, 'add', '-A');
+    g(main, ...id, 'commit', '-m', 'release v2');
+    g(main, 'push', 'origin', 'main');
+    g(wt, 'fetch', 'origin');
+    g(wt, 'reset', '--mixed', 'origin/main');
+  }
+
+  test('files that only restore an older origin/main state are not parked', async () => {
+    staleCheckout();
+    const r = await autosave(opts({ mode: undefined }));
+    expect(r.message).toMatch(/not autosaved: the \d+ changed file\(s\) only restore an older origin\/main state/);
+    expect(g(wt, 'branch', '--list', 'parked/autosave/sess1')).toBe('');
+  });
+
+  test('own content next to the restored files is still saved', async () => {
+    staleCheckout();
+    write('mine.txt', 'own work');
+    const r = await autosave(opts({ mode: undefined }));
+    expect(r.message).toMatch(/saved locally as parked\/autosave\/sess1/);
+  });
+});
