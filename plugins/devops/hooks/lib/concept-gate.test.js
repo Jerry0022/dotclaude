@@ -9,6 +9,7 @@ import {
   ENGINE_DOCUMENT,
   ENGINE_FINAL,
   findFinalReportIssues,
+  findFinalReportPlaceholders,
   isConceptHtml,
   findMissing,
   findStaleEngine,
@@ -1010,6 +1011,18 @@ describe("final report (templates-final-report.md, validation-gate.md 33b / 37b)
     const html = report('<section data-tests hidden><ul><li data-crit="mid">x</li></ul></section><p>ok</p>')
       .replace("</body>", "<script>// \"nicht führbar\" is never shown</script>\n</body>");
     expect(findFinalReportIssues(html)).toEqual([]);
+  });
+
+  test("leftover {n} and {{key}} placeholders warn, never block; code spans are exempt", () => {
+    const html = report("<summary>🔍 {n} Funde unterwegs</summary><p>{{final.level_9}}</p><code>{n}</code>");
+    expect(findFinalReportPlaceholders(html).map((w) => w.why)).toEqual([
+      expect.stringContaining("{n}"),
+      expect.stringContaining("{{final.level_9}}"),
+    ]);
+    const r = evaluate("docs/concepts/x.html", html);
+    expect(r.ok).toBe(true);
+    expect(r.warnings.map((w) => w.kind)).toContain("final-report-placeholder");
+    expect(findFinalReportPlaceholders(report("<p>3 Funde unterwegs</p><code>{{a.b}}</code>"))).toEqual([]);
   });
 
   test("the build feedback names the final-report finding", () => {

@@ -832,6 +832,26 @@ function findViewOverlap(html) {
  *
  * @returns {Array<{kind:string, why:string, at:number}>}
  */
+/**
+ * Advisory: placeholders left in the final report. The locale table carries
+ * `{n}` for the author to fill ("{n} Funde unterwegs", "Stufe {n} von 7"), and
+ * a `{{key}}` the build could not substitute stays as written — either one
+ * shows up as raw text on the page. Code spans and comments are skipped.
+ */
+function findFinalReportPlaceholders(html) {
+  const region = finalReportRegion(html);
+  if (!region) return [];
+  const body = region.html
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(code|pre|script|style|textarea)\b[\s\S]*?<\/\1>/gi, '')
+    .replace(/<[^>]*>/g, ' ');
+  const found = [...new Set([...body.matchAll(/\{\{[^{}\s]+\}\}|\{n\}/g)].map(m => m[0]))];
+  return found.map(token => ({
+    kind: 'final-report-placeholder',
+    why: `the final report shows the placeholder ${token} as raw text — fill in the value or fix the locale key`,
+  }));
+}
+
 function findDesignAuthoringWarnings(html) {
   const body = String(html || '').replace(/<!--[\s\S]*?-->/g, m => ' '.repeat(m.length));
   const warnings = [];
@@ -910,7 +930,7 @@ function evaluate(filePath, html) {
     collisions,
     finalReport,
     // Advisory, never part of `ok`.
-    warnings: findDesignAuthoringWarnings(html),
+    warnings: [...findDesignAuthoringWarnings(html), ...findFinalReportPlaceholders(html)],
   };
 }
 
@@ -1068,6 +1088,7 @@ module.exports = {
   findFinalReportIssues,
   finalReportRegion,
   findDesignAuthoringWarnings,
+  findFinalReportPlaceholders,
   ENGINE_CLASSES,
   evaluate,
   buildBlockReason,
