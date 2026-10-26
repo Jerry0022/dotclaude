@@ -53,5 +53,10 @@ export function claudeIgnoreCheck({ cwd, files, commonDir = null, read = readOrN
     if (check.untrack) fixes.push(check.untrack);
     check.warning = `.claude ignore block deviates (${res.issues.map((i) => i.detail).join("; ")}) — fix: ${fixes.join(" && ")}`;
   }
+  const concepts = res.policy.filter((d) => /^docs\/concepts(\/|$)/.test(d.path));
+  if (concepts.length) {
+    const w = `hand-written ignore line(s) ${concepts.map((d) => `"${d.line}"`).join(", ")} hide docs/concepts, which the policy versions — concept pages and decisions then exist on this machine only; delete the line from .gitignore (migrate keeps it)`;
+    check.warning = check.warning ? `${check.warning}; ${w}` : w;
+  }
   return check;
 }
