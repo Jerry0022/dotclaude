@@ -124,7 +124,7 @@ returns — the single-design page is untouched.
     countPlain: '{{design.overview_count_plain}}', overlay: '{{design.overview_overlay}}',
     keysCarousel: '{{design.keys_carousel}}', keysOverlay: '{{design.keys_overlay}}',
     space: '{{design.key_space}}', chRethought: '{{design.change_rethought}}',
-    chImproved: '{{design.change_improved}}', keysDock: '{{design.keys_dock}}',
+    chImproved: '{{design.change_improved}}', keysDock: '{{design.keys_dock}}', keysDockNext: '{{design.keys_dock_next}}', keysDockClose: '{{design.keys_dock_close}}',
     keysLevel: '{{design.keys_level}}'
   };
   // Never the accent blue: the icons are drawn in it (one uniform tint), the
@@ -365,7 +365,7 @@ returns — the single-design page is untouched.
     if (!st || typeof st !== 'object') return out;
     if (typeof st.favorite === 'string' && st.favorite) out.favorite = st.favorite;
     if (Array.isArray(st.pins)) {
-      out.pins = st.pins.filter(p => p && typeof p.id === 'string' && typeof p.screen === 'string')
+      out.pins = st.pins.filter(p => p && typeof p.id === 'string' && typeof p.screen === 'string' && !p.anchor)
         .map(p => ({ id: p.id, design: String(p.design || ''), screen: p.screen,
           x: Number(p.x) || 0, y: Number(p.y) || 0, target: String(p.target || ''), text: String(p.text || '') }));
     }
@@ -1275,7 +1275,7 @@ returns — the single-design page is untouched.
     sheet.appendChild(el('h2', '', L.keysTitle));
     const dl = el('dl');
     const rows = [['Esc', L.overview], ['1–9', L.keysDesign], ['⇧+1–9', L.keysView], ['Tab', L.keysNext],
-     ['←/→', L.keysCarousel], ['↑/↓', L.keysLevel], ['Enter', L.open], [L.space, L.keysDock], ['F', L.fav], ['Alt+1–9', L.keysRound], ['N', L.keysNotes], [L.ctrl + '+Enter', L.submit],
+     ['←/→', L.keysCarousel], ['↑/↓', L.keysLevel], ['Enter', L.open], [L.space, L.keysDock], ['F', L.fav], ['Alt+1–9', L.keysRound], ['N', L.keysNotes], [L.ctrl + '+Enter', L.keysDockNext], [L.ctrl + '+' + L.space, L.keysDockClose],
      [L.ctrl + '+' + L.keysClick, L.keysPin], ['M', L.keysMenu], ['H', L.keysHide], ['T', L.keysTheme], ['?', L.keysTitle]];
     // V only where there is a device view to switch to.
     if (document.getElementById('viewport-toggle') && body.dataset.singleViewport !== 'true') rows.splice(9, 0, ['V', L.keysViewport]);
@@ -1540,6 +1540,15 @@ returns — the single-design page is untouched.
   });
 
   // ── User pins (Ctrl + click) ───────────────────────────────────────────
+  // Notes set while body.anno-hidden is on stay visible (data-upin-fresh) until
+  // the eye shows everything again. The set is shared with the document-pin
+  // engine (§ Document pins); either engine clears it on un-hide.
+  const freshPins = window.conceptFreshPins || (window.conceptFreshPins = new Set());
+  new MutationObserver(() => {
+    if (body.classList.contains('anno-hidden') || !freshPins.size) return;
+    freshPins.clear();
+    document.querySelectorAll('[data-upin-fresh]').forEach(n => n.removeAttribute('data-upin-fresh'));
+  }).observe(body, { attributes: true, attributeFilter: ['class'] });
   let armed = null;   // 'ctrl' while the key is held, 'tap' after the header button
   let draft = null;   // the pin being placed, until saved or discarded
   function arm(kind) {
@@ -1622,6 +1631,8 @@ returns — the single-design page is untouched.
       x: pct(e.clientX, r.left, w), y: pct(e.clientY, r.top, h),
       target: describeTarget(e.target, screen), text: ''
     };
+    // Set while everything is hidden: this note stays visible (data-upin-fresh).
+    if (body.classList.contains('anno-hidden')) freshPins.add(draft.id);
     renderPins(it, readState(it), true);
   }, true);
   // Touch path for an own pin: a long-press (~500 ms, no movement) on the
@@ -1726,6 +1737,7 @@ returns — the single-design page is untouched.
   function pinNode(pin, k, live, isDraft) {
     const wrap = el('div', 'upin');
     wrap.dataset.upinId = pin.id;
+    if (freshPins.has(pin.id)) wrap.dataset.upinFresh = 'true';
     wrap.style.setProperty('--upin-x', pin.x + '%');
     wrap.style.setProperty('--upin-y', pin.y + '%');
     const label = L.upinLabel.replace('{n}', String(k));
@@ -1887,15 +1899,9 @@ returns — the single-design page is untouched.
       if (tab) { e.preventDefault(); tab.click(); }
       return;
     }
-    if (e.ctrlKey || e.metaKey) {
-      if (e.key === 'Enter') {
-        const btn = document.getElementById('submit-iterate-btn');
-        const ready = document.getElementById('panel-ready');
-        if (btn && !btn.disabled && ready && getComputedStyle(ready).display !== 'none'
-            && !body.classList.contains('viewing-frozen')) { e.preventDefault(); btn.click(); }
-      }
-      return;
-    }
+    // Ctrl/Cmd + Enter never submits: a round is sent only by clicking in the
+    // ☰ panel. The dock's own Ctrl + Enter / Ctrl + Space live in § Feedback dock.
+    if (e.ctrlKey || e.metaKey) return;
     if (e.altKey) return;
     if (n && e.shiftKey) {
       const v = viewsOf(it)[n - 1];

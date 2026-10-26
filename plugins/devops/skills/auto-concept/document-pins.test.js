@@ -149,7 +149,7 @@ describe("document pins · eye, ? badges, frozen, design regression", () => {
     expect(eye.getAttribute("aria-pressed")).toBe("false");
     eye.click();
     expect(document.body.classList.contains("anno-hidden")).toBe(false);
-    expect(md).toMatch(/body\.anno-hidden \.dpin-layer, body\.anno-hidden \.dpin-hint \{ display: none !important; \}/);
+    expect(md).toMatch(/body\.anno-hidden \.dpin-layer \.upin:not\(\[data-upin-fresh\]\), body\.anno-hidden \.dpin-hint \{ display: none !important; \}/);
   }, BOOT_TIMEOUT);
 
   test("? shows the badge overlay plus the Ctrl + click example pin on a document page; ? again removes it", async () => {

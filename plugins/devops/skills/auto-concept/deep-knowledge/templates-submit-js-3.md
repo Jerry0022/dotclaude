@@ -25,7 +25,10 @@ async function submitFinalize(shipRun) {
     // help) | inline (written steps in the final message).
     tests: collectTodos('tests'),
     handoffs: collectTodos('handoffs'),
-    disposition: collectDisposition()
+    disposition: collectDisposition(),
+    // Own Ctrl + click notes on the report (templates-free-pins.md); `bake`
+    // embeds them in the frozen tab like any other round's.
+    userPins: (typeof window.documentPinsPayload === 'function') ? window.documentPinsPayload(active) : []
   };
 
   setCloseoutFrozen(true);

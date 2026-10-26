@@ -331,7 +331,10 @@ body.anno-hidden .anno-toggle-fab .anno-eye-off { display: block; }
 body.anno-hidden .anno-layer { display: none !important; }
 /* The eye hides EVERYTHING except the header and the FABs: pins, connectors,
    summaries, own pins, the overview's top-3 info box and its change chip. */
-body.anno-hidden .upin-layer, body.anno-hidden .design-ov-overlay, body.anno-hidden .design-ov-change { display: none !important; }
+body.anno-hidden .upin-layer .upin:not([data-upin-fresh]), body.anno-hidden .design-ov-overlay, body.anno-hidden .design-ov-change { display: none !important; }
+/* ...except an own note set WHILE everything is hidden (data-upin-fresh, set by
+   the pin engines): it stays visible with its editor until the eye shows all
+   again, which clears the marker — so the next hide hides every pin. */
 /* Calm view: the same eye also takes the quick nav, the design switcher and
    both FABs (☰, 💬) away, so the concept can be looked at undisturbed. The
    eye itself (and the device switch beside it) stays, dimmed. visibility
@@ -391,25 +394,37 @@ body.panel-open .anno-toggle-fab { opacity: 0; pointer-events: none; }
   transform: translate(-50%, -50%);
   pointer-events: auto;
 }
+/* The origin pin is the user's own note pin (.upin-pin) tinted with the
+   annotation accent: same speech-bubble shape, gradient, ring, glow and
+   white dot — auto and own notes read as one family, told apart by colour. */
 .anno-pin {
   position: relative;
   width: var(--anno-pin-size, 28px); height: var(--anno-pin-size, 28px);
-  border-radius: 50%;
+  padding: 0;
+  border-radius: 50% 50% 50% 4px;
   border: 0;
-  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 70%, #fff), var(--anno-accent, var(--accent-color, #58a6ff)));
+  background: linear-gradient(160deg, color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 30%, #fff), var(--anno-accent, var(--accent-color, #58a6ff)));
   color: #fff;
   /* No number: the pin is a glowing bubble (the authored digit stays in the
      markup as its accessible name only). */
   font-size: 0; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 18%, transparent), 0 0 18px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 55%, transparent), 0 4px 10px rgba(0,0,0,0.4);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 22%, transparent), 0 0 24px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 65%, transparent), 0 6px 14px rgba(0,0,0,0.4);
   transition: transform 0.15s, opacity 0.2s;
   animation: annoGlow 2.8s ease-in-out infinite;
 }
 .anno-pin::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #fff; opacity: 0.92; }
-@keyframes annoGlow { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 10%, transparent), 0 0 26px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 70%, transparent), 0 4px 10px rgba(0,0,0,0.4); } }
+@keyframes annoGlow { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 12%, transparent), 0 0 30px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 75%, transparent), 0 6px 14px rgba(0,0,0,0.4); } }
+/* Opening its bubble pulses the pin ONCE (~600 ms), then it holds steady
+   while the bubble is open — the open note is never the one that blinks. */
+.anno-pin[aria-expanded="true"] { animation: annoPulseOnce 0.6s ease-out 1; }
+@keyframes annoPulseOnce {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 60%, transparent), 0 0 24px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 65%, transparent), 0 6px 14px rgba(0,0,0,0.4); }
+  100% { box-shadow: 0 0 0 14px transparent, 0 0 24px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 65%, transparent), 0 6px 14px rgba(0,0,0,0.4); }
+}
 @media (prefers-reduced-motion: reduce) { .anno-pin { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .anno-pin[aria-expanded="true"], .anno-bubble[data-open="true"] { animation: none; } }
 .anno-pin:hover { transform: scale(1.08); }
 /* A pin can be dragged aside (wireAnnotationLayer() § moving a pin):
    touch-action keeps a touch drag from scrolling the canvas instead, and
@@ -421,22 +436,40 @@ body.panel-open .anno-toggle-fab { opacity: 0; pointer-events: none; }
    from the still-open questions. Recomputed on every input, never only at
    generation time (see wireAnnotationLayer()). */
 .anno-pin[data-answered="true"] { animation: none; }
-.anno-pin[data-answered="true"]::after { content: '✓'; width: auto; height: auto; background: none; font-size: 1rem; font-weight: 900; line-height: 1; }
-/* While ANY note's input is open (anno bubble or own pin) the connectors and
-   summaries of all the others go away; their pins stay, faded. */
-body[data-note-editing="true"] .anno:not([data-editing="true"]) .anno-bubble { display: none; }
+.anno-pin[data-answered="true"]::after { content: '✓'; width: auto; height: auto; background: none; font-size: 1rem; font-weight: 900; line-height: 1; text-shadow: 0 1px 2px rgba(0,0,0,0.45); }
+/* While ANY note is open (an anno bubble or an own pin's editor) every OTHER
+   note — auto and own alike — stays where it is, dimmed into the background:
+   bubbles, connectors and pins fade, nothing is removed. One rule for both
+   kinds, so they never behave differently. */
+body[data-note-editing="true"] .anno:not([data-editing="true"]) .anno-bubble,
 body[data-note-editing="true"] .anno:not([data-editing="true"]) .anno-pin,
-body[data-note-editing="true"] .upin:not([data-editing="true"]) .upin-pin { opacity: 0.35; box-shadow: none; animation: none; }
+body[data-note-editing="true"] .upin:not([data-editing="true"]) .upin-pin,
+body[data-note-editing="true"] .upin:not([data-editing="true"]) .upin-editor { opacity: 0.35; animation: none; transition: opacity 0.15s ease; }
+/* Collapsed: ONE line pill — 10px corners, the accent as a stripe on the
+   left edge (pure styling), a soft accent glow. No number, no chevron. */
 .anno-bubble {
   position: absolute;
   z-index: 1;
+  box-sizing: border-box;
+  display: flex; align-items: center; gap: 0.45rem;
   min-width: 180px; max-width: min(280px, 60vw);
+  padding-left: 3px;
   background: var(--anno-bubble-bg, var(--panel-bg, #161b22));
-  border: 1px solid var(--border-color, #30363d);
-  border-radius: var(--anno-bubble-radius, 12px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  border: 1px solid color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 30%, var(--border-color, #30363d));
+  border-radius: var(--anno-bubble-radius, 10px);
+  box-shadow: inset 3px 0 0 var(--anno-accent, var(--accent-color, #58a6ff)), 0 0 14px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 22%, transparent), 0 8px 24px rgba(0,0,0,0.4);
   font-size: 0.85rem;
+  transition: box-shadow 0.2s ease;
 }
+/* Open: a writing surface with a stronger glow, grown from the pin side
+   (transform-origin per data-anno-side below). `scale` is the individual
+   transform property, so it never fights the side rules' `transform`. */
+.anno-bubble[data-open="true"] {
+  display: block;
+  box-shadow: inset 3px 0 0 var(--anno-accent, var(--accent-color, #58a6ff)), 0 0 26px color-mix(in srgb, var(--anno-accent, var(--accent-color, #58a6ff)) 42%, transparent), 0 12px 30px rgba(0,0,0,0.5);
+  animation: annoBubbleOpen 0.22s ease-out;
+}
+@keyframes annoBubbleOpen { from { opacity: 0; scale: 0.86; } to { opacity: 1; scale: 1; } }
 /* One open bubble reads above every collapsed pin/bubble around it. Uses
    :has() rather than a JS-set attribute — same pattern as the single-screen
    collapse rules above (body[data-single-screen] .feedback-section:has(...)). */
@@ -445,16 +478,17 @@ body[data-note-editing="true"] .upin:not([data-editing="true"]) .upin-pin { opac
    two-sentence answer fits without the user dragging the field taller. */
 .anno-bubble[data-open="true"] { width: min(360px, 80vw); max-width: min(360px, 80vw); }
 .anno-bubble-summary {
-  display: flex; align-items: center; gap: 0.4rem; width: 100%;
-  padding: 0.55rem 0.75rem; border: none; background: none; cursor: pointer;
+  display: flex; align-items: center; gap: 0.4rem; width: 100%; min-width: 0; flex: 1 1 auto;
+  padding: 0.45rem 0.7rem; border: none; background: none; cursor: pointer;
   color: var(--text-color, #c9d1d9); text-align: left; font: inherit;
 }
 .anno-bubble-question {
   flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .anno-bubble[data-open="true"] .anno-bubble-question { white-space: normal; }
-.anno-chevron { transition: transform 0.15s; color: var(--text-secondary); }
-.anno-bubble[data-open="true"] .anno-chevron { transform: rotate(90deg); }
+/* Retired: bubbles carry no arrow any more (same as own notes). Pages built
+   before keep the span in their markup — it simply never shows. */
+.anno-chevron { display: none; }
 .anno-bubble-body { display: none; flex-direction: column; gap: 0.5rem; padding: 0 0.75rem 0.75rem; min-width: 0; }
 .anno-bubble[data-open="true"] .anno-bubble-body { display: flex; }
 /* border-box is load-bearing: with the default content-box, `width: 100%`
@@ -490,6 +524,10 @@ textarea[hidden] + .attach-slot,
 textarea[hidden] + .attach-bar { display: none; }
 /* Leader line + bubble offset, one rule pair per side. The line is a short
    fixed-length connector (14px), never computed at runtime. */
+.anno[data-anno-side="right"] .anno-bubble { transform-origin: left center; }
+.anno[data-anno-side="left"] .anno-bubble { transform-origin: right center; }
+.anno[data-anno-side="top"] .anno-bubble { transform-origin: center bottom; }
+.anno[data-anno-side="bottom"] .anno-bubble { transform-origin: center top; }
 .anno[data-anno-side="right"] .anno-bubble { left: calc(var(--anno-pin-size, 28px) + 14px); top: 50%; transform: translateY(-50%); }
 .anno[data-anno-side="right"] .anno-bubble::before { content: ''; position: absolute; top: 50%; left: -14px; width: 14px; height: 2px; background: var(--anno-accent, var(--accent-color, #58a6ff)); transform: translateY(-50%); }
 .anno[data-anno-side="left"] .anno-bubble { right: calc(var(--anno-pin-size, 28px) + 14px); top: 50%; transform: translateY(-50%); }

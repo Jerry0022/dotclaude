@@ -79,6 +79,36 @@
   }
   window.openDock = openDock;
   window.closeDock = closeDock;
+  // Dock keys while the dock is open (capture phase, so no page handler
+  // swallows them first):
+  //   * Ctrl/Cmd + Enter in a dock field → focus the next VISIBLE field of the
+  //     dock; on the last one the dock closes. It never submits or implements
+  //     anything — a round is sent only by clicking in the ☰ menu panel.
+  //   * Ctrl/Cmd + Space → close the dock at once, wherever the focus is.
+  const dockFieldVisible = el => {
+    for (let n = el; n && n !== dock; n = n.parentElement) {
+      if (n.hidden || getComputedStyle(n).display === 'none') return false;
+    }
+    return true;
+  };
+  document.addEventListener('keydown', e => {
+    if (!dock || dock.dataset.open !== 'true' || e.defaultPrevented || e.repeat || e.altKey || e.shiftKey) return;
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (e.key === ' ' || e.code === 'Space') {
+      e.preventDefault();
+      closeDock();
+      return;
+    }
+    if (e.key !== 'Enter' || e.isComposing) return;
+    const from = e.target && e.target.closest ? e.target.closest('textarea, input') : null;
+    if (!from || !dock.contains(from)) return;
+    e.preventDefault();
+    const fields = [...dock.querySelectorAll('textarea, input:not([type="file"]):not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="checkbox"]):not([type="radio"])')]
+      .filter(dockFieldVisible);
+    const next = fields[fields.indexOf(from) + 1];
+    if (next) next.focus();
+    else closeDock();
+  }, true);
   // ── "Wusstest du schon?" — one static fact per dock open (rules below).
   // Every tip is about USING this page (never about the reviewed content or
   // the plugin's internals), understandable on a first visit, one line.
@@ -93,7 +123,8 @@
       "←/→ blättern durch die Seiten.",
       "Esc führt eine Ebene zurück.",
       "Esc im Notizfeld schließt die Notizen.",
-      "Strg + Enter schickt die Runde ab.",
+      "Strg + Enter springt zum nächsten Notizfeld.",
+      "Strg + Leertaste schließt die Notizen.",
       "Das Auge 👁 blendet Notizen und Leisten aus.",
       "☰ zeigt alle Seiten und offenen Fragen.",
       "Im ☰-Menü öffnet ein Klick jede Seite.",
@@ -124,7 +155,8 @@
       "←/→ flip through the pages.",
       "Esc goes back one level.",
       "Esc in a note field closes the notes.",
-      "Ctrl + Enter submits the round.",
+      "Ctrl + Enter jumps to the next note field.",
+      "Ctrl + Space closes the notes at once.",
       "The eye 👁 hides notes and toolbars.",
       "☰ lists every page and open question.",
       "In the ☰ menu, one click opens any page.",

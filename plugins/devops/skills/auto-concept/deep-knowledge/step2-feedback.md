@@ -262,8 +262,9 @@ signal Claude monitors.
   notes at all.
 - **Hotkeys** (`?` shows every hint as `<kbd>`, with the shortcut sheet): Space opens/closes the
   notes dock, ←/→ page through screens (or slides on the overview), ↑/↓ change
-  level, 1–9 pick a design / question / round tab, Ctrl+Enter starts the next
-  round; ignored while typing in a field. One-time nudges point at the useful
+  level, 1–9 pick a design / question / round tab, Ctrl+Enter in a notes field jumps to the next field (the last one closes the dock),
+  Ctrl+Space closes the dock — a round is submitted only by clicking in the ☰ panel;
+  the other keys are ignored while typing in a field. One-time nudges point at the useful
   ones and stay dismissed for 30 days.
 - **Staged entrance**: the journey row builds up left to right once per round
   on the first panel open; a new round opens at the first page/top (overview

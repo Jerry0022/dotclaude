@@ -23,14 +23,13 @@ the same hotkeys and tips as a design round. Three jobs:
   key, named in its tooltip as a keycap (`data-tip-key`) and in
   `aria-keyshortcuts`: `M` the ☰ menu (open / close), `H` hide / show the
   notes and navigation (the eye), `T` light / dark, `V` the device view (its
-  handler lives in § Design JS), `Esc` the menu's ✕, `Ctrl + Enter` the
-  submit button. Never while typing in a field, never with a modifier.
+  handler lives in § Design JS), `Esc` the menu's ✕. Never while typing in a field, never with a modifier.
 - **Nudges** — a quiet tip tab (`#hk-nudge.hk-nudge`) sitting on top of the
   status toast: key caps, a text that names the word "Hotkey(s)", a 1.5px
   timer line, ✕. It appears only when the engine sees the user doing by mouse
   what a hotkey does faster: switching variants (2 mouse clicks on the quick
   nav in 90 s), clicking through pages (3), opening the dock by click (2),
-  submitting the round by mouse, and — once — on the first visit
+  and — once — on the first visit
   ("? zeigt alle Hotkeys"). It auto-expires after 9 s; ✕ silences that
   one nudge for 30 days (`localStorage` `concept-nudge:<id>` = timestamp,
   every access in try / catch). Never two nudges within 60 s.
@@ -38,7 +37,7 @@ the same hotkeys and tips as a design round. Three jobs:
   a nudge is shown at most ONCE per page session; at most twice ever
   (`hint-nudge-shown:<id>`, the `?` tip once); and never again once the
   user has used that hotkey (`hint-hotkey-used:<id>`, recorded on the
-  first real use — Space, ?, 1–9, arrows, Ctrl + Enter, F, V, Esc,
+  first real use — Space, ?, 1–9, arrows, F, V, Esc,
   Ctrl + click on the design). Every nudge is one line (`nowrap` +
   ellipsis) in the calm `--tip-color`, never the amber of open questions.
   `window.conceptHotkeyUsed(id)` reads the used state for the dock tips.
@@ -52,7 +51,7 @@ the same hotkeys and tips as a design round. Three jobs:
 (function wireChromeHotkeys() {
   const T = {
     keys: '{{nudge.keys}}', variants: '{{nudge.variants}}', pages: '{{nudge.pages}}',
-    dock: '{{nudge.dock}}', submit: '{{nudge.submit}}', dismiss: '{{nudge.dismiss}}',
+    dock: '{{nudge.dock}}', dismiss: '{{nudge.dismiss}}',
     space: '{{design.key_space}}', ctrl: '{{design.key_ctrl}}', click: '{{design.keys_click}}'
   };
   const body = document.body;
@@ -73,7 +72,7 @@ the same hotkeys and tips as a design round. Three jobs:
   // Chrome controls name their keys too; the ✕ is icon-only, so its name
   // (the aria-label) is its tooltip text.
   const CHROME_KEYS = [['panel-toggle', 'M'], ['anno-toggle', 'H'], ['theme-toggle', 'T'],
-    ['viewport-toggle', 'V'], ['panel-close', 'Esc'], ['submit-iterate-btn', T.ctrl + '+Enter']];
+    ['viewport-toggle', 'V'], ['panel-close', 'Esc']];
   CHROME_KEYS.forEach(([id, k]) => {
     const n = document.getElementById(id);
     if (!n || n.dataset.tipKey) return;
@@ -242,11 +241,10 @@ the same hotkeys and tips as a design round. Three jobs:
   window.conceptNudgeSilenced = silenced;
 
   // Real hotkey use ends that hotkey's tips for good (capture phase, so a
-  // handler that stops the event still counts; fields only for Ctrl + Enter).
+  // handler that stops the event still counts; fields excluded).
   document.addEventListener('keydown', e => {
     const k = e.key;
     const mod = e.ctrlKey || e.metaKey;
-    if (mod && k === 'Enter') { markUsed('submit'); return; }
     if (k === '?') { markUsed('keys'); return; }
     if (k === 'Escape' && e.target && e.target.closest && e.target.closest('#feedback-dock')) { markUsed('dock-esc'); return; }
     if (fieldIn(e.target) || mod || e.altKey) return;
@@ -282,8 +280,6 @@ the same hotkeys and tips as a design round. Three jobs:
       nudge('pages', ['←', '→'], T.pages);
     } else if (t.closest('#feedback-toggle') && hit('dock', 2)) {
       nudge('dock', [T.space], T.dock);
-    } else if (t.closest('#submit-iterate-btn')) {
-      nudge('submit', [T.ctrl, 'Enter'], T.submit);
     }
   }, true);
   // First visit: once, a few seconds after the page settled.
