@@ -79,8 +79,9 @@ describe("base call: the four spec questions in one AskUserQuestion", () => {
     expect(base.map((q) => q.header)).toEqual(["Was?", "Ablauf?", "Umfang?", "Durchgänge?"]);
   });
 
-  test("only Q4 is multi-select", () => {
-    expect(base.map((q) => q.multi)).toEqual([false, false, false, true]);
+  test("Q4 is single-select, multi-select only when two passes apply", () => {
+    expect(base.map((q) => q.multi)).toEqual([false, false, false, false]);
+    expect(skill).toMatch(/Two or more apply → multiSelect: true/);
   });
 
   test("the skill says ONE call and at most one follow-up", () => {
@@ -94,7 +95,7 @@ describe("base call: fixed option order", () => {
     Q1: ["Prompt umsetzen", "Audit", "Backlog"],
     Q2: ["Interaktiv · Ship manuell", "Interaktiv · Ship automatisch", "Autonom · Ship manuell", "Autonom · Ship automatisch"],
     Q3: ["Flexibel", "Strikt"],
-    Q4: ["Rethink vorher", "Budget verbrennen", "Nichts davon"],
+    Q4: ["Normal umsetzen", "Rethink vorher", "Budget verbrennen", "Nichts davon"],
   };
 
   test.each(Object.entries(EXPECTED))("%s options in spec order", (id, labels) => {
@@ -117,10 +118,13 @@ describe("base call: recommendation", () => {
   });
 
   test("Q4: no Harden / Polish option; Rethink only conditionally; Budget never", () => {
-    const [rethink, budget] = byId(base, "Q4").options;
+    const [normal, rethink, budget] = byId(base, "Q4").options;
     expect(byId(base, "Q4").options.map((o) => o.label).join(" ")).not.toMatch(/Harden|Polish/);
+    expect(normal.recommended).toBe(true);
+    expect(normal.note).toMatch(/single-select only; always first and the only marker/);
     expect(rethink.recommended).toBe(false);
-    expect(rethink.note).toMatch(/\(Recommended\)" when the prompt reads stuck/);
+    expect(rethink.note).toMatch(/single-select appends " · empfohlen"/);
+    expect(rethink.note).toMatch(/multi-select adds " \(Recommended\)"/);
     expect(budget.recommended).toBe(false);
     expect(budget.note).toMatch(/never recommended/);
   });
@@ -145,7 +149,7 @@ describe("base call: conditional options", () => {
     expect(budget.label).toBe("Budget verbrennen");
     // #635: "Nichts davon" closes Q4 whenever it is asked.
     expect(q4.options.at(-1).label).toBe("Nichts davon");
-    expect(q4.options.at(-1).note).toMatch(/always last whenever Q4 is asked/);
+    expect(q4.options.at(-1).note).toMatch(/multi-select only, always last/);
     expect(budget.note).toMatch(/only when burn-plan\.js offer says so/);
     expect(questions).toMatch(/get_usage/);
     expect(questions).toContain('scripts/burn-plan.js" offer');
@@ -185,7 +189,8 @@ describe("base call: empty multi-select answer", () => {
   });
 
   test("Harden always, Polish on UI changes — Q4 dropped when neither extra applies", () => {
-    expect(skill).toMatch(/Leer lassen = nichts\)/);
+    expect(skill).toMatch(/multi-select only: "Was kommt dazu\? \(Leer lassen = nichts\)"/);
+    expect(byId(base, "Q4").note ?? "").not.toMatch(/Leer lassen/);
     expect(skill).toMatch(/only when option 1 or 2 applies, else dropped/);
     expect(skill).toMatch(/\*\*Harden, always\*\*/);
     expect(skill).toMatch(/\*\*Polish, on UI changes\*\*/);
@@ -226,7 +231,7 @@ describe("label rules (base call and follow-up)", () => {
 
   test("Q4 labels share one shape: <noun> <when/verb>", () => {
     for (const o of byId(base, "Q4").options) {
-      expect(o.label).toMatch(/^\S+ (danach|vorher|verbrennen|davon)$/);
+      expect(o.label).toMatch(/^(Normal umsetzen|\S+ (danach|vorher|verbrennen|davon))$/);
     }
   });
 

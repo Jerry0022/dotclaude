@@ -31,7 +31,7 @@ const SRC = fs.readFileSync(SRC_PATH, "utf8");
 // fallback, and the two new heartbeat/status texts. The injected payload is
 // the lean form (comments and indentation stripped) — about two thirds of this.
 // Raised to 72 KB for the comment row, Claude's answer note and the header ×
-// abort confirmation (1.14.0).
+// abort confirmation (1.14.1).
 const MAX_BYTES = 72 * 1024;
 const MAX_LINE_LENGTH = 200;
 
@@ -225,8 +225,8 @@ describe("web-guide-overlay — shape", () => {
     expect(() => new vm.Script(SRC)).not.toThrow();
   });
 
-  test("defines VERSION 1.14.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
-    expect(SRC).toMatch(/VERSION\s*=\s*["']1.14.0["']/);
+  test("defines VERSION 1.14.1, setStep/wait/state/destroy, and touches sessionStorage", () => {
+    expect(SRC).toMatch(/VERSION\s*=\s*["']1.14.1["']/);
     expect(SRC).toMatch(/defineProperty\(window, "claudeGuide"/);
     expect(SRC).toMatch(/setStep\s*:/);
     expect(SRC).toMatch(/wait\s*:/);
@@ -257,7 +257,7 @@ describe("web-guide-overlay — execution", () => {
     const result = run(sandbox);
     expect(result).toBe("injected");
     expect(sandbox.window.claudeGuide).toBeTruthy();
-    expect(sandbox.window.claudeGuide.version).toBe("1.14.0");
+    expect(sandbox.window.claudeGuide.version).toBe("1.14.1");
     expect(typeof sandbox.window.claudeGuide.setStep).toBe("function");
     expect(typeof sandbox.window.claudeGuide.wait).toBe("function");
     expect(typeof sandbox.window.claudeGuide.state).toBe("function");
@@ -274,7 +274,7 @@ describe("web-guide-overlay — execution", () => {
   test("state() reports version, stepId, collapsed, queued, url", () => {
     run(sandbox);
     const s = sandbox.window.claudeGuide.state();
-    expect(s).toMatchObject({ version: "1.14.0", stepId: null, queued: 0 });
+    expect(s).toMatchObject({ version: "1.14.1", stepId: null, queued: 0 });
     expect(s.url).toBe("https://example.test/page");
   });
 
@@ -787,6 +787,19 @@ describe("web-guide-overlay — execution", () => {
     fab.dispatch("click", { type: "click", target: fab, detail: 0 }); // expand again
     expect(confirmLayer()).toBeUndefined();
     expect(sandbox.window.claudeGuide.state().queued).toBe(0);
+  });
+
+  // #910: plain-HTTP pages have no navigator.clipboard.
+  test("copy chip falls back to execCommand when navigator.clipboard is missing", () => {
+    delete sandbox.navigator.clipboard;
+    sandbox.document.execCommand = vi.fn(() => true);
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go", copy: [{ value: "abc" }] });
+    const host = getHost(sandbox);
+    const copyBtn = findAll(host, (e) => e.tagName === "BUTTON" && e._text.indexOf("Kopieren") !== -1)[0];
+    copyBtn.click();
+    expect(sandbox.document.execCommand).toHaveBeenCalledWith("copy");
+    expect(copyBtn.textContent).toBe("Kopiert!");
   });
 
   // #514: location block, copy chips, checklist.

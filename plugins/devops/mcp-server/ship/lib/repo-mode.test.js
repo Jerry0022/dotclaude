@@ -4,7 +4,12 @@ vi.mock("node:child_process", () => ({
   execFileSync: vi.fn(),
 }));
 
+vi.mock("node:fs", () => ({
+  statSync: vi.fn(() => { throw new Error("ENOENT"); }),
+}));
+
 import { execFileSync } from "node:child_process";
+import { statSync } from "node:fs";
 import { detectRepoMode, isGitRepo, refusesGitWrites, probeTimeoutError, PROBE_TIMEOUT_MS } from "./repo-mode.js";
 
 beforeEach(() => {
@@ -69,6 +74,26 @@ describe("detectRepoMode", () => {
     expect(detectRepoMode("/outer/sub/notgit")).toBe("git-foreign-root");
     const probed = execFileSync.mock.calls.map((c) => c[1].join(" "));
     expect(probed).not.toContain("remote get-url origin");
+  });
+
+  test("a mapped drive and its UNC toplevel are one directory (same dev+ino) -> owned (#870)", () => {
+    mockGit({ toplevel: "//server/share/repo" });
+    statSync.mockReturnValue({ dev: 7, ino: 42 });
+    expect(detectRepoMode("H:/repo")).toBe("git");
+  });
+
+  test("a true ancestor stays foreign when the identities differ (#870)", () => {
+    mockGit({ toplevel: "//server/share" });
+    statSync.mockImplementation((p) => ({ dev: 7, ino: String(p).endsWith("share") ? 1 : 2 }));
+    expect(detectRepoMode("H:/repo")).toBe("git-foreign-root");
+  });
+
+  test("ino 0 (Windows, not provided) falls back to the string compare (#870)", () => {
+    mockGit({ toplevel: "/outer" });
+    statSync.mockReturnValue({ dev: 0, ino: 0 });
+    expect(detectRepoMode("/outer/sub")).toBe("git-foreign-root");
+    mockGit({ toplevel: "/repo" });
+    expect(detectRepoMode("/repo")).toBe("git");
   });
 
   test("tolerates a trailing separator on the repo root", () => {

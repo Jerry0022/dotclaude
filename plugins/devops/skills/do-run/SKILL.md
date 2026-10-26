@@ -98,8 +98,9 @@ the id the plugin's hooks name in context, e.g. the completion card's
 output, `"known":false` or `"extra":null` → nothing changes and nothing is
 said about it. `known:true` → read the `doc` § `section` it names before
 anything else; that text replaces the presets and questions it names.
-`extra` set → add it to Q4 as the last option before "Nichts davon"; if
-ticked it wins (the other ticks are dropped and named in one line) and its
+`extra` set → add it to Q4 as the last pass option (it counts as a pass: with
+another pass Q4 is multi-select, alone it is the single pass beside "Normal
+umsetzen"); if chosen it wins (the other ticks are dropped and named in one line) and its
 doc says what runs.
 
 The remaining tokens of `$ARGUMENTS` (or the prompt itself) are the task,
@@ -160,11 +161,12 @@ Q3  header: "Umfang?"       multiSelect: false
     1. "Flexibel (Recommended)"         — Darf inhaltlich erweitern: Angrenzendes, Refactors, eigene Ideen.
     2. "Strikt"                         — Inhalt exakt wie gesagt, vollständig mit Tests, Doku, Aufrufern; offene Wahl wird berichtet.
 
-Q4  header: "Durchgänge?"   multiSelect: true   [only when option 1 or 2 applies, else dropped; questions.md § Reading Q4]
-    question: "Was kommt dazu? (Leer lassen = nichts)"   [with Rethink recommended: "(Leer lassen = Rethink vorher)"]
-    1. "Rethink vorher"                 — Erst frisch neu denken, dann umsetzen; Concept-Seite nur bei echter Weichenstellung.   [only for Prompt umsetzen; + " (Recommended)" when the prompt reads stuck]
-    2. "Budget verbrennen"              — Restbudget, das sonst verfällt, als Tiefe pro Task verbrauchen.   [only when burn-plan.js offer says so; never recommended]
-    3. "Nichts davon"                   — Direkt umsetzen.   [always last whenever Q4 is asked — the Desktop app cannot submit a multi-select with nothing ticked]
+Q4  header: "Durchgänge?"   multiSelect: false   [only when option 1 or 2 applies, else dropped; questions.md § Reading Q4. Exactly one pass (Rethink, Budget or a channel extra) applies → single-select as written. Two or more apply → multiSelect: true, "Normal umsetzen" dropped, "Nichts davon" last]
+    question: "Was kommt dazu?"   [multi-select only: "Was kommt dazu? (Leer lassen = nichts)", with Rethink recommended "(Leer lassen = Rethink vorher)"]
+    1. "Normal umsetzen (Recommended)"  — Ohne Zusatz-Durchgang; Harden/Polish laufen wie immer.   [single-select only; always first and the only marker, even when the prompt reads stuck]
+    2. "Rethink vorher"                 — Erst frisch neu denken, dann umsetzen; Concept-Seite nur bei echter Weichenstellung.   [only for Prompt umsetzen; stuck prompt: single-select appends " · empfohlen" to this description, multi-select adds " (Recommended)" to the label]
+    3. "Budget verbrennen"              — Restbudget, das sonst verfällt, als Tiefe pro Task verbrauchen.   [only when burn-plan.js offer says so; never recommended]
+    4. "Nichts davon"                   — Direkt umsetzen.   [multi-select only, always last — the Desktop app cannot submit a multi-select with nothing ticked (#635)]
 ```
 
 ## Step 4 — Follow-up: at most one more call

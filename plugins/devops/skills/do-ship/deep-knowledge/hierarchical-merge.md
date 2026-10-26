@@ -36,3 +36,10 @@ ship, the feature branch on the final one. Inside a worktree `gh pr merge
 touched. The local branch and worktree stay with the session: a harness-created
 (Claude Desktop) worktree is removed by the app, an `EnterWorktree` one by
 `ExitWorktree` + `ship_cleanup`.
+
+The final ship also prunes the merged-in sub-branches (#876): every
+`<integration-branch>-*` ref, remote and local, whose tip is an ancestor of the
+shipped head (`ship/lib/sub-branches.js`, `subBranchesDeleted` in the release
+result). A ref with commits the shipped head lacks, a ref a worktree still has
+checked out, and main/the default branch are never touched; the remote ref is
+deleted only while origin still points at the proven tip.

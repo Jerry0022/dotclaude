@@ -468,6 +468,9 @@ const SETUP_VERB_RE = new RegExp(wordAlt([
   String.raw`connect`,
 ].join('|')), 'iu');
 
+/** Package registries and documentation hosts. */
+const DOCS_HOST_RE = /(?:^|\.)(?:npmjs\.com|pypi\.org|crates\.io|rubygems\.org|nuget\.org|pkg\.go\.dev|packagist\.org|readthedocs\.io|developer\.mozilla\.org)$|^docs\./i;
+
 /** A quoted UI label („Bank hinzufügen“, “Save”, «OK») — typographic quotes
  *  only: straight quotes mark code and strings far more often. */
 const UI_LABEL_RE = /[„“«»][^„“”«»\n]{1,60}[“”»«]/u;
@@ -488,7 +491,10 @@ function setupStepHandoff(text) {
   if (typeof text !== 'string' || !text) return null;
   if (SELF_PERFORMED_RE.test(text) || isOfferQuestion(text) || LOCAL_TARGET_RE.test(text)) return null;
   if (!SETUP_VERB_RE.test(text)) return null;
-  const service = matchService(text);
+  let service = matchService(text);
+  // A package registry or docs page is something to read, not a web UI to
+  // click through ("Install the package from https://www.npmjs.com/…").
+  if (service && !service.named && DOCS_HOST_RE.test(service.name)) service = null;
   if (!service && !hasArrowChain(text) && !UI_LABEL_RE.test(text)) return null;
   if (service && service.named) return { service: service.name };
   const place = text.match(PLACE_RE);

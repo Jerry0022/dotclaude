@@ -5,7 +5,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   scanRepo, planAutoClean, executeAutoClean, runHygiene, cardLines, landedVia, landingState,
-  reachableFromMerged, findStalePrs, startOrphanScan, BACKUP_EXPIRY_DAYS, BACKUP_PATTERNS,
+  reachableFromMerged, classifyUnits, findStalePrs, startOrphanScan, BACKUP_EXPIRY_DAYS, BACKUP_PATTERNS,
 } from "./hygiene.js";
 
 const DAY = 86_400_000;
@@ -284,5 +284,66 @@ describe("startOrphanScan", () => {
     expect(calls[0].args).toEqual(["scan.js"]);
     expect(calls).toContain("unref");
     expect(startOrphanScan("scan.js", () => { throw new Error("no spawn"); })).toBe(false);
+  });
+});
+
+describe("main checkout on a landed local-only branch (#879) and landed worktrees outside .claude/worktrees (#875)", () => {
+  const stub = () => ({ bySha: new Set(), byName: new Map() });
+  const classify = (dir, scan) => classifyUnits(scan, { cwd: dir, fetchMerged: stub, projectsDir: null, now: NOW });
+
+  test("a landed, upstream-less branch checked out in the main checkout is reported, never removable", () => {
+    const { dir } = makeRepo();
+    git(dir, "checkout", "-q", "-b", "feat/linux");
+    const scan = scanRepo(dir, NOW);
+    const unit = scan.units.find((u) => u.kind === "main-checkout");
+    expect(unit).toMatchObject({ branch: "feat/linux" });
+    const cls = classify(dir, scan);
+    expect(cls.mainOnLanded.map((u) => u.branch)).toEqual(["feat/linux"]);
+    expect(cls.removable).toEqual([]);
+    expect(cls.atRisk).toEqual([]);
+    const plan = planAutoClean(scan, SETTINGS, { cwd: dir, fetchMerged: stub, projectsDir: null, now: NOW });
+    expect(plan.remove).toEqual([]);
+  });
+
+  test("the main checkout on the default branch, or on an unlanded branch, is not reported as landed", () => {
+    const { dir } = makeRepo();
+    expect(scanRepo(dir, NOW).units.some((u) => u.kind === "main-checkout")).toBe(false);
+    git(dir, "checkout", "-q", "-b", "feat/open");
+    commitAt(dir, "b.txt", "x\n", daysAgo(1));
+    const cls = classify(dir, scanRepo(dir, NOW));
+    expect(cls.mainOnLanded).toEqual([]);
+    expect(cls.atRisk).toEqual([]);
+  });
+
+  test("a branch with an upstream is no main-checkout unit", () => {
+    const { dir, c1 } = makeRepo();
+    git(dir, "checkout", "-q", "-b", "feat/up");
+    git(dir, "update-ref", "refs/remotes/origin/feat/up", c1);
+    git(dir, "config", "branch.feat/up.remote", "origin");
+    git(dir, "config", "branch.feat/up.merge", "refs/heads/feat/up");
+    expect(scanRepo(dir, NOW).units.some((u) => u.kind === "main-checkout")).toBe(false);
+  });
+
+  test("a clean landed sibling worktree lands in landedOutside, not in removable", () => {
+    const { dir, c1 } = makeRepo();
+    const wt = path.join(mkTmp("hylife-sib-"), "wt");
+    git(dir, "worktree", "add", "-q", wt, "-b", "feat/sib", c1);
+    const cls = classify(dir, scanRepo(dir, NOW));
+    expect(cls.landedOutside.map((u) => u.branch)).toEqual(["feat/sib"]);
+    expect(cls.removable).toEqual([]);
+    expect(cls.keep).toEqual([]);
+  });
+
+  test("a sibling worktree with uncommitted changes or unlanded work stays out of landedOutside", () => {
+    const { dir, c1 } = makeRepo();
+    const wt = path.join(mkTmp("hylife-sib-"), "wt");
+    git(dir, "worktree", "add", "-q", wt, "-b", "feat/dirty", c1);
+    fs.writeFileSync(path.join(wt, "new.txt"), "x\n");
+    const wt2 = path.join(mkTmp("hylife-sib-"), "wt");
+    git(dir, "worktree", "add", "-q", wt2, "-b", "feat/ahead", c1);
+    commitAt(wt2, "c.txt", "y\n", daysAgo(1));
+    const cls = classify(dir, scanRepo(dir, NOW));
+    expect(cls.landedOutside).toEqual([]);
+    expect(cls.removable).toEqual([]);
   });
 });

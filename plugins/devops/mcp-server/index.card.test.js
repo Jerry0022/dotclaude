@@ -169,6 +169,24 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     expect(text).toMatch(/^## 👉 📦 Ready — Ship\?$/m);
   });
 
+  test("a zero count with a qualifier is a passed gate, a non-zero one stays red (#881)", async () => {
+    for (const result of ["grün · 0 Lint-Fehler", "0 lint errors", "0 TS-Fehler", "Build + Lint: grün · 0 Lint-Fehler"]) {
+      const text = await cardText({
+        variant: "ship-successful", summary: "Zero", lang: "en", session_id: "test-zero-qual",
+        state: { branch: "main", pushed: true, merged: "main", commit: "abc1234" },
+        tests: [{ method: "lint", result }],
+      });
+      expect(text, result).not.toContain("✗");
+      expect(text, result).not.toContain("Not achieved");
+    }
+    const red = await cardText({
+      variant: "ship-successful", summary: "Two", lang: "en", session_id: "test-zero-qual-red",
+      state: { branch: "main", pushed: true, merged: "main", commit: "abc1234" },
+      tests: [{ method: "lint", result: "grün · 2 Lint-Fehler" }],
+    });
+    expect(red).toContain("Not achieved");
+  });
+
   test("audit: '0 failed' next to a real error count names the real count, not 0 Tests rot", async () => {
     const text = await cardText({
       variant: "ready", summary: "Rot", lang: "de", session_id: "test-audit-zero-red",
@@ -375,6 +393,35 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
       expect(text).toContain("Alte Config löschen?");
     } finally {
       fs.rmSync(file, { force: true });
+    }
+  });
+
+  test("ship-successful in a dir nested under another repo is ship-blocked, never Released (#871)", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { execFileSync } = await import("node:child_process");
+    const outer = fs.mkdtempSync(path.join(os.tmpdir(), "card-foreign-root-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: outer });
+      const sub = path.join(outer, "proj");
+      fs.mkdirSync(sub);
+      const text = await cardText({
+        variant: "ship-successful", summary: "Fertig", lang: "en", session_id: "test-anatomy-foreign-root", cwd: sub,
+        state: { pushed: true, merged: "main", commit: "abc1234", branch: "main" },
+        delivery: { ship: { version: "1.2.3" } },
+      });
+      expect(text).toContain("git-foreign-root");
+      expect(text).toContain("Repo belongs to a parent directory");
+      expect(text).not.toMatch(/Released|Merged/);
+      const de = await cardText({
+        variant: "ship-successful", summary: "Fertig", lang: "de", session_id: "test-anatomy-foreign-root-de", cwd: sub,
+        state: { pushed: true, merged: "main", commit: "abc1234", branch: "main" },
+        delivery: { ship: { version: "1.2.3" } },
+      });
+      expect(de).toContain("Repo gehört einem übergeordneten Verzeichnis");
+    } finally {
+      fs.rmSync(outer, { recursive: true, force: true });
     }
   });
 

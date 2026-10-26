@@ -15,8 +15,8 @@ Apply to the base call, the resume and the follow-up questions alike:
   or the user's history suggests never moves the marker or the order — it
   shows as a description suffix instead (Q3), or as a preset (Step 1).
 - **Click-through is a valid run.** Accepting the first option of every
-  single-select question and submitting Q4 empty (when it is asked at all)
-  runs: Prompt umsetzen · Interaktiv · Ship manuell · Flexibel — Harden
+  single-select question (Q4 included when one pass applies) and submitting
+  a multi-select Q4 empty runs: Prompt umsetzen · Interaktiv · Ship manuell · Flexibel — Harden
   after the implementation, Polish when it touched UI files.
 - **Parallel labels.** Short, same shape, the verb in the same place — never
   "Ja" / "Nein".
@@ -52,12 +52,20 @@ number read and the rest dropped.
 vorher (Prompt umsetzen only) and Budget verbrennen (only on a
 `burn-plan.js` offer). Harden and Polish are no option — Harden always
 runs after the implementation, Polish whenever the change touched UI files.
-When neither option applies, Q4 is dropped. Whenever Q4 is asked, `"Nichts
-davon"` — Direkt umsetzen — is its last option, however many others apply
-(#635: the Desktop app cannot submit a multi-select with nothing ticked).
+When none applies, Q4 is dropped.
+
+- **One pass applies** (Rethink vorher, Budget verbrennen or a channel
+  extra) → single-select: `Normal umsetzen (Recommended)` first, then the
+  pass. A stuck prompt keeps "Normal umsetzen" first; Rethink carries
+  `" · empfohlen"` in its description. No empty-answer wording, no "Nichts
+  davon". "Normal umsetzen" → nothing extra; the pass → that pass.
+- **Two or more apply** → multi-select, "Normal umsetzen" dropped,
+  `"Nichts davon"` — Direkt umsetzen — last (#635: the Desktop app cannot
+  submit a multi-select with nothing ticked).
 
 `AskUserQuestion` has no pre-selection: an option can be marked, never
-pre-ticked. The question text therefore names what an empty answer runs.
+pre-ticked. The multi-select question text therefore names what an empty
+answer runs. The rules below are the multi-select case.
 
 - **Nothing ticked** → every option whose label carries `(Recommended)`
   (Rethink vorher when the prompt reads stuck), else nothing extra.

@@ -46,6 +46,10 @@ vi.mock("../lib/git.js", () => ({
   detectDefaultBranch: vi.fn(() => "main"),
 }));
 
+vi.mock("../lib/sub-branches.js", () => ({
+  pruneMergedSubBranches: vi.fn(() => ({ deleted: [], kept: [] })),
+}));
+
 vi.mock("../lib/github.js", () => ({
   createPR: vi.fn(() => ({ number: 42, url: "https://example.com/pull/42" })),
   mergePR: vi.fn(() => ({ sha: "merge12", verified: true })),
@@ -1241,6 +1245,18 @@ describe("ship_release — remote branch deletion in worktrees (#442)", () => {
     expect(res.remoteBranchDeleted).toBe(true);
     expect(res.remoteBranchWarning).toBeUndefined();
     expect(updateRefCalls()).toEqual([["update-ref", "-d", "refs/remotes/origin/feature-x"]]);
+  });
+
+  test("final ship sweeps merged-in sub-branches (#876); an intermediate merge does not", async () => {
+    const sub = await import("../lib/sub-branches.js");
+    sub.pruneMergedSubBranches.mockClear();
+    sub.pruneMergedSubBranches.mockReturnValueOnce({ deleted: [{ name: "feature-x-b1", where: "remote" }], kept: [] });
+    const res = await handler(params());
+    expect(sub.pruneMergedSubBranches).toHaveBeenCalledWith(expect.objectContaining({ branch: "feature-x", defaultBranch: "main" }), expect.anything());
+    expect(res.subBranchesDeleted).toEqual(["feature-x-b1"]);
+    sub.pruneMergedSubBranches.mockClear();
+    await handler(params({ base: "integ" }));
+    expect(sub.pruneMergedSubBranches).not.toHaveBeenCalled();
   });
 
   test("non-worktree ship: gh deletes the branch with the merge, no separate delete", async () => {

@@ -11,6 +11,7 @@ import { classifyFailedChecks } from "../lib/ci-account-limits.js";
 import { quotaKey as accountQuotaKey, readRecord, recordBlock, setDecision, revokeDecision, clearRecord, describeRecord, DECISIONS, MINUTES_KIND } from "../lib/ci-quota.js";
 import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
 import { remoteTagExists, parseLsRemoteTagOutput } from "../lib/remote-tags.js";
+import { pruneMergedSubBranches } from "../lib/sub-branches.js";
 import { retryUntil } from "../lib/retry.js";
 import { isPermanentPushError, tagHandoff } from "../lib/tag-handoff.js";
 import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js";
@@ -720,6 +721,20 @@ export async function handler(params) {
         result.remoteBranchWarning =
           `PR merged, but the remote branch origin/${branch} could not be deleted (${del.error}) — ` +
           `the cleanup page removes it (say "branch cleanup").`;
+      }
+    }
+
+    // Final ship of an integration branch: sub-branches merged into it with plain
+    // merge commits never had a ship of their own and would linger on origin (#876).
+    // Only refs named <branch>-* whose tip is an ancestor of the shipped head go.
+    if (!intermediate) {
+      try {
+        const swept = pruneMergedSubBranches(
+          { branch, defaultBranch: base, head: gitTry(["rev-parse", "HEAD"], opts) }, opts,
+        );
+        if (swept.deleted.length) result.subBranchesDeleted = swept.deleted.map((d) => d.name);
+      } catch {
+        /* best effort — the cleanup page still lists what is left */
       }
     }
 
