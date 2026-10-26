@@ -21,11 +21,12 @@ const config = require(path.join(here, "..", "..", "..", "hooks", "lib", "devops
 export const schema = z.object({
   cwd: z.string().describe("Working directory of the target repo (required — the same cwd the other ship tools got)"),
   trigger: z.enum(["ship", "promote"]).describe("'ship' after a merged ship (auto-clean + nudge), 'promote' after a promotion-only run (nudge only, removes nothing)"),
+  sync: z.boolean().default(false).describe("Remove in-process and wait (old behaviour). Default: the removal runs in a detached background worker and the call returns fast"),
   lang: z.enum(["de", "en"]).default("de").describe("Language of the ready-made card lines"),
 });
 
 export async function handler(params) {
-  const { cwd, trigger, lang = "de" } = params;
+  const { cwd, trigger, lang = "de", sync = false } = params;
   if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const mode = detectRepoMode(cwd);
   if (mode === "unknown") {
@@ -35,7 +36,7 @@ export async function handler(params) {
     return { success: true, skipped: true, reason: mode === "none" ? "file-only-mode" : "foreign-repo-root", card: {} };
   }
   const { values } = config.load(cwd);
-  const result = runHygiene({ cwd, trigger, lang, settings: values.cleanup, stateKey: config.mainCheckoutRoot(cwd) });
+  const result = runHygiene({ cwd, trigger, lang, sync, settings: values.cleanup, stateKey: config.mainCheckoutRoot(cwd) });
   if (trigger === "ship" && result && result.success) startOrphanScan();
   return result;
 }

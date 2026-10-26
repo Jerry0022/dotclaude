@@ -66,6 +66,7 @@ import { dropForeignOpenItems, foreignTokensFor } from "./lib/foreign-branches.j
 import { dropNextStepOpenItems } from "./lib/open-admission.js";
 import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending, normalizeConcept, CONCEPT_LABEL } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
+import { summarizeShip, shipDurationTest } from "./ship/lib/ship-timings.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
 import { batchGuide, conceptCloseoutOnly, conceptUrl, readBatch, readRunContractLine, sameProjectRoot, titlePrefixFor, titleInstruction, currentSessionTitle, titleStateForKey, hasMandatoryStep, TITLE_SCHEME } from "./lib/mode-state.js";
 import { staleServerLine } from "./lib/server-version.js";
@@ -2559,6 +2560,17 @@ function buildCompletionCard(params) {
       console.error(`[dotclaude-mcp] dropped ${chipped.dropped} open point(s) a task chip already offers`);
       params.open = chipped.open;
     }
+  }
+
+  // 0c2. Ship telemetry (ship/lib/ship-timings.js): a shipped card carries the
+  //      ship's duration as an automatic tests line when cli.js recorded one for
+  //      this cwd + branch. No data, no line.
+  if (typeof params.variant === 'string' && params.variant.startsWith('ship-successful') && params.cwd) {
+    try {
+      const dur = shipDurationTest(summarizeShip({ cwd: params.cwd, branch: params.state && params.state.branch }), params.lang);
+      const tests = Array.isArray(params.tests) ? params.tests : [];
+      if (dur && !tests.some((t) => t && t.method === dur.method)) params.tests = [...tests, dur];
+    } catch { /* telemetry never blocks a card */ }
   }
 
   // 0d. `open` is for decisions, never the approved scope's obvious next step
