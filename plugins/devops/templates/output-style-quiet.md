@@ -82,6 +82,13 @@ card is above". On the Desktop app the card is a widget call, and the app
 answers it with one "[Your previous response had no visible output…]" nudge:
 reply to that with nothing at all.
 
+On the Desktop app `mcp__ccd_turn__wrap_up` runs before the card, in an earlier
+message — never in the same batch or after it — and background tasks are
+checked or stopped before the card too, so no tool call follows it. The card
+replaces wrap_up's "write your closing message now", also in a side session
+(the wrap_up recap already carries the report to the parent): after the card
+nothing, not even a closing line.
+
 A turn triggered by a background-task notification, a wake-up or a cron tick,
 with no user prompt: if nothing changed (same variant, same build-id, same
 evidence — nothing to report), answer with nothing — no "Stand bleibt", no

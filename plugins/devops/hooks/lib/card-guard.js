@@ -239,6 +239,41 @@ function deliveredCardText(transcriptContent) {
 }
 
 /**
+ * Did the assistant write text AFTER the shown card (#886)? Scans back from the
+ * end of the turn to the card (widget call or ✨ text block): any non-empty text
+ * block met on the way is trailing prose. A render call met first means the
+ * newest card was never shown — nothing trails a card then.
+ */
+function textAfterCard(transcriptContent) {
+  if (!transcriptContent) return false;
+  const lines = transcriptContent.split('\n');
+  let trailing = false;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const raw = lines[i].trim();
+    if (!raw) continue;
+    let entry;
+    try { entry = JSON.parse(raw); } catch { continue; }
+    if (entry.type === 'user' && isPromptEntry(entry)) return false;
+    if (entry.type !== 'assistant') continue;
+    const content = entry.message && entry.message.content;
+    if (!Array.isArray(content)) continue;
+    for (let b = content.length - 1; b >= 0; b--) {
+      const block = content[b];
+      if (!block) continue;
+      if (block.type === 'text' && typeof block.text === 'string') {
+        if (block.text.includes(CARD_MARKER)) return trailing;
+        if (block.text.trim()) trailing = true;
+        continue;
+      }
+      if (block.type !== 'tool_use') continue;
+      if (isCardRenderCall(block)) return false;
+      if (isCardWidgetCall(block.name, block.input)) return trailing;
+    }
+  }
+  return false;
+}
+
+/**
  * Did the user see this turn's card? Proves the card was relayed, not just
  * rendered (#449, Gate 1b), and backs up a failed card-rendered flag write
  * (e.g. tmp-file I/O error). See deliveredCardText.
@@ -494,6 +529,7 @@ function lastUserEntryIsNotification(transcriptContent) {
  *                                     `openTaskNames` says nothing about background work
  * @param {string[]} [s.openTaskNames] — background subagents / tasks still running at
  *                                     turn end (names only — ids stay internal)
+ * @param {boolean} [s.textAfterCard] — prose followed the shown card (#886)
  * @param {boolean} [s.pendingAttested] — the card was rendered with a `pending` field
  * @param {string}  [s.pluginRoot]   — active install root, so the block reason can name
  *                                     the offline renderer path for this install
@@ -534,7 +570,7 @@ function lastUserEntryIsNotification(transcriptContent) {
  */
 function decideAction({
   workHappened, cardRendered, stopHookActive, substantial, silent,
-  validationPending, validationAttested, validationOpen, openTasksKnown, openTaskNames, pendingAttested, pluginRoot,
+  validationPending, validationAttested, validationOpen, openTasksKnown, openTaskNames, pendingAttested, textAfterCard: trailingText, pluginRoot,
   scheduledTask, treeClean, turnEdits, shipped, completionMcpDown,
   notificationTurn, cardText, prevCardSignature, desktopClient, cardRelayed,
   widgetFile, widgetCalled, guideActive, guideLoopLive, foreignWidgetTitle: foreignTitle,
@@ -702,6 +738,9 @@ function decideAction({
   const open = openTaskNames || [];
   if (cardRendered && open.length > 0 && !pendingAttested) {
     failures.push(buildPendingReason(open));
+  } else if (cardRendered && open.length > 0 && trailingText) {
+    // The card carried `pending`; the defect is the prose under it (#886).
+    failures.push(buildTextAfterCardReason(open));
   }
 
   if (failures.length > 0) {
@@ -931,6 +970,20 @@ function buildValidationReason() {
   ].join('\n');
 }
 
+function buildTextAfterCardReason(names) {
+  const list = names.map(n => `  - ${n}`).join('\n');
+  return [
+    '[stop.flow.guard] Text after the card — the card already carried `pending`; the prose written under it is the defect.',
+    '',
+    'Background work still open:',
+    list,
+    '',
+    'Do NOT re-render the card. End the turn now with no text: the card is the closing',
+    'message, replacing any wrap_up recap. If a tool call is still needed (TaskStop),',
+    'make it and then write nothing.',
+  ].join('\n');
+}
+
 function buildPendingReason(names) {
   const list = names.map(n => `  - ${n}`).join('\n');
   return [
@@ -943,8 +996,10 @@ function buildPendingReason(names) {
     'user to act ("SHIP or CHANGE?", "All DONE") on a result that does not exist',
     'yet — exactly the wrong call to action while agents are still working.',
     '',
-    'Re-render `mcp__plugin_devops_dotclaude__render_completion_card` NOW',
-    'with `pending` populated, then relay the card VERBATIM as the LAST output:',
+    'FIRST stop or check the background work (TaskStop / TaskOutput) — no tool call',
+    'may follow the card. Then re-render `mcp__plugin_devops_dotclaude__render_completion_card`',
+    'NOW with `pending` populated and relay the card VERBATIM as the LAST output',
+    '(after the card end the turn with no text, not even a closing message):',
     '  pending: [{ name: "<agent type, workflow name or task label>",',
     '              kind: "agent" | "task" | "workflow",',
     '              doing: "<what it is working on>" }]',
@@ -1098,6 +1153,7 @@ module.exports = {
   isSubstantialAnswer,
   cardDelivered,
   deliveredCardText,
+  textAfterCard,
   isCardRenderCall,
   NO_OUTPUT_NUDGE_REPLY,
   widgetCardTitle,
@@ -1117,6 +1173,7 @@ module.exports = {
   isCardWidgetCall,
   CARD_WIDGET_TITLE,
   buildPendingReason,
+  buildTextAfterCardReason,
   safeReadTranscript,
   TITLE_STATUS_WORD_RE,
   extractCardTitle,
