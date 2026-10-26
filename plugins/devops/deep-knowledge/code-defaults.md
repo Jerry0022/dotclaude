@@ -17,6 +17,7 @@ Standard coding conventions enforced across all projects using the devops plugin
 - Don't create helpers or abstractions for one-time operations.
 - Don't design for hypothetical future requirements.
 - Don't add backwards-compatibility hacks for removed code.
+- Don't write temp files or redirected command output next to or above the repo; use the session scratchpad or %TEMP%.
 
 ## Strict Mode (`strict on` / `strict: <task>`)
 

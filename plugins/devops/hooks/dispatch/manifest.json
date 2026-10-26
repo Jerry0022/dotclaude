@@ -60,6 +60,12 @@
       },
       {
         "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.redirect.scope.js\"" }
+        ],
+        "matcher": "Bash|PowerShell"
+      },
+      {
+        "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.cleanup.gate.js\"", "timeout": 30, "onFailure": "block" }
         ],
         "matcher": "Bash|PowerShell"
