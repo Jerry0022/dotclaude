@@ -6,6 +6,7 @@ import {
   detectWebHandoff,
   detectCardHandoff,
   replyHandoff,
+  setupStepHandoff,
   hasHandoffSentence,
   matchService,
   hasNumberedUiSteps,
@@ -538,5 +539,52 @@ describe("detectCardHandoff — open-item replies and hand-off verbs (#742)", ()
       .toEqual({ service: "Acme portal" });
     expect(replyHandoff({ reply: "Führ mich per Web-Guide durch die" })).toBeNull();
     expect(replyHandoff({ reply: `Guide me through ${"x".repeat(200)}` }).service.length).toBeLessThanOrEqual(80);
+  });
+});
+
+describe("detectCardHandoff — arrows and service in the same item (#900)", () => {
+  const path1 = "Data Uploader 0.62.0 (Alpha) laufen lassen → Codex → Carrack / Hammerhead → Abschnitt Deckplan prüfen (Deck-Reiter, Räume, Raumliste)";
+  const verify = "Live-Version auf sc-companion.vercel.app = v0.165.0 prüfen (Watcher läuft)";
+
+  test("an in-app path and a provider URL to verify in different items do not trigger", () => {
+    expect(detectCardHandoff({ userFinalTest: [path1, verify] })).toBeNull();
+    expect(detectCardHandoff({ userFinalTest: [path1] })).toBeNull();
+    expect(detectCardHandoff({ userFinalTest: [verify] })).toBeNull();
+  });
+
+  test("a single item with the arrow path still hits", () => {
+    expect(detectCardHandoff({ userFinalTest: ["Vercel → Settings → Environment Variables → CRON_SECRET anlegen"] }))
+      .toEqual({ service: "Vercel" });
+  });
+});
+
+describe("detectCardHandoff — setup steps in unknown web UIs (#905)", () => {
+  const redirect = "Bei Enable Banking die Redirect-URL https://my.home-assistant.io/redirect/oauth hinterlegen";
+  const hacs = "In HACS als benutzerdefiniertes Repository installieren, altes Add-on deinstallieren, HA neu starten";
+  const dkb = "Unter Geräte & Dienste → Finance → „Bank hinzufügen“ DKB verbinden und prüfen, dass Giro und Visa erscheinen";
+
+  test("a setup verb with a URL names the place as the service", () => {
+    expect(detectCardHandoff({ userFinalTest: [redirect] })).toEqual({ service: "Enable Banking" });
+  });
+
+  test("a setup verb with a UI path and a quoted label hits", () => {
+    expect(detectCardHandoff({ userFinalTest: [dkb] })).toEqual({ service: "Geräte & Dienste" });
+  });
+
+  test("the session's three items offer a guide", () => {
+    expect(detectCardHandoff({ userFinalTest: [redirect, hacs, dkb] })).not.toBeNull();
+  });
+
+  test("a setup verb without URL, path or quoted label stays quiet", () => {
+    expect(setupStepHandoff(hacs)).toBeNull();
+    expect(setupStepHandoff("Das Paket lokal installieren und neu starten")).toBeNull();
+  });
+
+  test("reports, offers, verification and local targets do not trigger", () => {
+    expect(setupStepHandoff("Ich habe die Redirect-URL https://example.com/cb bei Enable Banking hinterlegt.")).toBeNull();
+    expect(setupStepHandoff("Soll ich die Redirect-URL https://example.com/cb hinterlegen?")).toBeNull();
+    expect(setupStepHandoff("Live-Version auf https://example.com prüfen")).toBeNull();
+    expect(setupStepHandoff("In `src/config.ts` die URL https://example.com/cb eintragen")).toBeNull();
+    expect(setupStepHandoff("Add the badge from https://github.com/acme/repo to the README")).toBeNull();
   });
 });

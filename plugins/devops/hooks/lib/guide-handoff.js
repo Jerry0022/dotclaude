@@ -431,8 +431,6 @@ function detectCardHandoff(card) {
     const hit = replyHandoff(item);
     if (hit) return hit;
   }
-  // AUD-C042: each list is read as one block, so a numbered list split over
-  // items or a `→` chain in one item hits the same shapes as in chat.
   const lists = [
     asList(card && card.userFinalTest),
     asList(card && card.open),
@@ -440,11 +438,62 @@ function detectCardHandoff(card) {
     userWaitingValidation(card && card.validation),
   ];
   for (const list of lists) {
-    const text = list.map(itemText).filter(Boolean).join('\n');
-    const hit = text ? detectWebHandoff(text) : null;
-    if (hit) return hit;
+    const texts = list.map(itemText).filter(Boolean);
+    // AUD-C042: a numbered list really does span items, so it is read as one
+    // block. #900: every other shape needs its arrows, service and verb in
+    // the SAME item — joined, an in-app path in one item and a provider URL
+    // to verify in another read as one Vercel click-through.
+    const joined = stripCompletionCard(texts.join('\n'));
+    const service = joined ? matchService(joined) : null;
+    if (service && hasNumberedUiSteps(joined)) return { service: service.name };
+    for (const text of texts) {
+      const hit = detectWebHandoff(text) || setupStepHandoff(text);
+      if (hit) return hit;
+    }
   }
   return null;
+}
+
+/** #905: setup verbs a user performs in a web UI (de+en, incl. imperatives
+ *  and the separable "trag … ein" / "gib … frei"). */
+const SETUP_VERB_RE = new RegExp(wordAlt([
+  String.raw`hinterlegen`, String.raw`hinterlege`,
+  String.raw`eintragen`, String.raw`einzutragen`, String.raw`trag(?:e)?\s(?:[^.!?\n]|\.(?=\S))*?\sein`,
+  String.raw`installieren`, String.raw`installiere`,
+  String.raw`verbinden`, String.raw`verbinde`,
+  String.raw`freigeben`, String.raw`freizugeben`, String.raw`gib\s(?:[^.!?\n]|\.(?=\S))*?\sfrei`,
+  String.raw`anlegen`, String.raw`aktivieren`, String.raw`aktiviere`,
+  String.raw`hinzufügen`, String.raw`registrieren`,
+  String.raw`register`, String.raw`add`, String.raw`configure`, String.raw`install`,
+  String.raw`connect`,
+].join('|')), 'iu');
+
+/** A quoted UI label („Bank hinzufügen“, “Save”, «OK») — typographic quotes
+ *  only: straight quotes mark code and strings far more often. */
+const UI_LABEL_RE = /[„“«»][^„“”«»\n]{1,60}[“”»«]/u;
+
+/** The place an item names ("Bei Enable Banking", "Unter Geräte & Dienste",
+ *  "In HACS") — the guide's subject when no known service matches. */
+const PLACE_RE = /(?:^|[\s(])(?:[Bb]ei|[Ii]m?|[Uu]nter|[Aa]uf|[Aa]t|[Oo]n)\s+((?:[\p{Lu}\p{N}][\p{L}\p{N}.&+-]*)(?:\s+(?:&\s+)?[\p{Lu}\p{N}][\p{L}\p{N}.&+-]*){0,3})/u;
+
+/**
+ * #905: one card item that tells the user to set something up in a web UI
+ * the plugin does not know — a setup verb together with a URL, a UI path
+ * (`A → B → C`) or a quoted UI label in the same item. The service is a
+ * known one, else the place the item names, else the URL's host.
+ * @param {string} text one card item
+ * @returns {{service:string}|null}
+ */
+function setupStepHandoff(text) {
+  if (typeof text !== 'string' || !text) return null;
+  if (SELF_PERFORMED_RE.test(text) || isOfferQuestion(text) || LOCAL_TARGET_RE.test(text)) return null;
+  if (!SETUP_VERB_RE.test(text)) return null;
+  const service = matchService(text);
+  if (!service && !hasArrowChain(text) && !UI_LABEL_RE.test(text)) return null;
+  if (service && service.named) return { service: service.name };
+  const place = text.match(PLACE_RE);
+  if (place) return { service: place[1].trim() };
+  return service ? { service: service.name } : null;
 }
 
 /** Skill input naming auto-guide or its pre-PR-2 name web-guide. */
@@ -482,6 +531,7 @@ module.exports = {
   hasHandoffSentence,
   detectWebHandoff,
   detectCardHandoff,
+  setupStepHandoff,
   replyHandoff,
   webGuideInvokedThisTurn,
   writePendingHandoff,
