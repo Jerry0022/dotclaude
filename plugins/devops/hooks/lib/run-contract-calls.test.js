@@ -65,6 +65,12 @@ describe("commandFacts", () => {
     expect(C.isReleaseTool(C.SHIP_RELEASE)).toBe(true);
   });
 
+  test("releaseResult counts ship_release's base-branch `merged` as a merge", () => {
+    const env = (o) => ({ content: [{ type: "text", text: JSON.stringify(o) }] });
+    expect(C.releaseResult(env({ success: true, merged: "main" }))).toEqual({ ok: true, merged: true });
+    expect(C.releaseResult(env({ success: false, merged: null }))).toEqual({ ok: false, merged: false });
+  });
+
   test("AUD-008: --render-card inside a quoted string (unrelated command) is never mistaken for the renderer", () => {
     expect(C.commandFacts('grep "index.js --render-card x" file.txt').renderCard).toBeNull();
     expect(C.commandFacts('echo "run node index.js --render-card /tmp/c.json manually"').renderCard).toBeNull();

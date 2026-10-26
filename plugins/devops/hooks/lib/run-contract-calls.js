@@ -1072,7 +1072,8 @@ function releaseResult(response, tool) {
     }
   }
   if (!obj || typeof obj !== 'object') return null;
-  return { ok: obj.success === true, merged: obj.merged === true };
+  // ship_release reports the base branch name ("main") in `merged`, never a boolean
+  return { ok: obj.success === true, merged: obj.merged === true || (typeof obj.merged === 'string' && obj.merged !== '') };
 }
 
 /**
