@@ -1,6 +1,6 @@
 /**
  * @script web-guide-overlay
- * @version 1.14.0
+ * @version 1.14.1
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
@@ -27,7 +27,7 @@
   var nativeObjectCreate = Object.create;
   var nativeDefineProperty = Object.defineProperty;
 
-  var VERSION = "1.14.0";
+  var VERSION = "1.14.1";
   // AUD-C007: per-guide channel token, substituted by `web-guide.js payload
   // inject` (32 hex chars). setStep()/wait() must pass it and every event
   // echoes it, so a page script can neither push steps nor steal events.
@@ -1027,7 +1027,8 @@
         var copyWrap = mk("div", "copylist");
         currentStep.copy.forEach(function (c) {
           var chip = mk("div", "chip");
-          chip.appendChild(mk("code", null, c.value));
+          var codeEl = mk("code", null, c.value);
+          chip.appendChild(codeEl);
           var copyLabel = c.label ? "Kopieren: " + c.label : "Kopieren";
           // AUD-C063: "Kopiert!" only once the clipboard write succeeded.
           var resetTimer = null;
@@ -1041,6 +1042,36 @@
             };
             // Fix 9: the failure path still leaves the user with a next step.
             var COPY_FAIL = "Kopieren fehlgeschlagen – Wert markieren und mit Strg+C kopieren";
+            // #910: plain-HTTP pages have no navigator.clipboard — fall back to an
+            // offscreen textarea inside the shadow root + execCommand("copy").
+            var legacyCopy = function () {
+              var prev = document.activeElement;
+              var ta = null;
+              var ok = false;
+              try {
+                ta = document.createElement("textarea");
+                ta.value = c.value;
+                if (typeof ta.setAttribute === "function") ta.setAttribute("readonly", "");
+                if (ta.style) ta.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0";
+                shadow.appendChild(ta);
+                if (typeof ta.focus === "function") ta.focus();
+                if (typeof ta.select === "function") ta.select();
+                ok = typeof document.execCommand === "function" && document.execCommand("copy") === true;
+              } catch {
+                ok = false;
+              }
+              try { if (ta && ta.parentNode) ta.parentNode.removeChild(ta); } catch { /* best effort */ }
+              try { if (prev && typeof prev.focus === "function") prev.focus(); } catch { /* best effort */ }
+              return ok;
+            };
+            var fail = function () {
+              flash(COPY_FAIL);
+              try { // both paths failed: select the value so Ctrl+C works
+                var sel = window.getSelection && window.getSelection();
+                if (sel && typeof sel.selectAllChildren === "function") sel.selectAllChildren(codeEl);
+              } catch { /* best effort */ }
+            };
+            var fallback = function () { if (legacyCopy()) flash("Kopiert!"); else fail(); };
             var done;
             try {
               done = navigator.clipboard.writeText(c.value);
@@ -1048,9 +1079,9 @@
               done = null;
             }
             if (done && typeof done.then === "function") {
-              done.then(function () { flash("Kopiert!"); }, function () { flash(COPY_FAIL); });
+              done.then(function () { flash("Kopiert!"); }, fallback);
             } else {
-              flash(COPY_FAIL);
+              fallback();
             }
           });
           chip.appendChild(copyBtn);
