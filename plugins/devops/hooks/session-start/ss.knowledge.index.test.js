@@ -59,13 +59,14 @@ describe("ss.knowledge.index — always-on policy injection", () => {
     }
   });
 
-  test("the index shrinks before anything else does", () => {
+  test("the index shrinks before the policy does", () => {
     const rows = Array.from({ length: 40 }, (_, i) => `| [doc-${i}.md](doc-${i}.md) | Topic number ${i} with a longer title | summary |`);
     const policy = "p".repeat(6000);
     const root = tmpPlugin({ "INDEX.md": ["| File | Topic | Summary |", ...rows].join("\n"), "agent-proactivity.md": policy });
     const ctx = buildContext(root);
     expect(ctx).toContain(policy);
-    expect(ctx).toContain("doc-39 (Topic number 39 with a longer title)"); // fits: file + topic
+    expect(ctx).toContain("doc-39"); // file names listed
+    expect(ctx).not.toContain("Topic number 39"); // topics live in INDEX.md only
 
     const big = tmpPlugin({
       "INDEX.md": ["| File | Topic | Summary |", ...rows].join("\n"),
@@ -74,8 +75,7 @@ describe("ss.knowledge.index — always-on policy injection", () => {
     const tight = buildContext(big);
     expect(tight).toContain("p".repeat(7000));
     expect(tight.length).toBeLessThanOrEqual(SAFE_CONTEXT_CHARS);
-    expect(tight).not.toContain("(Topic number 39)"); // topics dropped first
-    expect(tight).toContain("doc-39");
+        expect(tight).toContain("doc-39");
 
     const many = Array.from({ length: 400 }, (_, i) => `| [a-long-document-name-${i}.md](x) | T | s |`);
     const huge = tmpPlugin({ "INDEX.md": many.join("\n"), "agent-proactivity.md": "p".repeat(7000) });
@@ -105,7 +105,7 @@ describe("ss.knowledge.index — always-on policy injection", () => {
   test("a missing always-on file is skipped, index still goes", () => {
     const root = tmpPlugin({ "INDEX.md": "# Index\n\n| [x.md](x.md) | Ex | s |" });
     const ctx = buildContext(root);
-    expect(ctx).toContain("x (Ex)");
+    expect(ctx).toContain("x");
     expect(ctx).not.toContain("always-on");
   });
 
