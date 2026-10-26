@@ -182,6 +182,31 @@ The tool handles: commit (optional), rebase verification, push (explicit force-w
 
 Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status, passed, failed, pending}, merged, mergeSha, mergeVerified?, mergeWarning?, mergeStrategy, intermediate, tag, channel, tagVerified, releaseDeferred, postMergeTreeMatch, postMergeWarning, postMergeError?, titleClamped }`.
 
+## Landing lock, channel state, full-suite gate
+
+- `landingLock { waitedMs, outcome, reason? }` — a per-REPO lock (file in the
+  git common dir; other repos never wait) serialises ships of one repo between
+  the final base check and merge+tag. `outcome`: `acquired` | `stolen-stale`
+  (dead holder / expired heartbeat taken over) | `timeout-proceeded` (waited
+  `landingLockWaitSec`, default 600, then shipped without the lock — the
+  old behaviour, a moved base is still caught) | `disabled` (`landingLock:false`,
+  env `DEVOPS_SHIP_LANDING_LOCK=0`, or the lock file is unusable). Never a
+  blocker: the lock is released on every exit and by `ship_cleanup`.
+- `channels { alpha, beta, stable }`, `betaLag`, `stableLag` (`{ versions, days }`)
+  — final ships only, for the promotion-gap nudge (`completion-card-payloads.md`).
+- `prLeftOpen { number, url }` — the PR was not merged and stays open (incl. a
+  draft opened by `ship_preflight earlyPush`); `draftPrReady` — the early draft
+  was marked ready.
+- `reason: "full-suite-required"` + `fullSuiteRequired: true` — the CI `suite`
+  check cannot run (GitHub account limit) and no green FULL local suite exists
+  for this exact tree. Nothing merged, PR open. Run `ship_build` with
+  `testScope: "full"` on HEAD, then call `ship_release` again; the pass is
+  reported as `fullSuiteLocal { treeHash, at }`. A merge always has one full
+  green suite on its tree: the CI `suite` check or this local run.
+- `ship_cleanup` returns `porcelain` (the worktree's `git status --porcelain`
+  lines after cleanup, `null` when git did not answer) — Step 5c needs no git
+  call of its own — and `landingLockReleased` when it dropped a leftover lock.
+
 ## autoRebased
 
 **`autoRebased` set** (with `rebaseRequired` + `retestRequired`): only version files collided, so `ship_release` already rebased and bumped again (`autoRebased.to`; the CHANGELOG header follows). Skip the manual rebase: push the branch (`git push --force-with-lease`), run `ship_build`, re-run preflight, then call `ship_release` again — the release commit exists, a `commitMessage` on the clean tree is skipped. Use `autoRebased.to` as `vNew` on the card. `autoRebaseRefused` names why the tool left it to Step 1b.

@@ -244,3 +244,12 @@ describe("ship_cleanup — default branch is not 'intermediate' (master repos)",
     expect((result.warnings || []).some((w) => /Intermediate merge/.test(w))).toBe(true);
   });
 });
+
+describe("ship_cleanup - porcelain + landing lock (M2/M4)", () => {
+  test("returns porcelain (null when git cannot answer) and keeps the field in keep-mode", async () => {
+    const full = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
+    expect(full).toHaveProperty("porcelain");
+    const kept = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: true });
+    expect(kept).toHaveProperty("porcelain");
+  });
+});

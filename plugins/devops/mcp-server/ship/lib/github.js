@@ -72,12 +72,12 @@ export function deleteRemoteBranch(branch, opts = {}) {
  * Create a PR and return { number, url }.
  * Body is passed via stdin to avoid shell escaping issues.
  */
-export function createPR({ title, body, base = "main", head }, opts) {
+export function createPR({ title, body, base = "main", head, draft = false }, opts) {
   const cwd = opts?.cwd || process.cwd();
   // gh pr create does not support --json; parse URL from stdout instead
   const url = execFileSync(
     "gh",
-    ["pr", "create", "--title", title, "--body-file", "-", "--base", base, "--head", head],
+    ["pr", "create", "--title", title, "--body-file", "-", "--base", base, "--head", head, ...(draft ? ["--draft"] : [])],
     { windowsHide: true,
       cwd,
       encoding: "utf8",
@@ -89,6 +89,33 @@ export function createPR({ title, body, base = "main", head }, opts) {
   const match = url.match(/\/pull\/(\d+)/);
   const number = match ? parseInt(match[1], 10) : null;
   return { number, url };
+}
+
+/**
+ * Mark a draft PR ready for review (`gh pr ready`) and optionally refresh its
+ * title/body. Used by ship_release for the draft that ship_preflight opened
+ * early (earlyPush). Never throws — a failure is reported, the ship continues
+ * (a draft PR still runs CI; only the merge call would be refused by GitHub).
+ * @returns {{ ok: boolean, error?: string }}
+ */
+export function markPRReady(prNumber, { title, body } = {}, opts = {}) {
+  const cwd = opts?.cwd || process.cwd();
+  try {
+    gh(["pr", "ready", String(prNumber)], opts);
+  } catch (e) {
+    return { ok: false, error: sanitizeError(e) };
+  }
+  if (title || body) {
+    try {
+      const args = ["pr", "edit", String(prNumber)];
+      if (title) args.push("--title", title);
+      if (body) args.push("--body-file", "-");
+      execFileSync("gh", args, { windowsHide: true, cwd, encoding: "utf8", input: body || undefined, timeout: DEFAULT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"] });
+    } catch (e) {
+      return { ok: true, editError: sanitizeError(e) };
+    }
+  }
+  return { ok: true };
 }
 
 /**
@@ -253,14 +280,14 @@ export function mergePR(prNumber, base = "main", opts, flags = {}) {
 export function findExistingPR({ base, head }, opts) {
   try {
     const raw = gh(
-      ["pr", "list", "--head", head, "--base", base, "--state", "open", "--json", "number,url,mergeable", "--limit", "1"],
+      ["pr", "list", "--head", head, "--base", base, "--state", "open", "--json", "number,url,mergeable,isDraft", "--limit", "1"],
       opts,
     );
     const list = JSON.parse(raw);
     if (list.length === 0) return null;
     const pr = list[0];
     // mergeable: "MERGEABLE", "CONFLICTING", "UNKNOWN"
-    return { number: pr.number, url: pr.url, mergeable: pr.mergeable || "UNKNOWN" };
+    return { number: pr.number, url: pr.url, mergeable: pr.mergeable || "UNKNOWN", isDraft: pr.isDraft === true };
   } catch {
     return null; // Network error or no PR — safe to proceed
   }

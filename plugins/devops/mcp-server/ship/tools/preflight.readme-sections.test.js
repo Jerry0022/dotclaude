@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 vi.mock("zod", () => {
   const node = new Proxy(() => node, { get: () => () => node });
-  return { z: { object: () => node, string: () => node, boolean: () => node, array: () => node } };
+  return { z: { object: () => node, string: () => node, boolean: () => node, array: () => node, enum: () => node, number: () => node, preprocess: () => node } };
 });
 
 const { readmeSectionsToCheck } = await import("./preflight.js");
