@@ -11,8 +11,8 @@ import { readTemplates } from "./templates-source.js";
 // had no expression: the first click submitted and ended the round. A guided
 // wizard fixed that and added its own confusion (a "Weiter" that might
 // already have committed something, the consequence list buried on step 4).
-// It is now ONE close-out sheet: every question at once in execution order,
-// a live plan, one `finalize` submit.
+// It is now a to-do inbox (🧭 / 🧪 / 👉, pre-selected) with two buttons that
+// are the ship answer — both submit one `finalize`.
 //
 // The same reference also pins the design-template chrome: two FABs that are
 // one component with two positions, and a feedback dock with exactly two
@@ -44,7 +44,6 @@ const cssSource = blocks("css").join("\n");
 describe("final-report close-out sheet", () => {
   test("the panel offers exactly one submit, and it is finalize", () => {
     expect(jsSource).toContain("action: 'finalize'");
-    // Each of these used to be its own submit path from the same panel.
     for (const gone of ["submitCreateIssues", "submitShip", "submitDisposeConcept"]) {
       expect(jsSource, gone).not.toContain(gone + "(");
     }
@@ -53,195 +52,105 @@ describe("final-report close-out sheet", () => {
     }
   });
 
-  test("the finalize payload carries all four decisions at once", () => {
+  test("the finalize payload carries every decision at once, 🧪/👉 included", () => {
     const fn = jsSource.slice(jsSource.indexOf("async function submitFinalize"));
-    expect(fn).toBeTruthy();
-    for (const key of ["issues:", "implement:", "ship:", "disposition:"]) {
+    for (const key of ["issues:", "implement:", "ship:", "tests: collectTodos('tests')", "handoffs: collectTodos('handoffs')", "disposition:"]) {
       expect(fn.slice(0, 2500), key).toContain(key);
     }
+    // The ship answer is which button was clicked — nothing else.
+    expect(fn.slice(0, 600)).toContain("const ship = shipRun === true;");
+    expect(fn.slice(0, 2500)).toContain("ship: { run: ship }");
   });
 
-  test("an open point has three routes, and the buckets are disjoint", () => {
-    // A follow-up is worth tracking, worth building now, or worth dropping.
-    // The old checkbox could only say "file an issue" or "forget it", so the
-    // user had no way to ask for the one thing they most often wanted: build
-    // it as part of the close-out.
-    const build = jsSource.slice(jsSource.indexOf("function buildFollowUpList"));
-    expect(build.slice(0, 4000)).toContain("['issue', 'implement', 'ignore']");
-    // Disjoint by construction: one radio group per row, and the two
-    // collectors read the same single answer.
-    expect(jsSource).toContain("function collectIssueItems() { return collectFollowUps('issue'); }");
-    expect(jsSource).toContain("function collectImplementItems() { return collectFollowUps('implement'); }");
-    // The body checkbox stays the source of truth for "still open".
-    expect(build.slice(0, 5000)).toContain("src.checked = value !== 'ignore'");
-  });
-
-  test("a route is never restored from storage — the default writes no code", () => {
-    // saveState() restores every named radio document-wide. A remembered
-    // "jetzt umsetzen" would sail through a later close-out and build
-    // something nobody re-authorised, invisibly.
-    const build = jsSource.slice(jsSource.indexOf("function buildFollowUpList"));
-    expect(build.slice(0, 4000)).toContain("input.dataset.noPersist = ''");
-    expect(jsSource).toContain("const CLOSEOUT_DEFAULT_ROUTE = 'issue'");
-    const route = jsSource.slice(jsSource.indexOf("function followUpRoute"));
-    expect(route.slice(0, 400)).toContain("return el ? el.value : CLOSEOUT_DEFAULT_ROUTE");
-  });
-
-  test("the rows' inline summaries are the readout — there is no separate plan line", () => {
-    // Every consequence is readable on its own collapsed row (2 · Issue,
-    // Jetzt umsetzen / shippen / Seite löschen / 2 Schritte); the implement
-    // route is named there by its own label, never folded into "Issue".
-    expect(jsSource).not.toContain("function buildCloseoutPlan");
-    const summary = jsSource.slice(jsSource.indexOf("function closeoutRowSummary"));
-    const body = summary.slice(0, summary.indexOf("\n}"));
-    expect(body).toContain("labels[followUpRoute(keys[i])]");
-    expect(body).toContain("host.dataset.labelImplement");
-    for (const kind of ["'followups'", "'ship'", "'files'", "'handoffs'"]) expect(body, kind).toContain("kind === " + kind);
-  });
-
-  test("there is no step chain left to click through", () => {
-    // The wizard's own controls are gone: no counter, no Weiter/Zurück, no
-    // per-step hiding. Every question is on the sheet, and the only thing
-    // that commits anything is #closeout-execute.
-    for (const gone of ["wizardStep", "_wizardSteps", "_wizardIndex", "renderWizard("]) {
-      expect(jsSource, gone).not.toContain(gone);
+  test("two buttons are the ship answer — no ship row, no accordion, no progress, no Weiter", () => {
+    expect(htmlSource).toMatch(/id="closeout-ship"[^>]*data-closeout-go="yes"/);
+    expect(htmlSource).toMatch(/id="closeout-noship"[^>]*data-closeout-go="no"/);
+    expect(htmlSource).toContain('data-label="{{final.closeout_ship_go}}"');
+    expect(htmlSource).toContain('data-label="{{final.closeout_noship_go}}"');
+    for (const gone of ['name="closeout-ship"', 'id="closeout-execute"', 'id="closeout-progress"', "data-closeout-block=", "data-closeout-row"]) {
+      expect(htmlSource, gone).not.toContain(gone);
     }
-    for (const gone of ["wizard-next", "wizard-back", "wizard-count", "wizard-execute"]) {
-      expect(htmlSource, gone).not.toContain(`id="${gone}"`);
+    for (const gone of ["function closeoutButtonClick", "function openCloseoutRow", "function isCloseoutRowLocked", "function layoutCloseoutRowHeads", "closeout_next", "closeout_progress"]) {
+      expect(md, gone).not.toContain(gone);
     }
-    // …and all four blocks are present on the one sheet.
-    for (const block of ["followups", "ship", "files", "handoffs"]) {
-      expect(htmlSource, block).toContain(`data-closeout-block="${block}"`);
-    }
+    const row = (k) => md.split("\n").find((l) => l.startsWith("| `" + k + "`"));
+    expect(row("final.closeout_ship_go")).toContain("Abschließen & shippen");
+    expect(row("final.closeout_noship_go")).toContain("Nur abschließen, nicht shippen");
+    // The ship button is the warning FILL, without a ⚠ glyph.
+    expect(htmlSource).toContain('data-icon="🏁🚀"');
+    const rule = cssSource.slice(cssSource.indexOf(".closeout-sheet #closeout-ship {"));
+    expect(rule.slice(0, 200)).toContain("background: var(--warning-color");
   });
 
-  test("the accordion is sequential: later rows are locked, answered rows stay reachable", () => {
-    const lockFn = jsSource.slice(jsSource.indexOf("function isCloseoutRowLocked"));
-    expect(lockFn.slice(0, 200)).toContain("block.dataset.answered !== 'true' && block.dataset.open !== 'true'");
-    const summaryFn = jsSource.slice(jsSource.indexOf("function updateCloseoutRowSummary"));
-    expect(summaryFn.slice(0, 900)).toContain("block.dataset.locked = locked ? 'true' : 'false'");
-    expect(summaryFn.slice(0, 900)).toContain("head.disabled = locked");
-    // The row-head click goes through the guard, never straight to openCloseoutRow.
-    const wire = jsSource.slice(jsSource.indexOf("function wireCloseout"));
-    expect(wire.slice(0, 900)).toContain("closeoutRowClick(head.closest('.closeout-block'))");
-    expect(wire.slice(0, 900)).not.toContain("openCloseoutRow(block)");
-    const click = jsSource.slice(jsSource.indexOf("function closeoutRowClick"));
-    expect(click.slice(0, 400)).toContain("if (isCloseoutRowLocked(block)) return;");
-    // Unfreezing must not hand a locked head back.
-    expect(jsSource.slice(jsSource.indexOf("function setCloseoutFrozen")).slice(0, 500)).toContain("if (!frozen) closeoutRows().forEach(updateCloseoutRowSummary)");
-  });
-
-  test("the sheet is a one-open-at-a-time accordion, never 'Alles ausführen'", () => {
-    // The answerable rows each collapse to one line.
-    for (const kind of ["followups", "ship", "files", "handoffs"]) {
-      const block = htmlSource.slice(htmlSource.indexOf(`data-closeout-block="${kind}"`));
-      expect(block.slice(0, 400), kind).toContain("data-closeout-row");
-      expect(block.slice(0, 400), kind).toContain("data-closeout-mark");
-    }
-    // No second button, and the locale table itself no longer names the
-    // button "Alles ausführen" (a historical mention in the "why one sheet"
-    // prose, describing the old wizard, is fine — the live label is not).
-    expect((htmlSource.match(/id="closeout-execute"/g) || []).length).toBe(1);
-    const executeRow = md.split("\n").find((l) => l.startsWith("| `final.closeout_execute`"));
-    expect(executeRow, "final.closeout_execute row").toBeTruthy();
-    expect(executeRow).not.toContain("Alles ausführen");
-    // The button carries both label strings and swaps them at runtime.
-    expect(htmlSource).toMatch(/id="closeout-execute"[^>]*data-label-next="\{\{final\.closeout_next\}\}"/);
-    expect(htmlSource).toMatch(/data-label-execute="\{\{final\.closeout_execute\}\}"/);
+  test("the inbox has the three groups in order, then the 🤖 group under the divider", () => {
+    const at = (s) => htmlSource.indexOf(s);
+    const order = [
+      'data-closeout-group="decide"',
+      'data-closeout-group="tests"',
+      'data-closeout-group="handoffs"',
+      'class="closeout-foot"',
+      "{{final.group_claude}}",
+      "data-dispose-summary",
+      'id="closeout-ship"',
+      'id="closeout-noship"',
+    ];
+    for (let i = 1; i < order.length; i++) expect(at(order[i]), order[i]).toBeGreaterThan(at(order[i - 1]));
+    expect(htmlSource).toContain("<span aria-hidden=\"true\">👉</span> {{final.group_handoffs}}");
+    expect(htmlSource).not.toContain("✋");
+    expect(jsSource).toContain("const CLOSEOUT_GROUP_MAX = 3;");
   });
 
   test("the sheet is actually wired, not just defined", () => {
-    // A defined-but-unwired handler renders a complete sheet where every
-    // click is inert: no console error, no network request, nothing to see.
-    // The button is wired to the accordion's own dispatcher, never straight
-    // to submitFinalize — that would submit on the very first click.
-    expect(jsSource).toContain("addEventListener('click', closeoutButtonClick)");
-    expect(jsSource).not.toContain("addEventListener('click', submitFinalize)");
-    expect(jsSource).toContain("getElementById('closeout-execute')");
+    expect(jsSource).toContain("sheet?.addEventListener('click', closeoutSheetClick)");
     expect(jsSource).toContain("refreshCloseout({ reset: true })");
-    // The ship question blocks execute from inside the handler — the button
-    // itself stays enabled, because a disabled button explains nothing.
-    const fn = jsSource.slice(jsSource.indexOf("async function submitFinalize"));
-    expect(fn.slice(0, 1200)).toContain("if (!closeoutShipChoice())");
-    expect(fn.slice(0, 1200)).toContain("closeout-ship-required");
-    // The accordion's own dispatcher also refuses to advance an unanswered
-    // ship row for the same reason.
-    const dispatch = jsSource.slice(jsSource.indexOf("function closeoutButtonClick"));
-    expect(dispatch.slice(0, 900)).toContain("closeoutShipChoice()");
-    expect(dispatch.slice(0, 900)).toContain("closeout-ship-required");
-    expect(dispatch.slice(0, 900)).toContain("submitFinalize()");
-    // An active choice in a single-choice row confirms it — wired on click
-    // (a re-click on the default fires no change), never to submitFinalize.
-    expect(jsSource).toContain("addEventListener('click', closeoutChoiceClick)");
-    const choice = jsSource.slice(jsSource.indexOf("function closeoutChoiceClick"));
-    expect(choice.slice(0, 900)).toContain("confirmCloseoutRow(block)");
-    expect(choice.slice(0, 900)).not.toContain("submitFinalize");
+    const click = jsSource.slice(jsSource.indexOf("function closeoutSheetClick"));
+    expect(click.slice(0, 600)).toContain("submitFinalize(go.dataset.closeoutGo === 'yes')");
   });
 
   test("a finalize cannot be delivered twice", () => {
-    // POST /decisions has no version guard — a payload the bridge fsynced
-    // before the response was lost is queued locally AND live on the server.
-    // Re-POSTing it means a second `gh issue create` run and a second release.
     expect(jsSource).toContain("submission_id: newSubmissionId()");
     const retry = jsSource.slice(jsSource.indexOf("async function retryPendingSubmission"));
     expect(retry.slice(0, 3200)).toContain("seen.submission_id === id");
   });
 
   test("a finalize participates in the submit-state machine", () => {
-    // pollProcessedState() bails on `!_submittedAt`, so without these the
-    // status channel never advances and the 5-minute stuck-state recovery
-    // can never fire for the longest action there is.
-    const fn = jsSource.slice(jsSource.indexOf("async function submitFinalize"), jsSource.indexOf("addEventListener('click', submitFinalize)"));
-    for (const v of ["_submittedAt = Date.now()", "_submittedReloadCounter", "_submittedAction = 'finalize'"]) {
+    const fn = jsSource.slice(jsSource.indexOf("async function submitFinalize"), jsSource.indexOf("async function restoreInFlightCloseout"));
+    for (const v of ["_submittedAt = Date.now()", "_submittedReloadCounter", "_submittedAction = 'finalize'", "body.durable !== false"]) {
       expect(fn, v).toContain(v);
     }
   });
 
   test("the panel-reset safety net knows the final report has no ready panel", () => {
-    // Restoring #panel-ready over a final report would paint iterate/implement
-    // onto a closed session and let the user submit against it.
     const fn = jsSource.slice(jsSource.indexOf("function restorePanelToReady"));
     expect(fn.slice(0, 900)).toContain("hasAttribute('data-final-report')");
     expect(fn.slice(0, 900)).toContain("restoreCloseoutToReady");
   });
 
-  test("the submitted sheet is frozen, and unfreezing never re-arms routed issues", () => {
+  test("the submitted sheet is frozen, scoped to its own controls", () => {
     expect(jsSource).toContain("setCloseoutFrozen(true)");
     const fn = jsSource.slice(jsSource.indexOf("function setCloseoutFrozen"));
     const body = fn.slice(0, fn.indexOf("\n}"));
-    // Scoped to the sheet's own controls: Claude disables the body's
-    // open-question checkboxes as it routes each item, permanently.
     expect(body).toContain("sheet.querySelectorAll");
     expect(body).not.toContain("data-open-questions");
   });
 
-  test("the follow-up rows are keyed by item id, never by count", () => {
-    // Claude can route one item and append another in the same rewrite. A
-    // count-keyed fast path then syncs each row to the WRONG body checkbox:
-    // the user picks a route on a row labelled A and files an issue for B.
-    const fn = jsSource.slice(jsSource.indexOf("function buildFollowUpList"));
-    expect(fn.slice(0, 1400)).toContain("host.dataset.itemKey === ids");
-    expect(fn.slice(0, 1400)).not.toMatch(/host\.children\.length === boxes\.length/);
+  test("rows are rebuilt by item set, never by count", () => {
+    const fn = jsSource.slice(jsSource.indexOf("function renderGroup"));
+    expect(fn.slice(0, 600)).toContain("host.dataset.itemKey !== sig");
   });
 
-  test("the open-questions listener is element-agnostic", () => {
-    // openQuestionBoxes() and the documented gating contract both accept any
-    // element carrying the attribute; a listener pinned to `section[...]`
-    // silently stops updating the review plan on a div/ul report.
-    expect(jsSource).toContain("t.matches('[data-open-questions] input[type=\"checkbox\"]')");
-    expect(jsSource).not.toContain("section[data-open-questions] input[type=\"checkbox\"]");
-  });
-
-  test("the ship answer is never restored from storage", () => {
-    // saveState() persists every named radio document-wide. A restored "yes"
-    // would sail through a later close-out and ship without re-authorisation.
-    const shipRadios = htmlSource.match(/<input[^>]*name="closeout-ship"[^>]*>/g) || [];
-    expect(shipRadios.length).toBe(2);
-    for (const r of shipRadios) expect(r).toContain("data-no-persist");
+  test("no choice on the sheet is restored from storage", () => {
+    expect(jsSource).toContain("const _closeoutChoices = { route: {}, mode: {} };");
+    expect(jsSource).toContain("input.dataset.noPersist = ''");
     expect(jsSource).toContain("if (el.dataset.noPersist !== undefined) return;");
-    expect(jsSource).toContain("el.dataset.noPersist === undefined");
-    // And no `checked` default: the ship question must be answered, not skipped.
-    for (const r of shipRadios) expect(r).not.toMatch(/\schecked\b/);
+    const block = md.slice(md.indexOf('// --- Final-report close-out sheet'), md.indexOf("// --- Offline Submit Queue ---"));
+    expect(block).not.toMatch(/\b(localStorage|sessionStorage)\s*\./);
+  });
+
+  test("the UI never says 'nicht führbar'", () => {
+    const rows = md.split("\n").filter((l) => l.startsWith("| `final."));
+    expect(rows.filter((l) => /nicht führbar|not guidable/i.test(l))).toEqual([]);
+    expect(htmlSource).not.toMatch(/nicht führbar/i);
   });
 
   test("Claude-side execution order is pinned issues → implement → ship → cleanup", () => {

@@ -148,19 +148,14 @@ describe("Kompass tree — source contracts", () => {
     // kept every "hidden" entry on screen next to its toggle (seen in Edge
     // at 1024x768 while verifying #541 — jsdom computes no layout).
     expect(md).toContain("#section-nav > [hidden] { display: none; }");
-    // The final report defers to the 3-entry window BEFORE the overflow
-    // measurement — it must never fall through to the tail cut there.
-    const branch = fn.indexOf("document.body.classList.contains('viewing-final')");
+    // The final report shows no TOC in the panel at all, so the overflow cut
+    // returns before measuring — no window, no tail cut there.
+    const branch = fn.indexOf("if (document.body.classList.contains('viewing-final')) return;");
     expect(branch).toBeGreaterThan(-1);
     expect(branch).toBeLessThan(fn.indexOf("scrollBox.scrollHeight <= scrollBox.clientHeight"));
-    expect(fn.slice(branch)).toMatch(/applyNavWindow\(nav, nav\.querySelector\('\.section-nav-item\.is-active'\)\);\s*return;/);
-    // The window follows the reading line; a hand-expanded list does not
-    // re-window; a rebuild starts windowed again.
-    expect(fnSource("setActiveNavItem")).toContain("applyNavWindow(nav, item)");
-    expect(fnSource("applyNavWindow")).toMatch(/^function applyNavWindow\(nav, activeItem\) \{\s*if \(nav\.dataset\.navExpanded === 'true'\) return;/);
-    expect(fnSource("makeNavMoreToggle")).toContain("nav.dataset.navExpanded = 'true'");
-    expect(slice(md, "function buildSectionNav()")).toContain("delete nav.dataset.navExpanded;");
-    expect(md).toContain("const NAV_WINDOW_MAX = 3;");
+    expect(md).not.toContain("function applyNavWindow");
+    expect(md).not.toContain("NAV_WINDOW_MAX");
+    expect(md).toContain("body.viewing-final .panel-nav-scroll { display: none; }");
   });
 
   test("the spy opens, never closes; revealNavItem has the zero-rect guard first", () => {
@@ -282,8 +277,6 @@ function page(rounds) {
     fnSource("applyNavOverflow"),
     fnSource("navOverflowFloor"),
     fnSource("makeNavMoreToggle"),
-    "const NAV_WINDOW_MAX = 3;",
-    fnSource("applyNavWindow"),
     fnSource("pickInitialNavTarget"),
     slice(md, "function buildSectionNav()"),
     fnSource("openNavGroupFor"),
@@ -704,41 +697,13 @@ describe("Kompass tree — behaviour (reference JS on jsdom)", () => {
     expect(children.slice(1).every((el) => el.hidden)).toBe(true);
   });
 
-  test("final report: the TOC is a 3-entry window around the reading line, not a tail cut", () => {
+  test("final report: no TOC window — the overflow cut leaves the list alone there", () => {
     const p = page([R(1, { live: true, selected: true, entries: 6 })]);
     p.document.body.classList.add("viewing-final");
     p.window.buildSectionNav();
     const nav = p.document.getElementById("section-nav");
-    const visible = () => [...nav.children].filter((el) => !el.hidden && !el.classList.contains("nav-more-toggle")).map((el) => el.dataset.sectionId);
-    const ids = [...nav.querySelectorAll(".section-nav-item")].map((el) => el.dataset.sectionId);
-    // Windowed right after the build, whichever entry the spy settled on.
-    expect(visible().length).toBeLessThanOrEqual(3);
-    expect(nav.querySelector(".nav-more-toggle")).not.toBeNull();
-    // At the first entry: current + next only — never three-from-the-top.
-    p.window.setActiveNavItem(nav.querySelector(`[data-section-id="${ids[0]}"]`));
-    expect(visible()).toEqual(ids.slice(0, 2));
-    expect(nav.querySelector(".nav-more-toggle").textContent).toBe("+4 nav.more_entries");
-    // The window follows the reading line: previous + current + next.
-    p.window.setActiveNavItem(nav.querySelector(`[data-section-id="${ids[3]}"]`));
-    expect(visible()).toEqual(ids.slice(2, 5));
-    expect(nav.querySelector(".nav-more-toggle").textContent).toBe("+3 nav.more_entries");
-    // At the last entry: previous + current.
-    p.window.setActiveNavItem(nav.querySelector(`[data-section-id="${ids[5]}"]`));
-    expect(visible()).toEqual(ids.slice(4, 6));
-    // Expanded by hand stays expanded across reading-line changes …
-    nav.querySelector(".nav-more-toggle").dispatchEvent(new p.window.MouseEvent("click", { bubbles: true }));
-    expect(visible()).toEqual(ids);
-    p.window.setActiveNavItem(nav.querySelector(`[data-section-id="${ids[1]}"]`));
-    expect(visible()).toEqual(ids);
+    expect([...nav.children].some((el) => el.hidden)).toBe(false);
     expect(nav.querySelector(".nav-more-toggle")).toBeNull();
-    // … but a rebuild starts windowed again.
-    p.window.buildSectionNav();
-    expect(visible().length).toBeLessThanOrEqual(3);
-    expect(nav.querySelector(".nav-more-toggle")).not.toBeNull();
-    // Outside the final report the window never applies.
-    p.document.body.classList.remove("viewing-final");
-    p.window.buildSectionNav();
-    expect(visible()).toEqual(ids);
   });
 
   test("the chip's stamped label survives the summary — frozen bar and head read it, not the summary", () => {

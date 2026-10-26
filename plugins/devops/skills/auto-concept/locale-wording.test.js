@@ -19,7 +19,12 @@ for (const m of md.matchAll(/^\| `([a-z_.0-9]+)`\s*\|(.+)\|$/gm)) {
 
 // Keys allowed to keep a flagged word. Empty on purpose: add a key here only
 // with a comment saying why the word must stay.
-const ALLOW = new Set([]);
+const ALLOW = new Set([
+  // "🤖 Claude macht beim Klick" — the close-out sheet's 🤖 group names who
+  // runs the plan on the click; the user approved exactly this label in the
+  // close-out concept (round 3, 2026-10-25).
+  "final.group_claude",
+]);
 
 describe("locale table wording", () => {
   test("table is parsed", () => expect(rows.length).toBeGreaterThan(200));

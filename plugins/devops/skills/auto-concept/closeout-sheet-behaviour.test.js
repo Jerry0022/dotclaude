@@ -1,18 +1,16 @@
 import { describe, test, expect } from "vitest";
-import path from "node:path";
 import { JSDOM } from "jsdom";
 import { readTemplates } from "./templates-source.js";
 
 // The close-out sheet is the last screen of a concept session and the only
 // one whose single click creates GitHub issues, writes code, cuts a release
-// and deletes files. Every other test in this folder greps templates.md; this
-// one RUNS the reference JS on jsdom, because the failure modes that matter
-// here are not spellings:
-//   * an item landing in both payload buckets, or in neither,
-//   * a route change re-entering the change listener it just fired,
-//   * execute submitting while the ship question is unanswered,
-//   * a rebuild re-attaching row 2's radios to row 1's checkbox after Claude
-//     routes one item and appends another in the same rewrite.
+// and deletes files. This suite RUNS the reference JS on jsdom, because the
+// failure modes that matter here are not spellings:
+//   * a Fund landing in both payload buckets, or in neither,
+//   * a pre-selection the user cannot see deciding what gets built,
+//   * a ship that was never the user's answer,
+//   * a 🧪/👉 choice that does not reach the payload with its mode,
+//   * a sheet that re-arms over a finalize that is still running.
 //
 // The block under test is copied VERBATIM into every generated page, so a
 // defect here ships into all of them at once.
@@ -28,10 +26,10 @@ function scanBlocks(src) {
     const m = /^```(.*)$/.exec(lines[i]);
     if (m) {
       if (open === null) {
-        open = { info: m[1].trim(), start: i + 2 };
+        open = { info: m[1].trim() };
         body = [];
       } else {
-        out.push({ info: open.info, line: open.start, code: body.join("\n") });
+        out.push({ info: open.info, code: body.join("\n") });
         open = null;
       }
       continue;
@@ -56,17 +54,16 @@ const CLOSEOUT_JS = (() => {
 const localeKeys = (src) => src.replace(/\{\{([a-z_.]+)\}\}/g, "$1");
 
 /**
- * A page whose live round is a final report.
- * `items` = [{ id, title, checked?, disabled?, body? }] rendered into the
- * [data-open-questions] block exactly as SKILL.md tells Claude to write it.
+ * A page whose live round is a final report, written the way
+ * step5-update-page.md tells Claude to write it.
+ * funde    = [{ id, title, label?, route?, reason?, origin?, body?, routed? }]
+ * tests    = [{ id, text, crit?, guide?, mode? }]   → [data-tests] li
+ * handoffs = same                                   → [data-handoffs] li
  */
-function page({ items = [], closed = false, noBlock = false } = {}) {
+function page({ funde = [], tests = [], handoffs = [], closed = false } = {}) {
   const dom = new JSDOM(localeKeys(SKELETON.code), {
     runScripts: "outside-only",
     pretendToBeVisual: true,
-    // A real origin, not "about:blank": sessionStorage (the accordion's
-    // answered-state mirror) throws "not available for opaque origins"
-    // without one — a jsdom quirk, not a product bug.
     url: "https://concept.test/",
   });
   const { window } = dom;
@@ -78,29 +75,43 @@ function page({ items = [], closed = false, noBlock = false } = {}) {
   sec.setAttribute("data-final-report", "");
   sec.setAttribute("data-active", "");
   if (closed) sec.setAttribute("data-closed", "");
-  if (!noBlock) {
-    const block = document.createElement("section");
-    block.setAttribute("data-open-questions", "");
+  if (funde.length) {
+    const fold = document.createElement("details");
+    fold.className = "fr-fold";
+    fold.setAttribute("data-open-questions", "");
     const ul = document.createElement("ul");
-    ul.className = "open-questions-list";
-    for (const it of items) {
+    for (const f of funde) {
       const li = document.createElement("li");
-      const label = document.createElement("label");
-      const box = document.createElement("input");
-      box.type = "checkbox";
-      if (it.id !== null) box.name = it.id;
-      box.checked = it.checked !== false;
-      if (it.disabled) box.disabled = true;
-      box.dataset.issueTitle = it.title;
-      box.dataset.issueType = it.type || "chore";
-      if (it.body) box.dataset.issueBody = it.body;
-      if (it.role) box.dataset.issueRole = it.role;
-      const span = document.createElement("span");
-      span.className = "oq-label";
-      span.textContent = it.label || it.title;
-      label.appendChild(box);
-      label.appendChild(span);
+      if (f.id) li.dataset.oqId = f.id;
+      li.dataset.issueTitle = f.title;
+      li.dataset.issueType = f.type || "chore";
+      if (f.body) li.dataset.issueBody = f.body;
+      if (f.route) li.dataset.routeDefault = f.route;
+      if (f.reason) li.dataset.routeReason = f.reason;
+      li.dataset.oqOrigin = f.origin || "found";
+      if (f.routed) li.setAttribute("data-routed", "");
+      const label = document.createElement("span");
+      label.className = "oq-label";
+      label.textContent = f.label || f.title.replace(/^\[[A-Z]+\]\s*/, "");
       li.appendChild(label);
+      ul.appendChild(li);
+    }
+    fold.appendChild(ul);
+    sec.appendChild(fold);
+  }
+  for (const [attr, list] of [["data-tests", tests], ["data-handoffs", handoffs]]) {
+    if (!list.length) continue;
+    const block = document.createElement("section");
+    block.setAttribute(attr, "");
+    block.hidden = true;
+    const ul = document.createElement("ul");
+    for (const t of list) {
+      const li = document.createElement("li");
+      li.dataset.todoId = t.id;
+      if (t.crit) li.dataset.crit = t.crit;
+      if (t.guide != null) li.dataset.guide = t.guide;
+      if (t.mode) li.dataset.mode = t.mode;
+      li.textContent = t.text;
       ul.appendChild(li);
     }
     block.appendChild(ul);
@@ -108,22 +119,19 @@ function page({ items = [], closed = false, noBlock = false } = {}) {
   }
   document.querySelector("main").appendChild(sec);
 
-  const posted = [];
   window.eval(
     [
-      // Globals the block shares with the rest of the page engine.
       "window.STORAGE_KEY = 'concept-test';",
       "var _submittedAt = 0, _submittedReloadCounter = null, _submittedAction = null;",
       "var _bootReloadCounter = 7;",
-      "window.__stub = { pending: null, warn: null, dim: false };",
+      "window.__stub = { pending: null, warn: null, dim: false, closed: 0 };",
       "function _guardedSetItem(k, v) { window.__stub.pending = { k, v }; }",
       "function showContentDimmer() { window.__stub.dim = true; }",
       "function hideContentDimmer() { window.__stub.dim = false; }",
       "function showSubmitWarning(m) { window.__stub.warn = m; }",
+      "window.closePanel = () => { window.__stub.closed++; };",
       "window.__posted = [];",
       "window.__reply = { ok: true, body: { durable: true } };",
-      // What GET /decisions answers — the boot check reads it to find a
-      // finalize that outlived its tab.
       "window.__decisions = {};",
       "window.fetch = async (url, opts) => {",
       "  if (!opts || opts.method !== 'POST') {",
@@ -133,678 +141,433 @@ function page({ items = [], closed = false, noBlock = false } = {}) {
       "  if (window.__reply.throws) throw new Error('offline');",
       "  return { ok: window.__reply.ok, json: async () => window.__reply.body };",
       "};",
-      // jsdom implements neither scrollIntoView nor layout; the sheet uses it
-      // to bring the ship warning into view. Browser behaviour, not product
-      // logic — stub it rather than weakening the reference code.
-      "if (!window.Element.prototype.scrollIntoView) window.Element.prototype.scrollIntoView = function () {};",
-      // jsdom has CSS.escape, but a page opened in an older engine may not.
       "if (!window.CSS || !window.CSS.escape) window.CSS = { escape: (s) => String(s).replace(/[^a-zA-Z0-9_-]/g, '\\\\$&') };",
       CLOSEOUT_JS,
       "window.__submitted = () => ({ at: _submittedAt, action: _submittedAction, counter: _submittedReloadCounter });",
     ].join("\n")
   );
 
+  const $ = (sel) => document.querySelector(sel);
   const api = {
     window,
     document,
     posted: window.__posted,
-    sheet: () => document.getElementById("closeout-sheet"),
+    sheet: () => $("#closeout-sheet"),
     render: () => window.refreshCloseout({ reset: true }),
-    boxes: () => Array.from(document.querySelectorAll("[data-open-questions] input[type=checkbox]")),
-    rows: () => Array.from(document.querySelectorAll("#closeout-followup-list .followup")),
-    /** Click a route the way a user does: check the radio, fire `change`. */
-    route: (id, value) => {
-      const input = document.querySelector(`input[name="fu-${id}"][value="${value}"]`);
-      expect(input, `${id} → ${value}`).toBeTruthy();
+    group: (kind) => $(`[data-closeout-group="${kind}"]`),
+    decideRows: () => Array.from(document.querySelectorAll("#closeout-decide-list [data-route-open]")),
+    pill: (key) => $(`#closeout-decide-list [data-route-open="${key}"] [data-route-pill]`),
+    todoRows: (kind) => Array.from(document.querySelectorAll(`#closeout-${kind}-list .closeout-todo`)),
+    routeSheet: () => $("#closeout-route-sheet"),
+    /** Tap a 🧭 row, then a tile — the way a user re-routes a Fund. */
+    route: (key, value) => {
+      const row = $(`#closeout-decide-list [data-route-open="${key}"]`);
+      expect(row, "row " + key).toBeTruthy();
+      row.click();
+      const tile = $(`#closeout-route-sheet [data-route-tile="${value}"]`);
+      expect(tile, "tile " + value).toBeTruthy();
+      tile.click();
+    },
+    /** Pick one of Muss nicht / Mit Anleitung / Mach ich selbst. */
+    mode: (kind, id, value) => {
+      const input = $(`#closeout-${kind}-list input[data-todo-mode="${kind}:${id}"][value="${value}"]`);
+      expect(input, `${kind}:${id} → ${value}`).toBeTruthy();
       input.checked = true;
       input.dispatchEvent(new window.Event("change", { bubbles: true }));
     },
-    ship: (value) => {
-      const input = document.querySelector(`input[name="closeout-ship"][value="${value}"]`);
-      expect(input, "ship " + value).toBeTruthy();
-      input.checked = true;
-      input.dispatchEvent(new window.Event("change", { bubbles: true }));
-    },
-    // A single click on the fixed button: confirms the open accordion row and
-    // advances while anything is unanswered, submits once everything is.
-    execute: () => document.getElementById("closeout-execute").click(),
-    // Clicks through the accordion until every visible row is answered OR it
-    // gets stuck (an unanswered ship row refuses forever) — capped so a stuck
-    // sheet fails the test instead of hanging it. Deliberately stops SHORT of
-    // the submit click: closeoutAllAnswered() flips to true the moment the
-    // last row is confirmed, so the loop's own guard condition (checked
-    // BEFORE each click) exits before that same click could also submit.
-    advanceAll: () => {
-      let guard = 0;
-      while (!window.closeoutAllAnswered() && guard++ < 10) {
-        document.getElementById("closeout-execute").click();
-      }
-    },
-    row: (kind) => document.querySelector(`.closeout-block[data-closeout-block="${kind}"]`),
-    rowHead: (kind) => document.querySelector(`.closeout-block[data-closeout-block="${kind}"] [data-closeout-row]`),
-    rowMark: (kind) => document.querySelector(`.closeout-block[data-closeout-block="${kind}"] [data-closeout-mark]`)?.textContent,
-    // The collapsed row's inline summary — the readout of what will happen.
-    rowSummary: (kind) => document.querySelector(`.closeout-block[data-closeout-block="${kind}"] [data-closeout-summary]`)?.textContent,
-    button: () => document.getElementById("closeout-execute"),
+    ship: () => $("#closeout-ship"),
+    noship: () => $("#closeout-noship"),
+    close: () => $("#closeout-close"),
+    lastPayload: () => window.__posted[window.__posted.length - 1]?.body,
   };
-  // The block wires itself on DOM-ready (an inline <script> runs while the
-  // document is still parsing). Deliver the event the way a browser does.
-  api.boot = () => {
-    if (document.readyState === "loading") {
-      document.dispatchEvent(new window.Event("DOMContentLoaded"));
-    } else {
-      window.wireCloseout();
-    }
-  };
-  api.boot();
+  if (document.readyState === "loading") {
+    document.dispatchEvent(new window.Event("DOMContentLoaded"));
+  } else {
+    window.wireCloseout();
+  }
   return api;
 }
 
-/** A page whose bridge reports `decisions` as the current submission state. */
 async function pageWithBridge(decisions, opts) {
   const p = page(opts);
   p.window.__decisions = decisions;
-  // Re-run the boot check now that the bridge has an answer.
   await p.window.restoreInFlightCloseout();
   return p;
 }
 
-const ITEMS = [
-  { id: "oq-saml", title: "[BUG] SAML login fails", type: "bug", body: "repro steps" },
-  { id: "oq-docs", title: "[DOCS] Update README", type: "docs" },
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+const FUNDE = [
+  { id: "oq-saml", title: "[BUG] SAML login fails", type: "bug", body: "repro steps", route: "issue", reason: "riskant" },
+  { id: "oq-typo", title: "[CHORE] Fix the login hint", route: "now", reason: "kosmetisch" },
+  { id: "oq-alt", title: "[CHORE] Alternative sort order", route: "ignore", reason: "nur anders" },
 ];
 
-describe("close-out sheet — the three routes", () => {
-  test("every open point defaults to Issue: one bucket filled, the other empty", () => {
-    const p = page({ items: ITEMS });
-    expect(p.rows()).toHaveLength(2);
-    expect(p.window.collectIssueItems().map((i) => i.id)).toEqual(["oq-saml", "oq-docs"]);
-    expect(p.window.collectImplementItems()).toEqual([]);
-    // …and the item shape is the one both parts of finalize consume.
-    const first = p.window.collectIssueItems()[0];
-    expect(first).toMatchObject({
+describe("🧭 Du entscheidest — pre-selected routes", () => {
+  test("the authored data-route-default decides the bucket: now → implement, issue → issues, ignore → neither", () => {
+    const p = page({ funde: FUNDE });
+    expect(p.decideRows()).toHaveLength(3);
+    expect(p.window.collectImplementItems().map((i) => i.id)).toEqual(["oq-typo"]);
+    expect(p.window.collectIssueItems().map((i) => i.id)).toEqual(["oq-saml"]);
+    expect(p.window.collectIssueItems()[0]).toMatchObject({
       id: "oq-saml",
       title: "[BUG] SAML login fails",
       type: "bug",
       description: "repro steps",
       selected: true,
     });
+    // The pill shows the pre-selection, the chip its one-word reason.
+    expect(p.pill("oq-typo").dataset.route).toBe("implement");
+    expect(p.pill("oq-saml").dataset.route).toBe("issue");
+    expect(p.pill("oq-alt").dataset.route).toBe("ignore");
+    expect(p.decideRows()[1].querySelector(".closeout-why").textContent).toBe("kosmetisch");
   });
 
-  test("routing one point to Jetzt umsetzen moves it, and only it", () => {
-    const p = page({ items: ITEMS });
+  test("a Fund without data-route-default falls back to 📌 Issue — nothing gets built unseen", () => {
+    const p = page({ funde: [{ id: "oq-x", title: "[BUG] X" }] });
+    expect(p.window.collectIssueItems().map((i) => i.id)).toEqual(["oq-x"]);
+    expect(p.window.collectImplementItems()).toEqual([]);
+  });
+
+  test("a tile in the bottom sheet re-routes one Fund, and only it", () => {
+    const p = page({ funde: FUNDE });
     p.route("oq-saml", "implement");
-    expect(p.window.collectImplementItems().map((i) => i.id)).toEqual(["oq-saml"]);
-    expect(p.window.collectIssueItems().map((i) => i.id)).toEqual(["oq-docs"]);
-    // The body checkbox stays checked — the point is still open, it is just
-    // being built instead of filed.
-    expect(p.boxes()[0].checked).toBe(true);
+    expect(p.window.collectImplementItems().map((i) => i.id)).toEqual(["oq-saml", "oq-typo"]);
+    expect(p.window.collectIssueItems()).toEqual([]);
+    expect(p.pill("oq-saml").dataset.route).toBe("implement");
+    // The sheet closed again and focus is back on the row.
+    expect(p.routeSheet().hidden).toBe(true);
+    expect(p.document.activeElement.dataset.routeOpen).toBe("oq-saml");
   });
 
-  test("Ignorieren unchecks the body box and drops the item from BOTH buckets", () => {
-    const p = page({ items: ITEMS });
-    p.route("oq-docs", "ignore");
-    expect(p.boxes()[1].checked).toBe(false);
+  test("the buckets never overlap, whatever the user taps", () => {
+    const p = page({ funde: FUNDE });
+    for (const [a, b] of [["issue", "implement"], ["implement", "ignore"], ["ignore", "issue"]]) {
+      p.route("oq-saml", a);
+      p.route("oq-typo", b);
+      const iss = p.window.collectIssueItems().map((i) => i.id);
+      const imp = p.window.collectImplementItems().map((i) => i.id);
+      expect(iss.filter((id) => imp.includes(id)), a + "/" + b).toEqual([]);
+    }
+  });
+
+  test("the bottom sheet shows name, origin, description, recommendation + reason, and the current tile", () => {
+    const p = page({ funde: FUNDE });
+    p.decideRows()[0].click();
+    const box = p.routeSheet();
+    expect(box.hidden).toBe(false);
+    expect(box.querySelector("[data-route-title]").textContent).toBe("SAML login fails");
+    expect(box.querySelector("[data-route-origin]").textContent).toBe("final.origin_found");
+    expect(box.querySelector("[data-route-body]").textContent).toBe("repro steps");
+    const why = box.querySelector("[data-route-why]").textContent;
+    expect(why).toContain("final.route_recommended");
+    expect(why).toContain("📌 final.route_issue");
+    expect(why).toContain("riskant");
+    expect(box.querySelector('[data-route-tile="issue"]').getAttribute("aria-checked")).toBe("true");
+    expect(p.document.activeElement.dataset.routeTile).toBe("issue");
+    // Escape closes it unchanged.
+    box.dispatchEvent(new p.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(box.hidden).toBe(true);
     expect(p.window.collectIssueItems().map((i) => i.id)).toEqual(["oq-saml"]);
-    expect(p.window.collectImplementItems()).toEqual([]);
-    // The row stays on screen so the choice is reversible.
-    expect(p.rows()).toHaveLength(2);
   });
 
-  test("the buckets can never overlap, whatever the user clicks", () => {
-    const p = page({ items: ITEMS });
-    for (const seq of [["issue", "implement"], ["implement", "ignore"], ["ignore", "issue"]]) {
-      p.route("oq-saml", seq[0]);
-      p.route("oq-docs", seq[1]);
-      const a = p.window.collectIssueItems().map((i) => i.id);
-      const b = p.window.collectImplementItems().map((i) => i.id);
-      expect(a.filter((id) => b.includes(id)), seq.join("/")).toEqual([]);
-    }
-  });
-
-  test("two points sharing one name still get their own routes", () => {
-    // A hand-written report repeating a checkbox `name` is the natural way to
-    // write a list, and a radio group is keyed by name document-wide: one
-    // click would recolour both rows, answer for both, and "Ignorieren" would
-    // uncheck only one of them — leaving the other in NO bucket while it is
-    // still on screen as open.
-    const p = page({
-      items: [
-        { id: "oq", title: "[BUG] First" },
-        { id: "oq", title: "[BUG] Second" },
-      ],
-    });
-    expect(p.rows()).toHaveLength(2);
-    const groups = p.rows().map((r) => r.querySelector("input").name);
-    expect(new Set(groups).size, "one radio group per row").toBe(2);
-    p.route(groups[1].replace(/^fu-/, ""), "implement");
-    expect(p.window.collectImplementItems().map((i) => i.title)).toEqual(["[BUG] Second"]);
-    expect(p.window.collectIssueItems().map((i) => i.title)).toEqual(["[BUG] First"]);
-  });
-
-  test("a nameless point is routed like any other, not silently filed", () => {
-    // followUpRoute('') used to answer with the default without reading the
-    // DOM, so a nameless row always became an issue no matter what the user
-    // clicked — the silent downgrade SKILL.md forbids for the implement path.
-    const p = page({ items: [{ id: null, title: "[CHORE] Nameless" }] });
-    const group = p.rows()[0].querySelector("input").name;
-    p.route(group.replace(/^fu-/, ""), "implement");
-    expect(p.window.collectImplementItems().map((i) => i.title)).toEqual(["[CHORE] Nameless"]);
-    expect(p.window.collectIssueItems()).toEqual([]);
-  });
-
-  test("an item routed away and back keeps its identity", () => {
-    const p = page({ items: ITEMS });
-    p.route("oq-saml", "ignore");
-    p.route("oq-saml", "implement");
-    expect(p.boxes()[0].checked).toBe(true);
-    expect(p.window.collectImplementItems().map((i) => i.id)).toEqual(["oq-saml"]);
-  });
-
-  test("a route change does not re-enter the rebuild and lose the click", () => {
-    // The route handler flips the body checkbox and dispatches `change` on it;
-    // the document listener then re-renders. If that rebuilt the row list, the
-    // radio the user just clicked would be replaced mid-event.
-    const p = page({ items: ITEMS });
-    const before = p.rows()[0];
-    p.route("oq-saml", "implement");
-    expect(p.rows()[0], "row identity survived the re-render").toBe(before);
-    expect(
-      p.document.querySelector('input[name="fu-oq-saml"][value="implement"]').checked
-    ).toBe(true);
-  });
-});
-
-describe("close-out sheet — what the user is promised", () => {
-  test("every consequence is readable on its own collapsed row, and re-renders on every answer", () => {
-    const p = page({ items: ITEMS });
-    p.route("oq-saml", "implement");
-    // "2 · Issue, Jetzt umsetzen" — count, then each item's route by label.
-    expect(p.rowSummary("followups")).toBe("2 · final.route_implement, final.route_issue");
-    expect(p.rowSummary("ship")).toBe("final.closeout_unanswered");
-    p.ship("yes");
-    expect(p.rowSummary("ship")).toBe("final.closeout_summary_ship_yes");
-    p.ship("no");
-    expect(p.rowSummary("ship")).toBe("final.closeout_summary_ship_no");
-    expect(p.rowSummary("files")).toBe("final.dispose_discard");
-  });
-
-  test("dropping every point is a legitimate answer, but it is said out loud", () => {
-    const p = page({ items: ITEMS });
-    p.route("oq-saml", "ignore");
-    p.route("oq-docs", "ignore");
-    expect(p.document.getElementById("closeout-followups-none").hidden).toBe(false);
-    expect(p.window.collectIssueItems()).toEqual([]);
-    expect(p.window.collectImplementItems()).toEqual([]);
-  });
-
-  test("there is no plan line and no status hint under a live button", () => {
-    const p = page({ items: ITEMS });
-    expect(p.sheet().querySelector('[data-closeout-block="plan"]')).toBeNull();
-    expect(p.document.getElementById("closeout-plan")).toBeNull();
-    expect(p.document.getElementById("closeout-plan-warn")).toBeNull();
-    expect(p.sheet().querySelector('.hint[data-finalize-state="running"]')).toBeNull();
-    expect(p.sheet().querySelector('.hint[data-finalize-state="done"]')).toBeNull();
-  });
-
-  test("the consequence warning is the execute button's tooltip, only once the click can fire", () => {
-    const p = page({ items: ITEMS });
-    expect(p.button().hasAttribute("data-tip"), "unanswered ship — nothing to warn about yet").toBe(false);
-    p.ship("no");
-    p.advanceAll();
-    expect(p.button().dataset.tip, "every row answered — the click is live").toBe("final.closeout_plan_warn");
-  });
-
-  test("a disconnected bridge shows on the button, not on a status line", () => {
-    const p = page({ items: ITEMS });
-    // The skeleton's own heartbeat element — checkClaudeConnection() writes
-    // [data-state] there and then calls updateCloseoutButton().
-    const conn = p.document.getElementById("connection-status");
-    expect(conn).toBeTruthy();
-    conn.dataset.state = "disconnected";
-    p.ship("no");
-    p.advanceAll();
-    expect(p.button().textContent).toContain("final.closeout_execute_offline");
-    conn.dataset.state = "connected";
-    p.window.updateCloseoutButton();
-    expect(p.button().textContent).not.toContain("final.closeout_execute_offline");
-    expect(p.button().textContent).toContain("final.closeout_execute");
-  });
-
-  test("a report with no open questions hides the block instead of rendering an empty one", () => {
-    const p = page({ noBlock: true });
-    const block = p.sheet().querySelector('[data-closeout-block="followups"]');
-    expect(block.hidden).toBe(true);
-    expect(p.rowHead("ship").getAttribute("aria-expanded")).toBe("true");
-  });
-});
-
-describe("close-out sheet — the single irreversible click", () => {
-  test("the button cannot advance past an unanswered ship row", () => {
-    const p = page({ items: ITEMS });
-    p.advanceAll(); // confirms followups, then stalls on the unanswered ship row
-    expect(p.posted, "nothing was sent").toHaveLength(0);
-    expect(p.document.getElementById("closeout-ship-required").hidden).toBe(false);
-    // …and the button stays usable, rather than looking broken.
-    expect(p.document.getElementById("closeout-execute").disabled).toBe(false);
-    expect(p.window.closeoutAllAnswered()).toBe(false);
-  });
-
-  test("answering the ship question clears the block and lets the submit through", async () => {
-    const p = page({ items: ITEMS });
-    p.advanceAll(); // stalls on ship
-    p.ship("no");
-    expect(p.document.getElementById("closeout-ship-required").hidden).toBe(true);
-    p.advanceAll(); // confirms ship, then files (default) — now ready
-    p.execute();
-    await new Promise((r) => setTimeout(r, 0));
-    expect(p.posted).toHaveLength(1);
-  });
-
-  test("the payload carries both buckets, the ship answer and the disposition", async () => {
-    const p = page({ items: ITEMS });
-    p.route("oq-saml", "implement");
-    p.ship("yes");
-    p.advanceAll();
-    p.execute();
-    await new Promise((r) => setTimeout(r, 0));
-    const body = p.posted[0].body;
-    expect(p.posted[0].url).toBe("/decisions");
-    expect(body.action).toBe("finalize");
-    expect(body.submission_id).toMatch(/^sub-/);
-    expect(body.issues).toMatchObject({ create: true });
-    expect(body.issues.items.map((i) => i.id)).toEqual(["oq-docs"]);
-    expect(body.implement).toMatchObject({ run: true });
-    expect(body.implement.items.map((i) => i.id)).toEqual(["oq-saml"]);
-    expect(body.ship).toEqual({ run: true });
-    expect(body.disposition).toEqual({ mode: "discard", moveTo: null });
-  });
-
-  test("a submitted sheet is frozen and cannot be fired twice", async () => {
-    const p = page({ items: ITEMS });
-    p.ship("no");
-    p.advanceAll();
-    p.execute();
-    await new Promise((r) => setTimeout(r, 0));
-    expect(p.sheet().dataset.frozen).toBe("true");
-    expect(p.document.getElementById("closeout-execute").disabled).toBe(true);
-    // Even a direct call must bail — the button is not the only way in.
-    p.window.submitFinalize();
-    await new Promise((r) => setTimeout(r, 0));
-    expect(p.posted).toHaveLength(1);
-    // The submit-state bookkeeping pollProcessedState() depends on is set.
-    expect(p.window.__submitted().action).toBe("finalize");
-    expect(p.window.__submitted().counter).toBe(7);
-  });
-
-  test("a bridge that answers but cannot persist hands the sheet back", async () => {
-    const p = page({ items: ITEMS });
-    p.window.__reply = { ok: true, body: { durable: false } };
-    p.ship("no");
-    p.advanceAll();
-    p.execute();
-    await new Promise((r) => setTimeout(r, 0));
-    expect(p.sheet().dataset.frozen).toBe("false");
-    expect(p.document.getElementById("closeout-execute").disabled).toBe(false);
-    expect(p.window.__stub.warn, "the user is told").toBeTruthy();
-    expect(p.window.__stub.pending, "and the payload is queued").toBeTruthy();
-    expect(p.window.__submitted().at).toBe(0);
-  });
-
-  test("an offline bridge queues the payload and keeps the sent state", async () => {
-    const p = page({ items: ITEMS });
-    p.window.__reply = { throws: true };
-    p.ship("no");
-    p.advanceAll();
-    p.execute();
-    await new Promise((r) => setTimeout(r, 0));
-    expect(p.window.__stub.pending, "queued for retry").toBeTruthy();
-    expect(p.sheet().dataset.frozen, "still sent, not re-armed").toBe("true");
-  });
-});
-
-describe("close-out sheet — the accordion", () => {
-  test("collapsed rows show one line each, and exactly one is open", () => {
-    const p = page({ items: ITEMS });
-    for (const kind of ["followups", "ship", "files"]) {
-      expect(p.rowHead(kind), kind).toBeTruthy();
-    }
-    const open = ["followups", "ship", "files"].filter(
-      (k) => p.rowHead(k).getAttribute("aria-expanded") === "true"
-    );
-    expect(open).toEqual(["followups"]);
-  });
-
-  test("the order is enforced: a later, unanswered row is locked and cannot be opened by hand", () => {
-    const p = page({ items: ITEMS });
-    for (const kind of ["ship", "files"]) {
-      expect(p.row(kind).dataset.locked, kind + " locked").toBe("true");
-      expect(p.rowHead(kind).disabled, kind + " head disabled").toBe(true);
-    }
-    expect(p.row("followups").dataset.locked).toBe("false");
-    // A programmatic click on a locked head is refused too.
-    p.window.closeoutRowClick(p.row("files"));
-    expect(p.rowHead("files").getAttribute("aria-expanded")).toBe("false");
-    expect(p.rowHead("followups").getAttribute("aria-expanded")).toBe("true");
-  });
-
-  test("an answered row stays clickable to go back; the rows after it keep their state", () => {
-    const p = page({ items: ITEMS });
-    p.execute(); // followups ✓ → ship open
-    p.ship("no");
-    p.execute(); // ship ✓ → files open
-    expect(p.rowHead("files").getAttribute("aria-expanded")).toBe("true");
-    expect(p.rowHead("followups").disabled).toBe(false);
-    p.rowHead("followups").click();
-    expect(p.rowHead("followups").getAttribute("aria-expanded")).toBe("true");
-    expect(p.rowHead("files").getAttribute("aria-expanded")).toBe("false");
-    expect(p.row("ship").dataset.answered, "ship stays answered").toBe("true");
-    expect(p.row("files").dataset.answered).toBe("false");
-    expect(p.row("files").dataset.locked, "files is locked again while an earlier row is open").toBe("true");
-    // Weiter from the re-opened row lands on the first still-unanswered one.
-    p.execute();
-    expect(p.rowHead("files").getAttribute("aria-expanded")).toBe("true");
-  });
-
-  test("the marker reads ● while open, ✓ once confirmed, ○ while locked", () => {
-    const p = page({ items: ITEMS });
-    expect(p.rowMark("followups")).toBe("●");
-    expect(p.rowMark("ship")).toBe("○");
-    p.execute(); // confirms the open row (followups)
-    expect(p.rowMark("followups")).toBe("✓");
-    expect(p.rowMark("ship")).toBe("●");
-    expect(p.rowMark("files")).toBe("○");
-  });
-
-  test("Weiter confirms the open row and opens the next unanswered one", () => {
-    const p = page({ items: ITEMS });
-    expect(p.row("followups").dataset.answered).toBe("false");
-    p.execute();
-    expect(p.row("followups").dataset.answered).toBe("true");
-    expect(p.rowHead("ship").getAttribute("aria-expanded")).toBe("true");
-  });
-
-  test("clicking a ship option confirms the row like Weiter — no second click", () => {
-    const p = page({ items: ITEMS });
-    p.execute(); // followups ✓ → ship open
-    p.document.querySelector('input[name="closeout-ship"][value="yes"]').click();
-    expect(p.row("ship").dataset.answered).toBe("true");
-    expect(p.rowHead("files").getAttribute("aria-expanded")).toBe("true");
-    expect(p.window.closeoutShipChoice()).toBe("yes");
-    expect(p.posted.length, "a choice click never submits").toBe(0);
-  });
-
-  test("re-clicking the pre-selected page option counts as the answer too", () => {
-    const p = page({ items: ITEMS });
-    p.execute();
-    p.document.querySelector('input[name="closeout-ship"][value="no"]').click();
-    const discard = p.document.querySelector('input[name="dispose-mode"][value="discard"]');
-    expect(discard.checked, "default is already selected").toBe(true);
-    discard.click();
-    expect(p.row("files").dataset.answered).toBe("true");
-    expect(p.window.closeoutAllAnswered()).toBe(true);
-    expect(p.button().dataset.ready).toBe("true");
-    expect(p.posted.length, "the last row's choice does not fire the finalize").toBe(0);
-  });
-
-  test("arrow-key browsing through the options does not advance the sheet", () => {
-    const p = page({ items: ITEMS });
-    p.execute();
-    p.execute(); // refused — ship unanswered, stays open
-    const yes = p.document.querySelector('input[name="closeout-ship"][value="yes"]');
-    yes.dispatchEvent(new p.window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    yes.click();
-    expect(p.row("ship").dataset.answered).toBe("false");
-    expect(p.rowHead("ship").getAttribute("aria-expanded")).toBe("true");
-  });
-
-  test("a route click in the followups row does not collapse it", () => {
-    const p = page({ items: ITEMS });
-    p.document.querySelector('input[name="fu-oq-saml"][value="implement"]').click();
-    expect(p.row("followups").dataset.answered).toBe("false");
-    expect(p.rowHead("followups").getAttribute("aria-expanded")).toBe("true");
-  });
-
-  test("the button reads Weiter until every row is answered, then Ausführen", () => {
-    const p = page({ items: ITEMS });
-    const btn = p.document.getElementById("closeout-execute");
-    expect(btn.dataset.ready).toBe("false");
-    expect(btn.textContent).toContain("closeout_next");
-    p.ship("no");
-    p.advanceAll();
-    expect(btn.dataset.ready).toBe("true");
-    expect(btn.textContent).toContain("closeout_execute");
-  });
-
-  test("the icon only appears once the button is ready — no '› Weiter ›'", () => {
-    // The label string ("Weiter ›") already carries its own "›"; an
-    // always-visible icon glyph next to it rendered "› Weiter ›".
-    const p = page({ items: ITEMS });
-    const btn = p.document.getElementById("closeout-execute");
-    const icon = btn.querySelector("[data-closeout-btn-icon]");
-    expect(icon.hidden, "icon hidden in the Weiter state").toBe(true);
-    p.ship("no");
-    p.advanceAll();
-    expect(icon.hidden, "icon shown once ready").toBe(false);
-    expect(icon.textContent).toBe("⚠");
-  });
-
-  test("re-opening an answered row does not un-answer it", () => {
-    const p = page({ items: ITEMS });
-    p.execute(); // confirm followups
-    p.rowHead("followups").click(); // look again
-    expect(p.row("followups").dataset.answered).toBe("true");
-    expect(p.rowHead("followups").getAttribute("aria-expanded")).toBe("true");
-  });
-
-  test("progress reads n of total answered while the sheet is live", () => {
-    const p = page({ items: ITEMS });
-    // The skeleton fixture does not run the real locale substitution (that
-    // happens at page-generation time, not in the browser) — supply a
-    // template here the way a generated page would.
-    p.sheet().dataset.labelProgress = "{n} of {total} answered";
-    p.window.updateCloseoutProgress();
-    const progress = () => p.document.getElementById("closeout-progress").textContent;
-    expect(progress()).toBe("0 of 3 answered");
-    p.execute();
-    expect(progress()).toBe("1 of 3 answered");
-  });
-
-  test("answered state survives a reload within the same session", () => {
-    const p = page({ items: ITEMS });
-    p.execute(); // confirm followups
-    expect(p.row("followups").dataset.answered).toBe("true");
-    // Simulate a reload: the DOM node's own dataset is fresh (as it would be
-    // on a freshly parsed page), but sessionStorage — same tab, same session
-    // — is not.
-    delete p.row("followups").dataset.answered;
-    delete p.row("followups").dataset.open;
+  test("a routed Fund (data-routed) leaves the inbox; with all routed the group disappears", () => {
+    const p = page({ funde: [{ ...FUNDE[0], routed: true }, FUNDE[1]] });
+    expect(p.decideRows().map((r) => r.dataset.routeOpen)).toEqual(["oq-typo"]);
+    p.document.querySelector('[data-oq-id="oq-typo"]').setAttribute("data-routed", "");
     p.render();
-    expect(p.row("followups").dataset.answered).toBe("true");
+    expect(p.group("decide").hidden).toBe(true);
   });
 
-  test("freezing the sheet disables the row heads too, not just the button", () => {
-    const p = page({ items: ITEMS });
-    p.window.setCloseoutFrozen(true);
-    for (const kind of ["followups", "ship", "files"]) {
-      expect(p.rowHead(kind).disabled, kind).toBe(true);
-    }
+  test("route choices live in memory only: nothing persisted, a tab switch keeps them, a reload does not", () => {
+    const p = page({ funde: FUNDE });
+    p.route("oq-saml", "implement");
+    expect(p.window.localStorage.length).toBe(0);
+    expect(p.window.sessionStorage.length).toBe(0);
+    p.render(); // tab switch → refreshCloseout({ reset: true })
+    expect(p.pill("oq-saml").dataset.route).toBe("implement");
+    const fresh = page({ funde: FUNDE });
+    expect(fresh.pill("oq-saml").dataset.route).toBe("issue");
+  });
+
+  test("a legacy report's enabled checkbox still counts; unchecked means drop", () => {
+    const p = page({});
+    const block = p.document.createElement("section");
+    block.setAttribute("data-open-questions", "");
+    block.innerHTML =
+      '<label><input type="checkbox" name="oq-a" data-issue-title="[BUG] A" checked><span class="oq-label">A</span></label>' +
+      '<label><input type="checkbox" name="oq-b" data-issue-title="[BUG] B"><span class="oq-label">B</span></label>' +
+      '<label><input type="checkbox" name="oq-c" data-issue-title="[BUG] C" checked disabled><span class="oq-label">C</span></label>';
+    p.document.querySelector("section[data-final-report]").appendChild(block);
+    p.render();
+    expect(p.decideRows().map((r) => r.dataset.routeOpen)).toEqual(["oq-a", "oq-b"]);
+    expect(p.window.collectIssueItems().map((i) => i.id)).toEqual(["oq-a"]);
   });
 });
 
-describe("close-out sheet — a finalize that outlives its tab", () => {
-  test("a reload during a running finalize comes back frozen, not re-armed", async () => {
-    // The dangerous version of this: the sheet comes back ready, the user
-    // clicks execute again, and the second payload carries a NEW
-    // submission_id — which the replay guard cannot recognise as a duplicate.
-    // A second `gh issue create` run and a second real release.
-    const p = await pageWithBridge(
-      { submitted: true, action: "finalize", _version: 4 },
-      { items: ITEMS }
-    );
+describe("🧭 at most three rows — the rest is one Sammel-Issue", () => {
+  const FIVE = [1, 2, 3, 4, 5].map((n) => ({ id: "oq-" + n, title: "[CHORE] Fund " + n, route: "now", reason: "klein" }));
+
+  test("three Funde stay three rows, no Sammel row", () => {
+    const p = page({ funde: FIVE.slice(0, 3) });
+    expect(p.decideRows()).toHaveLength(3);
+    expect(p.document.querySelector(".closeout-sammel")).toBeNull();
+  });
+
+  test("five Funde: two rows + one Sammel row; the payload files ONE issue for the other three", () => {
+    const p = page({ funde: FIVE });
+    const rows = p.decideRows();
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => r.dataset.routeOpen)).toEqual(["oq-1", "oq-2", "__sammel"]);
+    expect(rows[2].textContent).toContain("final.sammel_row");
+    expect(p.window.collectImplementItems().map((i) => i.id)).toEqual(["oq-1", "oq-2"]);
+    const issues = p.window.collectIssueItems();
+    expect(issues).toHaveLength(1);
+    expect(issues[0].id).toBe("__sammel");
+    expect(issues[0].collected.map((i) => i.id)).toEqual(["oq-3", "oq-4", "oq-5"]);
+    expect(issues[0].description).toContain("[CHORE] Fund 4");
+  });
+
+  test("the Sammel row offers Issue or Ignorieren — never a bundled build", () => {
+    const p = page({ funde: FIVE });
+    p.decideRows()[2].click();
+    expect(p.routeSheet().querySelector('[data-route-tile="implement"]').hidden).toBe(true);
+    p.routeSheet().querySelector('[data-route-tile="ignore"]').click();
+    expect(p.window.collectIssueItems()).toEqual([]);
+    expect(p.pill("__sammel").dataset.route).toBe("ignore");
+  });
+});
+
+describe("🧪 / 👉 — criticality, then guidability", () => {
+  const TESTS = [
+    { id: "t-low", text: "Read the English copy", crit: "low", guide: "web" },
+    { id: "t-web", text: "Try the login on a phone", crit: "mid", guide: "web" },
+    { id: "t-game", text: "Watch the camera pan", crit: "mid", guide: "" },
+  ];
+  const HANDOFFS = [{ id: "h-secret", text: "Store the token secret", crit: "high", guide: "desktop" }];
+
+  test("defaults: low → Muss nicht; guidable → Mit Anleitung (its kind); not guidable → Mach ich selbst", () => {
+    const p = page({ tests: TESTS, handoffs: HANDOFFS });
+    expect(p.window.collectTodos("tests")).toEqual([
+      { id: "t-low", text: "Read the English copy", mode: "skip", guide: null },
+      { id: "t-web", text: "Try the login on a phone", mode: "guide", guide: "web" },
+      { id: "t-game", text: "Watch the camera pan", mode: "self", guide: null },
+    ]);
+    expect(p.window.collectTodos("handoffs")).toEqual([
+      { id: "h-secret", text: "Store the token secret", mode: "guide", guide: "desktop" },
+    ]);
+    // The radios show it, and the guidance kind is named under the row.
+    const web = p.todoRows("tests")[1];
+    expect(web.querySelector('input[value="guide"]').checked).toBe(true);
+    expect(web.querySelector("[data-guide-kind]").textContent).toBe("final.guide_web");
+    expect(p.todoRows("tests")[2].querySelector("[data-guide-kind]").hidden).toBe(true);
+  });
+
+  test("Mit Anleitung on something Claude cannot walk through becomes written steps — never 'nicht führbar'", () => {
+    const p = page({ tests: TESTS });
+    p.mode("tests", "t-game", "guide");
+    expect(p.window.collectTodos("tests")[2]).toMatchObject({ mode: "guide", guide: "inline" });
+    expect(p.todoRows("tests")[2].querySelector("[data-guide-kind]").textContent).toBe("final.guide_inline");
+    expect(p.sheet().textContent).not.toMatch(/nicht führbar|not guidable/i);
+    expect(md).not.toMatch(/final\.[a-z_]+`\s*\|[^|\n]*\|[^|\n]*nicht führbar/);
+  });
+
+  test("the radios never persist and choosing one keeps focus on its row (no rebuild)", () => {
+    const p = page({ tests: TESTS });
+    const input = p.document.querySelector('input[data-todo-mode="tests:t-web"][value="self"]');
+    expect(input.hasAttribute("data-no-persist")).toBe(true);
+    const row = p.todoRows("tests")[1];
+    p.mode("tests", "t-web", "self");
+    expect(p.todoRows("tests")[1]).toBe(row);
+    expect(p.window.collectTodos("tests")[1]).toMatchObject({ mode: "self", guide: null });
+  });
+
+  test("more than three: three rows, '+N weitere', and every item still in the payload", () => {
+    const many = [1, 2, 3, 4, 5].map((n) => ({ id: "t" + n, text: "Check " + n, crit: "mid", guide: "" }));
+    const p = page({ tests: many });
+    expect(p.todoRows("tests")).toHaveLength(3);
+    expect(p.document.querySelector("#closeout-tests-list .closeout-more").textContent).toBe("final.todo_more".replace("{n}", "2"));
+    expect(p.window.collectTodos("tests")).toHaveLength(5);
+  });
+
+  test("criticality chip from data-crit; an empty group is not shown", () => {
+    const p = page({ tests: TESTS });
+    expect(p.todoRows("tests")[2].querySelector(".closeout-crit").dataset.crit).toBe("mid");
+    expect(p.group("tests").hidden).toBe(false);
+    expect(p.group("handoffs").hidden).toBe(true);
+    expect(p.group("decide").hidden).toBe(true);
+  });
+
+  test("an inbox with nothing in it says so", () => {
+    const p = page({});
+    expect(p.document.getElementById("closeout-empty").hidden).toBe(false);
+  });
+});
+
+describe("the two buttons are the ship answer", () => {
+  test("🏁🚀 Abschließen & shippen submits finalize with ship.run true and the full payload", async () => {
+    const p = page({ funde: FUNDE, tests: [{ id: "t1", text: "Look", crit: "mid", guide: "web" }], handoffs: [{ id: "h1", text: "Do", crit: "high" }] });
+    p.ship().click();
+    await tick();
+    expect(p.posted).toHaveLength(1);
+    const body = p.lastPayload();
+    expect(body).toMatchObject({
+      submitted: true,
+      action: "finalize",
+      iteration: "2",
+      ship: { run: true },
+      issues: { create: true },
+      implement: { run: true },
+      disposition: { mode: "discard", moveTo: null },
+    });
+    expect(body.submission_id).toMatch(/^sub-/);
+    expect(body.tests).toEqual([{ id: "t1", text: "Look", mode: "guide", guide: "web" }]);
+    expect(body.handoffs).toEqual([{ id: "h1", text: "Do", mode: "self", guide: null }]);
+  });
+
+  test("🏁 Nur abschließen, nicht shippen submits the same finalize with ship.run false", async () => {
+    const p = page({ funde: FUNDE });
+    p.noship().click();
+    await tick();
+    expect(p.lastPayload().action).toBe("finalize");
+    expect(p.lastPayload().ship).toEqual({ run: false });
+  });
+
+  test("ready look: the ship button carries 🏁🚀 and no ⚠; no 'Weiter', no progress, no ship row", () => {
+    const p = page({ funde: FUNDE });
+    expect(p.ship().textContent).toContain("🏁🚀");
+    expect(p.ship().textContent).toContain("final.closeout_ship_go");
+    expect(p.ship().textContent).not.toContain("⚠");
+    expect(p.noship().textContent).toContain("final.closeout_noship_go");
+    expect(p.document.getElementById("closeout-execute")).toBeNull();
+    expect(p.document.getElementById("closeout-progress")).toBeNull();
+    expect(p.document.querySelector('input[name="closeout-ship"]')).toBeNull();
+  });
+
+  test("after the click the clicked button is the status and the other steps aside; a second click sends nothing", async () => {
+    const p = page({ funde: FUNDE });
+    p.noship().click();
+    await tick();
     expect(p.sheet().dataset.frozen).toBe("true");
-    expect(p.button().disabled).toBe(true);
-    // The button itself says it is still running — no hint beneath it.
-    expect(p.button().dataset.finalizeState, "the user is told it is still running").toBe("running");
-    expect(p.button().textContent).toContain("final.closeout_running");
-    // …and it re-joins the state machine, so the 5-minute recovery still runs.
+    expect(p.noship().dataset.finalizeState).toBe("running");
+    expect(p.noship().textContent).toContain("final.closeout_running");
+    expect(p.ship().hidden).toBe(true);
+    p.noship().click();
+    p.ship().click();
+    await tick();
+    expect(p.posted).toHaveLength(1);
     expect(p.window.__submitted().action).toBe("finalize");
   });
 
-  test("a processed finalize does not freeze a fresh sheet", async () => {
-    // /reset replaces the payload, so a processed finalize reads back as
-    // `submitted: false` with the reset's stamp.
-    const p = await pageWithBridge(
-      { submitted: false, _processed_at: new Date().toISOString() },
-      { items: ITEMS }
-    );
-    expect(p.sheet().dataset.frozen).not.toBe("true");
-    expect(p.window.__stub.dim).toBe(false);
+  test("a non-durable answer hands the sheet back; a transport failure queues and stays running", async () => {
+    const p = page({ funde: FUNDE });
+    p.window.__reply = { ok: true, body: { durable: false } };
+    p.ship().click();
+    await tick();
+    expect(p.sheet().dataset.frozen).toBe("false");
+    expect(p.ship().hidden).toBe(false);
+    expect(p.noship().hidden).toBe(false);
+    expect(p.ship().disabled).toBe(false);
+    expect(p.window.__stub.pending.k).toBe("concept-test-pending");
+
+    const q = page({ funde: FUNDE });
+    q.window.__reply = { throws: true };
+    q.ship().click();
+    await tick();
+    expect(q.ship().dataset.finalizeState).toBe("running");
+    expect(JSON.parse(q.window.__stub.pending.v).ship.run).toBe(true);
   });
 
-  test("an earlier round's reset stamp does not hide a running finalize", async () => {
-    // The bridge keeps `_processed_at` from the LAST /reset across new
-    // submissions — every concept that had a round before its final report
-    // carries one. Treating it as "this finalize is done" skipped the
-    // restore on exactly the reload it exists for.
-    const p = await pageWithBridge(
-      { submitted: true, action: "finalize", iteration: "2", _processed_at: "2026-09-01T10:00:00Z" },
-      { items: ITEMS }
-    );
+  test("offline, both buttons say the click will be queued", () => {
+    const p = page({ funde: FUNDE });
+    p.document.getElementById("connection-status").dataset.state = "disconnected";
+    p.window.updateCloseoutButton();
+    expect(p.ship().textContent).toContain("final.closeout_go_offline");
+    expect(p.noship().textContent).toContain("final.closeout_go_offline");
+  });
+});
+
+describe("🤖 Claude macht beim Klick", () => {
+  test("the plan line counts what the click will do and follows every re-route", () => {
+    const p = page({ funde: FUNDE });
+    const plan = p.document.getElementById("closeout-plan");
+    expect(plan.textContent).toBe("⚡ final.plan_implement · 📌 final.plan_issue");
+    p.route("oq-typo", "ignore");
+    expect(plan.textContent).toBe("📌 final.plan_issue");
+    p.route("oq-saml", "ignore");
+    expect(plan.hidden).toBe(true);
+  });
+
+  test("disposition is one line with its default, 'ändern' opens it inline, and the line follows the choice", async () => {
+    const p = page({});
+    const line = p.document.querySelector("[data-dispose-summary]");
+    const edit = p.document.getElementById("closeout-dispose-edit");
+    const set = p.document.getElementById("panel-dispose-concept");
+    expect(line.textContent).toBe("final.dispose_line_discard");
+    expect(set.hidden).toBe(true);
+    edit.click();
+    expect(set.hidden).toBe(false);
+    expect(edit.getAttribute("aria-expanded")).toBe("true");
+    const keep = set.querySelector('input[value="keep"]');
+    keep.checked = true;
+    keep.dispatchEvent(new p.window.Event("change", { bubbles: true }));
+    const move = p.document.getElementById("dispose-move-to");
+    move.value = "docs/decisions/";
+    move.dispatchEvent(new p.window.Event("input", { bubbles: true }));
+    expect(line.textContent).toBe("final.dispose_line_keep → docs/decisions/");
+    p.noship().click();
+    await tick();
+    expect(p.lastPayload().disposition).toEqual({ mode: "keep", moveTo: "docs/decisions/" });
+  });
+});
+
+describe("a finalize that outlives its tab, and the done state", () => {
+  test("a reload during a running finalize comes back frozen on the button that was clicked", async () => {
+    const p = await pageWithBridge({ submitted: true, action: "finalize", iteration: "2", ship: { run: true } }, { funde: FUNDE });
     expect(p.sheet().dataset.frozen).toBe("true");
-    // …and the content veil comes back with it.
+    expect(p.ship().dataset.finalizeState).toBe("running");
+    expect(p.noship().hidden).toBe(true);
     expect(p.window.__stub.dim).toBe(true);
-    expect(p.document.body.classList.contains("content-dimmed")).toBe(true);
+    expect(p.window.__submitted().action).toBe("finalize");
   });
 
-  test("a finalize payload naming another round is left alone", async () => {
-    const p = await pageWithBridge(
-      { submitted: true, action: "finalize", iteration: "1" },
-      { items: ITEMS }
-    );
-    expect(p.sheet().dataset.frozen).not.toBe("true");
-  });
-
-  test("a submitted finalize names its round", () => {
-    expect(CLOSEOUT_JS).toContain("iteration: active ? active.dataset.iteration : null,");
-  });
-
-  test("an iterate submission on the bridge is none of the sheet's business", async () => {
-    const p = await pageWithBridge({ submitted: true, action: "iterate" }, { items: ITEMS });
-    expect(p.sheet().dataset.frozen).not.toBe("true");
+  test("a payload naming another round, or an iterate, is left alone", async () => {
+    const a = await pageWithBridge({ submitted: true, action: "finalize", iteration: "1" }, { funde: FUNDE });
+    expect(a.sheet().dataset.frozen).not.toBe("true");
+    const b = await pageWithBridge({ submitted: true, action: "iterate" }, { funde: FUNDE });
+    expect(b.sheet().dataset.frozen).not.toBe("true");
   });
 
   test("a stalled finalize stays frozen and says so — it never re-arms", () => {
-    // The safety net used to hand the sheet back after 5 minutes. With the
-    // default disposition the file is already deleted by then and the bridge
-    // is shutting down, so a click there queues a payload nobody picks up.
-    const p = page({ items: ITEMS });
+    const p = page({ funde: FUNDE });
+    p.window.submitFinalize(false);
     p.window.markCloseoutStalled();
+    expect(p.noship().dataset.finalizeState).toBe("stalled");
+    expect(p.noship().textContent).toContain("final.closeout_stalled_short");
+    expect(p.document.querySelector('.hint[data-finalize-state="stalled"]').hidden).toBe(false);
     expect(p.sheet().dataset.frozen).toBe("true");
-    expect(p.button().dataset.finalizeState).toBe("stalled");
-    expect(p.button().textContent).toContain("final.closeout_stalled_short");
-    // The stalled state is the one that keeps a paragraph: it tells the user
-    // where to go next.
-    expect(p.sheet().querySelector('.hint[data-finalize-state="stalled"]').hidden).toBe(false);
-    // A heartbeat must not repaint the frozen button as a live control.
-    p.window.updateCloseoutButton();
-    expect(p.button().dataset.finalizeState).toBe("stalled");
-    expect(p.button().textContent).toContain("final.closeout_stalled_short");
   });
 
-  test("a submit turns the button into the running state; handing the sheet back clears it", async () => {
-    const p = page({ items: ITEMS });
-    p.ship("no");
-    p.advanceAll();
-    p.window.__reply = { ok: true, body: { durable: false } };
-    p.execute();
-    await new Promise((r) => setTimeout(r, 0));
-    // Non-durable → restoreCloseoutToReady() → the button is a live control again.
-    expect(p.sheet().dataset.frozen).toBe("false");
-    expect(p.button().dataset.finalizeState).toBeUndefined();
-    expect(p.button().dataset.ready).toBe("true");
-    expect(p.button().textContent).toContain("final.closeout_execute");
-    // Locked rows did not come back clickable with the unfreeze.
-    expect(p.rowHead("ship").disabled).toBe(false);
-  });
-});
-
-describe("close-out sheet — the report Claude rewrites underneath it", () => {
-  test("a routed item drops out, and a newly appended one keeps its own routes", () => {
-    // Claude routes one item (adds `disabled`) and appends another in the same
-    // rewrite. A count-keyed rebuild would re-attach row 1's radios to the
-    // wrong checkbox and file an issue for the item the user did not pick.
-    const p = page({ items: ITEMS });
-    p.route("oq-docs", "implement");
-    p.boxes()[0].disabled = true; // oq-saml became [Issue #12]
-    const li = p.document.createElement("li");
-    li.innerHTML =
-      '<label><input type="checkbox" name="oq-new" data-issue-title="[CHORE] New point" checked>' +
-      '<span class="oq-label">New point</span></label>';
-    p.document.querySelector(".open-questions-list").appendChild(li);
-    p.render();
-
-    expect(p.rows().map((r) => r.dataset.followup)).toEqual(["oq-docs", "oq-new"]);
-    // The surviving row kept the user's answer; the new one starts on Issue.
-    expect(p.window.collectImplementItems().map((i) => i.id)).toEqual(["oq-docs"]);
-    expect(p.window.collectIssueItems().map((i) => i.id)).toEqual(["oq-new"]);
-  });
-
-  test("a detour into an earlier round does not silently reset the routes", () => {
-    // showIteration() calls refreshCloseout({ reset: true }) on every tab
-    // switch. Reading an earlier iteration and coming back is the most normal
-    // thing a reviewer does on a final report — and it used to move every row
-    // back to Issue, with the plan above the execute button agreeing.
-    const p = page({ items: ITEMS });
-    p.route("oq-saml", "implement");
-    p.route("oq-docs", "ignore");
-    p.render();
-    expect(p.window.collectImplementItems().map((i) => i.id)).toEqual(["oq-saml"]);
-    expect(p.window.collectIssueItems()).toEqual([]);
-    expect(p.rowSummary("followups")).toBe("2 · final.route_implement, final.route_ignore");
-  });
-
-  test("once every item is routed the block disappears and the sheet still closes", () => {
-    const p = page({ items: ITEMS });
-    p.boxes().forEach((b) => { b.disabled = true; });
-    p.render();
-    expect(p.sheet().querySelector('[data-closeout-block="followups"]').hidden).toBe(true);
-    expect(p.rowHead("ship").getAttribute("aria-expanded")).toBe("true");
-    expect(p.row("ship").dataset.locked).toBe("false");
-  });
-
-  test("a closed-out report shows the outcome and no controls at all", () => {
-    const p = page({ items: ITEMS, closed: true });
-    for (const block of p.sheet().querySelectorAll(".closeout-block")) {
-      expect(block.hidden).toBe(true);
-    }
-    // The button stays as the outcome — disabled, never hidden.
-    expect(p.button().hidden).toBe(false);
-    expect(p.button().disabled).toBe(true);
-    expect(p.button().dataset.finalizeState).toBe("done");
-    expect(p.button().textContent).toContain("final.closeout_done");
-    expect(p.sheet().querySelector('.hint[data-finalize-state="stalled"]').hidden).toBe(true);
-  });
-
-  test("the done state's hand-offs head is permanently disabled and stripped of its mark/summary", () => {
-    // [hidden] alone loses to .closeout-row's own `display: flex` in the
-    // cascade, so a row hidden that way still LOOKED clickable (the ○ mark
-    // and label kept rendering). The done branch must disable the head and
-    // remove its answerable affordances instead of trying to hide it.
-    const p = page({ items: ITEMS, closed: true });
-    const head = p.rowHead("handoffs");
-    expect(head.disabled, "permanently disabled").toBe(true);
-    expect(head.hasAttribute("aria-expanded"), "no longer expandable").toBe(false);
-    expect(head.querySelector("[data-closeout-mark]").hidden, "no ○/✓ mark").toBe(true);
-    expect(head.querySelector("[data-closeout-summary]").hidden, "no summary").toBe(true);
-  });
-
-  test("an open point with no name and no id does not take the sheet down", () => {
-    // CSS.escape('') and a keyless row are the kind of markup a hand-written
-    // report produces. The sheet must degrade, not throw.
-    const p = page({ items: [{ id: null, title: "[CHORE] Nameless" }, ...ITEMS] });
-    expect(p.rows()).toHaveLength(3);
-    expect(() => p.window.collectIssueItems()).not.toThrow();
-    expect(p.window.collectIssueItems()).toHaveLength(3);
+  test("data-closed: only 🧪/👉 with the chosen mode, and one '✓ Concept abgeschlossen · schließen'", () => {
+    const p = page({
+      closed: true,
+      funde: FUNDE,
+      tests: [{ id: "t1", text: "Look", crit: "mid", guide: "web", mode: "self" }, { id: "t2", text: "Read", crit: "low", mode: "skip" }],
+      handoffs: [{ id: "h1", text: "Do", crit: "high", guide: "desktop", mode: "guide" }],
+    });
+    expect(p.group("decide").hidden).toBe(true);
+    expect(p.sheet().querySelector(".closeout-claude").hidden).toBe(true);
+    expect(p.ship().hidden).toBe(true);
+    expect(p.noship().hidden).toBe(true);
+    expect(p.close().hidden).toBe(false);
+    expect(p.close().textContent).toContain("final.closeout_done_close");
+    const rows = p.todoRows("tests");
+    expect(rows.map((r) => r.dataset.mode)).toEqual(["self", "skip"]);
+    expect(p.sheet().querySelectorAll("#closeout-tests-list input").length).toBe(0);
+    expect(p.todoRows("handoffs")[0].textContent).toContain("🖥 final.mode_guide");
+    // No line about the completion card.
+    expect(p.sheet().textContent).not.toMatch(/Completion Card/i);
+    p.close().click();
+    expect(p.window.__stub.closed).toBe(1);
   });
 });

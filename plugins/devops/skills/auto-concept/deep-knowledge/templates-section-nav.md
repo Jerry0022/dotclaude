@@ -343,20 +343,15 @@ function computeSelectedVariant(variantSections) {
 // "+N weitere" — only when the TOC would otherwise overflow the scroll box
 // (measured AFTER render, never a fixed cut-off). Hides the tail of the
 // direct-children list and reveals it on click.
-// On the FINAL REPORT the rule is different (applyNavWindow()): the TOC is
-// secondary there and the close-out sheet below it needs the height, so by
-// default only the entry under the reading line plus its neighbour on each
-// side stay visible, whatever the scroll box would fit.
+// On the FINAL REPORT the panel shows no TOC at all (§ CSS
+// body.viewing-final .panel-nav-scroll), so there is nothing to cut.
 function applyNavOverflow(nav, scrollBox) {
   nav.querySelectorAll('.nav-more-toggle').forEach(el => el.remove());
   nav.querySelectorAll('[data-nav-overflow-hidden]').forEach(el => {
     el.hidden = false;
     el.removeAttribute('data-nav-overflow-hidden');
   });
-  if (document.body.classList.contains('viewing-final')) {
-    applyNavWindow(nav, nav.querySelector('.section-nav-item.is-active'));
-    return;
-  }
+  if (document.body.classList.contains('viewing-final')) return;
   if (!scrollBox || scrollBox.scrollHeight <= scrollBox.clientHeight) return;
   const items = [...nav.children];
   const floor = navOverflowFloor(nav, items);
@@ -388,41 +383,9 @@ function makeNavMoreToggle(nav, hiddenCount) {
       el.hidden = false;
       el.removeAttribute('data-nav-overflow-hidden');
     });
-    // Expanded by hand stays expanded: the spy must not re-window the list
-    // on the next reading-line change (applyNavWindow() checks this).
-    nav.dataset.navExpanded = 'true';
     toggle.remove();
   });
   return toggle;
-}
-// Final-report TOC window: at most NAV_WINDOW_MAX top-level entries —
-// the current one, the one before it (if any) and the one after it (if
-// any); at the first entry that is two, never three-from-the-top. The rest
-// hides behind the same "+N weitere" toggle the overflow rule uses, and the
-// window FOLLOWS the reading line (setActiveNavItem() re-applies it) until
-// the user expands the list once — `nav.dataset.navExpanded` — after which
-// it stays fully open for that build. Counts over the nav's direct children
-// (a grouped TOC's <details> counts as one entry), same as the overflow
-// rule; `current` is the child that CONTAINS the active item, or the first
-// child when nothing is active yet.
-const NAV_WINDOW_MAX = 3;
-function applyNavWindow(nav, activeItem) {
-  if (nav.dataset.navExpanded === 'true') return;
-  nav.querySelectorAll('.nav-more-toggle').forEach(el => el.remove());
-  const items = [...nav.children];
-  if (items.length <= NAV_WINDOW_MAX) return;
-  let cur = activeItem ? items.findIndex(el => el === activeItem || el.contains(activeItem)) : 0;
-  if (cur < 0) cur = 0;
-  const lo = Math.max(0, cur - 1);
-  const hi = Math.min(items.length - 1, cur + 1);
-  let hiddenCount = 0;
-  items.forEach((el, i) => {
-    const hide = i < lo || i > hi;
-    el.hidden = hide;
-    if (hide) { el.setAttribute('data-nav-overflow-hidden', ''); hiddenCount++; }
-    else el.removeAttribute('data-nav-overflow-hidden');
-  });
-  if (hiddenCount) nav.appendChild(makeNavMoreToggle(nav, hiddenCount));
 }
 ```
 

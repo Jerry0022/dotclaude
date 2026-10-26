@@ -82,9 +82,9 @@ process.stdin.on('end', () => {
     process.exit(2);
   }
 
-  const { ok, missing, forbidden, structural, mapping, overlap, stale, collisions, analysis } = evaluate(file, html);
+  const { ok, missing, forbidden, structural, mapping, overlap, stale, collisions, finalReport, analysis } = evaluate(file, html);
   if (ok) process.exit(0);
 
-  process.stderr.write(buildBlockReason(file, missing, forbidden, structural, mapping, overlap, stale, collisions, analysis) + '\n');
+  process.stderr.write(buildBlockReason(file, missing, forbidden, structural, mapping, overlap, stale, collisions, finalReport, analysis) + '\n');
   process.exit(2);
 });

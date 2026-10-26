@@ -1,350 +1,373 @@
 # Concept templates, part 36 of 43: Shared systems — two-button submit JS (continued 2)
 
 ```javascript
-// The rows currently on the sheet — every non-plan block that is not hidden.
-// A block hides for a real reason (no open points, no hand-offs), so a
-// hidden block is never counted against "every row answered".
-function closeoutRows() {
+// Every user-facing string comes from the sheet's data-label-* attributes,
+// baked in from the locale table at generation time.
+function closeoutLabel(name, fallback) {
   const sheet = document.getElementById('closeout-sheet');
-  if (!sheet) return [];
-  return CLOSEOUT_ROW_KINDS
-    .map(kind => sheet.querySelector('.closeout-block[data-closeout-block="' + kind + '"]'))
-    .filter(el => el && !el.hidden);
+  const key = 'label' + name.charAt(0).toUpperCase() + name.slice(1);
+  return (sheet && sheet.dataset[key]) || fallback || '';
 }
-function closeoutOpenRow() {
-  return closeoutRows().find(el => el.dataset.open === 'true') || null;
+const CLOSEOUT_ROUTE_GLYPH = { implement: '⚡', issue: '📌', ignore: '✕' };
+function closeoutRouteText(route) {
+  return CLOSEOUT_ROUTE_GLYPH[route] + ' ' + closeoutLabel('route' + route.charAt(0).toUpperCase() + route.slice(1), route);
 }
-function closeoutAllAnswered() {
-  const rows = closeoutRows();
-  return rows.length === 0 || rows.every(el => el.dataset.answered === 'true');
+function closeoutEl(tag, cls, text) {
+  const el = document.createElement(tag);
+  if (cls) el.className = cls;
+  if (text != null) el.textContent = text;
+  return el;
 }
-// Exactly one open row at a time — opening one closes the others. Opening a
-// row never touches its answered state: re-opening an already-answered row
-// (to look again, or change the answer) keeps it answered.
-function openCloseoutRow(target) {
-  closeoutRows().forEach(el => {
-    const isTarget = el === target;
-    el.dataset.open = isTarget ? 'true' : 'false';
-    const head = el.querySelector('[data-closeout-row]');
-    const body = el.querySelector('[data-closeout-row-body]');
-    if (head) head.setAttribute('aria-expanded', isTarget ? 'true' : 'false');
-    if (body) body.hidden = !isTarget;
+
+// 🧭 One line per Fund: name · reason chip · route pill. The whole line is
+// the button — it opens the bottom sheet (openRouteSheet()).
+function decideRow(key, el) {
+  const row = closeoutEl('button', 'closeout-todo closeout-decide');
+  row.type = 'button';
+  row.dataset.routeOpen = key;
+  row.dataset.followup = followUpId(el) || key;
+  // One line per row: the full name is the tooltip, so an ellipsis never
+  // hides anything for good.
+  row.dataset.tip = followUpLabel(el);
+  row.appendChild(closeoutEl('span', 'closeout-todo-title', followUpLabel(el)));
+  const reason = el.dataset.routeReason;
+  if (reason) row.appendChild(closeoutEl('span', 'closeout-why', reason));
+  const pill = closeoutEl('span', 'closeout-pill');
+  pill.dataset.routePill = '';
+  row.appendChild(pill);
+  return row;
+}
+function sammelRow(rest) {
+  const row = closeoutEl('button', 'closeout-todo closeout-decide closeout-sammel');
+  row.type = 'button';
+  row.dataset.routeOpen = CLOSEOUT_SAMMEL_KEY;
+  row.appendChild(closeoutEl('span', 'closeout-todo-title',
+    closeoutLabel('sammelRow', '{n}').replace('{n}', String(rest.length))));
+  const pill = closeoutEl('span', 'closeout-pill');
+  pill.dataset.routePill = '';
+  row.appendChild(pill);
+  return row;
+}
+function syncDecideRows() {
+  const host = document.getElementById('closeout-decide-list');
+  if (!host) return;
+  const { rows } = closeoutFundeSplit();
+  const byKey = {};
+  rows.forEach(r => { byKey[r.key] = r.el; });
+  host.querySelectorAll('[data-route-open]').forEach(row => {
+    const key = row.dataset.routeOpen;
+    const route = key === CLOSEOUT_SAMMEL_KEY ? sammelRoute() : followUpRoute(key, byKey[key]);
+    const pill = row.querySelector('[data-route-pill]');
+    if (pill) {
+      pill.dataset.route = route;
+      // The pill is short ("⚡ Jetzt ▾"); the bottom sheet names the route in full.
+      pill.textContent = (route === 'implement'
+        ? CLOSEOUT_ROUTE_GLYPH.implement + ' ' + closeoutLabel('routeImplementShort', 'implement')
+        : closeoutRouteText(route)) + ' ▾';
+    }
   });
 }
-// The collapsed row's one-line answer, reusing the same collectors/labels the
-// plan and the payload already read from — never a second source of truth.
-function closeoutRowSummary(kind) {
+
+// 🧪 / 👉 One line per to-do: text · criticality chip, then the three-way
+// choice, then — only for "Mit Anleitung" — which kind of guidance it gets.
+// Real radios (keyboard: Tab into the group, arrows to choose), unnamed in
+// the persistence sense: data-no-persist keeps saveState() off them.
+function todoRow(kind, el, i) {
+  const key = todoKey(kind, el, i);
+  const row = closeoutEl('div', 'closeout-todo closeout-todo-mode');
+  row.dataset.todoKey = key;
+  const head = closeoutEl('div', 'closeout-todo-head');
+  const title = closeoutEl('span', 'closeout-todo-title', todoText(el));
+  title.dataset.tip = title.textContent;
+  head.appendChild(title);
+  const crit = String(el.dataset.crit || '').toLowerCase();
+  if (crit === 'low' || crit === 'mid' || crit === 'high') {
+    const chip = closeoutEl('span', 'closeout-crit',
+      closeoutLabel('crit' + crit.charAt(0).toUpperCase() + crit.slice(1), crit));
+    chip.dataset.crit = crit;
+    head.appendChild(chip);
+  }
+  row.appendChild(head);
+  const seg = closeoutEl('div', 'closeout-seg');
+  seg.setAttribute('role', 'radiogroup');
+  seg.setAttribute('aria-label', title.textContent);
+  CLOSEOUT_MODES.forEach(mode => {
+    const label = closeoutEl('label', 'closeout-seg-opt');
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'td-' + key;
+    input.value = mode;
+    input.dataset.noPersist = '';
+    input.dataset.todoMode = key;
+    label.appendChild(input);
+    label.appendChild(closeoutEl('span', '',
+      closeoutLabel('mode' + mode.charAt(0).toUpperCase() + mode.slice(1), mode)));
+    seg.appendChild(label);
+  });
+  row.appendChild(seg);
+  const kindLine = closeoutEl('div', 'closeout-guide-kind');
+  kindLine.dataset.guideKind = '';
+  row.appendChild(kindLine);
+  return row;
+}
+// Done state (data-closed): the chosen mode as a plain line, no controls.
+function todoDoneRow(kind, el, i) {
+  const mode = todoMode(kind, el, i);
+  const row = closeoutEl('div', 'closeout-todo closeout-todo-done');
+  row.dataset.mode = mode;
+  row.appendChild(closeoutEl('span', 'closeout-todo-title', todoText(el)));
+  const g = todoGuide(el, mode);
+  const text = closeoutLabel('mode' + mode.charAt(0).toUpperCase() + mode.slice(1), mode);
+  row.appendChild(closeoutEl('span', 'closeout-pill', g === 'web' ? '🧭 ' + text
+    : g === 'desktop' ? '🖥 ' + text : g === 'inline' ? '📄 ' + text : text));
+  return row;
+}
+function syncTodoRows(kind) {
+  const host = document.getElementById('closeout-' + kind + '-list');
+  if (!host) return;
+  const items = todoItems(kind);
+  host.querySelectorAll('[data-todo-key]').forEach(row => {
+    const i = items.findIndex((el, j) => todoKey(kind, el, j) === row.dataset.todoKey);
+    if (i < 0) return;
+    const mode = todoMode(kind, items[i], i);
+    row.querySelectorAll('input[type="radio"]').forEach(inp => { inp.checked = inp.value === mode; });
+    const line = row.querySelector('[data-guide-kind]');
+    const g = todoGuide(items[i], mode);
+    if (line) {
+      line.hidden = !g;
+      line.textContent = g ? closeoutLabel('guide' + g.charAt(0).toUpperCase() + g.slice(1), g) : '';
+    }
+  });
+}
+
+// Rebuild a group only when its item SET changes (by key, never by count) —
+// a rebuild on every change would tear the row out from under the cursor or
+// the keyboard focus mid-choice. Answers live in _closeoutChoices, so a
+// rebuild never loses one.
+function renderGroup(kind, keys, build) {
+  const host = document.getElementById('closeout-' + kind + '-list');
+  const group = host && host.closest('[data-closeout-group]');
+  if (!host || !group) return 0;
+  const sig = JSON.stringify(keys);
+  if (host.dataset.itemKey !== sig) {
+    host.dataset.itemKey = sig;
+    host.textContent = '';
+    build(host);
+  }
+  group.hidden = keys.length === 0;
+  return keys.length;
+}
+function renderDecideGroup(closed) {
+  const { rows, rest } = closeoutDecideSplit(closed);
+  const keys = rows.map(r => r.key).concat(rest.length ? [CLOSEOUT_SAMMEL_KEY + ':' + rest.length] : []);
+  const n = renderGroup('decide', keys, host => {
+    rows.forEach(r => host.appendChild(decideRow(r.key, r.el)));
+    if (rest.length) host.appendChild(sammelRow(rest));
+  });
+  const count = document.querySelector('[data-closeout-group="decide"] [data-closeout-count]');
+  if (count) count.textContent = n ? String(rows.length + rest.length) : '';
+  syncDecideRows();
+  return n;
+}
+// The done state shows no Funde in the FAB — the report body says what
+// became of each one (issue link / "umgesetzt").
+function closeoutDecideSplit(closed) {
+  return closed ? { rows: [], rest: [] } : closeoutFundeSplit();
+}
+function renderTodoGroup(kind, closed) {
+  const items = todoItems(kind);
+  const shown = items.slice(0, CLOSEOUT_GROUP_MAX);
+  const keys = shown.map((el, i) => todoKey(kind, el, i)).concat(closed ? ['closed'] : []);
+  const n = renderGroup(kind, items.length ? keys : [], host => {
+    shown.forEach((el, i) => host.appendChild(closed ? todoDoneRow(kind, el, i) : todoRow(kind, el, i)));
+    // More than three: the rest keep their authored default and stay in the
+    // payload; the line only says they exist.
+    if (items.length > shown.length) {
+      host.appendChild(closeoutEl('p', 'closeout-more',
+        closeoutLabel('todoMore', '{n}').replace('{n}', String(items.length - shown.length))));
+    }
+  });
+  const count = document.querySelector('[data-closeout-group="' + kind + '"] [data-closeout-count]');
+  if (count) count.textContent = items.length ? String(items.length) : '';
+  if (!closed) syncTodoRows(kind);
+  return n;
+}
+
+// --- Bottom sheet: one Fund, its reason, three big tiles ---
+let _routeSheetKey = null;
+function openRouteSheet(key) {
   const sheet = document.getElementById('closeout-sheet');
-  if (kind === 'followups') {
-    const boxes = openQuestionBoxes();
-    if (!boxes.length) return '';
-    const keys = followUpKeys(boxes);
-    const host = document.getElementById('closeout-followup-list');
-    const labels = {
-      issue: (host && host.dataset.labelIssue) || 'Issue',
-      implement: (host && host.dataset.labelImplement) || '',
-      ignore: (host && host.dataset.labelIgnore) || ''
-    };
-    const parts = boxes.map((b, i) => labels[followUpRoute(keys[i])] || '');
-    return boxes.length + ' · ' + parts.join(', ');
-  }
-  if (kind === 'ship') {
-    const choice = closeoutShipChoice();
-    if (!choice) return (sheet && sheet.dataset.labelUnanswered) || '';
-    return choice === 'yes'
-      ? (sheet && sheet.dataset.labelShipYes) || ''
-      : (sheet && sheet.dataset.labelShipNo) || '';
-  }
-  if (kind === 'files') {
-    const mode = document.querySelector('input[name="dispose-mode"]:checked');
-    return (mode && mode.closest('label')?.querySelector('strong')?.textContent.trim()) || '';
-  }
-  if (kind === 'handoffs') {
-    const n = document.querySelectorAll('#closeout-handoffs-list li').length;
-    return ((sheet && sheet.dataset.labelSteps) || '{n}').replace('{n}', String(n));
-  }
-  return '';
+  const box = document.getElementById('closeout-route-sheet');
+  if (!sheet || !box || sheet.dataset.frozen === 'true') return;
+  const { rows, rest } = closeoutFundeSplit();
+  const isSammel = key === CLOSEOUT_SAMMEL_KEY;
+  const hit = rows.find(r => r.key === key);
+  if (!isSammel && !hit) return;
+  _routeSheetKey = key;
+  const el = hit ? hit.el : null;
+  const route = isSammel ? sammelRoute() : followUpRoute(key, el);
+  const authored = isSammel ? 'issue' : routeDefault(el);
+  box.querySelector('[data-route-title]').textContent = isSammel
+    ? closeoutLabel('sammelRow', '{n}').replace('{n}', String(rest.length))
+    : followUpLabel(el);
+  const origin = box.querySelector('[data-route-origin]');
+  const o = el ? el.dataset.oqOrigin : '';
+  origin.hidden = !(o === 'deferred' || o === 'found');
+  origin.textContent = o === 'deferred' ? closeoutLabel('originDeferred') : o === 'found' ? closeoutLabel('originFound') : '';
+  const body = box.querySelector('[data-route-body]');
+  body.textContent = isSammel
+    ? rest.map(r => followUpLabel(r.el)).join(' · ')
+    : (el.dataset.issueBody || '');
+  body.hidden = !body.textContent;
+  const reason = el ? el.dataset.routeReason : '';
+  box.querySelector('[data-route-why]').textContent = closeoutLabel('routeRecommended')
+    + ' ' + closeoutRouteText(authored) + (reason ? ' · ' + reason : '');
+  box.querySelectorAll('[data-route-tile]').forEach(tile => {
+    const v = tile.dataset.routeTile;
+    tile.hidden = isSammel && v === 'implement';
+    tile.setAttribute('aria-checked', v === route ? 'true' : 'false');
+  });
+  box.hidden = false;
+  sheet.dataset.routeSheet = 'open';
+  const current = box.querySelector('[data-route-tile][aria-checked="true"]');
+  if (current) current.focus();
 }
-// Locked = not answered AND not the open row: every unanswered row after the
-// current one. The order of the sheet is the order Claude executes it in, so
-// a later row may only be reached through "Weiter ›" on the ones before it;
-// an answered row stays reachable (closeoutRowClick()) to go back and change
-// the answer. `disabled` on the head is what makes the lock real for
-// keyboard and AT, the data-locked attribute is what the CSS dims.
-function isCloseoutRowLocked(block) {
-  return block.dataset.answered !== 'true' && block.dataset.open !== 'true';
-}
-function updateCloseoutRowSummary(block) {
-  const summaryEl = block.querySelector('[data-closeout-summary]');
-  if (summaryEl) summaryEl.textContent = closeoutRowSummary(block.dataset.closeoutBlock);
-  const answered = block.dataset.answered === 'true';
-  const open = block.dataset.open === 'true';
-  const mark = block.querySelector('[data-closeout-mark]');
-  if (mark) mark.textContent = answered ? '✓' : open ? '●' : '○';
-  const locked = isCloseoutRowLocked(block);
-  block.dataset.locked = locked ? 'true' : 'false';
-  const head = block.querySelector('[data-closeout-row]');
-  // A frozen sheet has already disabled every head (setCloseoutFrozen) —
-  // never re-enable one from here.
+function closeRouteSheet() {
   const sheet = document.getElementById('closeout-sheet');
-  if (head && !(sheet && sheet.dataset.frozen === 'true')) head.disabled = locked;
+  const box = document.getElementById('closeout-route-sheet');
+  if (box) box.hidden = true;
+  if (sheet) delete sheet.dataset.routeSheet;
+  const key = _routeSheetKey;
+  _routeSheetKey = null;
+  // Focus goes back to the row it came from, so the keyboard path continues.
+  if (key != null) {
+    const row = document.querySelector('#closeout-decide-list [data-route-open="' + CSS.escape(key) + '"]');
+    if (row) row.focus();
+  }
 }
-function updateCloseoutProgress() {
-  const sheet = document.getElementById('closeout-sheet');
-  const el = document.getElementById('closeout-progress');
-  if (!sheet || !el) return;
-  const rows = closeoutRows();
-  const done = rows.filter(r => r.dataset.answered === 'true').length;
-  const tpl = sheet.dataset.labelProgress || '{n}/{total}';
-  el.textContent = rows.length
-    ? tpl.replace('{n}', String(done)).replace('{total}', String(rows.length))
-    : '';
+function chooseRoute(route) {
+  if (_routeSheetKey == null || !CLOSEOUT_ROUTES.includes(route)) return;
+  if (_routeSheetKey === CLOSEOUT_SAMMEL_KEY && route === 'implement') return;
+  _closeoutChoices.route[_routeSheetKey] = route;
+  closeRouteSheet();
+  refreshCloseout();
 }
-// The one button's pre-submit states — never two buttons. Ready = every
-// visible row answered; only then does it read as the warning-coloured
-// execute action, with the consequence warning as its data-tip tooltip. While
-// the bridge is disconnected the ready label says so ("· wird
-// zwischengespeichert"): the final report has no status line of its own
-// (§ CSS body.viewing-final .panel-status), so the button is the one place
-// left to say that the click will be queued rather than delivered.
-// checkClaudeConnection() calls this on every heartbeat for that reason.
-// Never touches a button that already carries a finalize state — after the
-// click the button is the submission's status (setCloseoutButtonState()) and
-// nothing on the sheet may repaint it as a live control again.
+
+// --- 🤖 Claude macht beim Klick ---
+// The plan line ("⚡ 2 × jetzt umsetzen · 📌 1 × Issue anlegen") is the
+// readout of the inbox above — re-rendered on every change, so it can never
+// describe an older answer than the one on screen.
+function renderCloseoutPlan() {
+  const el = document.getElementById('closeout-plan');
+  if (!el) return;
+  const impl = collectImplementItems().length;
+  const iss = collectIssueItems().length;
+  const parts = [];
+  if (impl) parts.push('⚡ ' + closeoutLabel('planImplement', '{n}').replace('{n}', String(impl)));
+  if (iss) parts.push('📌 ' + closeoutLabel('planIssue', '{n}').replace('{n}', String(iss)));
+  el.textContent = parts.join(' · ');
+  el.hidden = parts.length === 0;
+}
+// The disposition as ONE line with its default — "🧹 Diese Seite wird
+// gelöscht · ändern"; "ändern" opens the radios + moveTo inline.
+function renderDisposeLine() {
+  const el = document.querySelector('[data-dispose-summary]');
+  if (!el) return;
+  const d = collectDisposition();
+  const name = d.mode === 'keep' ? 'disposeLineKeep' : d.mode === 'gitignore' ? 'disposeLineGitignore' : 'disposeLineDiscard';
+  el.textContent = closeoutLabel(name, d.mode) + (d.moveTo ? ' → ' + d.moveTo : '');
+}
+function toggleDisposeEdit(open) {
+  const btn = document.getElementById('closeout-dispose-edit');
+  const set = document.getElementById('panel-dispose-concept');
+  if (!btn || !set) return;
+  const next = typeof open === 'boolean' ? open : set.hidden;
+  set.hidden = !next;
+  btn.setAttribute('aria-expanded', next ? 'true' : 'false');
+}
+
+// --- The two buttons: the ship answer, then the status ---
+// Before the click: "🏁🚀 Abschließen & shippen" (warning fill) and "🏁 Nur
+// abschließen, nicht shippen" (ghost). While the bridge is disconnected both
+// say "· wird zwischengespeichert" — the final report has no status line
+// (§ CSS body.viewing-final .panel-status), so the buttons are the one place
+// left to say the click will be queued. checkClaudeConnection() calls this
+// on every heartbeat for that reason. Never touches a sheet that already
+// carries a finalize state.
+function closeoutGoButtons() {
+  return Array.from(document.querySelectorAll('#closeout-sheet [data-closeout-go]'));
+}
 function updateCloseoutButton() {
-  const btn = document.getElementById('closeout-execute');
-  if (!btn || btn.dataset.finalizeState) return;
-  const ready = closeoutAllAnswered();
-  btn.dataset.ready = ready ? 'true' : 'false';
-  const label = btn.querySelector('[data-closeout-btn-label]');
-  const icon = btn.querySelector('[data-closeout-btn-icon]');
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet || sheet.dataset.finalizeState) return;
   const conn = document.getElementById('connection-status');
   const offline = !!conn && conn.dataset.state === 'disconnected';
-  if (label) {
-    label.textContent = !ready ? (btn.dataset.labelNext || '')
-      : offline ? (btn.dataset.labelExecuteOffline || btn.dataset.labelExecute || '')
-      : (btn.dataset.labelExecute || '');
-  }
-  // The icon is warning-only. "Weiter ›" already carries its own "›" inside
-  // the label string — an always-visible icon glyph next to it used to
-  // render "› Weiter ›". Hidden (not emptied) in the "next" state so no
-  // stray gap/glyph is left in the flex row either.
-  if (icon) {
-    icon.hidden = !ready;
-    icon.textContent = ready ? '⚠' : '';
-  }
-  // "Ein Klick, alles davon" only makes sense once the click it describes
-  // can actually fire.
-  if (ready) btn.dataset.tip = btn.dataset.titleExecute || '';
-  else btn.removeAttribute('data-tip');
-}
-// After the click the button IS the status: running → done, or stalled.
-// Sets [data-finalize-state] (the CSS colour), swaps the label/icon from the
-// baked-in data-label-* strings and clears the execute title; `null` clears
-// the state again (restoreCloseoutToReady) and hands the button back to
-// updateCloseoutButton(). The stalled state is the only one that also keeps
-// a paragraph under the button (`.hint[data-finalize-state="stalled"]`): it
-// carries an instruction ("schau in den Chat"), not just a state.
-function setCloseoutButtonState(state) {
-  const btn = document.getElementById('closeout-execute');
-  const sheet = document.getElementById('closeout-sheet');
-  if (sheet) {
-    sheet.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
-      el.hidden = el.dataset.finalizeState !== state;
-    });
-  }
-  if (!btn) return;
-  if (!state) {
+  closeoutGoButtons().forEach(btn => {
+    btn.hidden = false;
     delete btn.dataset.finalizeState;
+    const label = btn.querySelector('[data-closeout-btn-label]');
+    const icon = btn.querySelector('[data-closeout-btn-icon]');
+    if (label) label.textContent = (btn.dataset.label || '') + (offline ? ' ' + (btn.dataset.labelOffline || '') : '');
+    if (icon) icon.textContent = btn.dataset.icon || '';
+    if (btn.dataset.titleReady) btn.dataset.tip = btn.dataset.titleReady;
+  });
+  const done = document.getElementById('closeout-close');
+  if (done) done.hidden = true;
+}
+// After the click the CLICKED button is the status — running → done, or
+// stalled — and the other one steps aside. Done collapses both into the one
+// "✓ Concept abgeschlossen · schließen" button (it closes the panel). `null`
+// clears the state again (restoreCloseoutToReady). The stalled state also
+// keeps the one paragraph under the buttons: it carries an instruction.
+function setCloseoutButtonState(state, which) {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet) return;
+  sheet.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
+    el.hidden = el.dataset.finalizeState !== state;
+  });
+  if (!state) {
+    delete sheet.dataset.finalizeState;
+    delete sheet.dataset.go;
     updateCloseoutButton();
     return;
   }
-  btn.dataset.finalizeState = state;
-  btn.removeAttribute('data-tip');
+  sheet.dataset.finalizeState = state;
+  if (which) sheet.dataset.go = which;
+  const go = sheet.dataset.go || 'no';
+  const done = document.getElementById('closeout-close');
+  if (done) { done.hidden = state !== 'done'; done.disabled = false; }
   const glyph = state === 'running' ? '⏳' : state === 'done' ? '✓' : '⚠';
   const key = 'label' + state.charAt(0).toUpperCase() + state.slice(1);
-  const label = btn.querySelector('[data-closeout-btn-label]');
-  const icon = btn.querySelector('[data-closeout-btn-icon]');
-  if (label) label.textContent = btn.dataset[key] || '';
-  if (icon) { icon.hidden = false; icon.textContent = glyph; }
-}
-function refreshCloseoutRows() {
-  closeoutRows().forEach(updateCloseoutRowSummary);
-  updateCloseoutProgress();
-  updateCloseoutButton();
-}
-// Called at the end of every non-closed renderCloseout(). Row DOM nodes are
-// static (they live in the skeleton, not rebuilt per render), so
-// `dataset.answered === undefined` is true only on the very first render —
-// every later call leaves in-session progress alone and just re-derives the
-// summaries/progress/button from current answers.
-// Fixed to match the `min-height` on .closeout-row (§ CSS) — the two MUST
-// agree, or consecutive stuck heads either gap or overlap.
-const CLOSEOUT_HEAD_H_REM = 2.2;
-// Sticky-both-edges: each head gets BOTH `top: i × H` and
-// `bottom: (n-1-i) × H`. `top` alone piles heads at the TOP as the region
-// scrolls down, but once the region is shorter than n × H (routine here —
-// 4 heads is already ~9rem, and a live check found only 1 head fitting
-// inside a fixed-height rows region before this), the LAST head(s) still get
-// pushed out past the bottom of the scroll container while the earlier ones
-// pile up top. Adding the symmetric `bottom` offset gives every head a
-// second constraint pinning it from the other edge, so the browser keeps it
-// inside a fixed HxH-tall "slot" regardless of scroll position or how short
-// the region is — no scroll-listener, no measured layout, just two sticky
-// constraints per element. Indices are over VISIBLE blocks only (computed
-// fresh on every call): a hidden block (no open points, no hand-offs) must
-// not leave a gap in the stack.
-function layoutCloseoutRowHeads() {
-  const rows = closeoutRows();
-  const n = rows.length;
-  rows.forEach((block, i) => {
-    block.dataset.closeoutIndex = String(i);
-    const head = block.querySelector('[data-closeout-row]');
-    if (!head) return;
-    head.style.top = (i * CLOSEOUT_HEAD_H_REM) + 'rem';
-    head.style.bottom = ((n - 1 - i) * CLOSEOUT_HEAD_H_REM) + 'rem';
+  closeoutGoButtons().forEach(btn => {
+    const mine = btn.dataset.closeoutGo === go;
+    btn.hidden = state === 'done' || !mine;
+    btn.disabled = true;
+    btn.dataset.finalizeState = state;
+    btn.removeAttribute('data-tip');
+    const label = btn.querySelector('[data-closeout-btn-label]');
+    const icon = btn.querySelector('[data-closeout-btn-icon]');
+    if (label) label.textContent = btn.dataset[key] || '';
+    if (icon) icon.textContent = glyph;
   });
-}
-function initCloseoutRows() {
-  const rows = closeoutRows();
-  if (!rows.length) return;
-  const answered = loadCloseoutAnswered();
-  rows.forEach(r => {
-    if (r.dataset.answered === undefined) {
-      r.dataset.answered = answered[r.dataset.closeoutBlock] ? 'true' : 'false';
-    }
-  });
-  if (!closeoutOpenRow()) {
-    openCloseoutRow(rows.find(r => r.dataset.answered !== 'true') || rows[0]);
-  }
-  // Re-run on every call, not just the first: the visible SET can change
-  // (a followups/hand-offs block appearing or disappearing) and the offsets
-  // above are only valid for the current set.
-  layoutCloseoutRowHeads();
-  refreshCloseoutRows();
-}
-// A row head click. Only an ANSWERED row (or the one already open) may be
-// opened by hand — going back to change an answer; a locked row's head is
-// `disabled` (updateCloseoutRowSummary()) so it never gets here from a real
-// click, but the guard stays for programmatic callers. Going back leaves the
-// rows in between exactly as they were: answered stays answered, and
-// "Weiter ›" from the re-opened row lands on the first still-unanswered one
-// again (closeoutButtonClick()).
-function closeoutRowClick(block) {
-  const sheet = document.getElementById('closeout-sheet');
-  if (!block || !sheet || sheet.dataset.frozen === 'true') return;
-  if (isCloseoutRowLocked(block)) return;
-  openCloseoutRow(block);
-  refreshCloseoutRows();
-}
-// The single button's click handler. Not yet all answered → confirm the open
-// row (refusing on an unanswered ship question) and open the next unanswered
-// one; all answered → this IS the execute click.
-function closeoutButtonClick() {
-  const sheet = document.getElementById('closeout-sheet');
-  if (!sheet || sheet.dataset.frozen === 'true') return;
-  if (closeoutAllAnswered()) {
-    submitFinalize();
-    return;
-  }
-  const rows = closeoutRows();
-  const open = closeoutOpenRow() || rows.find(r => r.dataset.answered !== 'true');
-  if (!open) return;
-  if (open.dataset.closeoutBlock === 'ship' && !closeoutShipChoice()) {
-    const req = document.getElementById('closeout-ship-required');
-    if (req) {
-      req.hidden = false;
-      req.scrollIntoView({ block: 'nearest' });
-    }
-    return;
-  }
-  confirmCloseoutRow(open);
-}
-// Marks one row answered and opens the next unanswered one (or keeps this
-// one open when nothing is left — the button then reads "⚠ Ausführen").
-// Shared by "Weiter ›" and an active choice inside a single-choice row
-// (closeoutChoiceClick()); it never submits, so confirming the LAST row by
-// a choice click can never also fire the finalize.
-function confirmCloseoutRow(block) {
-  block.dataset.answered = 'true';
-  const answered = loadCloseoutAnswered();
-  answered[block.dataset.closeoutBlock] = true;
-  saveCloseoutAnswered(answered);
-  const next = closeoutRows().find(r => r.dataset.answered !== 'true');
-  openCloseoutRow(next || block);
-  refreshCloseoutRows();
-}
-// The rows whose whole answer is ONE radio choice. Actively clicking one of
-// their options — also the pre-selected default — IS the answer, the same as
-// "Weiter ›": the user said "Ship" or "Seite löschen", making them click a
-// second button to mean it was pure friction. "Weiter ›" stays as the way to
-// take the default without touching it. The followups row is deliberately
-// not one of them: it holds one route per open point, so a click on the
-// first point's route must not collapse the row before the others are seen.
-const CLOSEOUT_SINGLE_CHOICE = { ship: 'closeout-ship', files: 'dispose-mode' };
-// Arrow keys move a radio group's selection AND dispatch a click — that is
-// browsing the options, not choosing one, so it must not advance the sheet
-// (otherwise the middle option of three could never be passed by keyboard).
-// Space/Enter and pointer clicks stay active choices.
-let _closeoutArrowNav = false;
-function closeoutChoiceKeydown(e) {
-  if (/^Arrow/.test(e.key)) {
-    _closeoutArrowNav = true;
-    setTimeout(() => { _closeoutArrowNav = false; }, 0);
-  }
-}
-function closeoutChoiceClick(e) {
-  const input = e.target;
-  if (!input || !input.matches || !input.matches('input[type="radio"]')) return;
-  if (_closeoutArrowNav) return;
-  const sheet = document.getElementById('closeout-sheet');
-  if (!sheet || sheet.dataset.frozen === 'true') return;
-  const block = input.closest('.closeout-block');
-  if (!block || block.dataset.open !== 'true') return;
-  if (CLOSEOUT_SINGLE_CHOICE[block.dataset.closeoutBlock] !== input.name) return;
-  const req = document.getElementById('closeout-ship-required');
-  if (req && block.dataset.closeoutBlock === 'ship') req.hidden = true;
-  confirmCloseoutRow(block);
-}
-
-// Re-renders the sheet. Called from showIteration() with { reset: true } (a
-// tab switch re-reads the report from scratch) and from the change listener
-// without it. There are no steps to keep a position in any more — the reset
-// flag only forces the follow-up rows to be rebuilt from the body.
-function refreshCloseout(opts) {
-  const sheet = document.getElementById('closeout-sheet');
-  if (!sheet) return;
-  if (opts && opts.reset) {
-    // Force the rows to be re-derived from the report body — the section may
-    // have been rewritten under us. The user's answers are carried over by
-    // buildFollowUpList(); "reset" is about the row SET, never about the
-    // choices made on it.
-    const host = document.getElementById('closeout-followup-list');
-    if (host) host.dataset.itemKey = '';
-  }
-  renderCloseout();
 }
 
 // Freezing is not cosmetic: after a submit the payload is fixed, so a live
-// radio or a re-enabled execute button would let the user act on a screen
-// that no longer describes what was sent.
-// Scoped to the sheet's own controls ONLY. Never touch the body's
-// [data-open-questions] checkboxes here: Claude disables those permanently as
-// it routes each item, and a blanket re-enable on unfreeze would hand back
-// checkboxes for issues that already exist.
+// choice or a re-enabled button would let the user act on a screen that no
+// longer describes what was sent. Scoped to the sheet's own controls.
 function setCloseoutFrozen(frozen) {
   const sheet = document.getElementById('closeout-sheet');
   if (!sheet) return;
   sheet.dataset.frozen = frozen ? 'true' : 'false';
-  sheet.querySelectorAll('input, button').forEach(el => { el.disabled = frozen; });
-  // Unfreezing re-enabled every row head above — a locked row must not come
-  // back clickable.
-  if (!frozen) closeoutRows().forEach(updateCloseoutRowSummary);
+  if (frozen) closeRouteSheet();
+  sheet.querySelectorAll('input, button').forEach(el => {
+    if (el.id === 'closeout-close') return;
+    el.disabled = frozen;
+  });
 }
 
 // Re-arm after a finalize that did not complete — a blocked ship, a stale
-// processed state, a bridge that could not persist. Without this the execute
-// button stays disabled forever and the user's only way out is a reload.
+// processed state, a bridge that could not persist. Without this the buttons
+// stay disabled forever and the user's only way out is a reload.
 function restoreCloseoutToReady() {
   const sheet = document.getElementById('closeout-sheet');
   if (!sheet) return;
@@ -353,215 +376,55 @@ function restoreCloseoutToReady() {
   renderCloseout();
 }
 
-// What the user has to do by hand once the close-out is through — the one
-// part of a concept nothing here can automate, so it must not disappear into
-// the report body. Mirrors the report's [data-handoffs] list onto the sheet;
-// renderCloseout() keeps this block after data-closed, when every other block
-// is gone.
-function renderHandoffs() {
-  const sheet = document.getElementById('closeout-sheet');
-  const block = sheet && sheet.querySelector('[data-closeout-block="handoffs"]');
-  const host = document.getElementById('closeout-handoffs-list');
-  if (!block || !host) return;
-  const section = finalReportSection();
-  const list = section ? section.querySelector('[data-handoffs]') : null;
-  const items = list ? Array.from(list.querySelectorAll('li')) : [];
-  host.textContent = '';
-  items.forEach(li => {
-    const el = document.createElement('li');
-    el.textContent = li.textContent.trim().replace(/\s+/g, ' ');
-    host.appendChild(el);
-  });
-  const count = document.getElementById('closeout-handoffs-count');
-  if (count) count.textContent = items.length ? '(' + items.length + ')' : '';
-  block.hidden = items.length === 0;
-}
-
 function renderCloseout() {
   const sheet = document.getElementById('closeout-sheet');
   if (!sheet) return;
-
   // A closed-out report is done. Claude stamps data-closed on the section
-  // before the final /reload, so the reloaded page shows the outcome instead
-  // of re-arming a sheet whose bridge has already been shut down — a live
-  // execute button there would queue a submission nobody will ever pick up.
+  // before the final /reload (and data-mode on every 🧪/👉 item), so the
+  // reloaded page shows the outcome instead of re-arming a sheet whose bridge
+  // is already gone: only the 🧪/👉 items with their chosen mode, and the one
+  // "✓ Concept abgeschlossen · schließen" button.
   const section = finalReportSection();
-  if (section && section.hasAttribute('data-closed')) {
-    sheet.querySelectorAll('.closeout-block').forEach(el => {
-      el.hidden = el.dataset.closeoutBlock !== 'handoffs';
-    });
-    renderHandoffs();
-    // Done means no controls at all — the hand-offs row keeps its icon +
-    // label as a plain heading but loses every answerable affordance: no ○/✓
-    // mark, no "current answer" summary, no aria-expanded, permanently
-    // disabled so it neither opens/closes anything nor looks clickable
-    // (§ CSS ":disabled" override — the row's own cursor:pointer would
-    // otherwise survive `disabled`). Never `head.hidden`: [hidden] loses to
-    // `.closeout-row`'s own `display: flex` in the cascade, which is what
-    // left a live-looking "○ Danach von Hand" row after close in practice.
-    const handoffsBlock = sheet.querySelector('[data-closeout-block="handoffs"]');
-    if (handoffsBlock) {
-      const head = handoffsBlock.querySelector('[data-closeout-row]');
-      const body = handoffsBlock.querySelector('[data-closeout-row-body]');
-      if (head) {
-        head.disabled = true;
-        head.removeAttribute('aria-expanded');
-        const mark = head.querySelector('[data-closeout-mark]');
-        if (mark) mark.hidden = true;
-        const summary = head.querySelector('[data-closeout-summary]');
-        if (summary) { summary.hidden = true; summary.textContent = ''; }
-      }
-      if (body) body.hidden = false;
-    }
-    // The button stays, as the outcome: "✓ Concept abgeschlossen." — disabled
-    // (nothing left to click), never hidden (the done state must be visible
-    // where the action was).
+  const closed = !!(section && section.hasAttribute('data-closed'));
+  sheet.dataset.closed = closed ? 'true' : 'false';
+  const decided = renderDecideGroup(closed);
+  const todos = renderTodoGroup('tests', closed) + renderTodoGroup('handoffs', closed);
+  const claude = sheet.querySelector('.closeout-claude');
+  if (claude) claude.hidden = closed;
+  const empty = document.getElementById('closeout-empty');
+  if (empty) empty.hidden = closed || decided + todos > 0;
+  renderCloseoutPlan();
+  renderDisposeLine();
+  if (closed) {
+    closeRouteSheet();
     setCloseoutButtonState('done');
-    const exec = document.getElementById('closeout-execute');
-    if (exec) { exec.hidden = false; exec.disabled = true; }
-    const progress = document.getElementById('closeout-progress');
-    if (progress) progress.textContent = '';
     return;
   }
-
-  const boxes = openQuestionBoxes();
-  const followBlock = sheet.querySelector('[data-closeout-block="followups"]');
-  if (followBlock) followBlock.hidden = boxes.length === 0;
-  const count = document.getElementById('closeout-followup-count');
-  if (count) count.textContent = boxes.length ? '(' + boxes.length + ')' : '';
-
-  if (boxes.length) buildFollowUpList();
-  renderHandoffs();
-
-  // Every point dropped is a legitimate answer, but it is worth saying out
-  // loud: nothing at all will be carried out of this concept.
-  const none = document.getElementById('closeout-followups-none');
-  if (none) {
-    none.hidden = !(boxes.length > 0
-      && collectIssueItems().length === 0
-      && collectImplementItems().length === 0);
-  }
-  const req = document.getElementById('closeout-ship-required');
-  if (req && closeoutShipChoice()) req.hidden = true;
-
-  // Re-apply after the rebuild above: buildFollowUpList() creates fresh
-  // radios, which would otherwise come back live on a frozen sheet.
+  // Re-apply after a rebuild: fresh rows would otherwise come back live on a
+  // frozen sheet.
   if (sheet.dataset.frozen === 'true') setCloseoutFrozen(true);
-
-  // Accordion state — row set may have just changed (a block appeared or
-  // disappeared above), so re-derive open/answered/summaries/button every
-  // time, not just on first render.
-  initCloseoutRows();
+  updateCloseoutButton();
 }
 
-// One row per still-open point: its title, then its three routes. The body
-// checkbox stays authoritative for "is this point still open" — "Ignorieren"
-// unchecks it, the other two check it — so Claude's routed-item rewrite keeps
-// working unchanged.
-function buildFollowUpList() {
-  const host = document.getElementById('closeout-followup-list');
-  if (!host) return;
-  const boxes = openQuestionBoxes();
-  // Only rebuild when the underlying item SET changed — a rebuild driven by a
-  // route's own change event would tear the row out from under the user's
-  // cursor mid-click. The comparison is by id, never by count: Claude can
-  // route one item (it gains `disabled`, leaving openQuestionBoxes) while the
-  // same rewrite appends another, and a count-keyed fast path would then sync
-  // every row to the WRONG body checkbox — the user picks a route on a row
-  // labelled A and files an issue for B.
-  const keys = followUpKeys(boxes);
-  const ids = JSON.stringify(keys);
-  if (host.dataset.itemKey === ids) return;
-  // Answers survive the rebuild. refreshCloseout({ reset: true }) runs on
-  // EVERY tab switch, so without this a detour into an earlier round to
-  // re-read something silently reset every row the user had set to "jetzt
-  // umsetzen" back to Issue — and the plan above the execute button would
-  // have agreed with the reset, not with what they chose. Keyed by the radio
-  // group name, so an id that is gone drops its answer with its row.
-  const previous = {};
-  host.querySelectorAll('.followup-routes input[type="radio"]:checked')
-      .forEach(el => { previous[el.name] = el.value; });
-  host.dataset.itemKey = ids;
-  host.textContent = '';
-  const labels = {
-    issue: host.dataset.labelIssue || 'Issue',
-    implement: host.dataset.labelImplement || 'Implement now',
-    ignore: host.dataset.labelIgnore || 'Drop',
-    originDeferred: host.dataset.labelOriginDeferred || 'deferred by you',
-    originFound: host.dataset.labelOriginFound || 'found on the way'
-  };
-  boxes.forEach((src, i) => {
-    const key = keys[i];
-    const row = document.createElement('div');
-    row.className = 'followup';
-    row.dataset.followup = followUpId(src) || key;
-    const title = document.createElement('span');
-    title.className = 'followup-title';
-    const labelEl = src.closest('label')?.querySelector('.oq-label');
-    title.textContent = src.dataset.issueTitle
-      || (labelEl ? labelEl.textContent.trim() : '');
-    row.appendChild(title);
-    // Where a row came from is part of the decision: a point the user parked
-    // themselves reads differently from one Claude stumbled over. The
-    // admission gate (SKILL.md § Open points admission gate) allows exactly
-    // these two origins; any other value is a report that skipped the gate,
-    // and the row then carries no tag rather than a made-up one.
-    const origin = src.dataset.oqOrigin;
-    if (origin === 'deferred' || origin === 'found') {
-      const tag = document.createElement('span');
-      tag.className = 'followup-origin';
-      tag.dataset.origin = origin;
-      tag.textContent = origin === 'deferred' ? labels.originDeferred : labels.originFound;
-      row.appendChild(tag);
-    }
-    const routes = document.createElement('div');
-    routes.className = 'followup-routes';
-    routes.setAttribute('role', 'radiogroup');
-    routes.setAttribute('aria-label', title.textContent);
-    ['issue', 'implement', 'ignore'].forEach(value => {
-      const label = document.createElement('label');
-      label.className = 'followup-route';
-      const input = document.createElement('input');
-      input.type = 'radio';
-      // Named so the three form one radio group, but data-no-persist for the
-      // same reason the ship radios carry it: saveState() otherwise restores
-      // every named radio document-wide, and a remembered "jetzt umsetzen"
-      // would sail through a later close-out and write code the user never
-      // re-authorised. After a reload every row falls back to the default.
-      input.name = 'fu-' + key;
-      input.value = value;
-      input.dataset.noPersist = '';
-      // The body checkbox decides ignore-vs-not (it is the source of truth
-      // for "still open"); a preserved answer only chooses between the two
-      // routes that keep it open.
-      const prior = previous['fu-' + key];
-      const initial = !src.checked ? 'ignore'
-        : (prior === 'implement' ? 'implement' : CLOSEOUT_DEFAULT_ROUTE);
-      if (value === initial) input.checked = true;
-      input.addEventListener('change', () => {
-        src.checked = value !== 'ignore';
-        src.dispatchEvent(new Event('change', { bubbles: true }));
-      });
-      const text = document.createElement('span');
-      text.textContent = labels[value];
-      label.appendChild(input);
-      label.appendChild(text);
-      routes.appendChild(label);
-    });
-    row.appendChild(routes);
-    host.appendChild(row);
-  });
+// Called from showIteration() with { reset: true } (a tab switch re-reads the
+// report from scratch) and from the change listener without it. "reset" is
+// about the row SET only — the choices are kept, by id.
+function refreshCloseout(opts) {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet) return;
+  if (opts && opts.reset) {
+    sheet.querySelectorAll('[data-closeout-group] [id$="-list"]').forEach(host => { host.dataset.itemKey = ''; });
+  }
+  renderCloseout();
 }
 
-// One submit for the whole close-out. Claude executes the parts in a fixed
-// order (issues → implement → ship → disposition), so the user never has to
-// sequence outward-facing actions by clicking things in the right order.
-// POST /decisions has NO version guard (that lives on /reset and /status), so
-// a payload the bridge already fsynced but whose response never reached the
-// browser sits in two places at once. For an iterate that is harmless; for a
-// finalize it means a second `gh issue create` run and a second real release.
-// The id is what lets retryPendingSubmission() recognise its own payload on
-// the bridge and drop the local copy instead of re-sending it.
+// One submit for the whole close-out. POST /decisions has NO version guard
+// (that lives on /reset and /status), so a payload the bridge already fsynced
+// but whose response never reached the browser sits in two places at once.
+// For an iterate that is harmless; for a finalize it means a second
+// `gh issue create` run and a second real release. The id is what lets
+// retryPendingSubmission() recognise its own payload on the bridge and drop
+// the local copy instead of re-sending it.
 function newSubmissionId() {
   return 'sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 }

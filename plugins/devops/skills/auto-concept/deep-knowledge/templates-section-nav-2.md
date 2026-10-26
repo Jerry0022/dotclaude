@@ -28,9 +28,6 @@ function buildSectionNav() {
     });
   });
   nav.innerHTML = '';
-  // A hand-expanded final-report window (applyNavWindow()) is per build —
-  // the next tab switch starts windowed again.
-  delete nav.dataset.navExpanded;
   // Every group + listener created from here on belongs to THIS generation;
   // any 'toggle' event still queued from a PREVIOUS one is now stale by
   // definition, whatever its own .open reads.
@@ -367,13 +364,6 @@ function setActiveNavItem(item) {
   }
   updateHereRoundParenthesis(item);
   openNavGroupFor(item);
-  // On the final report the TOC is a 3-entry window around the reading line
-  // (applyNavWindow()); it has to move with the line, or the active entry
-  // would scroll out of the window it is supposed to be the centre of.
-  if (document.body.classList.contains('viewing-final')) {
-    const nav = document.getElementById('section-nav');
-    if (nav && nav.contains(item)) applyNavWindow(nav, item);
-  }
   revealNavItem(item);
 }
 
@@ -507,10 +497,6 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
   `applyNavOverflow()` hides the TOC's tail only when `.panel-nav-scroll`'s
   `scrollHeight` exceeds its `clientHeight` after render, and the toggle
   expands it in place — never a fixed cut-off on a round that already fits.
-  On the final report (`body.viewing-final`) it defers to `applyNavWindow()`
-  instead: by default only the entry under the reading line plus one
-  neighbour on each side (at most `NAV_WINDOW_MAX` = 3 top-level entries)
-  stay visible, the rest sits behind the same toggle, and the window follows
-  the reading line (`setActiveNavItem()`) until the user expands it once.
-  The TOC is secondary there; the close-out sheet below it gets the height.
+  On the final report (`body.viewing-final`) the panel shows no TOC at all
+  — its body belongs to the close-out inbox — so there is nothing to cut.
 

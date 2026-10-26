@@ -150,18 +150,69 @@ must see their own language. The locale hint is authoritative.
 | `reality.reassure`             | Your implement order is not lost: submitting this round with "Implement with feedback" implements directly, with no further check. | Dein Implement-Auftrag ist nicht verloren: Wenn du diese Runde mit „Mit Feedback implementieren" abschickst, wird direkt implementiert — ohne erneute Prüfung. |
 | `reality.evidence`             | Landed on the default branch   | Auf dem Default-Branch gelandet |
 | `reality.recommendation`       | Recommendation                 | Empfehlung |
-| `final.open_questions`         | Open questions & TODOs         | Offene Fragen & TODOs |
-| `final.followups_hint`         | Issue = tracked for later. Implement now = built during this close-out, by the devops agents. Drop = it ends with the concept. | Issue = für später festgehalten. Jetzt umsetzen = wird in diesem Abschluss gebaut, von den devops-Agents. Ignorieren = fällt mit dem Concept weg. |
-| `final.followups_none`         | Everything dropped — no issue, no implementation. | Alles ignoriert — kein Issue, keine Umsetzung. |
+| `final.phase`                  | Close-out                      | Abschluss |
+| `final.done_what`              | What was done                  | Was getan wurde |
+| `final.results`                | What came out                  | Was kam raus |
+| `final.holds`                  | What it withstands             | Was es aushält |
+| `final.depth`                  | Test depth                     | Prüftiefe |
+| `final.level_of`               | level {n} of 7                 | Stufe {n} von 7 |
+| `final.level_code`                | Code check                     | Code-Check |
+| `final.level_dry`                | Dry run                        | Trockentest |
+| `final.level_interplay`                | Interplay                      | Zusammenspiel |
+| `final.level_local`                | Played through locally         | Lokal durchgespielt |
+| `final.level_prod`                | Prod build checked             | Prod-Build geprüft |
+| `final.level_live`                | Tested live                    | Live vertestet |
+| `final.level_accept`                | Accepted by you                | Von dir abgenommen |
+| `final.target_met`             | target met                     | Ziel erreicht |
+| `final.target_short`           | {n} short of the target        | {n} fehlen bis Ziel |
+| `final.before`                 | Before                         | Vorher |
+| `final.after`                  | After                          | Nachher |
+| `final.try_it`                 | Try it yourself                | Selbst ausprobieren |
+| `final.open_live`              | Open the live version          | Live-Version öffnen |
+| `final.banner_done`            | Closed                         | Abgeschlossen |
+| `final.banner_live`            | live as {version}              | live als {version} |
+| `final.funde_fold`             | {n} findings on the way        | {n} Funde unterwegs |
+| `final.dev_fold`               | For developers                 | Für Entwickler |
+| `final.fund_what`              | What                           | Was |
+| `final.fund_where`             | Where                          | Wo |
+| `final.fund_why`               | Why pre-selected               | Warum vorbelegt |
 | `final.route_issue`            | Issue                          | Issue |
 | `final.route_implement`        | Implement now                  | Jetzt umsetzen |
+| `final.route_implement_short`  | Now                            | Jetzt |
 | `final.route_ignore`           | Drop                           | Ignorieren |
+| `final.route_implement_hint`   | Built in this close-out, before any ship. | Wird in diesem Abschluss gebaut, vor dem Shippen. |
+| `final.route_issue_hint`       | Filed as a GitHub issue for later. Nothing is built now. | Wird als GitHub-Issue für später angelegt. Jetzt wird nichts gebaut. |
+| `final.route_ignore_hint`      | Ends with the concept. Nothing is filed or built. | Fällt mit dem Concept weg. Nichts wird angelegt oder gebaut. |
+| `final.route_recommended`      | Recommended:                   | Empfohlen: |
 | `final.origin_deferred`        | deferred by you                | bewusst vertagt |
 | `final.origin_found`           | found on the way               | unterwegs gefunden |
+| `final.sammel_row`             | {n} more findings → one collected issue | {n} weitere Funde → ein Sammel-Issue |
+| `final.sammel_title`           | [CHORE] Collected findings ({n}) | [CHORE] Gesammelte Funde ({n}) |
+| `final.sheet_close`            | Close without changing         | Ohne Änderung schließen |
+| `final.group_decide`           | You decide                     | Du entscheidest |
+| `final.group_tests`            | You test                       | Du testest |
+| `final.group_handoffs`         | You do afterwards              | Du machst danach |
+| `final.group_claude`           | Claude does on the click       | Claude macht beim Klick |
+| `final.mode_skip`              | Not needed                     | Muss nicht |
+| `final.mode_guide`             | With guidance                  | Mit Anleitung |
+| `final.mode_self`              | I'll do it                     | Mach ich selbst |
+| `final.guide_web`              | Guidance: 🧭 web guide          | Anleitung: 🧭 Web-Guide |
+| `final.guide_desktop`          | Guidance: 🖥 desktop help       | Anleitung: 🖥 Desktop-Hilfe |
+| `final.guide_inline`           | Guidance: 📄 written steps in the chat | Anleitung: 📄 Schritte im Chat |
+| `final.crit_low`               | low                            | niedrig |
+| `final.crit_mid`               | medium                         | mittel |
+| `final.crit_high`              | high                           | hoch |
+| `final.todo_more`              | +{n} more in the report        | +{n} weitere im Bericht |
+| `final.plan_implement`         | {n} × implement now            | {n} × jetzt umsetzen |
+| `final.plan_issue`             | {n} × file an issue            | {n} × Issue anlegen |
+| `final.closeout_empty`         | Nothing left to decide — just close it out. | Nichts mehr zu entscheiden — nur noch abschließen. |
 | `final.issue_link_prefix`      | Issue                          | Issue |
 | `final.done_prefix`            | implemented                    | umgesetzt |
+| `final.dispose_line_discard`   | This page gets deleted         | Diese Seite wird gelöscht |
+| `final.dispose_line_keep`      | This page stays in the project | Diese Seite bleibt im Projekt |
+| `final.dispose_line_gitignore` | This page stays local (.gitignore) | Diese Seite bleibt lokal (.gitignore) |
+| `final.dispose_change`         | change                         | ändern |
 | `final.dispose_heading`        | This concept page              | Diese Konzeptseite |
-| `final.dispose_hint`           | Only the page is at stake here — whatever was implemented, shipped or filed stays. | Hier geht es nur um die Seite — alles Umgesetzte, Geshippte und Angelegte bleibt. |
 | `final.dispose_discard`        | Delete the page (default)      | Seite löschen (Standard) |
 | `final.dispose_discard_hint`   | Removes the HTML + its decisions JSON. The implementation is untouched. | Entfernt die HTML + ihr Decisions-JSON. Die Umsetzung bleibt unberührt. |
 | `final.dispose_keep`           | Keep in project                | Im Projekt behalten |
@@ -170,30 +221,15 @@ must see their own language. The locale hint is authoritative.
 | `final.dispose_gitignore_hint` | Files stay locally, an entry is appended to .gitignore. | Files bleiben lokal, ein Eintrag wird zur .gitignore hinzugefügt. |
 | `final.dispose_move_label`     | Move to (optional):            | Verschieben nach (optional): |
 | `final.dispose_move_placeholder` | e.g. docs/architecture/      | z.B. docs/architecture/ |
-| `final.ship_hint`              | Runs the full ship pipeline (build, version bump, release, merge). | Startet die komplette Ship-Pipeline (Build, Version-Bump, Release, Merge). |
-| `final.closeout_heading`       | Close-out                      | Abschluss |
-| `final.followups_q`            | Open points                    | Offene Punkte |
-| `final.closeout_ship_q`        | Ship this now?                 | Jetzt shippen? |
-| `final.closeout_ship_yes`      | Yes, run the ship pipeline     | Ja, Ship-Pipeline starten |
-| `final.closeout_ship_no`       | No, leave it unreleased        | Nein, nicht releasen |
-| `final.closeout_ship_no_hint`  | The code stays as committed. You can ship later from the chat. | Der Code bleibt wie committed. Shippen geht später jederzeit im Chat. |
-| `final.closeout_choice_required` | Answer this one — it is the only step that reaches outside the repo. | Beantworte diese eine Frage — sie ist der einzige Schritt, der das Repo verlässt. |
-| `final.closeout_plan_warn`     | One click, all of it — including anything outward-facing. | Ein Klick, alles davon — inklusive allem was nach aussen geht. |
-| `final.closeout_execute`       | Execute                        | Ausführen |
-| `final.closeout_execute_offline` | Execute · will be queued     | Ausführen · wird zwischengespeichert |
-| `final.closeout_next`          | Continue ›                     | Weiter › |
-| `final.closeout_progress`      | {n} of {total} answered        | {n} von {total} beantwortet |
-| `final.closeout_unanswered`    | unanswered                     | unbeantwortet |
-| `final.closeout_steps`         | {n} steps                      | {n} Schritte |
-| `final.closeout_label_files`   | This page                      | Diese Seite |
-| `final.closeout_summary_ship_yes` | ship                        | shippen |
-| `final.closeout_summary_ship_no` | no release                   | nicht releasen |
+| `final.closeout_ship_go`       | Close out & ship               | Abschließen & shippen |
+| `final.closeout_noship_go`     | Close out only, don't ship     | Nur abschließen, nicht shippen |
+| `final.closeout_ship_go_hint`  | One click, all of it: findings, then the full ship pipeline (build, version bump, release, merge), then this page. | Ein Klick, alles davon: die Funde, dann die komplette Ship-Pipeline (Build, Version-Bump, Release, Merge), dann diese Seite. |
+| `final.closeout_noship_go_hint` | One click: findings and this page — no release. You can ship later from the chat. | Ein Klick: die Funde und diese Seite — kein Release. Shippen geht später jederzeit im Chat. |
+| `final.closeout_go_offline`    | · will be queued               | · wird zwischengespeichert |
 | `final.closeout_running` | Working through it … | Wird abgearbeitet … |
-| `final.closeout_done`          | Concept closed.                | Concept abgeschlossen. |
+| `final.closeout_done_close`    | Concept closed · close         | Concept abgeschlossen · schließen |
 | `final.closeout_stalled` | Delivered, but nothing is answering any more. Nothing more can be sent from this page — check the chat. | Übermittelt, aber es kommt keine Antwort mehr. Von dieser Seite kann nichts mehr gesendet werden — schau in den Chat. |
 | `final.closeout_stalled_short` | Delivered · no answer any more | Übermittelt · keine Antwort mehr |
-| `final.handoffs`               | By hand, afterwards            | Danach von Hand |
-| `final.handoffs_hint` | These cannot be done for you — they stay with you once this is through. | Das lässt sich nicht für dich erledigen — das bleibt bei dir, sobald das hier durch ist. |
 | `proto.feedback_title` | Notes | Notizen |
 | `proto.feedback_toggle` | Open notes | Notizen öffnen |
 | `proto.feedback_general`       | General notes on this concept  | Allgemeine Notizen zum Konzept |

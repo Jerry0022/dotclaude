@@ -102,6 +102,30 @@ describe("concept-build — assemble", () => {
     expect(doc(b.html).documentElement.dataset.pageVersion).toBe(page.pageVersion);
   });
 
+  test("init --report: only round is the final-report skeleton, live, tab = Abschluss", () => {
+    const { dir, home } = project();
+    const page = cb.init(dir, { title: "Done", locale: "de", report: true });
+    expect(page.mode).toBe("free");
+    const frag = read(dir, 1);
+    expect(frag).toMatch(/data-iteration="1"/);
+    expect(frag).toMatch(/data-iteration-template="free"/);
+    expect(frag).toMatch(/data-final-report/);
+    expect(cb.roundFiles(dir).map(r => r.n)).toEqual([1]);
+    const r = cb.build(dir, { home, dryRun: true });
+    expect(r.problems).toEqual([]);
+    expect(r.live).toBe(1);
+    expect(r.rounds).toEqual([1]);
+    const d = doc(r.html);
+    const tabs = [...d.querySelectorAll("nav.iteration-tabs .iteration-tab")];
+    expect(tabs.length).toBe(1);
+    expect(tabs[0].hasAttribute("data-final-report")).toBe(true);
+    expect(d.querySelector("section[data-iteration][data-active]").hasAttribute("data-final-report")).toBe(true);
+    // --mode report is the equivalent spelling; an existing round 01 is kept without --force
+    const { dir: dir2 } = project();
+    expect(cb.init(dir2, { title: "T", mode: "report" }).mode).toBe("free");
+    expect(read(dir2, 1)).toMatch(/data-final-report/);
+  });
+
   test("decision concept: common skeleton, live round active, engine current, gate passes", () => {
     const { dir, home } = project();
     cb.init(dir, { title: "Billing <rework>", subtitle: "one line", locale: "de", mode: "decision" });

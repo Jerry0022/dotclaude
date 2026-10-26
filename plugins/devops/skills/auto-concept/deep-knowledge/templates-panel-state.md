@@ -112,22 +112,11 @@
   overflow-y: auto;
   overflow-x: hidden;
 }
-/* On the final report the TOC is secondary — the close-out sheet is the main
-   content, and it needs most of the foot's height (§ CTA foot below). By
-   default the tree is a 3-entry window around the reading line
-   (applyNavWindow(), § Section Nav JS), so it normally fits this cap
-   without scrolling; the cap still applies once the user expands the list
-   with "+N weitere". A live check at 1440×768 with the rows region still
-   floored at 220px found only 1–3 of the 4 row heads fitting with a body
-   open; capping the tree tighter (28vh → 18vh) is what gives
-   `.closeout-rows` the room it needs. `min-height: 56px` keeps a sliver of
-   the tree reachable rather than letting it collapse to nothing — it is
-   secondary, not gone. */
-body.viewing-final .panel-nav-scroll {
-  flex: 0 1 auto;
-  max-height: 18vh;
-  min-height: 56px;
-}
+/* On the final report there is no TOC in the panel at all: the panel body
+   belongs to the close-out inbox (§ Final Report Panel), and earlier rounds
+   stay one click away through the head's 🕘 rounds chip. The report body
+   itself is short enough to read without one. */
+body.viewing-final .panel-nav-scroll { display: none; }
 .panel-status {
   flex: none;
   margin-top: 0.75rem;
@@ -172,12 +161,12 @@ body.viewing-final .panel-nav-scroll {
      box achieves (see .submit-menu below). */
   overflow-y: auto;
 }
-/* The close-out sheet is the one legitimate exception: a form to fill in, not
-   a call to action. On the final-report tab the foot grows to take the space
-   `.panel-nav-scroll` gave up above (§ .panel-nav-scroll) and becomes a flex
+/* The close-out sheet is the one legitimate exception: a to-do inbox, not
+   a call to action. On the final-report tab the foot takes the whole panel
+   body (`.panel-nav-scroll` is hidden there, § .panel-nav-scroll) and becomes a flex
    column itself — `overflow: hidden`, NOT `auto`: the foot must never scroll
-   as a whole, only `.closeout-rows` inside `#closeout-sheet` may (§ below).
-   A live check at 1440×768/900 found #closeout-execute below the fold with
+   as a whole, only `.closeout-body` inside `#closeout-sheet` may (§ below).
+   A live check at 1440×768/900 found the close-out button below the fold with
    EVERY row open before this: `.panel-cta` had a bounded height but stayed
    `display: block` (its default from the base rule), so its child
    `#panel-final-report` never became the flex column the sheet's own
@@ -203,11 +192,11 @@ body.viewing-final .panel-cta {
   min-height: 0;
   flex: 1 1 auto;
 }
-/* The final report has no status line: the sheet's one button carries the
+/* The final report has no status line: the clicked button carries the
    submission state itself (running/done/stalled — setCloseoutButtonState())
    and the disconnected case as its "wird zwischengespeichert" label
    (updateCloseoutButton()), so a second, separate line above the sheet only
-   cost the rows region ~40px for information the button already shows. */
+   cost the inbox height for information the buttons already show. */
 body.viewing-final .panel-status { display: none; }
 
 /* ── Status line ── one line, one glyph, six mutually exclusive states on
