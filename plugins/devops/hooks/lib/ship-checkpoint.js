@@ -183,7 +183,14 @@ function recordShipStep(tool, params, result, { now = Date.now() } = {}) {
     const steps = { ...cp.steps };
     if (tool === 'ship_build') {
       if (params.buildIdOnly) return;
-      if (result.success) steps.build = { buildId: result.buildId || null };
+      // fullSuiteVia "ci" makes ship_release demand the PR's `suite` check (M6 invariant).
+      if (result.success) {
+        steps.build = {
+          buildId: result.buildId || null,
+          ...(result.fullSuiteVia ? { fullSuiteVia: result.fullSuiteVia } : {}),
+          ...(result.testScope ? { testScope: result.testScope } : {}),
+        };
+      }
     } else if (tool === 'ship_version_bump') {
       // A bump whose verification failed has still rewritten the version
       // files (typically only CHANGELOG lags behind). It counts as landed —
