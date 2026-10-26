@@ -20,6 +20,7 @@ Faster ships without giving up determinism: one orchestrated `ship_run`, the ful
 - **Lock races.** The landing-lock heartbeat swaps atomically and re-checks its token; the hygiene worker lock claims a stale lock by rename and releases only its own.
 - **Completion card.** The offline `--render-card` path runs the same pre-check as the tool (no second render after a guard refusal), and a `cwd` that lost its backslashes is refused instead of silently dropping the concept link.
 - **Run contract** counts `ship_release`'s base-branch `merged` value as a merge.
+- **Write-path guard on another drive.** A drive-relative temp root (`/tmp`) is resolved against the repo's drive, not the process's, so `> /tmp/x.log` is no longer reported as outside the repo.
 
 ## [0.325.0] — 2026-10-26
 
