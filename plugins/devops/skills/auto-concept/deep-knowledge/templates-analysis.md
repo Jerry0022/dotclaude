@@ -346,10 +346,14 @@ html[data-theme="light"] [data-analysis] {
 /* design view kind `analysis`: the view itself is the (scrolling) Lite card */
 section[data-view][data-view-kind="analysis"] { overflow-y: auto; }
 section[data-view].an-lite { max-width: none; margin: 0; border: 0; border-radius: 0; background: none; box-shadow: none; padding-left: max(2rem, calc((100% - 1160px) / 2)); padding-right: max(2rem, calc((100% - 1160px) / 2)); }
-.an-enh[hidden] { display: none !important; }
+.an-enh[hidden], [data-analysis] [hidden] { display: none !important; }
+.an-lr small { display: block; font-size: 12px; font-weight: 400; color: var(--an-mu2); }
 .an-enh [data-alevel] { display: none; }
 .an-stage[data-decision] { display: flex; flex-direction: column; min-height: 560px; }
 .an-lite .an-stage[data-decision] { min-height: 470px; }
+.an-intro, .an-start, .an-fin, .an-review, .an-list, .an-next { display: flex; flex-direction: column; }
+.an-intro { min-height: 560px; }
+.an-lite .an-start, .an-lite .an-fin { min-height: 470px; }
 [data-analysis] .an-epic { flex: 0 1 160px; height: 30px; padding: 0 9px; border: 1px solid var(--an-bd2); border-radius: 8px; background: var(--an-s1); font-size: 12.5px; }
 [data-analysis] .an-epic[hidden] { display: none; }
 
@@ -759,7 +763,12 @@ What the code does, in the order of the file:
       let spec = null;
       try { spec = JSON.parse(el.getAttribute('data-viz-spec') || 'null'); } catch (e) { spec = null; }
       if (!spec || typeof spec !== 'object') return;          // keep the authored fallback text
-      const fn = VIZ[el.getAttribute('data-viz')] || VIZ.text;
+      let fn = VIZ[el.getAttribute('data-viz')];
+      if (!fn) {
+        // Custom type: the author's own markup (inline SVG ...) stays; spec.text only fills an empty element.
+        if (el.children.length || el.textContent.trim()) { el.dataset.vizDone = '1'; return; }
+        fn = VIZ.text;
+      }
       try { fn(el, spec, { size: size || 'long' }); } catch (e) { try { VIZ.text(el, spec); } catch (e2) { /* keep */ } }
       el.dataset.vizDone = '1';
       el.classList.add('an-vz-' + (size || 'long'));
@@ -826,7 +835,7 @@ What the code does, in the order of the file:
   /* choreography duration: slow the first two times per page */
   const CK = 'concept-an-transitions:' + (location.pathname || '/');
   function transCount() { try { return parseInt(localStorage.getItem(CK) || '0', 10) || 0; } catch (e) { return 0; } }
-  function bumpTrans() { try { localStorage.setItem(CK, String(transCount() + 1)); } catch (e) { /* private mode */ } }
+  function bumpTrans() { try { const v = String(transCount() + 1); if (typeof _guardedSetItem === 'function') _guardedSetItem(CK, v); else localStorage['setItem'](CK, v); } catch (e) { /* private mode */ } }
   function transMs() { return reduced() ? 0 : (transCount() < 2 ? 1000 : 300); }
 
   /* ================= 3. analysis column ================= */
@@ -1535,6 +1544,7 @@ What the code does, in the order of the file:
       const same = !!prev && prev.kind === 'dec' && st.kind === 'dec' && prev.topic === st.topic;
       applyLevels(inst, st, { swap: same, dur: opt.initial ? 0 : undefined });
     }
+    inst.root.querySelectorAll('.an-back').forEach(x => { x.disabled = st === inst.seq[0]; });
     refreshStepper(inst);
     if (typeof updateSectionNavState === 'function') updateSectionNavState();
     armTouch(inst);
@@ -1726,8 +1736,7 @@ What the code does, in the order of the file:
     const inputs = [...d.querySelectorAll('[data-options] input[type=radio], [data-options] input[type=checkbox]')];
     const c = inputs[k];
     if (!c || c.disabled) return false;
-    c.click();
-    c.focus({ preventScroll: true });
+    c.click();   // focus stays on the stage: the key must keep working and no tooltip opens on a hidden radio
     return true;
   }
   function moveOption(d, dir) {
@@ -1735,7 +1744,7 @@ What the code does, in the order of the file:
     if (!radios.length) return false;
     const i = radios.findIndex(r => r.checked);
     const n = radios[clamp((i < 0 ? 0 : i) + dir, 0, radios.length - 1)];
-    n.click(); n.focus({ preventScroll: true });
+    n.click();
     return true;
   }
   document.addEventListener('keydown', e => {
