@@ -228,6 +228,9 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   bug the button exists to catch. An `open` item whose own `reply` starts
   with "Führ mich per Web-Guide durch …" / "Guide me through …" is a
   declared hand-off and gets the button without the text heuristics (#742).
+  Heuristics read each item alone (#900; numbered lists span items); a setup
+  verb with a URL, UI path or „label“ counts for unknown web UIs (#905). Still
+  declare every manual website step as an `open` item with that `reply`.
 - **`App starten` / `Start app` button** (#680): `test` and `ship-successful`
   cards (plain, kept, deploy, also a plain merge with nothing to promote) get
   it when the card server finds a launch path in the card's `cwd`
