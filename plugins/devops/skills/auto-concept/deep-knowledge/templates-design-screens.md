@@ -509,6 +509,8 @@ function collectDesignDecisions() {
       // Own pins take attachments like every other note (slot `upin-ta-<id>`).
       attachments: (typeof attachmentsFor === 'function') ? attachmentsFor('upin-ta-' + p.id) : []
     }));
+  // Own notes on the question views (§ Document pins) — entries with an `anchor`.
+  if (typeof window.documentPinsPayload === 'function') userPins.push(...window.documentPinsPayload(active));
   return {
     submitted: true,
     template: 'design',

@@ -149,7 +149,7 @@ describe("C · header islands and FABs", () => {
     window.updateAnnoUI();
     expect(eye.hidden).toBe(false);
     // everything the eye hides, it hides (and nothing but header + FABs survive)
-    expect(css()).toMatch(/body\.anno-hidden \.upin-layer, body\.anno-hidden \.design-ov-overlay, body\.anno-hidden \.design-ov-change \{ display: none !important; \}/);
+    expect(css()).toMatch(/body\.anno-hidden \.upin-layer \.upin:not\(\[data-upin-fresh\]\), body\.anno-hidden \.design-ov-overlay, body\.anno-hidden \.design-ov-change \{ display: none !important; \}/);
     document.body.classList.remove("anno-hidden");
     // the overview always has its info box to hide
     window.showOverview();

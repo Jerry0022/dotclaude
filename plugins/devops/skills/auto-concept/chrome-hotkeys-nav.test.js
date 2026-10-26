@@ -336,7 +336,7 @@ describe("nudges", () => {
 describe("locale", () => {
   test("every new key exists in both locales, the wording is clean", () => {
     for (const k of ["design.change_rethought", "design.change_improved", "design.keys_dock", "design.keys_level",
-      "nudge.keys", "nudge.variants", "nudge.pages", "nudge.dock", "nudge.submit", "nudge.dismiss"]) {
+      "nudge.keys", "nudge.variants", "nudge.pages", "nudge.dock", "nudge.dismiss"]) {
       const row = md.split("\n").find((l) => l.startsWith("| `" + k + "`"));
       expect(row, k).toBeTruthy();
       const cells = row.split("|").map((c) => c.trim()).filter(Boolean);

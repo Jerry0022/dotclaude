@@ -331,7 +331,10 @@ body.anno-hidden .anno-toggle-fab .anno-eye-off { display: block; }
 body.anno-hidden .anno-layer { display: none !important; }
 /* The eye hides EVERYTHING except the header and the FABs: pins, connectors,
    summaries, own pins, the overview's top-3 info box and its change chip. */
-body.anno-hidden .upin-layer, body.anno-hidden .design-ov-overlay, body.anno-hidden .design-ov-change { display: none !important; }
+body.anno-hidden .upin-layer .upin:not([data-upin-fresh]), body.anno-hidden .design-ov-overlay, body.anno-hidden .design-ov-change { display: none !important; }
+/* ...except an own note set WHILE everything is hidden (data-upin-fresh, set by
+   the pin engines): it stays visible with its editor until the eye shows all
+   again, which clears the marker — so the next hide hides every pin. */
 /* Calm view: the same eye also takes the quick nav, the design switcher and
    both FABs (☰, 💬) away, so the concept can be looked at undisturbed. The
    eye itself (and the device switch beside it) stays, dimmed. visibility
