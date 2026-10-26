@@ -79,10 +79,6 @@ const textOf = (doc, n) => doc.src.slice(n.innerStart, n.innerEnd).replace(/<[^>
 const decode = s => String(s).replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 const lineAt = (doc, at) => doc.src.slice(0, at).split('\n').length;
 
-function labelOf(doc, n) {
-  return decode(attr(n, 'data-label') || attr(n, 'data-decision') || n.tag);
-}
-
 function preselectionIssue(doc, el, mode, rec) {
   const id = attr(el, 'data-decision');
   const name = `dm-${id}`;
@@ -151,6 +147,8 @@ function findAnalysisIssues(html) {
     if (!MODES.includes(mode)) { err('decision-mode', `decision "${id}": data-decision-mode="${mode}" is none of ${MODES.join(', ')}`, d.start); continue; }
     const rec = (attr(d, 'data-rec') || '').trim();
     if (!rec) { err('decision-rec', `decision "${id}" (${mode}): no data-rec — every decision names its recommended option, preselected`, d.start); continue; }
+    // A baked (frozen) round holds the user's answers, not the authored preselection.
+    if (doc.nodes.some(n => has(n, 'data-baked') && inside(n, d))) continue;
     const issue = preselectionIssue(doc, d, mode, rec);
     if (issue) err('decision-preselect', `decision "${id}" (${mode}): ${issue} — the recommendation is always preselected`, d.start);
   }
