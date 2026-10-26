@@ -59,7 +59,7 @@ If the output shows `file:///c/Users/...` (no colon), the URL is broken.
 
 ## Skills that must follow this rule
 
-- do-run autonomous mode (AUTONOMOUS-REPORT.html)
+- do-run backlog mode (BACKLOG-REPORT.html)
 - `concept` (concept pages)
 - `auto-cleanup` (interactive branch report)
 - any future skill that writes an HTML file and opens it in a browser

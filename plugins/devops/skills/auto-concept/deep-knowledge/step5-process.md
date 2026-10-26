@@ -272,8 +272,20 @@ user made:
   "issues":    { "create": true, "items": [ … ] },
   "implement": { "run": true,    "items": [ … ] },
   "ship":      { "run": true },
+  "tests":     [ { "id": "t1", "text": "…", "mode": "guide", "guide": "web" } ],
+  "handoffs":  [ { "id": "h1", "text": "…", "mode": "self",  "guide": null } ],
   "disposition": { "mode": "discard", "moveTo": null } }
 ```
+
+`ship.run` is no longer a toggle on the sheet: the footer carries two buttons,
+"Abschließen & shippen" (`ship.run: true`) and "Nur abschließen, nicht
+shippen" (`ship.run: false`). Whichever was clicked IS the ship answer, and
+both submit `finalize`. `tests[]` (what Claude could not verify — 🧪) and
+`handoffs[]` (manual follow-ups — 👉) share one item shape,
+`{ id, text, mode: "skip"|"guide"|"self", guide: "web"|"desktop"|"inline"|null }`;
+`guide` is only meaningful with `mode: "guide"`. Both arrays are optional —
+an older page omits them, treat that as empty. Processing: `step5-finalize.md`
+§ E · Tests and hand-offs.
 
 `issues.items` and `implement.items` are **disjoint** and carry the same item
 shape: the sheet gives every open point one of three routes — file it, build

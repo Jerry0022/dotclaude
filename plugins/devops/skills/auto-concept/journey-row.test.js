@@ -308,31 +308,13 @@ describe("old rounds and the final report", () => {
     expect(cssSource).toMatch(/#panel-frozen \.frozen-indicator \{ display: none; \}/);
   });
 
-  test("the final report shows the finished journey row on top of its panel", () => {
-    const dom = new JSDOM(`<!doctype html><body class="viewing-final panel-open">
-      <div id="panel-final-report"><div class="closeout-sheet"></div></div></body>`,
-      { runScripts: "outside-only", url: "http://localhost/" });
-    const { window } = dom;
-    window.eval(localeKeys([
-      "var STORAGE_KEY = 'concept-state-t';",
-      constLine("_JR_CHK"),
-      fnSource("_jrEl"),
-      fnSource("mountFinalJourney"),
-      fnSource("maybeBuildFinalJourney"),
-      "mountFinalJourney(); maybeBuildFinalJourney();",
-    ].join("\n")));
-    const row = window.document.querySelector("#panel-final-report > .journey-final");
-    expect(row).not.toBeNull();
-    expect(row.dataset.phase).toBe("done");
-    expect(row.querySelectorAll(".jr-dot .jr-chk").length).toBe(2);
-    expect(row.querySelector(".jr-run-done").style.width).toBe("100%");
-    expect(row.querySelector(".jr-finish").textContent).toBe("🏁");
-    expect(row.classList.contains("jr-build")).toBe(true);
-    // Once per page: a second open does not rebuild.
-    row.classList.remove("jr-build");
-    window.eval("maybeBuildFinalJourney();");
-    expect(row.classList.contains("jr-build")).toBe(false);
-    expect(cssSource).toContain("body.viewing-final .journey:not(.journey-final)");
+  test("the final report has no journey row — the panel body is the close-out inbox", () => {
+    // The phase icon in the head ("🏁 Abschluss") says where the session is;
+    // a finished journey row on top of the inbox only cost it height.
+    expect(md).not.toContain("function mountFinalJourney");
+    expect(md).not.toContain("journey-final");
+    expect(cssSource).toContain("body.viewing-frozen .journey, body.viewing-final .journey { display: none; }");
+    expect(fnSource("_bootJourney")).not.toContain("Final");
   });
 });
 

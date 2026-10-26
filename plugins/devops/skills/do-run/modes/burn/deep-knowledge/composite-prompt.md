@@ -53,5 +53,5 @@ auto-agents mit --burn={project root}/BURN-STATE.json — Conveyor statt Waves
 
 ### Abschluss
 - burn-plan.js state finish --status=<COMPLETED|INTERRUPTED|BLOCKED> (misst die Kalibrierung)
-- AUTONOMOUS-REPORT.html: alle Tasks mit Status, Profil und Landing-SHA; übersprungene Füll-Tasks
+- Abschluss-Seite (auto-concept --report, nur wenn etwas offen ist): alle Tasks mit Status, Profil und Landing-SHA; übersprungene Füll-Tasks
 ```

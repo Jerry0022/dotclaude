@@ -290,7 +290,7 @@ function showIteration(n) {
   // 'flex', not 'block': #panel-final-report is a flex column (§ CTA foot
   // CSS) so it can hand #closeout-sheet a bounded, shrinkable height — a
   // plain 'block' display left the sheet sizing to its own content with
-  // nothing to cap it, and #closeout-execute sat below the fold.
+  // nothing to cap it, and the close-out buttons sat below the fold.
   if (panelFinal) panelFinal.style.display = isFinal ? 'flex' : 'none';
   if (panelFrozen) panelFrozen.style.display = isLive ? 'none' : 'block';
   // Frozen veil + floating bar. Every entry into a non-live tab RE-LOCKS the
@@ -328,11 +328,16 @@ function showIteration(n) {
     const round = document.querySelector('[data-here-round]');
     if (round) {
       const label = hereTab ? (hereTab.dataset.tabLabel || stripActiveSuffix(hereTab.textContent.trim())) : String(n);
-      round.dataset.hereRoundBase = label + (isLive ? '' : ' · {{nav.archived}}');
+      // Phase icon: "🧭 Runde N" while concepting, "🏁 Abschluss" on the
+      // final report — the head names the phase the session is in.
+      const finalTab = isFinal || (hereTab && hereTab.hasAttribute('data-final-report'));
+      const phase = finalTab ? '🏁 {{final.phase}}' : '🧭 ' + label;
+      round.dataset.phase = finalTab ? 'final' : 'round';
+      round.dataset.hereRoundBase = phase + (isLive ? '' : ' · {{nav.archived}}');
       round.textContent = round.dataset.hereRoundBase;
     }
-    // The final report drops the second head line entirely — the accordion
-    // shows the selection instead.
+    // The final report drops the second head line entirely — the close-out
+    // inbox is the panel body there.
     const section = here.querySelector('[data-here-section]');
     if (section && isFinal) section.hidden = true;
     const back = document.getElementById('panel-here-back');

@@ -17,7 +17,7 @@ invokes: [do-ship, auto-agents, auto-issue]
 user-invocable: false
 triggers:
   en: ["concept", "concept page", "interactive plan", "show me this as a page", "visualize this"]
-argument-hint: "[topic, analysis result, plan, or concept to visualize]"
+argument-hint: "[topic, analysis result, plan, or concept to visualize | --report]"
 allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), Bash(python *), Bash(curl *), Bash(kill *), Bash(node *), AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Browser__*, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude__health_check, mcp__plugin_devops_dotclaude__get_usage, mcp__plugin_devops_dotclaude__render_completion_card, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---
 
@@ -54,6 +54,39 @@ concept the user wants. Three modes exist:
 | **mixed** | Both — the visual call AND the non-visual calls belong to the same concept | `design` iteration(s) carrying decision views where the question is *about the mock*, and/or a separate `decision` iteration where it stands on its own (entangled-questions rule in 1a) |
 
 **Before executing this step, Read `deep-knowledge/step1-templates.md` § Step 0.5 · Asking, the do-batch start, count preferences completely** — ask exactly ONE `AskUserQuestion` (mixed first, "(Recommended)") unless the prompt names or unambiguously implies the mode or a caller pins the template — then skip it; lean to mixed when the prompt allows two readings; no "Erstmal in Ruhe durchlesen" prefix; a typed "Other" is a real answer; a `--from=do-batch` start derives the mode from its open decisions and never drops a coverage line; the mode is decided once per concept and feedback widens it silently; plus the count preferences (7 alternatives, 3 designs, top 3–7 annotations — the user's count wins).
+
+## Report-only entry (`--report`) — the Abschluss without a prior concept
+
+Other skills call `auto-concept --report` as the step **after an
+implementation** that had no concept page (`do-run`, `auto-fix`, `do-backlog`,
+`do-audit`): the user gets the same Abschluss page, bridge and close-out FAB a
+concept ends with, but the page has exactly one round — the final report.
+Steps 0.5 to 1 and Step 5's iterate/implement branches do not apply.
+
+1. **Open only when there is something to do.** The page exists only if at
+   least one of these is true: a Fund out of scope (admission gate: `found`
+   only), a 🧪 test the user must do, a 👉 hand-off, or an open ship decision
+   (work is committed but not shipped). Otherwise skip the page, the bridge and
+   Edge entirely: the completion card alone ends the run. After a
+   devops-concept implementation the Abschluss is mandatory (the report is
+   appended to that concept instead; this entry is not used).
+2. **Scaffold.** `node "{PLUGIN_ROOT}/scripts/concept-build.js" init docs/concepts/{date}-{slug} --report --title "<what was done>" --locale <de|en>`
+   (in the caller's worktree). Round 01 is a final-report skeleton
+   (`data-iteration="1" data-iteration-template="free" data-final-report`).
+3. **Author the report from the implementation context** — what was done, the
+   commit(s), tests actually run, QA evidence, the Funde / 🧪 / 👉 rows with
+   their pre-selection (`deep-knowledge/step5-update-page.md` § Final-report
+   append and `deep-knowledge/step5-finalize.md` § E). The run's decision
+   journal, if any, goes short into the dev fold. Replace every TODO
+   placeholder, then `build` (gate), as in Step 2.
+4. **Step 3 unchanged** (bridge, pulser, waker, real Edge), then Steps 4–5 with
+   the page's only legal action, `finalize` (parts A–E as above; B builds the
+   Funde the user routed to "Jetzt umsetzen", C ships on the "Abschließen &
+   shippen" button). Under autonomous callers the page waits for the user's
+   return; the caller's completion card is rendered by the caller after Step 6a.
+5. **Scope.** Decisions about backlog issues and audit proposals stay concept
+   pages with decision rounds (`/do-backlog`, `/do-audit`); this entry is
+   never used for them, only for the Abschluss after their implementation.
 
 ## Step 1 — Pick Template, then Content Variant
 
@@ -276,7 +309,7 @@ Exit 126 or `"known":false` → nothing changes. `known:true` → read the `doc`
 (cleanup).** Never reorder: issues are independent, follow-ups land before
 the release, ship is the one part that can hard-fail, and cleanup can DELETE
 the concept HTML. Skip any part whose flag is false; with none set, finalize
-is just Step 6.
+is just Step 6. Part E (tests and hand-offs) follows D, below.
 
 **Checkpoint each part as it lands** (see Checkpoint duty above) — a finalize
 that dies mid-flight must be resumable without re-creating issues or
@@ -332,6 +365,10 @@ re-shipping.
    `do-ship` ship card (held back per part C step 4) is the authoritative
    closing artefact and you MUST NOT render a second concept completion card
    (duplicate summary). Otherwise render the concept card per Step 6b.
+
+### E · Tests and hand-offs (`tests[]`, `handoffs[]`)
+
+**Before executing this step, Re-Read `deep-knowledge/step5-finalize.md` § E · Tests and hand-offs completely on every round — even if read earlier in this session** — per-item `mode` / `guide` processing (guide web / desktop / inline, self → completion card, skip → dropped) and the pre-selection rules for Funde, 🧪 and 👉. Runs after part D; never when part C blocked.
 
 ### Legacy final-report actions
 

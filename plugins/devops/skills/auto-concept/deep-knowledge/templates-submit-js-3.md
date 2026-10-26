@@ -1,24 +1,14 @@
 # Concept templates, part 37 of 42: Shared systems — two-button submit JS (continued 3)
 
 ```javascript
-async function submitFinalize() {
+async function submitFinalize(shipRun) {
   const active = finalReportSection();
   const sheet = document.getElementById('closeout-sheet');
-  const btn = document.getElementById('closeout-execute');
-  if (!active || !sheet || !btn) return;
+  if (!active || !sheet) return;
   if (sheet.dataset.frozen === 'true') return;
-
-  // The ship question has no preselected answer on purpose: a release must
-  // never be the by-product of running the sheet. Explain the block instead
-  // of disabling execute, which would look broken.
-  if (!closeoutShipChoice()) {
-    const req = document.getElementById('closeout-ship-required');
-    if (req) {
-      req.hidden = false;
-      req.scrollIntoView({ block: 'nearest' });
-    }
-    return;
-  }
+  // Which button was clicked IS the ship answer — there is no third way to
+  // reach this submit, so a release can never be a by-product of it.
+  const ship = shipRun === true;
 
   const issues = collectIssueItems();
   const implement = collectImplementItems();
@@ -29,12 +19,17 @@ async function submitFinalize() {
     iteration: active ? active.dataset.iteration : null,
     issues: { create: issues.length > 0, items: issues },
     implement: { run: implement.length > 0, items: implement },
-    ship: { run: closeoutShipChoice() === 'yes' },
+    ship: { run: ship },
+    // 🧪 / 👉 with the mode the user chose: skip | guide | self, and for
+    // guide which kind — web (auto-guide) | desktop (scripts / takeover
+    // help) | inline (written steps in the final message).
+    tests: collectTodos('tests'),
+    handoffs: collectTodos('handoffs'),
     disposition: collectDisposition()
   };
 
   setCloseoutFrozen(true);
-  setCloseoutButtonState('running');
+  setCloseoutButtonState('running', ship ? 'yes' : 'no');
 
   const container = document.getElementById('concept-decisions');
   if (container) container.textContent = JSON.stringify(payload);
@@ -42,9 +37,8 @@ async function submitFinalize() {
   showContentDimmer();
   // Same submit-state bookkeeping submitWithAction does. Without it
   // pollProcessedState() returns at its first line, so a finalize gets no
-  // `_picked_up_at` progress in the status channel and — worse — no
-  // PROCESSED_SAFETY_MS recovery: a Claude that dies mid-finalize would leave
-  // the sheet disabled under a spinner forever.
+  // `_picked_up_at` progress and — worse — no PROCESSED_SAFETY_MS recovery:
+  // a Claude that dies mid-finalize would leave the sheet under a spinner.
   _submittedAt = Date.now();
   _submittedReloadCounter = _bootReloadCounter;
   _submittedAction = 'finalize';
@@ -92,7 +86,7 @@ async function submitFinalize() {
 
 // A finalize takes minutes — issues, follow-ups built by agents, a release.
 // If the tab is reloaded while it runs, the sheet would come back fully
-// re-armed, and a second execute would carry a NEW submission_id that the
+// re-armed, and a second click would carry a NEW submission_id that the
 // replay guard cannot recognise as a duplicate: a second `gh issue create`
 // run and a second real release. So ask the bridge what is in flight before
 // arming anything.
@@ -105,21 +99,17 @@ async function restoreInFlightCloseout() {
     const data = await res.json();
     // Processed means `submitted: false` — /reset replaces the payload. The
     // `_processed_at` stamp is NOT that signal: the bridge keeps the stamp of
-    // the LAST /reset across new submissions, so every concept with an
-    // earlier round carried one and this check used to bail on exactly the
-    // reload it exists for.
+    // the LAST /reset across new submissions.
     if (!data || data.submitted !== true || data.action !== 'finalize') return;
     // A payload that names another round is not this sheet's (older pages
     // sent none — kept as before).
     const live = finalReportSection();
     if (data.iteration != null && String(data.iteration) !== String(live.dataset.iteration)) return;
     setCloseoutFrozen(true);
-    setCloseoutButtonState('running');
+    setCloseoutButtonState('running', data.ship && data.ship.run ? 'yes' : 'no');
     // Same veil submitFinalize() put up — a reload must not lift it.
     document.body.classList.add('concept-submitted', 'content-dimmed');
     showContentDimmer();
-    // Re-join the submit-state machine so pollProcessedState() keeps tracking
-    // the round that outlived its tab.
     _submittedAt = Date.now();
     _submittedReloadCounter = _bootReloadCounter;
     _submittedAction = 'finalize';
@@ -130,10 +120,9 @@ async function restoreInFlightCloseout() {
 // The safety net (pollProcessedState → restorePanelToReady) must NOT re-arm a
 // finalize. It was delivered durably; Claude either finishes it and rewrites
 // this page, or reports a blocker and sends /reload. Re-arming here would put
-// a live execute button on a page whose file may already be deleted (the
-// default disposition is "Seite löschen", which deliberately sends no
-// /reload) and whose bridge is shutting down — a click there queues a payload
-// nobody will ever pick up.
+// live buttons on a page whose file may already be deleted (the default
+// disposition deletes it and deliberately sends no /reload) and whose bridge
+// is shutting down.
 function markCloseoutStalled() {
   const sheet = document.getElementById('closeout-sheet');
   if (!sheet) return;
@@ -141,52 +130,61 @@ function markCloseoutStalled() {
   setCloseoutButtonState('stalled');
 }
 
-// No "Runden ansehen" link under the sheet: earlier rounds are one click
-// away through the panel head's rounds chip (🕘 N, `#panel-here-rounds-btn`)
-// and the tab bar, so a third way only cost the sheet a row of height.
+// No "Runden ansehen" link on the sheet: earlier rounds are one click away
+// through the panel head's 🕘 rounds chip.
 
-// Recompute whenever an input the plan summarises changes — the open-questions
-// checkboxes in the body, a follow-up route, the ship choice, the disposition
-// mode. The generic change listener (for saveState) fires the same event, so
-// we just hook into the same channel.
+// A 🧪/👉 choice is stored, then the sheet re-syncs (the plan line, the
+// guidance-kind line). The disposition radios and moveTo only re-render the
+// 🧹 line. A frozen sheet describes a payload already on its way — nothing
+// on screen may re-render against newer input.
 document.addEventListener('change', e => {
   const t = e.target;
   if (!t || !t.matches) return;
-  // A frozen sheet describes a payload that is already on its way — nothing
-  // on screen may still re-render against newer input.
   if (document.getElementById('closeout-sheet')?.dataset.frozen === 'true') return;
-  // Element-agnostic on purpose: openQuestionBoxes() and the gating contract
-  // both accept ANY element carrying [data-open-questions]. A listener pinned
-  // to `section[...]` silently stops updating the rows and the plan on a
-  // report that used a div or ul — so the plan would name the wrong counts
-  // right before the one irreversible click.
-  if (t.matches('[data-open-questions] input[type="checkbox"]') ||
-      t.matches('.followup-routes input[type="radio"]') ||
-      t.matches('input[name="closeout-ship"]') ||
-      t.matches('input[name="dispose-mode"]')) {
+  if (t.matches('#closeout-sheet input[data-todo-mode]')) {
+    if (t.checked) _closeoutChoices.mode[t.dataset.todoMode] = t.value;
     refreshCloseout();
+  } else if (t.matches('input[name="dispose-mode"]')) {
+    renderDisposeLine();
   }
 });
+document.addEventListener('input', e => {
+  if (e.target && e.target.id === 'dispose-move-to') renderDisposeLine();
+});
+// One delegated click listener for the whole sheet — the rows are rebuilt
+// per item set, the listener never is.
+function closeoutSheetClick(e) {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet || !e.target.closest) return;
+  const go = e.target.closest('[data-closeout-go]');
+  if (go) {
+    if (sheet.dataset.frozen === 'true' || sheet.dataset.finalizeState) return;
+    submitFinalize(go.dataset.closeoutGo === 'yes');
+    return;
+  }
+  if (e.target.closest('#closeout-close')) { window.closePanel?.(); return; }
+  if (sheet.dataset.frozen === 'true') return;
+  const tile = e.target.closest('[data-route-tile]');
+  if (tile) { chooseRoute(tile.dataset.routeTile); return; }
+  if (e.target.closest('[data-route-close]')) { closeRouteSheet(); return; }
+  const row = e.target.closest('[data-route-open]');
+  if (row) { openRouteSheet(row.dataset.routeOpen); return; }
+  if (e.target.closest('#closeout-dispose-edit')) toggleDisposeEdit();
+}
+function closeoutSheetKeydown(e) {
+  if (e.key === 'Escape' && _routeSheetKey != null) {
+    e.stopPropagation();
+    closeRouteSheet();
+  }
+}
 // Wired on DOM-ready, not at parse time: this block is copied verbatim into
 // generated pages, and one whose script ends up before the markup would
-// otherwise get a rendered sheet whose execute button is inert — no console
-// error, no request, nothing to see.
+// otherwise get a rendered sheet whose buttons are inert — no console error,
+// no request, nothing to see.
 function wireCloseout() {
-  document.getElementById('closeout-execute')?.addEventListener('click', closeoutButtonClick);
-  // One delegated listener for every row head — the accordion body is
-  // static (never rebuilt per render), so binding once here is enough; only
-  // buildFollowUpList()'s OWN inner content is rebuilt, and its rows sit
-  // inside the already-wired followups row body.
-  document.getElementById('closeout-sheet')?.addEventListener('click', e => {
-    const head = e.target.closest('[data-closeout-row]');
-    if (!head) return;
-    closeoutRowClick(head.closest('.closeout-block'));
-  });
-  // An active choice in a single-choice row confirms it like "Weiter ›"
-  // (closeoutChoiceClick()). `click`, not `change`: re-clicking the
-  // pre-selected default fires no change but is just as much an answer.
-  document.getElementById('closeout-sheet')?.addEventListener('keydown', closeoutChoiceKeydown, true);
-  document.getElementById('closeout-sheet')?.addEventListener('click', closeoutChoiceClick);
+  const sheet = document.getElementById('closeout-sheet');
+  sheet?.addEventListener('click', closeoutSheetClick);
+  sheet?.addEventListener('keydown', closeoutSheetKeydown, true);
   refreshCloseout({ reset: true });
   restoreInFlightCloseout();
 }
