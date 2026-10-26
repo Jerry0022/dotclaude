@@ -42,7 +42,8 @@
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.ship.guard.js\"", "onFailure": "block" },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.main.guard.js\"", "onFailure": "block" },
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.worktree.split-guard.js\"" }
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.worktree.split-guard.js\"" },
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.test.fullguard.js\"" }
         ],
         "matcher": "Bash|PowerShell"
       },
@@ -242,6 +243,12 @@
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.worktree.enter.js\"", "timeout": 10 }
         ],
         "matcher": "EnterWorktree"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.test.record.js\"", "timeout": 40 }
+        ],
+        "matcher": "Bash|PowerShell"
       }
     ],
     "PostToolUseFailure": [

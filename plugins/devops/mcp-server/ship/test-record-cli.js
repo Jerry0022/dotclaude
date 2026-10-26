@@ -17,6 +17,9 @@
  *            when any file is not imported by a test (hooks/scripts spawned
  *            via execFile, JSON, Markdown). Agent loops only; scoped runs are
  *            never recorded, the ship gate always runs the full suite.
+ *   record-now — records a green FULL run that just finished (the
+ *            post.test.record hook): the current tree is the key, the command
+ *            maps to the project's full command (`npx vitest run` → `npm run test`).
  *   record — records a run you already finished green; refused (exit 3) when
  *            the current tree no longer matches --tree.
  *
@@ -27,7 +30,7 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { recordResult, treeKey, usualDurationMs } from "./lib/test-results.js";
+import { canonicalFullCmd, recordResult, treeKey, usualDurationMs } from "./lib/test-results.js";
 import { buildPreRunWarning, readLockHolder } from "./lib/test-step.js";
 
 const DEFAULT_CMD = "npm test";
@@ -101,6 +104,15 @@ export function main(argv, { exec = (cmd, cwd) => spawnSync(cmd, { windowsHide: 
       return 3;
     }
     const rec = record(a.cwd, { treeHash: a.tree, testCmd: a.cmd, passed: true, source: "agent" });
+    say(log, { ok: !!rec, recorded: rec });
+    return rec ? 0 : 1;
+  }
+  if (a.sub === "record-now") {
+    const k = key(a.cwd);
+    if (!k) { say(log, { ok: false, reason: "no tree key (not a git repo?)" }); return 2; }
+    const cmd = canonicalFullCmd(a.cwd, a.cmd);
+    if (isScopedCmd(cmd)) { say(log, { ok: false, reason: "scoped command — not recorded" }); return 3; }
+    const rec = record(a.cwd, { treeHash: k.treeHash, testCmd: cmd, passed: true, source: "manual" });
     say(log, { ok: !!rec, recorded: rec });
     return rec ? 0 : 1;
   }
