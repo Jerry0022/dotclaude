@@ -2,7 +2,19 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { netEstimate } = require('./audit.js');
+const { netEstimate, nextStepLine } = require('./audit.js');
+
+// Regression (2026-10-26, v0.320.0): the ship-triggered audit finished and the
+// session only offered the report as an open point instead of opening it.
+describe('nextStepLine', () => {
+  it('tells the session to open the report itself, naming the run dir', () => {
+    const line = nextStepLine('C:/x/runs/0.320.0-t');
+    expect(line).toContain('WITHOUT asking');
+    expect(line).toContain('steps 2-5');
+    expect(line).toContain('C:/x/runs/0.320.0-t');
+    expect(line).toMatch(/never put it on the card as an open point/i);
+  });
+});
 
 const footprint = { components: [{ name: 'skills', tokens: 1000 }, { name: 'hooks (measured)', tokens: 50 }] };
 const mining = (sessions, injected, saved) => ({

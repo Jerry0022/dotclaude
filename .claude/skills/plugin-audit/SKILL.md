@@ -32,7 +32,9 @@ node .claude/skills/plugin-audit/scripts/audit.js --out <dir> [--skip-tests] [--
 ```
 
 Without `--out` a new `runs/` directory is created. From a ship, run it with the
-Bash tool's `run_in_background: true` and carry on. It prints one summary line and
+Bash tool's `run_in_background: true` and carry on; when it completes, continue
+with steps 2–5 right away, without asking (`--trigger ship` prints that as a
+`[plugin-audit] Next …` line) — never offer the report as an open point. It prints one summary line and
 writes `<dir>/results.json` (footprint, mining, benefit, integrity[12], hygiene[8],
 net). `--skip-tests` skips `npm test` + `npm run lint` (a full audit runs them).
 Exit 0 unless the arguments are invalid.
