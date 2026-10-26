@@ -134,6 +134,17 @@ const CSS = `
 .d1-warn { border: 1px dashed #d29922; border-radius: 8px; padding: 8px 12px; margin: 10px 0; }
 `;
 
+/** Blocked ship attempts per `[ship-guard:<rule>]` tag — frequencies, never savings. */
+function shipBlocksTable(sb) {
+  if (!sb || !sb.byRule) return '';
+  const rows = Object.entries(sb.byRule).sort((x, y) => y[1] - x[1])
+    .map(([k, v]) => `<tr><td><code>${esc(k)}</code></td><td>${Number(v) || 0}</td></tr>`).join('');
+  return `
+  <h3>Blockierte Ship-Versuche nach Regel (nur Häufigkeit)</h3>
+  ${sb.note ? `<p class="d1-note">${esc(sb.note)}</p>` : ''}
+  <table class="d1-table"><thead><tr><th>Regel</th><th>Versuche</th></tr></thead><tbody>${rows || '<tr><td colspan="2">keine</td></tr>'}</tbody></table>`;
+}
+
 /**
  * Build the round-1 fragment.
  * @param {object} results   results.json
@@ -180,7 +191,7 @@ function renderFragment(results, suggestions, history = []) {
   </tbody></table>
   <h3>Gate-Treffer (nur Häufigkeit, keine Token-Ersparnis)</h3>
   <p class="d1-note">${esc(b.gateCatches.note)}</p>
-  <table class="d1-table"><thead><tr><th>Regel</th><th>Treffer</th></tr></thead><tbody>${Object.entries(b.gateCatches.byRule).sort((x, y) => y[1] - x[1]).map(([k, v]) => `<tr><td><code>${esc(k)}</code></td><td>${v}</td></tr>`).join('') || '<tr><td colspan="2">keine</td></tr>'}</tbody></table>
+  <table class="d1-table"><thead><tr><th>Regel</th><th>Treffer</th></tr></thead><tbody>${Object.entries(b.gateCatches.byRule).sort((x, y) => y[1] - x[1]).map(([k, v]) => `<tr><td><code>${esc(k)}</code></td><td>${Number(v) || 0}</td></tr>`).join('') || '<tr><td colspan="2">keine</td></tr>'}</tbody></table>${shipBlocksTable(b.shipBlocksByRule)}
   <h3>Footprint-Komponenten</h3>
   <table class="d1-table"><thead><tr><th>Komponente</th><th>Anzahl</th><th>Tokens</th></tr></thead><tbody>${fp.components.map((c) => `<tr><td>${esc(c.name)}</td><td>${c.count}</td><td>${fmt(c.tokens)}</td></tr>`).join('')}</tbody></table>
   <p class="d1-note">${fp.notes.map(esc).join(' ')}</p>
