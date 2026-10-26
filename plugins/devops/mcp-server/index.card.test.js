@@ -378,6 +378,28 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     }
   });
 
+  test("ship-successful in a dir nested under another repo is ship-blocked, never Released (#871)", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { execFileSync } = await import("node:child_process");
+    const outer = fs.mkdtempSync(path.join(os.tmpdir(), "card-foreign-root-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: outer });
+      const sub = path.join(outer, "proj");
+      fs.mkdirSync(sub);
+      const text = await cardText({
+        variant: "ship-successful", summary: "Fertig", lang: "en", session_id: "test-anatomy-foreign-root", cwd: sub,
+        state: { pushed: true, merged: "main", commit: "abc1234", branch: "main" },
+        delivery: { ship: { version: "1.2.3" } },
+      });
+      expect(text).toContain("git-foreign-root");
+      expect(text).not.toMatch(/Released|Merged/);
+    } finally {
+      fs.rmSync(outer, { recursive: true, force: true });
+    }
+  });
+
   test("no remote is detected from cwd when the caller passes no state.mode (#500)", async () => {
     const fs = await import("node:fs");
     const os = await import("node:os");

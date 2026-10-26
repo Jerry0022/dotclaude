@@ -60,6 +60,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { register as registerHeartbeat } from "./lib/heartbeat.js";
 import { ensureDeps } from "./lib/ensure-deps.js";
+import { detectRepoMode } from "./ship/lib/repo-mode.js";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
 import { dropForeignOpenItems, foreignTokensFor } from "./lib/foreign-branches.js";
 import { dropNextStepOpenItems } from "./lib/open-admission.js";
@@ -518,6 +519,13 @@ function withDetectedRepoMode(params) {
   // button). A probe that timed out proves nothing and changes nothing.
   if (insideWorkTree(params.cwd) === false) {
     params.state = { ...state, mode: 'file-only' };
+    return;
+  }
+  // A repo rooted above the project: ship_release refused it, so a
+  // ship-successful claim is false (#871). Probed only for that variant.
+  // Needs a cwd: without one git would probe the server's own directory.
+  if (params.variant === 'ship-successful' && params.cwd && detectRepoMode(params.cwd) === 'git-foreign-root') {
+    params.state = { ...state, mode: 'git-foreign-root' };
     return;
   }
   const names = remoteNames(params.cwd);
@@ -2519,6 +2527,9 @@ function buildCompletionCard(params) {
     params.variant = shipGuard.variant;
     params._downgraded = true;
     params._downgradeReason = shipGuard.reason;
+    if (shipGuard.variant === 'ship-blocked' && !(params.cta && params.cta.reason)) {
+      params.cta = { ...(params.cta || {}), reason: 'Repo gehört einem übergeordneten Verzeichnis (git-foreign-root)' };
+    }
   }
 
   // 0b. A branch checked out in another worktree belongs to the session there,
