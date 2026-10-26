@@ -239,6 +239,18 @@ describe("session-title — readCurrentTitle", () => {
     // Out of reach of maxBytes → unknown, the caller falls back to get_session.
     expect(readCurrentTitle(p, { chunk: 4096, maxBytes: 64 * 1024 })).toBeNull();
   });
+  test("2.1.309-style /rename transcript: paired custom-title + agent-name, repeated, rename wins", () => {
+    // Shape verified against a real 2.1.30x transcript: both entries carry
+    // only type, the title key and sessionId, and are re-emitted over time.
+    const p = write("h.jsonl", [
+      ct("Auto title"), an("Auto title"), msg(50),
+      ct("Auto title"), an("Auto title"), msg(50),
+      ct("Renamed by user"), an("Renamed by user"), msg(50),
+    ]);
+    expect(readCurrentTitle(p)).toBe("Renamed by user");
+    // A trailing agent-name that differs must not override the custom-title.
+    expect(readCurrentTitle(write("i.jsonl", [ct("Mine"), an("Other"), msg(5)]))).toBe("Mine");
+  });
   test("multi-byte titles survive a chunk boundary", () => {
     const p = write("g.jsonl", [msg(3000), ct("👉 ➜ 🧭 Concept ┃ Übersicht ä"), msg(100)]);
     expect(readCurrentTitle(p, { chunk: 200 })).toBe("👉 ➜ 🧭 Concept ┃ Übersicht ä");
