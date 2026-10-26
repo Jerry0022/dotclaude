@@ -1,4 +1,4 @@
-# Concept templates, part 07 of 43: Template: decision
+# Concept templates, part 07 of 46: Template: decision
 
 # Template: decision
 

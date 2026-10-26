@@ -48,7 +48,10 @@ Index of the concept engine reference: the three templates (decision, design, fr
 | 40 | [templates-heartbeat.md](templates-heartbeat.md) | 597 | Claude Connection Heartbeat (HTTP Bridge) |
 | 41 | [templates-rounds.md](templates-rounds.md) | 447 | Iteration Tabs |
 | 42 | [templates-final-report.md](templates-final-report.md) | 499 | Final Report Panel · Design System |
-| 43 | [templates-analysis.md](templates-analysis.md) | 305 | Template: analysis (Full + Lite) · Markup contract · Decision modes · Payload · collectModeDecision · Display palette |
+| 43 | [templates-analysis.md](templates-analysis.md) | 293 | Template: analysis (Full + Lite) · Markup contract · Decision modes · Payload · collectModeDecision · Display palette |
+| 44 | [templates-analysis-css.md](templates-analysis-css.md) | 341 | Template: analysis — Styling CSS (Full + Lite) |
+| 45 | [templates-analysis-js.md](templates-analysis-js.md) | 579 | Template: analysis — Engine UI JS (palette, stages, stepper, choreography) |
+| 46 | [templates-analysis-js-2.md](templates-analysis-js-2.md) | 609 | Template: analysis — Engine UI JS (continued) |
 
 ## Using the parts
 
