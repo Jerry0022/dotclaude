@@ -136,7 +136,16 @@
     "SubagentStop": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop/substop.agent.wip.js\"", "timeout": 30 }
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop/substop.agent.wip.js\"", "timeout": 30 },
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop/substop.approval.clear.js\"", "timeout": 5 }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/permission-request/perm.approval.flag.js\"", "timeout": 30, "asyncRewake": true, "dispatch": false },
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/permission-request/perm.approval.watch.js\"", "timeout": 3600, "asyncRewake": true, "dispatch": false }
         ]
       }
     ],
@@ -150,7 +159,8 @@
     "PostToolUse": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.completion.js\"" }
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.completion.js\"" },
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.approval.clear.js\"", "timeout": 5 }
         ]
       },
       {
@@ -240,6 +250,11 @@
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.governor.clear.js\"", "timeout": 5 }
         ],
         "matcher": "Bash|PowerShell"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.approval.clear.js\"", "timeout": 5 }
+        ]
       }
     ],
     "Stop": [

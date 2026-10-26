@@ -15,7 +15,7 @@ turn end. Nothing else strips or sets titles.
 | STATUS | Meaning |
 |---|---|
 | `⏳` | Claude works (shipping, V&V running, background agents pending, concept iterating/implementing, generic Solo work) |
-| `👉` | Your move: the card carries a MANDATORY user step |
+| `👉` | Your move: the card carries a MANDATORY user step, or something waits for your approval (question, plan, tool permission) |
 | `🟩` | Done, nothing mandatory left (not ✅) |
 | `🟥` | Aborted |
 | `🟦` | Paused |
@@ -38,6 +38,21 @@ shows the app's approval card, even under bypass permissions) — so it carries
 until a `set_session_title` to that head goes out in the same message, and
 `post.ask.title` puts the ⏳ head back after the answer (a running ship keeps
 `🚀 Shipping`). Rules: `hooks/lib/ask-title.js`.
+
+**An approval waits → 👉, also for a background agent.** Whenever the user
+must approve something (tool permission, plan, question) the status slot is
+👉 — also while only a background agent waits on a tool permission dialog;
+the activity stays: `⏳ ➜ 🤖 Team ┃ X` → `👉 ➜ 🤖 Team ┃ X`, and back to ⏳
+once the dialog is answered (Solo and Testing alike; a bare ⏳ becomes
+`👉 ➜ 🤖 Solo ┃`). A running ship, a working concept, a batch and every
+outcome keep their head. Only the main thread can rename the session, so
+`perm.approval.flag` (PermissionRequest, `asyncRewake`) wakes it with the
+exact title, `perm.approval.watch` wakes it again for the ⏳ once
+`post.approval.clear` / `substop.approval.clear` saw the agent move on. A
+wake turn of an idle main thread is silent: the rename only — no text, no
+card (a card would put the ⏳ back). Main-thread permission prompts are not
+covered: the user already looks at that session's dialog. Rules:
+`hooks/lib/approval-wait.js`, `title-scheme.js` (`approvalTitle`).
 
 **The 👉-vs-🟩 rule** is decided by content, not by variant name: a
 mandatory user step (an open point or question, a required userTest, a

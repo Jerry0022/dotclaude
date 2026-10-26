@@ -1,6 +1,6 @@
 /**
  * @module title-scheme
- * @version 2.4.0
+ * @version 2.5.0
  * @description The ONE table behind the session title and the completion
  *   card's CTA heading (concept 2026-10-21 "title-iconography").
  *
@@ -26,6 +26,13 @@
  *   (`<STATUS> <ACTIVITY> <Word> – `, old keywords/icons, old ⏸️ status), the
  *   bare ⏳ and every single-icon prefix (`LEGACY_PREFIXES`). Free text such as
  *   "Fix Login – Bug" after a bare ⏳ is the title and stays (F6).
+ *
+ *   Approval wait (2.5): while a background agent waits on a tool permission
+ *   dialog, a `⏳` Solo/Team/Testing head turns into the same head with 👉
+ *   (`👉 ➜ 🤖 Team ┃ `) and back once the dialog is answered — the activity
+ *   stays, only the status says whose move it is (`approvalTitle`,
+ *   `approvalRestoredTitle`; hooks: perm.approval.*). classify() reads those
+ *   heads as 'approval'.
  *
  *   CJS so hooks `require` it; mcp-server (ESM) loads it through
  *   `hookRequire("lib", "title-scheme.js")` in mcp-server/lib/mode-state.js.
@@ -261,6 +268,13 @@ const LEGACY = Object.freeze({
   conceptTwoSlot: '👉 🧭 Concept – ',
 });
 
+/**
+ * The ⏳ heads [word, activity] that swap to 👉 while a background agent
+ * waits on a tool approval. Shipping and a working concept keep their ⏳: a
+ * ship and a concept round own their title.
+ */
+const APPROVAL_HEADS = Object.freeze([['Solo', '🤖'], ['Team', '🤖'], ['Testing', '🧪']]);
+
 /** Category of a canonical (fill-less) prefix → classify() result. */
 const CATEGORY = new Map();
 /** Canonical → every known prefix, used for matching. */
@@ -312,6 +326,7 @@ const KNOWN = [];
           : p === LEGACY.concept ? 'concept-waiting' : 'outcome';
     add(p, cat);
   }
+  for (const [word, act] of APPROVAL_HEADS) CATEGORY.set(compose(STATUS.user, word, act) + ' ', 'approval');
 }());
 
 /** Every known prefix but the bare ⏳, longest first. */
@@ -401,16 +416,60 @@ function stripPrefixes(title) {
  * - 'batch'      any status + Batch
  * - 'concept-waiting' `👉 ➜ 🧭 Concept ┃ ` (or the legacy forms)
  * - 'process'    any other ⏳ prefix (Concept working, Team, Testing)
+ * - 'approval'   `👉 ➜ 🤖 Team ┃ ` / Solo / Testing — a background agent
+ *                waits on a tool approval (approvalTitle)
  * - 'outcome'    any other known prefix (a card's outcome, legacy included)
  *
  * @param {string} title
- * @returns {'plain'|'work'|'shipping'|'batch'|'concept-waiting'|'process'|'outcome'}
+ * @returns {'plain'|'work'|'shipping'|'batch'|'concept-waiting'|'process'|'approval'|'outcome'}
  */
 function classify(title) {
   const lead = leadingPrefix(title);
   if (!lead) return 'plain';
   if (lead.prefix === BARE_WORK) return 'work';
   return CATEGORY.get(lead.prefix) || 'outcome';
+}
+
+/** The APPROVAL_HEADS pair behind `prefix` under `status`, or undefined. */
+function approvalHead(prefix, status) {
+  return APPROVAL_HEADS.find(([word, act]) => prefix === compose(status, word, act) + ' ');
+}
+
+/**
+ * The title while a background agent waits on a tool approval: the ⏳ head
+ * with 👉 in its status slot, activity kept (`⏳ ➜ 🤖 Team ┃ X` →
+ * `👉 ➜ 🤖 Team ┃ X`; a bare or legacy ⏳ counts as Solo). Null — leave the
+ * title — for every other state: a ship, a working concept, a batch, an
+ * outcome, a question, a title that already waits, and an unknown title.
+ *
+ * @param {string|null} title
+ * @returns {string|null}
+ */
+function approvalTitle(title) {
+  if (typeof title !== 'string' || !title.trim()) return null;
+  const kind = classify(title);
+  const rest = stripPrefixes(title);
+  if (!rest.trim()) return null;
+  if (kind === 'work') return compose(STATUS.user, 'Solo', '🤖') + ' ' + rest;
+  if (kind !== 'process') return null;
+  const pair = approvalHead(leadingPrefix(title).prefix, STATUS.work);
+  return pair ? compose(STATUS.user, pair[0], pair[1]) + ' ' + rest : null;
+}
+
+/**
+ * The title once the approval is answered: an approval head back to its ⏳
+ * head (`👉 ➜ 🤖 Team ┃ X` → `⏳ ➜ 🤖 Team ┃ X`). Null when the title is no
+ * approval head any more — a card or a rename meanwhile wins.
+ *
+ * @param {string|null} title
+ * @returns {string|null}
+ */
+function approvalRestoredTitle(title) {
+  if (typeof title !== 'string' || classify(title) !== 'approval') return null;
+  const rest = stripPrefixes(title);
+  if (!rest.trim()) return null;
+  const pair = approvalHead(leadingPrefix(title).prefix, STATUS.user);
+  return pair ? compose(STATUS.work, pair[0], pair[1]) + ' ' + rest : null;
 }
 
 /** Every prefix a state can leave on a title (status raised included). */
@@ -454,4 +513,7 @@ module.exports = {
   stripPrefixes,
   classify,
   allStatePrefixes,
+  APPROVAL_HEADS,
+  approvalTitle,
+  approvalRestoredTitle,
 };

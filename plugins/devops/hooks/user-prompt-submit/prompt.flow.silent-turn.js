@@ -96,6 +96,10 @@ if (require.main === module) {
     try { fs.unlinkSync(sessionFile('dotclaude-devops-validation-open', hook.session_id)); } catch {}
     // #632: an archive hand-over belongs to the card of the turn that shipped —
     // a later widget must never release it.
+    // A prompt is no approval wake turn (lib/approval-wait.js): a wake flag
+    // the woken turn never consumed must not silence this one.
+    const approvalWait = require('../lib/approval-wait');
+    if (!prompt.includes(approvalWait.MARKER)) approvalWait.dropWake(hook.session_id);
     for (const prefix of ['dotclaude-devops-card-archive', 'dotclaude-devops-card-archive-released', 'dotclaude-devops-archive-shipped']) {
       try { fs.unlinkSync(sessionFile(prefix, hook.session_id)); } catch { /* no flag to clear */ }
     }
