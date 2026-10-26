@@ -586,5 +586,7 @@ describe("detectCardHandoff — setup steps in unknown web UIs (#905)", () => {
     expect(setupStepHandoff("Live-Version auf https://example.com prüfen")).toBeNull();
     expect(setupStepHandoff("In `src/config.ts` die URL https://example.com/cb eintragen")).toBeNull();
     expect(setupStepHandoff("Add the badge from https://github.com/acme/repo to the README")).toBeNull();
+    expect(setupStepHandoff("Install the package from https://www.npmjs.com/package/foo")).toBeNull();
+    expect(setupStepHandoff("Install it as described on https://docs.example.com/setup")).toBeNull();
   });
 });
