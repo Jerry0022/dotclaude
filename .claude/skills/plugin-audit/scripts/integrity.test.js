@@ -5,7 +5,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 
 const require = createRequire(import.meta.url);
-const { checkReferences, sizeTrend } = require('./lib/integrity.js');
+const { checkReferences, sizeTrend, wiring, mcpDepsMissing } = require('./lib/integrity.js');
+const { hookCommandPath } = require('./lib/util.js');
 const { frontmatter, mcpToolsOfSource } = require('./lib/footprint.js');
 
 function tree(files) {
@@ -69,5 +70,31 @@ describe('plugin-audit footprint parsing', () => {
     expect(items).toHaveLength(1);
     expect(items[0].id).toBe('t1');
     expect(items[0].chars).toBeLessThan(120);
+  });
+});
+
+describe('plugin-audit hook command paths and MCP deps', () => {
+  it('extracts the script path from quoted commands with args', () => {
+    expect(hookCommandPath('node "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js" PreToolUse')).toBe('hooks/dispatch/dispatch.js');
+    expect(hookCommandPath('node ${CLAUDE_PLUGIN_ROOT}/hooks/a.js')).toBe('hooks/a.js');
+    expect(hookCommandPath('echo hi')).toBeNull();
+  });
+
+  it('wiring does not report quoted existing hook files as missing', () => {
+    const root = tree({
+      'plugins/devops/hooks/hooks.json': JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ command: 'node "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js" PreToolUse' }] }] } }),
+      'plugins/devops/hooks/dispatch/dispatch.js': '',
+    });
+    const r = wiring(root);
+    expect(r.findings.filter((f) => /missing/.test(f.msg))).toEqual([]);
+  });
+
+  it('detects MCP servers without node_modules', () => {
+    const root = tree({
+      'plugins/devops/mcp-server/package.json': '{}',
+      'plugins/other/mcp-server/package.json': '{}',
+      'plugins/other/mcp-server/node_modules/.keep': '',
+    });
+    expect(mcpDepsMissing(root).map((d) => path.relative(root, d).replace(/\\/g, '/'))).toEqual(['plugins/devops/mcp-server']);
   });
 });

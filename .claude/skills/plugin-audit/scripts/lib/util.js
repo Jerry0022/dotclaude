@@ -90,4 +90,10 @@ async function timed(id, title, fn) {
   return res;
 }
 
-module.exports = { CHARS_PER_TOKEN, tokensOfChars, run, git, walk, readText, readJson, rel, cmpSemver, check, timed };
+/** Plugin-relative script path of a hook command (`node "${CLAUDE_PLUGIN_ROOT}/a/b.js" Arg`), without quotes or args. */
+function hookCommandPath(command) {
+  const m = /\$\{CLAUDE_PLUGIN_ROOT\}\/([^"'\s]+)/.exec(String(command || ''));
+  return m ? m[1] : null;
+}
+
+module.exports = { hookCommandPath, CHARS_PER_TOKEN, tokensOfChars, run, git, walk, readText, readJson, rel, cmpSemver, check, timed };

@@ -23,7 +23,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { tokensOfChars, run, walk, readText, readJson, rel } = require('./util');
+const { hookCommandPath, tokensOfChars, run, walk, readText, readJson, rel } = require('./util');
 
 /** Hooks executed with a fixture to measure their real stdout. */
 const SAFE_HOOKS = [
@@ -173,7 +173,7 @@ function unexecutedHooks(root) {
     for (const ev of Object.keys(out)) {
       for (const g of cfg.hooks[ev] || []) {
         for (const h of g.hooks || []) {
-          const base = path.basename(String(h.command || '').split(/\s+/).pop() || '');
+          const base = path.basename(hookCommandPath(h.command) || String(h.command || '').split(/\s+/).pop().replace(/["']/g, ''));
           if (base && !executed.has(base)) out[ev].push(`${plugin}/${base}`);
         }
       }
