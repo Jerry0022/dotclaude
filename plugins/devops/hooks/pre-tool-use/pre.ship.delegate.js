@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.ship.delegate
- * @version 0.3.0
+ * @version 0.4.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Skill|Agent
@@ -18,8 +18,12 @@
  *     its cache write cost more than the inline ship (+28 % measured at 115 k).
  *   - Agent spawn that runs do-ship without `--delegated` / `--resume` →
  *     refused once with the delegated instruction; a retry carrying
- *     `--delegated` passes (stateless, #892). An accepted delegated spawn gets
- *     context asking the parent to set the Shipping title first.
+ *     `--delegated` passes (stateless, #892).
+ *   - Delegated spawn while the known title is not on Shipping and no
+ *     set_session_title to it went out in the same message → refused once per
+ *     turn with the exact set call: the old after-the-fact context arrived
+ *     with the spawn result, so the title never showed Shipping (backlog run
+ *     2026-10-26). Unknown title (no Desktop app) → passes with that context.
  *   - `--card-data` in the args (an /auto-concept finalize ship passes it
  *     itself) → the instruction keeps it: the subagent returns card data and
  *     the caller renders after its close-out (#712). Never inferred from a
@@ -58,7 +62,10 @@ function main(hook) {
     }
     if (!D.mentionsShip(prompt)) return null;
     if (D.delegatedSpawnTooSmall({ prompt, tokens })) return { block: tooSmallText(tokens, D.threshold(), formatTokens) };
-    if (/--delegated\b/.test(prompt) && !/--resume\b/.test(prompt)) return { context: titleText() };
+    if (/--delegated\b/.test(prompt) && !/--resume\b/.test(prompt)) {
+      const refusal = shippingTitleRefusal(hook);
+      return refusal ? { block: refusal } : { context: titleText() };
+    }
     return null;
   }
 
@@ -83,6 +90,50 @@ function main(hook) {
       `Only when the user explicitly asked for this ship to stay here: repeat the Skill call with "--inline" added to its args.`,
     ].join('\n'),
   };
+}
+
+const TITLE_MARKER = '[pre.ship.delegate:title]';
+const SET_TOOL = 'mcp__ccd_session_mgmt__set_session_title';
+
+/**
+ * The refusal text when the delegated spawn would run under a non-Shipping
+ * title, else null: title unknown, already Shipping, a set call to a Shipping
+ * title in this message, or this turn already refused once.
+ */
+function shippingTitleRefusal(hook) {
+  const S = require('../lib/title-scheme');
+  const { readCurrentTitle } = require('../lib/session-title');
+  const current = readCurrentTitle(hook.transcript_path);
+  if (typeof current !== 'string' || !current.trim()) return null;
+  if (S.classify(current) === 'shipping') return null;
+  const rest = S.stripPrefixes(current);
+  if (!rest.trim()) return null;
+  const text = require('../lib/agent-card-relay').readTail(hook.transcript_path);
+  if (turnHasShippingSetOrRefusal(text, S.SHIPPING_PREFIX)) return null;
+  const target = S.SHIPPING_PREFIX + rest;
+  return `${TITLE_MARKER} The sidebar would not show the ship. Send ${SET_TOOL} {session_id:"self", title:${JSON.stringify(target)}} ` +
+    'and this exact Agent call again in ONE message, the title call first (session_id is required). ' +
+    `Only deferred → load it with ToolSearch "select:${SET_TOOL}" first. Do not mention this to the user.`;
+}
+
+/** Since the last user prompt: a set call to a Shipping title, or this gate's refusal. */
+function turnHasShippingSetOrRefusal(text, prefix) {
+  let hit = false;
+  for (const line of String(text || '').split('
+')) {
+    if (!line.trim()) continue;
+    let e; try { e = JSON.parse(line); } catch { continue; }
+    if (!e || e.isSidechain) continue;
+    const c = e.message && e.message.content;
+    if (e.type === 'user' && e.isMeta !== true && (typeof c === 'string' || (Array.isArray(c) && c.some((b) => b && b.type !== 'tool_result')))) { hit = false; continue; }
+    if (!Array.isArray(c)) continue;
+    for (const b of c) {
+      if (!b) continue;
+      if (e.type === 'assistant' && b.type === 'tool_use' && b.name === SET_TOOL && typeof (b.input && b.input.title) === 'string' && b.input.title.startsWith(prefix)) hit = true;
+      if (e.type === 'user' && b.type === 'tool_result' && JSON.stringify(b.content || '').includes(TITLE_MARKER)) hit = true;
+    }
+  }
+  return hit;
 }
 
 /** The parent session owns the title; the hook can only ask for it, before the spawn result. */

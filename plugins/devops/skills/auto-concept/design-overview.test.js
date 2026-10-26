@@ -501,6 +501,34 @@ describe("Ctrl + click user pins", () => {
     window.Element.prototype.getBoundingClientRect = orig;
   }, BOOT_TIMEOUT);
 
+  test("Ctrl + click on the overview's centre preview places the pin and opens that design (#887)", async () => {
+    const p = await boot(page(2));
+    const { window, document } = p;
+    const slide = document.querySelector('.design-ov-slide[data-pos="cur"][data-design-id]');
+    expect(slide, "the overview is on screen at boot").not.toBeNull();
+    const preview = slide.querySelector(".design-ov-preview");
+    const box = preview.querySelector(".design-ov-scale").firstElementChild;
+    const h1 = box.querySelector("h1");
+    const rect = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top });
+    const orig = window.Element.prototype.getBoundingClientRect;
+    window.Element.prototype.getBoundingClientRect = function () {
+      if (this === box) return rect(0, 0, 200, 100);
+      if (this === h1) return rect(10, 10, 80, 20);
+      return orig.call(this);
+    };
+    preview.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true, clientX: 20, clientY: 20 }));
+    window.Element.prototype.getBoundingClientRect = orig;
+    expect(activeDesign(document).dataset.design).toBe(slide.dataset.designId);
+    const ta = [...document.querySelectorAll(".upin-editor")].find((e) => !e.hidden).querySelector("textarea");
+    ta.value = "From the overview";
+    key(window, ta, { key: "Enter", code: "Enter" });
+    const pin = window.collectDecisions("iterate").userPins[0];
+    expect(pin).toMatchObject({ design: slide.dataset.designId, x: 10, y: 20, text: "From the overview" });
+    expect(pin.screen).toMatch(/-s\d+$/);
+    expect(pin.target).toMatch(/^h1/);
+    expect(pin.target).not.toContain("ov");
+  }, BOOT_TIMEOUT);
+
   test("a single-design round keeps a pin: store exists, payload and reload carry it (#907)", async () => {
     const html = page(1, { attrs: false });
     const p = await boot(html);

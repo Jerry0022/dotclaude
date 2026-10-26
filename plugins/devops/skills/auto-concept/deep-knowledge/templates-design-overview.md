@@ -43,6 +43,10 @@ returns — the single-design page is untouched.
   (`data-ov-focus`, its pages stay folded, a small ▾ hints at them; the
   questions tile highlights "Fragen"). Everything is sized from the viewport
   (CSS container units on the stage), so the overview never scrolls.
+- **Pins on the overview.** Ctrl + click (or the armed pin button) on the
+  centre preview places an own pin there (#887): the preview is an inert
+  clone, so the spot is measured on the clone, the design opens on the
+  previewed page and the note editor sits at the same place.
 - **Header = the eye only.** `#design-header` holds nothing but the
   annotation eye (`.design-header-eye`), bare and dimmed until pointed at —
   no breadcrumb, no back item, no title, no ★, no box. Back to the overview:
@@ -541,6 +545,8 @@ returns — the single-design page is untouched.
   }
 
   // ── Overview previews ──────────────────────────────────────────────────
+  // Centre preview → { design, screen, prefix, open }, for Ctrl+click pins (#887).
+  const ovPreviews = new WeakMap();
   function cloneScreen(first, prefix) {
     const wrap = el('div', 'design-ov-scale');
     wrap.dataset.deviceClone = 'overview';
@@ -605,6 +611,7 @@ returns — the single-design page is untouched.
     }
     const open = () => (shown && shown !== screens[0] ? window.showDesign(m.id, shown.id) : window.showDesign(m.id));
     preview.appendChild(cloneScreen(shown, 'ov' + m.n + '-'));
+    ovPreviews.set(preview, { design: m.id, screen: shown, prefix: 'ov' + m.n + '-', open });
     // No "Open ↗" button: the centre preview itself is the control (click /
     // Enter / ↓) and answers a hover with a glow, never with scaling.
     const kind = delta ? (delta.isNew ? 'new' : delta.screens.length ? 'changed' : 'same') : '';
@@ -1605,8 +1612,47 @@ returns — the single-design page is untouched.
     const text = (node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40);
     return text ? s + ' "' + text + '"' : s;
   }
+  // Ctrl+click on the overview's centre preview (#887): the clone is inert,
+  // so the spot is measured on the clone; then the design opens on the
+  // previewed page with the draft at the same place.
+  function overviewPin(e) {
+    const it = visibleIteration();
+    const preview = e.target.closest && e.target.closest('.design-ov-slide[data-pos="cur"] .design-ov-preview');
+    const entry = preview && ovPreviews.get(preview);
+    if (!entry || !entry.screen || !isLive(it) || body.classList.contains('viewing-frozen')) return false;
+    if (body.dataset.viewportMode && body.dataset.viewportMode !== 'desktop') return false;
+    const wrap = preview.querySelector('.design-ov-scale');
+    const box = wrap && (wrap.querySelector(':scope > .device-frame') || wrap.firstElementChild || wrap);
+    if (!box) return false;
+    const r = box.getBoundingClientRect();
+    if (!r.width || !r.height || e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return false;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    if (armed === 'tap') disarm();
+    closeOtherNotes(null);
+    // Inert nodes are not hit-tested: the deepest clone node under the point.
+    let hit = null;
+    box.querySelectorAll('*').forEach(n => {
+      const b = n.getBoundingClientRect();
+      if (b.width && b.height && e.clientX >= b.left && e.clientX <= b.right && e.clientY >= b.top && e.clientY <= b.bottom) hit = n;
+    });
+    const pct = (v, lo, size) => Math.round(Math.min(100, Math.max(0, ((v - lo) / size) * 100)) * 10) / 10;
+    draft = {
+      id: 'up-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      design: entry.design, screen: entry.screen.id,
+      x: pct(e.clientX, r.left, r.width), y: pct(e.clientY, r.top, r.height),
+      target: describeTarget(hit, box).split(entry.prefix).join(''), text: ''
+    };
+    if (body.classList.contains('anno-hidden')) freshPins.add(draft.id);
+    entry.open();
+    const now = visibleIteration();
+    renderPins(now, readState(now), true);
+    return true;
+  }
   document.addEventListener('click', e => {
     if (!armed && !(e.ctrlKey || e.metaKey)) return;
+    if (on() && mode() === 'overview' && overviewPin(e)) return;
     if (!on() || mode() !== 'design') return;
     const it = visibleIteration();
     if (!isLive(it) || body.classList.contains('viewing-frozen')) return;

@@ -339,7 +339,8 @@ export function titleInstruction(prefix, current = null) {
     `strip every leading prefix (${list}) → ` +
     `${SET_TOOL} {session_id:"self"} and ${set} ` +
     "Deferred is not unavailable: if either tool is only in the deferred-tools list, load both once with ToolSearch `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`, then call them. " +
-    "If either tool is truly unavailable (not even deferred) or fails: skip silently — no retry, no note, no fallback. " +
+    "An input-validation error (session_id missing) is yours: resend once with session_id:\"self\". " +
+    "If either tool is truly unavailable (not even deferred) or fails otherwise: skip silently — no retry, no note, no fallback. " +
     "The card stays the last output of the turn."
   );
 }
@@ -370,7 +371,8 @@ function knownTitleInstruction(prefix, current) {
     "show_widget call (parallel tool use, set_session_title first in the batch); no message of its own. " +
     "No widget (markdown card): same batch as your last tool call before the card text, none left → alone, just before it. " +
     `Only deferred → ToolSearch "select:${SET_TOOL}" first, then the set call in the card's batch. ` +
-    "Truly unavailable (not even deferred) or failing: skip silently — no retry, no note. " +
+    "session_id is required: an input-validation error means the call went out without it — resend it once, exactly as written above. " +
+    "Truly unavailable (not even deferred) or failing otherwise: skip silently — no retry, no note. " +
     "The card stays the last output of the turn."
   );
 }
