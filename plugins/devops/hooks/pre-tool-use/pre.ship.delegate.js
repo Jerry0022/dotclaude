@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.ship.delegate
- * @version 0.2.0
+ * @version 0.3.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Skill|Agent
@@ -16,6 +16,10 @@
  *   - Agent spawn of a `--delegated` ship while the known main context is
  *     below the threshold → refused: there the subagent's fresh context and
  *     its cache write cost more than the inline ship (+28 % measured at 115 k).
+ *   - Agent spawn that runs do-ship without `--delegated` / `--resume` →
+ *     refused once with the delegated instruction; a retry carrying
+ *     `--delegated` passes (stateless, #892). An accepted delegated spawn gets
+ *     context asking the parent to set the Shipping title first.
  *   - `--card-data` in the args (an /auto-concept finalize ship passes it
  *     itself) → the instruction keeps it: the subagent returns card data and
  *     the caller renders after its close-out (#712). Never inferred from a
@@ -40,10 +44,22 @@ function main(hook) {
 
   if (tool === 'Agent') {
     const prompt = typeof input.prompt === 'string' ? input.prompt : '';
-    if (!/devops:do-ship/.test(prompt)) return null;
     const tokens = currentContextTokens(hook.transcript_path);
-    if (!D.delegatedSpawnTooSmall({ prompt, tokens })) return null;
-    return { block: tooSmallText(tokens, D.threshold(), formatTokens) };
+    if (D.bareShipSpawn(prompt)) {
+      return {
+        block: [
+          '[pre.ship.delegate] Refused: this subagent would run do-ship without the delegated protocol (no brief, no card contract, no Shipping title).',
+          D.shipDelegateInstruction({
+            tokens: tokens || 0, skillArgs: '', pluginRoot: PLUGIN_ROOT, sessionId: hook.session_id || '',
+          }),
+          'A retry must carry `--delegated` in the do-ship args; a bare repeat is refused again.',
+        ].join('\n'),
+      };
+    }
+    if (!/devops:do-ship/.test(prompt)) return null;
+    if (D.delegatedSpawnTooSmall({ prompt, tokens })) return { block: tooSmallText(tokens, D.threshold(), formatTokens) };
+    if (/--delegated\b/.test(prompt) && !/--resume\b/.test(prompt)) return { context: titleText() };
+    return null;
   }
 
   const skill = String(input.skill || input.name || '');
@@ -67,6 +83,15 @@ function main(hook) {
       `Only when the user explicitly asked for this ship to stay here: repeat the Skill call with "--inline" added to its args.`,
     ].join('\n'),
   };
+}
+
+/** The parent session owns the title; the hook can only ask for it, before the spawn result. */
+function titleText() {
+  const { SHIPPING_PREFIX } = require('../lib/title-scheme');
+  return [
+    `[pre.ship.delegate] Delegated ship accepted. In THIS message, before the spawn result arrives, set the session title to`,
+    `"${SHIPPING_PREFIX}" + the current title without its old devops prefix. The completion card sets the final prefix afterwards.`,
+  ].join('\n');
 }
 
 function tooSmallText(tokens, limit, formatTokens) {
