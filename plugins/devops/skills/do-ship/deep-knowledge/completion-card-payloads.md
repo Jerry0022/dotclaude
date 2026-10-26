@@ -8,11 +8,20 @@ the run" rules stay in SKILL.md; this is the payload shape and how its
 ## Promotion-gap nudge
 
 Deliberate promotion has no heartbeat without a forcing function — invisible
-channel lag is how stable rots. Before rendering the card, compute the drift:
+channel lag is how stable rots. **Take the drift from the `ship_release`
+result — never run `git ls-remote` yourself** (a model-run ls-remote hung
+650–1280 s several times). The tool did the one bounded query:
 
-```bash
-git ls-remote --tags origin
-```
+- `channels` = `{ alpha, beta, stable }` (latest bare version per channel, null
+  without tags; a bare `vX.Y.Z` counts as stable), `betaLag` / `stableLag` =
+  `{ versions, days }` (`days` null when the alpha tag dates are not known
+  locally). Pass `channels` as is; pass a lag only when `versions > 0` and
+  apply the thresholds below to it.
+- Fields absent (older server, or the listing was unreadable) → fall back to
+  `git ls-remote --tags origin` once, with a 60 s timeout, and derive the
+  values by hand as follows. Never retry it.
+
+Fallback derivation:
 
 - Latest alpha version = highest `alpha/vX.Y.Z` (numeric compare, never lexicographic).
 - Latest beta version = highest `beta/vX.Y.Z`.
