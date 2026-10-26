@@ -7,7 +7,7 @@ import {
   parseWorktrees, scanRepo, planAutoClean, executeAutoClean, runHygiene as runHygieneAsync, cardLines, landedVia,
   isRegenerable, isToolingState, hasLiveSession, hasMovedSession, LIVE_SESSION_MS, REMOVE_TIMEOUT, normPath,
   reachableFromMerged, dirBytes, landingState, openHeadsFromList, PR_LIST_LIMIT,
-  acquireWorkerLock, releaseWorkerLock, workerLockHeld, WORKER_LOCK_STALE_MS, startHygieneWorker,
+  acquireWorkerLock, releaseWorkerLock, workerLockHeld, WORKER_LOCK_STALE_MS, startHygieneWorker, persistedAtRisk,
 } from "./hygiene.js";
 import { runWorker } from "../hygiene-worker.js";
 
@@ -905,6 +905,31 @@ describe("runHygiene — trigger, switches and the nudge", () => {
       releaseWorkerLock(dir);
       deferred(dir, { spawnWorker: () => { spawned++; return true; } });
       expect(spawned).toBe(1);
+    });
+
+    test("persisted at-risk items of the last worker run reach the deferred ship card (gone units dropped)", () => {
+      const { dir, c1 } = makeRepo();
+      git(dir, "branch", "old-landed", c1);
+      const head = git(dir, "rev-parse", "old-landed");
+      const statePath = path.join(mkTmp("hy-state-"), "s.json");
+      fs.writeFileSync(statePath, JSON.stringify({ repos: { [normPath(dir)]: { atRisk: { at: daysAgo(0), items: [
+        { kind: "branch", branch: "old-landed", head, commits: 2, state: "unlanded", pushed: false, dirty: 0 },
+        { kind: "branch", branch: "gone", head: "f".repeat(40), commits: 1, state: "unlanded", pushed: false, dirty: 0 },
+      ] } } } }));
+      const res = deferred(dir, { statePath, spawnWorker: () => true });
+      expect(res.atRisk.map((x) => x.branch)).toEqual(["old-landed"]);
+      expect(res.atRiskSource).toMatchObject({ from: "last-hygiene-run" });
+      expect(res.card.risk.text).toMatch(/Nicht gelandete Arbeit ohne PR: old-landed/);
+    });
+
+    test("the in-process (worker) run persists its at-risk list per repo, empty included", () => {
+      const { dir } = makeRepo();
+      const statePath = path.join(mkTmp("hy-state-"), "s.json");
+      runHygiene({ cwd: dir, trigger: "ship", settings: SETTINGS, statePath, now: NOW, fetchMerged: offline });
+      const repo = JSON.parse(fs.readFileSync(statePath, "utf8")).repos[normPath(dir)];
+      expect(Array.isArray(repo.atRisk.items)).toBe(true);
+      expect(persistedAtRisk({}, { units: [] })).toEqual([]);
+      expect(persistedAtRisk({ atRisk: { items: [{ head: "a" }, { head: "b" }] } }, { units: [{ head: "b" }] })).toEqual([{ head: "b" }]);
     });
 
     test("startHygieneWorker spawns detached with the job as JSON and never throws", () => {

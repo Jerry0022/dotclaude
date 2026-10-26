@@ -1150,6 +1150,21 @@ function openDamage(repo, fresh, now) {
   return known;
 }
 
+/** How many at-risk items the state keeps for the next (deferred) ship card. */
+export const AT_RISK_KEEP = 20;
+
+/**
+ * The at-risk list the last in-process run (the worker) persisted for this repo,
+ * minus items whose unit is gone: a branch/worktree head no longer scanned and
+ * no dirty checkout left on disk.
+ */
+export function persistedAtRisk(repo, scan) {
+  const items = repo && repo.atRisk && Array.isArray(repo.atRisk.items) ? repo.atRisk.items : [];
+  if (!items.length) return [];
+  const heads = new Set((scan && scan.units ? scan.units : []).map((u) => u.head).filter(Boolean));
+  return items.filter((x) => x && (heads.has(x.head) || (x.dirty > 0 && x.path && fs.existsSync(x.path))));
+}
+
 export function defaultStatePath() {
   return path.join(os.homedir(), ".claude", "devops-hygiene.json");
 }
@@ -1371,6 +1386,14 @@ export function runHygiene(p) {
     // list run in a detached worker; the card only learns that cleanup is under way.
     result.autoClean.deferred = true;
     result.autoClean.reason = "deferred — detached worker";
+    // The at-risk list comes from the removal plan, which now runs in the worker. It persists
+    // its list per repo; re-emit it here so the "unlanded work without a PR" warning still
+    // reaches this ship's card (dropping items whose branch/worktree is gone meanwhile).
+    const persisted = persistedAtRisk(repo, scan);
+    if (persisted.length) {
+      result.atRisk = persisted;
+      result.atRiskSource = { from: "last-hygiene-run", at: repo.atRisk.at };
+    }
     if (scan.units.length > 0) {
       if (workerLockHeld(cwd, now)) {
         result.autoClean.reason = "deferred — worker already running";
@@ -1396,6 +1419,8 @@ export function runHygiene(p) {
     result.autoClean.kept = plan.keep.length;
     result.autoClean.offline = plan.offline;
     result.atRisk = plan.atRisk;
+    repo.atRisk = { at: new Date(now).toISOString(), items: plan.atRisk.slice(0, AT_RISK_KEEP) };
+    dirty = true;
     if (!plan.gateOpen) {
       result.autoClean.reason = plan.reason;
     } else {
