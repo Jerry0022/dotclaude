@@ -20,8 +20,12 @@ require('../lib/plugin-guard');
 const W = require('../lib/approval-wait');
 
 const POLL_MS = 1000;
-/** Below the manifest timeout (3600 s), so the hook ends on its own. */
-const DEADLINE_MS = 55 * 60_000;
+/**
+ * A safety net only: the entry expires after MAX_AGE_MS (55 min) and then
+ * counts as answered, so the watch restores ⏳ before this. Below the
+ * manifest timeout (3600 s), so the hook ends on its own.
+ */
+const DEADLINE_MS = W.MAX_AGE_MS + 60_000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

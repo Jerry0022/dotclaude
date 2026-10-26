@@ -32,6 +32,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   for (const p of [W.STATE_PREFIX, W.WAKE_PREFIX, "dotclaude-devops-work-happened"]) {
+    try { fs.unlinkSync(path.join(os.tmpdir(), `${p}-${sid}.lock`)); } catch { /* none */ }
     try { fs.unlinkSync(path.join(os.tmpdir(), `${p}-${sid}`)); } catch { /* not written */ }
   }
   fs.rmSync(dir, { recursive: true, force: true });
@@ -105,6 +106,41 @@ describe("approval-wait: the waiting calls", () => {
     W.record(req(), 1000);
     expect(W.clear({ ...req(), agent_id: "agent-2", duration_ms: 1 }, 5000)).toBe(0);
     expect(W.clear({ session_id: sid, agent_id: "agent-1", hook_event_name: "SubagentStop" }, 5000)).toBe(1);
+  });
+
+  test("a finished call without duration_ms clears only its own entry", () => {
+    W.record(req(), 1000);
+    const other = { ...req(), tool_name: "Read", tool_input: { file_path: "a" } };
+    expect(W.clear(other, 5000)).toBe(0);
+    expect(W.clear(req(), 5000)).toBe(1);
+  });
+
+  test("parallel writers lose no entry (lock)", async () => {
+    const { spawn } = await import("node:child_process");
+    const lib = fileURLToPath(new URL("./approval-wait.js", import.meta.url));
+    const run = (i) => new Promise((res) => {
+      const code = `require(${JSON.stringify(lib)}).record({session_id:${JSON.stringify(sid)},agent_id:"a${i}",tool_name:"Bash",tool_input:{i:${i}}})`;
+      spawn(process.execPath, ["-e", code]).on("exit", res);
+    });
+    await Promise.all([0, 1, 2, 3, 4, 5].map(run));
+    expect(W.readEntries(sid)).toHaveLength(6);
+    expect(fs.existsSync(`${W.statePath(sid)}.lock`)).toBe(false);
+  });
+
+  test("a stale lock from a killed hook is taken over", () => {
+    fs.writeFileSync(`${W.statePath(sid)}.lock`, "");
+    const old = new Date(Date.now() - 10_000);
+    fs.utimesSync(`${W.statePath(sid)}.lock`, old, old);
+    expect(W.record(req())).not.toBeNull();
+    expect(W.readEntries(sid)).toHaveLength(1);
+  });
+
+  test("an entry expired past the watch deadline counts as answered", async () => {
+    const t = transcript([titleEntry(TEAM_WAIT), endedTurn]);
+    const old = Date.now() - W.MAX_AGE_MS + 50;
+    W.record(req(), old);
+    const out = await watch.main({ ...req(), transcript_path: t }, { pollMs: 20, deadlineMs: 5000 });
+    expect(out.block).toContain(JSON.stringify(TEAM));
   });
 
   test("expired entries are dropped", () => {

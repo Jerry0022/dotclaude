@@ -37,8 +37,16 @@ const { sessionFile, writeSessionFile } = require('./session-id');
 
 const STATE_PREFIX = 'dotclaude-devops-approval-wait';
 const WAKE_PREFIX = 'dotclaude-devops-approval-wake';
-/** An entry older than this is dropped: a dialog nobody answered, a crash. */
-const MAX_AGE_MS = 2 * 3_600_000;
+/**
+ * An entry older than this is dropped: a dialog nobody answered, a crash.
+ * Also perm.approval.watch's deadline — an expired entry counts as answered
+ * there, so a long wait ends on ⏳ instead of a 👉 nobody takes back.
+ */
+const MAX_AGE_MS = 55 * 60_000;
+/** A lock older than this is left over from a killed hook. */
+const LOCK_STALE_MS = 2000;
+/** How long a writer waits for the lock before it writes anyway (fail-open). */
+const LOCK_WAIT_MS = 1000;
 /** A wake flag older than this no longer marks a turn silent — the wake comes within seconds. */
 const WAKE_TTL_MS = 2 * 60_000;
 /** The main thread's last entry must be this old to count as idle. */
@@ -78,6 +86,36 @@ function writeEntries(sessionId, entries) {
 }
 
 /**
+ * Runs `fn` (a read-modify-write of the state file) under an exclusive lock
+ * file: flag, watch and clear hooks of parallel agents rewrite the same
+ * file, and an unlocked overlap loses an entry or brings a cleared one back.
+ * A lock not won within LOCK_WAIT_MS is skipped — never block a hook.
+ */
+function withLock(sessionId, fn) {
+  const lock = `${statePath(sessionId)}.lock`;
+  const end = Date.now() + LOCK_WAIT_MS;
+  let held = false;
+  while (!held) {
+    try {
+      fs.closeSync(fs.openSync(lock, 'wx'));
+      held = true;
+    } catch (err) {
+      if (err.code !== 'EEXIST') break;
+      try {
+        if (Date.now() - fs.statSync(lock).mtimeMs > LOCK_STALE_MS) { fs.unlinkSync(lock); continue; }
+      } catch { continue; /* released meanwhile */ }
+      if (Date.now() >= end) break;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    if (held) try { fs.unlinkSync(lock); } catch { /* already gone */ }
+  }
+}
+
+/**
  * Records the subagent call `hook` describes as waiting. Idempotent — flag
  * and watch both call it, in parallel. Null for a main-thread call.
  *
@@ -87,12 +125,14 @@ function writeEntries(sessionId, entries) {
 function record(hook, now = Date.now()) {
   if (!hook || typeof hook.agent_id !== 'string' || !hook.agent_id) return null;
   const sig = signature(hook.tool_name, hook.tool_input);
-  const entries = readEntries(hook.session_id, now);
-  const known = entries.find((e) => e.agent === hook.agent_id && e.sig === sig);
-  if (known) return known;
-  const entry = { agent: hook.agent_id, sig, tool: String(hook.tool_name || ''), at: now };
-  writeEntries(hook.session_id, [...entries, entry]);
-  return entry;
+  return withLock(hook.session_id, () => {
+    const entries = readEntries(hook.session_id, now);
+    const known = entries.find((e) => e.agent === hook.agent_id && e.sig === sig);
+    if (known) return known;
+    const entry = { agent: hook.agent_id, sig, tool: String(hook.tool_name || ''), at: now };
+    writeEntries(hook.session_id, [...entries, entry]);
+    return entry;
+  });
 }
 
 /** True when `entry` still waits. */
@@ -111,17 +151,20 @@ function isWaiting(sessionId, entry, now = Date.now()) {
 function clear(hook, now = Date.now()) {
   if (!hook || typeof hook.agent_id !== 'string' || !hook.agent_id) return 0;
   if (!fs.existsSync(statePath(hook.session_id))) return 0;
-  const entries = readEntries(hook.session_id, now);
   const stop = hook.hook_event_name === 'SubagentStop';
   const sig = stop ? null : signature(hook.tool_name, hook.tool_input);
+  // No duration_ms → the call's start is unknown: only its own entry goes.
   const started = Number.isFinite(hook.duration_ms) ? now - hook.duration_ms : null;
-  const keep = entries.filter((e) => {
-    if (e.agent !== hook.agent_id) return true;
-    if (stop || e.sig === sig) return false;
-    return started !== null && started <= e.at;
+  return withLock(hook.session_id, () => {
+    const entries = readEntries(hook.session_id, now);
+    const keep = entries.filter((e) => {
+      if (e.agent !== hook.agent_id) return true;
+      if (stop || e.sig === sig) return false;
+      return started === null || started <= e.at;
+    });
+    if (keep.length !== entries.length) writeEntries(hook.session_id, keep);
+    return entries.length - keep.length;
   });
-  writeEntries(hook.session_id, keep);
-  return entries.length - keep.length;
 }
 
 /**
