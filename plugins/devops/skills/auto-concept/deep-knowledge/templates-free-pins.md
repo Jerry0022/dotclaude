@@ -1,10 +1,11 @@
 # Concept templates, part 21 of 42: Template: free — Document pins
 
-## Document pins — own notes in decision / free rounds (`wireDocumentPins()`)
+## Document pins — own notes in decision / free rounds and design-round question views (`wireDocumentPins()`)
 
 The document-round counterpart of the design round's own Ctrl + click pins
 (§ Variant overview JS, "User pins"). In a `decision` or `free` round
-(never the final report, never a design round) **Ctrl + click** — a long
+(and on the question views of a design round, `section[data-view]`, and
+the final report; never the variant overview or a design screen) **Ctrl + click** — a long
 press (~500 ms) on touch — on a paragraph, list item or table row sets the
 user's own note pin there. The pin looks and behaves like the design pin
 (same `.upin*` classes: note field, Enter saves, Esc discards, delete,
@@ -39,6 +40,22 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
 - **Frozen rounds** read `userPins` from `data-frozen-feedback`
   (`concept-build.js bake` writes it) and render the pins read-only in that
   round's section; entries without an `anchor` (design pins) are ignored.
+- **Question views (design rounds).** A design round with `section[data-view]`
+  hosts the same pins on the view that is on screen (`data-view-active`);
+  `anchor.section` is the view's `id`, else `view:<data-view>`. The pins live in
+  the same `doc-pins` store, are placed per view (pins of an inactive view are
+  hidden by measurement), and `collectDesignDecisions()` appends
+  `documentPinsPayload()` to its `userPins` (entries with an `anchor` belong to
+  views; the variant overview ignores them). The design eye stays the toggle.
+- **Final report.** Pins work there too: its `finalize` payload
+  (templates-submit-js-3.md) carries `userPins` from `documentPinsPayload()`,
+  and `bake` freezes them into the tab like any other round's.
+- **Set while hidden.** Ctrl + click works with everything hidden
+  (`body.anno-hidden`): the new note (design `.upin` and document pin alike)
+  gets `data-upin-fresh` and stays visible with its editor; older notes stay
+  hidden. Showing everything again clears the marker (shared id set
+  `window.conceptFreshPins`, cleared by a body-class observer in both pin
+  engines), so the next hide hides all. The marker is runtime-only.
 - **Eye + ?.** `#dpin-eye` (shown once any pin exists) toggles
   `body.anno-hidden` like the design eye and persists with it; `H` presses
   it (tooltip key `H`). `?`
@@ -66,8 +83,24 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
   const liveIt = () => document.querySelector('section[data-iteration][data-active]');
   const isLive = it => !!(it && it.hasAttribute('data-active'));
   const templateOf = it => (typeof resolveIterationTemplate === 'function' ? resolveIterationTemplate(it) : (it.dataset.iterationTemplate || 'decision'));
-  const isDocIt = it => !!it && !it.hasAttribute('data-final-report') && templateOf(it) !== 'design';
-  window.documentPinsActive = () => isDocIt(liveIt());
+  // A round hosts document pins when it is a decision / free round, or a design
+  // round with question views (section[data-view]) — the final report included
+  // (its finalize payload carries userPins); never the variant overview.
+  const viewOn = it => it.querySelector(':scope > section[data-view][data-view-active="true"]');
+  const isDocIt = it => !!it
+    && (templateOf(it) !== 'design' || !!it.querySelector(':scope > section[data-view]'));
+  // Where a Ctrl + click may set a note: the whole round, or — in a design
+  // round — the question view that is on screen.
+  const rootOf = it => (templateOf(it) === 'design' ? viewOn(it) : it);
+  window.documentPinsActive = () => { const it = liveIt(); return isDocIt(it) && !!rootOf(it); };
+  // Notes set while body.anno-hidden is on stay visible (data-upin-fresh) until
+  // the eye shows everything again (shared with the design pin engine).
+  const freshPins = window.conceptFreshPins || (window.conceptFreshPins = new Set());
+  new MutationObserver(() => {
+    if (body.classList.contains('anno-hidden') || !freshPins.size) return;
+    freshPins.clear();
+    document.querySelectorAll('[data-upin-fresh]').forEach(n => n.removeAttribute('data-upin-fresh'));
+  }).observe(body, { attributes: true, attributeFilter: ['class'] });
 
   // ── Store ────────────────────────────────────────────────────────────
   const EMPTY = () => ({ pins: [] });
@@ -127,8 +160,11 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
   // A row reads cell by cell ("stop.flow.guard | hoch"), not run together.
   const textOf = n => (n.tagName === 'TR' ? [...n.children].map(c => c.textContent).join(' | ') : n.textContent);
   const eligible = (n, it) => it.contains(n) && !n.closest('.dpin-layer, [data-device-clone], [data-engine-store], script, template');
+  // A question view of a design round is its own scope (key `view:<id>`).
+  const SCOPE = 'section[id], section[data-view]';
+  const keyOf = s => s.id || (s.dataset.view ? 'view:' + s.dataset.view : '');
   const scopeOf = (n, it) => {
-    const s = n.parentElement && n.parentElement.closest('section[id]');
+    const s = n.parentElement && n.parentElement.closest(SCOPE);
     return s && s !== it && it.contains(s) ? s : it;
   };
   const blocksOf = (scope, it, kind) =>
@@ -144,7 +180,7 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
     const scope = scopeOf(block, it);
     const kind = block.tagName.toLowerCase();
     return {
-      section: scope === it ? '' : scope.id, kind,
+      section: scope === it ? '' : keyOf(scope), kind,
       index: Math.max(0, blocksOf(scope, it, kind).indexOf(block)),
       ref: block.id || '', text: norm(textOf(block))
     };
@@ -154,7 +190,7 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
       const byId = [...it.querySelectorAll('[id]')].find(n => n.id === a.ref);
       if (byId) return byId;
     }
-    const scope = a.section ? [...it.querySelectorAll('section[id]')].find(n => n.id === a.section) : it;
+    const scope = a.section ? [...it.querySelectorAll(SCOPE)].find(n => keyOf(n) === a.section) : it;
     if (!scope) return null;
     const list = blocksOf(scope, it, a.kind);
     let hit = list[a.index];
@@ -232,6 +268,7 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
     const wrap = el('div', 'upin');
     wrap.dataset.upinId = pin.id;
     wrap.dataset.dpin = 'true';
+    if (freshPins.has(pin.id)) wrap.dataset.upinFresh = 'true';
     const label = L.label.replace('{n}', String(k));
     const btn = el('button', 'upin-pin');
     btn.type = 'button';
@@ -363,6 +400,7 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
   window.refreshDocumentPins = render;
   ['resize', 'load'].forEach(ev => window.addEventListener(ev, place));
   document.addEventListener('iteration:changed', () => requestAnimationFrame(render));
+  ['view:changed', 'overview:changed', 'design:changed'].forEach(ev => document.addEventListener(ev, () => requestAnimationFrame(place)));
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(place);
 
   // ── Ctrl + click (and long press) ────────────────────────────────────
@@ -381,7 +419,7 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
   }
   const usable = () => {
     const it = liveIt();
-    return isDocIt(it) && !body.classList.contains('viewing-frozen') ? it : null;
+    return isDocIt(it) && rootOf(it) && !body.classList.contains('viewing-frozen') ? it : null;
   };
   document.addEventListener('keydown', e => {
     if ((e.key === 'Control' || e.key === 'Meta') && !e.repeat && usable() && !fieldFocused(e.target)) armed(true);
@@ -392,7 +430,7 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
   document.addEventListener('click', e => {
     if (!(e.ctrlKey || e.metaKey)) return;
     const it = usable();
-    if (!it || !it.contains(e.target)) return;
+    if (!it || !rootOf(it).contains(e.target)) return;
     if (e.target.closest('.upin, .dpin-layer, ' + NATIVE)) return;
     const block = blockOf(e.target, it);
     if (!block) return;
@@ -401,12 +439,15 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
     e.stopPropagation();
     e.stopImmediatePropagation();
     ensureStore(it);
-    if (body.classList.contains('anno-hidden')) { body.classList.remove('anno-hidden'); if (typeof saveState === 'function') saveState(); }
     closeEditors(null);
     const a = anchorOf(block, it);
+    const id = 'up-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    // Set while everything is hidden: the note stays visible (data-upin-fresh)
+    // although the older ones stay hidden; showing all again clears the marker.
+    if (body.classList.contains('anno-hidden')) freshPins.add(id);
     draft = {
       it, pin: {
-        id: 'up-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        id,
         design: '', screen: a.section, x: pct(e.clientX, r.left, r.width || 1), y: pct(e.clientY, r.top, r.height || 1),
         target: describe(block), text: '', anchor: a
       }
@@ -420,7 +461,7 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
     cancelLongPress();
     if (e.pointerType === 'mouse' || !e.isPrimary) return;
     const it = usable();
-    if (!it || !it.contains(e.target) || e.target.closest('.upin, .dpin-layer, ' + NATIVE) || !blockOf(e.target, it)) return;
+    if (!it || !rootOf(it).contains(e.target) || e.target.closest('.upin, .dpin-layer, ' + NATIVE) || !blockOf(e.target, it)) return;
     const x = e.clientX, y = e.clientY, target = e.target;
     lp = { x, y, timer: setTimeout(() => {
       lp = null;
@@ -453,9 +494,12 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
 .dpin-layer .upin-pin { cursor: pointer; touch-action: manipulation; }
 .dpin-layer .upin[hidden] { display: none; }
 .dpin-layer:has(.upin[data-editing="true"]) { z-index: 45; }
+/* One note open → the other notes stay in place, dimmed into the background
+   (same contract as the design notes' body[data-note-editing] rule). */
+body[data-note-editing="true"] .dpin-layer .upin:not([data-editing="true"]) .upin-pin { opacity: 0.35; animation: none; transition: opacity 0.15s ease; }
 .dpin-layer .upin[data-orphan="true"] .upin-pin { opacity: 0.6; }
 body.dpin-armed section[data-iteration][data-active] :is(p, li, tr) { cursor: crosshair; }
-body.anno-hidden .dpin-layer, body.anno-hidden .dpin-hint { display: none !important; }
+body.anno-hidden .dpin-layer .upin:not([data-upin-fresh]), body.anno-hidden .dpin-hint { display: none !important; }
 .dpin-hint {
   position: fixed; left: 50%; bottom: 2rem; transform: translateX(-50%); z-index: 99;
   padding: 0.4rem 0.9rem; border-radius: 999px; white-space: nowrap; max-width: calc(100vw - 12rem);

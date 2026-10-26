@@ -119,7 +119,6 @@ work exactly the same either way:
         <button type="button" class="anno-bubble-summary" data-anno-summary="a1"
                 aria-expanded="false" aria-controls="anno-bubble-a1">
           <span class="anno-bubble-question">Should the dispatch queue auto-refresh, or stay manual?</span>
-          <span class="anno-chevron" aria-hidden="true">›</span>
         </button>
         <div class="anno-bubble-body">
           <textarea class="anno-answer" data-comment="anno-a1" data-annotation="a1" data-attachable
@@ -143,19 +142,30 @@ work exactly the same either way:
   "Improved"/"Verbessert" key, no new key) plus a phrase of max ~40 chars (same
   cap as `data-design-improved`) saying what changed on THIS element. Only
   when the element already existed in the previous round and was improved —
-  never in round 1, never for new elements. Collapsed it stays visible as one
-  ellipsised line; open it wraps. An improvement-only pin (no question) omits
-  `.anno-bubble-question` (the summary button keeps only the chevron and then
-  MUST carry `aria-label="{{design.change_improved}}: <phrase>"`, so screen
-  readers do not announce an unnamed button) but keeps
+  never in round 1, never for new elements. The label is visually hidden
+  (screen readers only); the phrase shows as a hint on a soft green wash.
+  Collapsed it shares the bubble's one line with the question (ellipsised,
+  a click on it opens the bubble); open it wraps in full. An
+  improvement-only pin (no question) omits `.anno-bubble-question` (the
+  summary button stays as the empty toggle and then MUST carry
+  `aria-label="{{design.change_improved}}: <phrase>"`, so screen readers do
+  not announce an unnamed button) but keeps
   the textarea, so the user can comment on the improvement or develop it
   further. Pin counts from round 2: only screens that changed this round, at
   most 3 per changed screen, never on the overview (round 1: top 3 to top 7).
+- **No chevron, no number.** The collapsed bubble is a one-line pill with
+  an accent stripe on its left edge; the pin is the own-note pin shape in
+  the accent colour. Do not add a `.anno-chevron` span (old pages that carry
+  one keep working — it is hidden).
 - Annotation ids (`data-anno`, `data-anno-pin`, `data-anno-bubble`,
   `data-anno-summary`, `data-annotation`, `data-attach-slot`'s `anno-{id}`
   suffix) MUST be unique **page-wide**. Prefix them with the screen id —
   `d1-s2-a1`, `d2-s1-a1` — which makes uniqueness structural instead of
-  something the author has to remember.
+  something the author has to remember. Screen ids repeat across rounds,
+  so from round 2 on add the round as well: `r2-d1-s1-a1`. A repeated id
+  once opened the frozen twin with the live bubble and hid every live
+  bubble of the round (the engine now scopes its lookups to the visible
+  round, but persistence keys still collide).
   Do NOT number them `a1`, `a2` per screen. That reads harmless and is not:
   `saveState()` keys the answer as `text:anno-{id}`, so two screens both
   using `a1` share ONE storage slot — the last field saved wins, the other
@@ -505,6 +515,8 @@ function collectDesignDecisions() {
       // Own pins take attachments like every other note (slot `upin-ta-<id>`).
       attachments: (typeof attachmentsFor === 'function') ? attachmentsFor('upin-ta-' + p.id) : []
     }));
+  // Own notes on the question views (§ Document pins) — entries with an `anchor`.
+  if (typeof window.documentPinsPayload === 'function') userPins.push(...window.documentPinsPayload(active));
   return {
     submitted: true,
     template: 'design',
