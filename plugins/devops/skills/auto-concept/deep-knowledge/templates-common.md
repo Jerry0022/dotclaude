@@ -1,4 +1,4 @@
-# Concept templates, part 01 of 42: Overview, UI locale
+# Concept templates, part 01 of 43: Overview, UI locale
 
 # Concept HTML Templates
 
@@ -129,7 +129,8 @@ must see their own language. The locale hint is authoritative.
 | `nav.summary_entries`          | entries                        | Einträge |
 | `nav.summary_discarded`        | discarded                      | verworfen |
 | `nav.group_context`            | Context                        | Kontext |
-| `nav.group_variants`           | Variants                       | Varianten |
+| `nav.group_variants`           | Decisions                      | Entscheidungen |
+| `nav.group_findings`           | Findings                       | Befunde |
 | `nav.rounds_chip`              | Previous rounds                | Vorherige Runden |
 | `nav.archived`                 | archived                       | archiviert |
 | `nav.other_variants`           | Other variants                 | Weitere Varianten |

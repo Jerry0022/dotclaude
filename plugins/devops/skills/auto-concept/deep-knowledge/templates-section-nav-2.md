@@ -1,4 +1,4 @@
-# Concept templates, part 23 of 42: Shared systems — section navigation (continued 2)
+# Concept templates, part 23 of 43: Shared systems — section navigation (continued 2)
 
 ```javascript
 function buildSectionNav() {
@@ -11,7 +11,22 @@ function buildSectionNav() {
   if (!activeIteration) return;
   // Top-level only — nested section[id][data-nav-label] (a variant's own
   // sub-sections) are collected separately, under the selected-variant node.
-  const sections = [...activeIteration.querySelectorAll(':scope > section[id][data-nav-label]')];
+  const topLevel = [...activeIteration.querySelectorAll(':scope > section[id][data-nav-label]')];
+  // A decision is a section with an eval-{id} radio group OR a
+  // data-decision-mode (analysis template). One nested INSIDE a plain
+  // top-level section (a context wrapper, an analysis topic) would otherwise
+  // be invisible in the TOC: it is listed right behind its parent and counted
+  // like any other entry. Decisions nested in a decision stay that variant's
+  // own sub-sections (selected-variant node below).
+  const isDecision = s => !!s.querySelector(`input[name="eval-${s.id}"]`) || s.hasAttribute('data-decision-mode');
+  const sections = [];
+  topLevel.forEach(sec => {
+    sections.push(sec);
+    if (isDecision(sec)) return;
+    sec.querySelectorAll('section[id][data-nav-label]').forEach(sub => {
+      if (isDecision(sub)) sections.push(sub);
+    });
+  });
   nav.innerHTML = '';
   // A hand-expanded final-report window (applyNavWindow()) is per build —
   // the next tab switch starts windowed again.
@@ -26,14 +41,15 @@ function buildSectionNav() {
   // data-nav-group="…" override on the section (its value is the group
   // name).
   const kindOf = sec => sec.dataset.navGroup
-    || (sec.querySelector(`input[name="eval-${sec.id}"]`) ? 'variants' : 'context');
+    || (isDecision(sec) ? 'variants' : sec.hasAttribute('data-analysis') ? 'findings' : 'context');
   const kindLabel = kind => kind === 'variants' ? '{{nav.group_variants}}'
+                          : kind === 'findings' ? '{{nav.group_findings}}'
                           : kind === 'context'  ? '{{nav.group_context}}'
                           : kind;
   const makeItem = sec => {
     const id = sec.id;
     const label = sec.dataset.navLabel;
-    const hasTriState = !!sec.querySelector(`input[name="eval-${id}"]`);
+    const hasTriState = isDecision(sec);
     const link = document.createElement('a');
     link.href = '#' + id;
     link.className = 'section-nav-item';
@@ -57,7 +73,7 @@ function buildSectionNav() {
     return link;
   };
 
-  const variantSections = sections.filter(s => s.querySelector(`input[name="eval-${s.id}"]`));
+  const variantSections = topLevel.filter(s => s.querySelector(`input[name="eval-${s.id}"]`));
   const selectedVariant = computeSelectedVariant(variantSections);
 
   if (selectedVariant) {

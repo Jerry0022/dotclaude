@@ -20,6 +20,7 @@
  */
 
 const path = require('path');
+const { findAnalysisIssues } = require('./concept-gate-analysis');
 
 // Live decision-panel + bridge-submit markers that MUST be present.
 // Each label doubles as the grep token and the human-readable reason line.
@@ -821,7 +822,7 @@ function findDesignAuthoringWarnings(html) {
  */
 function evaluate(filePath, html) {
   if (!isConceptHtml(filePath, html)) {
-    return { applicable: false, ok: true, missing: [], forbidden: [], structural: [], mapping: [], overlap: [], stale: [], warnings: [] };
+    return { applicable: false, ok: true, missing: [], forbidden: [], structural: [], mapping: [], overlap: [], stale: [], analysis: [], warnings: [] };
   }
   const missing = findMissing(html);
   const forbidden = findForbidden(html);
@@ -830,9 +831,10 @@ function evaluate(filePath, html) {
   const overlap = findViewOverlap(html);
   const stale = findStaleEngine(html);
   const collisions = findChromeCollisions(html);
+  const a = findAnalysisIssues(html);
   return {
     applicable: true,
-    ok: missing.length === 0 && forbidden.length === 0 && structural.length === 0 && mapping.length === 0 && overlap.length === 0 && stale.length === 0 && collisions.length === 0,
+    ok: missing.length === 0 && forbidden.length === 0 && structural.length === 0 && mapping.length === 0 && overlap.length === 0 && stale.length === 0 && collisions.length === 0 && a.errors.length === 0,
     missing,
     forbidden,
     structural,
@@ -840,13 +842,15 @@ function evaluate(filePath, html) {
     overlap,
     stale,
     collisions,
+    analysis: a.errors,
     // Advisory, never part of `ok`.
-    warnings: findDesignAuthoringWarnings(html),
+    warnings: [...findDesignAuthoringWarnings(html), ...a.warnings],
   };
 }
 
 /** Build the blocking feedback shown to Claude (stderr, exit 2). */
-function buildBlockReason(filePath, missing, forbidden, structural, mapping, overlap, stale = [], collisions = []) {
+function buildBlockReason(filePath, missing, forbidden, structural, mapping, overlap, stale = [], collisions = [], analysis = []) {
+  analysis = analysis || [];
   missing = missing || [];
   forbidden = forbidden || [];
   structural = structural || [];
@@ -855,6 +859,17 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
   stale = stale || [];
   collisions = collisions || [];
   const name = path.basename(filePath || 'concept.html');
+  const onlyAnalysis = analysis.length > 0 && !missing.length && !forbidden.length && !structural.length && !mapping.length && !overlap.length && !stale.length && !collisions.length;
+  if (onlyAnalysis) {
+    const lines = [`BLOCKED: the analysis / decision markup in "${name}" breaks its contract.`, ''];
+    analysis.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
+    lines.push('');
+    lines.push('A Full analysis opens with a briefing (what / why / potential); every decision names its');
+    lines.push('recommended option (data-rec) and ships it preselected. See templates-analysis.md § Markup');
+    lines.push('contract and validation-gate.md § Analysis & decision modes (A1-A3).');
+    lines.push('The rest of the page passed - re-write the file and open it once this gate passes.');
+    return lines.join('\n');
+  }
   const onlyCollisions = collisions.length > 0 && !missing.length && !forbidden.length && !structural.length && !mapping.length && !overlap.length && !stale.length;
   if (onlyCollisions) {
     const lines = [`BLOCKED: mock CSS in "${name}" collides with the engine chrome (P32).`, ''];
@@ -885,6 +900,11 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
   if (onlyMapping) lines.push(`BLOCKED: mapping spec problems in "${name}".`);
   else lines.push(`BLOCKED: "${name}" is not a valid live-bridge concept page.`);
   lines.push('');
+  if (analysis.length) {
+    lines.push('Analysis / decision markup breaks its contract (templates-analysis.md):');
+    analysis.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
+    lines.push('');
+  }
   if (collisions.length) {
     lines.push('Mock CSS collides with the engine chrome (P32):');
     collisions.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));

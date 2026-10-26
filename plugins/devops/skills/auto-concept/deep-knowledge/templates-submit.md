@@ -1,4 +1,4 @@
-# Concept templates, part 34 of 42: Shared systems — collectDecisions, two-button submit (HTML, CSS)
+# Concept templates, part 34 of 43: Shared systems — collectDecisions, two-button submit (HTML, CSS)
 
 ## collectDecisions (dispatcher)
 
@@ -162,6 +162,11 @@ function collectDecisionDecisions() {
   const active = document.querySelector('section[data-iteration][data-active]') || document;
 
   active.querySelectorAll('[data-decision]').forEach(el => {
+    // Analysis decision modes (templates-analysis.md): typed value, not include/discard.
+    if (el.hasAttribute('data-decision-mode') && typeof collectModeDecision === 'function') {
+      decisions.push(collectModeDecision(el));
+      return;
+    }
     decisions.push({
       id: el.dataset.decision,
       label: el.dataset.label || '',

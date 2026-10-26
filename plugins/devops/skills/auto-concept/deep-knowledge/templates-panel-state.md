@@ -1,4 +1,4 @@
-# Concept templates, part 24 of 42: Shared systems — decision panel state CSS
+# Concept templates, part 24 of 43: Shared systems — decision panel state CSS
 
 ## Decision Panel State CSS
 

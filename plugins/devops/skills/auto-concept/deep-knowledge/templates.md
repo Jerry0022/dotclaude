@@ -1,6 +1,6 @@
 # Concept HTML Templates
 
-Index of the concept engine reference: the three templates (decision, design, free) and the shared systems Claude copies verbatim into every concept page. The reference is split into the parts below. Read in this order, together they form the whole engine.
+Index of the concept engine reference: the three templates (decision, design, free; the analysis presentation Full + Lite is a content variant of them, § templates-analysis.md) and the shared systems Claude copies verbatim into every concept page. The reference is split into the parts below. Read in this order, together they form the whole engine.
 
 ## Reading order
 
@@ -48,6 +48,7 @@ Index of the concept engine reference: the three templates (decision, design, fr
 | 40 | [templates-heartbeat.md](templates-heartbeat.md) | 597 | Claude Connection Heartbeat (HTTP Bridge) |
 | 41 | [templates-rounds.md](templates-rounds.md) | 447 | Iteration Tabs |
 | 42 | [templates-final-report.md](templates-final-report.md) | 499 | Final Report Panel · Design System |
+| 43 | [templates-analysis.md](templates-analysis.md) | 305 | Template: analysis (Full + Lite) · Markup contract · Decision modes · Payload · collectModeDecision · Display palette |
 
 ## Using the parts
 

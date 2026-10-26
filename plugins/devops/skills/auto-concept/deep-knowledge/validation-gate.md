@@ -408,4 +408,26 @@ run before first paint (see § Frozen/Active Mismatch below). The submit
 payload MUST include an `action` field with value `"iterate"` or
 `"implement"`.
 
+## Analysis & decision modes (A1–A8, deterministic)
+
+Enforced by `hooks/lib/concept-gate-analysis.js` (called from
+`concept-gate.js` `evaluate()`, so the post-write hook and
+`concept-build.js build` both run it). Applies only to pages that carry
+`data-analysis` or `data-decision-mode` elements; contract in
+`templates-analysis.md`. Markup inside `<script>`, `<style>` and comments is
+ignored.
+
+| # | Severity | Rule |
+|---|---|---|
+| A1 | **fail** | `data-analysis="full"` without a briefing: `[data-analysis-briefing]` with non-empty `[data-briefing-what]`, `[data-briefing-why]` and `[data-briefing-potential]` (a value or `data-viz-spec`) |
+| A2 | **fail** | a `[data-decision-mode]` without `data-rec`, or whose preselected control is not the recommendation (checked radio / checked boxes / range value / initial order) |
+| A3 | **fail** | unknown `data-decision-mode` (single, multi, yesnoalt, slider, order, verify, wording) or a mode decision without `data-decision` id |
+| A4 | warn | more than 3 `[data-topic]` per Full, or more than 7 decisions in one topic |
+| A5 | warn | a Lite with more than 5 decisions (belongs in a Full) |
+| A6 | warn | a quantitative finding (L3 block with numbers/units, or `data-finding-quant="true"`) without a palette visual (`data-viz` other than `text`) |
+| A7 | warn | 3 or more legacy include/discard groups in one section on an analysis page: an exclusive choice built as N bi-states, use `data-decision-mode="single"` |
+| A8 | warn | timing as a decision ("Welle", "wann umsetzen", "when to ship" in a label or question): default is implement now, offer "Als Issue anlegen" |
+
+Warnings surface in the `concept-build.js` build report; they never block.
+
 > Phase 2 (template-specific patterns) and Failure handling continue in [validation-gate-phase2.md](validation-gate-phase2.md).

@@ -1,4 +1,4 @@
-# Concept templates, part 21 of 42: Template: free — Document pins
+# Concept templates, part 21 of 43: Template: free — Document pins
 
 ## Document pins — own notes in decision / free rounds (`wireDocumentPins()`)
 

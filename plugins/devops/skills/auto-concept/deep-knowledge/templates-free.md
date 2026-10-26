@@ -1,4 +1,4 @@
-# Concept templates, part 20 of 42: Template: free
+# Concept templates, part 20 of 43: Template: free
 
 # Template: free
 
@@ -241,6 +241,10 @@ function collectFreeDecisions() {
       evaluation: radio.value
     });
   });
+  // Embedded Lite analysis decisions (templates-analysis.md): typed values.
+  if (typeof collectModeDecision === 'function') {
+    active.querySelectorAll('[data-decision][data-decision-mode]').forEach(el => decisions.push(collectModeDecision(el)));
+  }
   // { general: { text, attachments }, items: [ … ] } — the live round's
   // inline notes plus the 💬 dock's general note (§ collectDecisions
   // (dispatcher), collectComments).
