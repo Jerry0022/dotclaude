@@ -79,7 +79,7 @@ describe('plugin-audit report fragment', () => {
     expect(out).toContain('Blockierte Ship-Versuche nach Regel');
     expect(out).toMatch(/<code>manual-pr-tools-deferred<\/code><\/td><td>2</);
     expect(out).toMatch(/<code>untagged<\/code><\/td><td>1</);
-    expect(html).not.toContain('Blockierte Ship-Versuche');
+    expect(renderFragment(results, sugg, [])).not.toContain('Blockierte Ship-Versuche');
   });
 
   it('falls back to rule-based suggestions for red/yellow checks', () => {

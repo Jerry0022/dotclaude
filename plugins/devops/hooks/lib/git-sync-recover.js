@@ -101,12 +101,14 @@ const KILL_TREE_PS = [
   'while ($queue.Count -gt 0) { $p = $queue.Dequeue(); foreach ($c in $all) { if ($c.ParentProcessId -eq $p -and $c.ProcessId -ne $p -and $ids.Add([int]$c.ProcessId)) { $queue.Enqueue([int]$c.ProcessId) } } }',
   'if ($ids.Count -gt 0) {',
   '  $ids | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }',
-  '  $ids | ForEach-Object { Wait-Process -Id $_ -Timeout 10 -ErrorAction SilentlyContinue }',
+  '  Wait-Process -Id @($ids) -Timeout 15 -ErrorAction SilentlyContinue',
   '}',
 ].join('\n');
 
 /**
- * Stop what a timed-out child left running, and wait until it is gone.
+ * Stop what a timed-out child left running, and wait (bounded) until it is
+ * gone. Best effort: the tree is snapshotted once, so a child spawned after
+ * the snapshot can survive — the lock settle check still guards the removal.
  *
  * execFileSync's timeout terminates only the process it spawned. On Windows
  * that is often just the launcher: Git for Windows' `cmd\git.exe` starts
@@ -123,7 +125,8 @@ const KILL_TREE_PS = [
 function killDescendants(pid) {
   if (process.platform !== 'win32' || !Number.isInteger(pid) || pid <= 0) return;
   try {
-    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', KILL_TREE_PS], {
+    const ps = path.join(process.env.SystemRoot || 'C:/Windows','System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    execFileSync(ps, ['-NoProfile', '-NonInteractive', '-Command', KILL_TREE_PS], {
       env: { ...process.env, GS_KILL_PID: String(pid) },
       timeout: 30_000,
       stdio: 'ignore',
