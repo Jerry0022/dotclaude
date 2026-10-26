@@ -31,13 +31,21 @@ per-item action select. Action ids and what they do:
 | `delete` | local branch removal (content is in the default branch) | Deletion gate, `repo-health-audit.js` pass |
 | `push-pr` | push the branch, open a PR, then land it via `/do-ship` | Step 10b ship queue |
 | `reimplement` | do NOT merge the old branch: start a fresh branch off the current default branch and re-do the work, using the old branch as reference; keep the old branch until the user deletes it | a separate task, offered afterwards |
-| `commit` | commit the dirty worktree on its branch and push (secure it) | worktree's session is not running |
+| `commit` | commit the dirty worktree on its branch and push (secure it) | worktree's session is not running; `park-check` not stale (below) |
 | `discard` | discard uncommitted changes (`git restore`/`clean`) | own explicit `Unmerged`-style yes naming the worktree and file count |
 | `stash-branch` | `git stash branch <name> <stash>` (secure as a branch) | |
 | `stash-drop` | `git stash drop <stash>` | own explicit yes naming the stash |
 | `prune` | `git worktree prune` | |
 | `review` | uninspectable — show details only; never pre-select a destructive choice | |
 | `keep` | do nothing (always offered) | |
+
+**Stale checkout first (#877).** Before `commit` (or any park of a dirty
+worktree) run `node "{PLUGIN_ROOT}/scripts/park-check.js" <worktree>`.
+`stale: true` = the files only restore an older state of the base branch —
+nothing of its own to keep: do not commit, report the row as "stale checkout —
+nothing to park" and offer `discard`. Otherwise commit with the script's
+`message` ("wip: N file(s) differ from <base>"): commit subjects state facts,
+never an inferred intent such as "refactor".
 
 `delete`, `discard` and `stash-drop` are the destructive ones: none is ever
 carried out without the Dry-Run-Confirm and, where listed, its own yes. A
