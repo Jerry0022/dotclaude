@@ -1456,6 +1456,22 @@ describe("post.flow.completion — the card widget ends the turn", () => {
       cleanup(dir); cleanup(root);
     });
 
+    test("ship_run: a merged final result is ship evidence, a decision point is not", () => {
+      const RUN = "mcp__plugin_devops_dotclaude__ship_run";
+      const dir = gitProject();
+      const marker = tmpFile(dir, "dotclaude-devops-archive-shipped", "s-run-1");
+      const call = (o) => runHookRaw(dir, "s-run-1", RUN, {
+        tool_input: { cwd: dir },
+        tool_response: { content: [{ type: "text", text: JSON.stringify(o) }] },
+      });
+      call({ ok: false, stage: "build", needs: "build-red", partial: { merged: "main" } });
+      expect(fs.existsSync(marker)).toBe(false);
+      expect(fs.existsSync(tmpFile(dir, "dotclaude-devops-shipped", "s-run-1"))).toBe(false);
+      call({ ok: true, stage: "done", merged: "main", mergeSha: "abc12345" });
+      expect(fs.existsSync(marker)).toBe(true);
+      cleanup(dir);
+    });
+
     test("a subagent's unmerged ship_release leaves no evidence", () => {
       const dir = gitProject();
       runHookRaw(dir, "s-arch-sub2", RELEASE, {

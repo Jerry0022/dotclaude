@@ -4,7 +4,7 @@
  * @version 0.5.0
  * @event PostToolUse
  * @plugin devops
- * @matcher AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude__ship_release|mcp__plugin_devops_dotclaude__render_completion_card|mcp__.*__merge_pull_request
+ * @matcher AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude__ship_release|mcp__plugin_devops_dotclaude__ship_run|mcp__plugin_devops_dotclaude__render_completion_card|mcp__.*__merge_pull_request
  * @description Record what happened for the do-run RUN CONTRACT (spec A
  *   events, B arming, E batch marker, H closing):
  *   - AskUserQuestion: router answers arm a new contract (and clear the arm
@@ -195,7 +195,8 @@ function onShell({ hook, cwd, root, roots, sessionId, s, RC, C }) {
   // stdout redirected to a file leaves no JSON in r.text: then the CLI's own
   // `.claude/.ship-cli-last.json` speaks (fresh, same root, merged only).
   if (f.release && !failed) {
-    const res = C.releaseResult(r.text) || cliLastRelease(hook, cwd, root, C);
+    const cliTool = /(^|\s)ship_run(\s|$)/.test(String(C.toolInput(hook).command || '')) ? 'ship_run' : 'ship_release';
+    const res = C.releaseResult(r.text, cliTool) || cliLastRelease(hook, cwd, root, C);
     if (res) {
       const r2 = contractRootOf(roots, RC, sessionId);
       RC.record(r2, { k: 'release', ok: res.ok, merged: res.merged, closes: C.closesOf(cliReleaseBody(hook, cwd, C)) }, s);
@@ -209,7 +210,7 @@ function onShell({ hook, cwd, root, roots, sessionId, s, RC, C }) {
 function cliReleaseParams(hook, cwd, C) {
   try {
     const cmd = String(C.toolInput(hook).command || '');
-    const m = cmd.match(/ship_release\s+("[^"]+"|'[^']+'|[^\s;&|]+)/);
+    const m = cmd.match(/ship_(?:release|run)\s+("[^"]+"|'[^']+'|[^\s;&|]+)/);
     if (!m) return null;
     const file = m[1].replace(/^["']|["']$/g, '');
     let text = require('fs').readFileSync(require('path').resolve(cwd, file), 'utf8');
@@ -245,12 +246,12 @@ function cliLastRelease(hook, cwd, root, C, { now = Date.now() } = {}) {
   for (const dir of candidates) {
     try {
       const entry = JSON.parse(fs.readFileSync(path.join(dir, '.claude', '.ship-cli-last.json'), 'utf8'));
-      if (!entry || entry.tool !== 'ship_release' || !entry.result || typeof entry.result !== 'object') continue;
+      if (!entry || (entry.tool !== 'ship_release' && entry.tool !== 'ship_run') || !entry.result || typeof entry.result !== 'object') continue;
       const at = Date.parse(entry.at);
       if (!(at <= now + 60_000 && now - at <= CLI_LAST_MAX_AGE_MS)) continue;
       if (typeof entry.root !== 'string' || !samePath(entry.root, dir)) continue;
       if (!entry.result.merged) continue;
-      return { ok: entry.result.success === true, merged: true };
+      return { ok: entry.tool === 'ship_run' ? entry.result.ok === true : entry.result.success === true, merged: true };
     } catch { /* missing / unreadable — next candidate */ }
   }
   return null;
@@ -259,7 +260,7 @@ function cliLastRelease(hook, cwd, root, C, { now = Date.now() } = {}) {
 /** `release` in the contract's root (ship_release acts on tool_input.cwd); a finished backlog closes. */
 function onRelease({ hook, input, roots, sessionId, s, RC, C }) {
   const r = contractRootOf(roots, RC, sessionId);
-  const res = C.releaseResult(hook.tool_response) || { ok: false, merged: false };
+  const res = C.releaseResult(hook.tool_response, hook.tool_name) || { ok: false, merged: false };
   RC.record(r, { k: 'release', ok: res.ok, merged: res.merged, closes: C.closesOf(input.body) }, s);
   const h = RC.readContract(r, s);
   if (h && backlogFinished(h, RC.events(r))) RC.close(r, 'done: every queued item shipped', s);
@@ -321,7 +322,7 @@ function handlerFor(tool, C) {
     return ({ input, cwd, root, s, RC }) => { if (C.isGatedEdit(tool, input, root, cwd)) RC.record(root, { k: 'edit' }, s); };
   }
   if (C.SHELL_TOOLS.has(tool)) return onShell;
-  if (tool === C.SHIP_RELEASE) return onRelease;
+  if (C.isReleaseTool(tool)) return onRelease;
   if (tool === C.RENDER_CARD) return onCard;
   if (C.MCP_MERGE_RE.test(tool)) return onMcpMerge;
   return null;
@@ -372,7 +373,7 @@ function main(hook) {
     let h = RC.readContract(root, s);
     // H-C5: an item parked AFTER the last release also finishes the backlog —
     // not only a ship_release.
-    if (h && tool !== C.SHIP_RELEASE && backlogFinished(h, RC.events(root))) {
+    if (h && !C.isReleaseTool(tool) && backlogFinished(h, RC.events(root))) {
       RC.close(root, 'done: every queued item shipped', s);
       h = RC.readContract(root, s);
     }

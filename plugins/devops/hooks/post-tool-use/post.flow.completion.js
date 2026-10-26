@@ -250,26 +250,19 @@ function contextOf(lines) {
   return text ? { context: text } : null;
 }
 
-const SHIP_RELEASE_TOOL = 'mcp__plugin_devops_dotclaude__ship_release';
-const isShipReleaseTool = (name) => name === SHIP_RELEASE_TOOL;
+// ship_release and ship_run (a whole ship in one call) both land a release.
+const { isReleaseTool: isShipReleaseTool, releaseResultOf } = require('../lib/ship-tool-names');
 
 /**
- * Did a ship_release response report a merge? MCP results arrive as
+ * Did a ship_release / ship_run response report a merge? MCP results arrive as
  * `{ content: [{ type: 'text', text: '<json>' }] }`; tolerate a bare object or
  * string too. `merged` is the field the do-ship skill itself gates on — never
- * `success`, which the skipped shapes (file-only, no-remote) also set.
+ * `success`, which the skipped shapes (file-only, no-remote) also set. A
+ * ship_run decision point (`{ ok:false, needs }`) never counts as merged.
  */
-function shipReleaseMerged(toolResponse) {
-  let r = toolResponse;
-  try {
-    if (r && Array.isArray(r.content)) {
-      const text = r.content.filter(c => c && c.type === 'text').map(c => c.text).join('');
-      r = JSON.parse(text);
-    } else if (typeof r === 'string') {
-      r = JSON.parse(r);
-    }
-  } catch { return false; }
-  return !!(r && typeof r === 'object' && r.merged);
+function shipReleaseMerged(toolResponse, toolName = 'ship_release') {
+  const r = releaseResultOf(toolName, toolResponse);
+  return !!(r && r.merged);
 }
 
 /** Per-turn flags the completion MCP writes under the `session_id` the MODEL passed. */
@@ -492,7 +485,7 @@ function isSilentTurn(hook) {
  * @returns {{ scheduledTask: boolean }}
  */
 function handleShipAndCardFlags(hook, toolName) {
-  if (isShipReleaseTool(toolName) && shipReleaseMerged(hook.tool_response)) {
+  if (isShipReleaseTool(toolName) && shipReleaseMerged(hook.tool_response, toolName)) {
     try { writeSessionFile(sessionFile('dotclaude-devops-shipped', hook.session_id), '1'); } catch { /* best effort */ }
     archiveGate.recordShipped(hook.session_id);
   }
@@ -1119,7 +1112,7 @@ function main(hook) {
     // subagent) still leaves the archive evidence for the PARENT session,
     // keyed by the parent's id the harness passes. Nothing else: the archive
     // release stays the main session's, after its own card widget.
-    if (isShipReleaseTool(hook.tool_name || '') && shipReleaseMerged(hook.tool_response)) {
+    if (isShipReleaseTool(hook.tool_name || '') && shipReleaseMerged(hook.tool_response, hook.tool_name)) {
       archiveGate.recordShipped(hook.session_id);
     }
     return null;
