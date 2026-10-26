@@ -119,8 +119,7 @@ function shippingTitleRefusal(hook) {
 /** Since the last user prompt: a set call to a Shipping title, or this gate's refusal. */
 function turnHasShippingSetOrRefusal(text, prefix) {
   let hit = false;
-  for (const line of String(text || '').split('
-')) {
+  for (const line of String(text || '').split('\n')) {
     if (!line.trim()) continue;
     let e; try { e = JSON.parse(line); } catch { continue; }
     if (!e || e.isSidechain) continue;
