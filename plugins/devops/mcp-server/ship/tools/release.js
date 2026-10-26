@@ -6,7 +6,9 @@
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
 import { gitArgs, gitTry, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf, detectDefaultBranch, NETWORK_TIMEOUT } from "../lib/git.js";
-import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch } from "../lib/github.js";
+import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch, markPRReady } from "../lib/github.js";
+import { acquireLandingLock } from "../lib/landing-lock.js";
+import { channelFields } from "../lib/channel-state.js";
 import { classifyFailedChecks } from "../lib/ci-account-limits.js";
 import { quotaKey as accountQuotaKey, readRecord, recordBlock, setDecision, revokeDecision, clearRecord, describeRecord, DECISIONS, MINUTES_KIND } from "../lib/ci-quota.js";
 import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
@@ -20,6 +22,8 @@ import { readVersion } from "../lib/version.js";
 import { localMerge, localTag, LocalMergeError } from "../lib/local-merge.js";
 import { versionOnlyOverlap, rebaseVersionFiles } from "../lib/version-rebase.js";
 import { createRequire } from "node:module";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 // Same reading of `validation` as the completion card and stop.flow.guard.
 const { classify, readRepoOpen } = createRequire(import.meta.url)("../../../hooks/lib/validation-gaps.js");
@@ -74,6 +78,8 @@ export const schema = z.object({
       waitsOn: z.enum(["user", "deploy", "external", "pending"]).optional(),
     })).optional(),
   ).describe("The requirements this ship delivers (same items as the completion card). The merge is REFUSED while one is still your own work: no status, partial/unmet without waitsOn, or waitsOn pending. Close the gap and call again; waitsOn user/deploy/external may ship. delivered-but-only-user-verifiable is met (check goes in userTest), not partial. Omitted: the not-met items of the last card for this cwd (≤ 12 h) are checked; pass current items once gaps are closed."),
+  landingLock: z.boolean().default(true).describe("Serialize the landing (final base check to merge+tag) with other ships of the SAME repo via a per-repo lock in the git common dir. Fail-open: after landingLockWaitSec the ship proceeds without the lock. false (or env DEVOPS_SHIP_LANDING_LOCK=0) disables it. Result: landingLock { waitedMs, outcome }."),
+  landingLockWaitSec: z.number().int().min(0).max(1800).default(600).describe("Max seconds to wait for another ship of this repo to finish landing before proceeding without the lock."),
   acceptGaps: z.boolean().default(false).describe("Ship despite open own gaps. Only when the USER explicitly asked to ship as-is — never on your own judgement."),
 });
 
@@ -124,6 +130,29 @@ function autoRebase(result, base, overlap, cwd) {
     `. Nothing was pushed or merged. The branch now contains ${base}'s new commits: ` +
     `run ship_build (tests) on it, then call ship_release again.`;
   return true;
+}
+
+/** Does the repo carry the CI "suite" workflow (aggregator job `suite`)? */
+export function hasCiSuite(cwd) {
+  try {
+    const root = gitTry(["rev-parse", "--show-toplevel"], { cwd }) || cwd;
+    return existsSync(join(root, ".github", "workflows", "ci-suite.yml"));
+  } catch { return false; }
+}
+
+/**
+ * The green full local suite for the exact tree being merged, or null.
+ * `findFullGreen` comes from lib/test-results.js (added by the test-scope
+ * change); until that lands the export is missing and this reads "no green run".
+ */
+export async function localFullGreen(cwd) {
+  try {
+    const mod = await import("../lib/test-results.js");
+    if (typeof mod.findFullGreen !== "function") return null;
+    const key = mod.treeKey(cwd);
+    if (!key?.treeHash) return null;
+    return mod.findFullGreen(cwd, { treeHash: key.treeHash, now: Date.now() }) || null;
+  } catch { return null; }
 }
 
 export async function handler(params) {
@@ -237,6 +266,7 @@ export async function handler(params) {
     }
   }
   const result = { branch, base, intermediate, mode: repoMode };
+  let lock = null;
 
   try {
     // The ring tag becomes `alpha/<tag>`; the channel grammar (lib/channels.js)
@@ -397,6 +427,17 @@ export async function handler(params) {
       return result;
     }
 
+    // Landing lock (per repo, fail-open): ships of this repo queue here so the
+    // one that lands first does not invalidate the CI run of the next. Held to
+    // the end of this call (finally), refreshed around the CI wait.
+    const checksMs = (checksTimeoutSec ?? 600) * 1000;
+    lock = await acquireLandingLock(cwd, {
+      branch, worktree: cwd, enabled: params.landingLock !== false,
+      waitMs: (params.landingLockWaitSec ?? 600) * 1000,
+      ttlMs: checksMs + 5 * 60_000, maxHoldMs: Math.max(25 * 60_000, checksMs + 10 * 60_000),
+    });
+    result.landingLock = { waitedMs: lock.waitedMs, outcome: lock.outcome, ...(lock.reason && { reason: lock.reason }) };
+
     // Safety gate: verify branch is rebased onto latest base (prevents silent overwrites)
     gitArgs(["fetch", "origin", base], { cwd, timeout: NETWORK_TIMEOUT });
     if (!isRebasedOnto(`origin/${base}`, opts)) {
@@ -455,6 +496,14 @@ export async function handler(params) {
     } else {
       pr = createPR({ title, body, base, head: branch }, opts);
     }
+    // A draft PR opened early by ship_preflight (earlyPush) goes ready now, with
+    // the final title/body, before the CI wait.
+    if (existingPR?.isDraft) {
+      const ready = markPRReady(pr.number, { title, body }, opts);
+      result.draftPrReady = ready.ok;
+      if (!ready.ok) (result.warnings ||= []).push(`gh pr ready #${pr.number} failed: ${ready.error}`);
+      else if (ready.editError) (result.warnings ||= []).push(`PR #${pr.number} title/body not refreshed: ${ready.editError}`);
+    }
     result.pr = { number: pr.number, url: pr.url, title };
     if (titleClamp.clamped) {
       result.titleClamped = { original: titleClamp.original, applied: title, max: PR_TITLE_MAX };
@@ -467,6 +516,8 @@ export async function handler(params) {
     if (checksBypassed && params.quotaDecision) {
       result.quotaDecisionIgnored = "checks are bypassed for this ship — the CI-quota decision was not applied";
     }
+    // Set when CI cannot vouch for the tree because of an account limit (M6).
+    let quotaBypass = false;
     if (!checksBypassed) {
       // #752: shared CI-quota memory. A record means some session already saw
       // the Actions minutes run out — probe briefly instead of waiting 10+ min.
@@ -486,6 +537,7 @@ export async function handler(params) {
         if (quotaStore(() => setDecision(quotaKey, params.quotaDecision))) quota = quotaStore(() => readRecord(quotaKey));
         else result.quotaDecisionIgnored = "no CI-quota block is recorded for this account — nothing to decide";
       }
+      lock.refresh();
       let checkResult = watchPRChecks(pr.number, opts, quota
         ? { timeoutSec: Math.min(checksTimeoutSec, 60), noChecksGraceMs: 0 }
         : { timeoutSec: checksTimeoutSec });
@@ -493,8 +545,10 @@ export async function handler(params) {
         // Checks are running or queued after all, or not registered yet right
         // after the push (the short probe has no #508 grace) — fall back to the
         // full wait, so a quota record never merges past an unseen check.
+        lock.refresh();
         checkResult = watchPRChecks(pr.number, opts, { timeoutSec: checksTimeoutSec });
       }
+      lock.refresh();
       // A red check caused by a GitHub account limit (Actions minutes,
       // artifact storage quota) says nothing about the code. ci-account-limits
       // (#768) is the single detector; #752 only persists what it reports.
@@ -522,6 +576,7 @@ export async function handler(params) {
           quotaNote.reason = `Stored decision applied (skip checks): merging without CI — ${blockMsg}`;
           checkResult = { status: "passed", checks: [] };
           result.checksSkippedByQuota = true;
+          quotaBypass = true;
         } else if (decision === "wait") {
           result.checks = { status: "quota-blocked", passed: 0, failed: checkResult.failed?.length || 0, pending: 0, ...quotaNote };
           result.success = false;
@@ -593,6 +648,25 @@ export async function handler(params) {
       // status === "passed" or "no-checks" → continue
     } else {
       result.checks = { status: "skipped", reason: skipChecks ? "skipChecks param" : "DEVOPS_SHIP_SKIP_CHECKS env" };
+      try { quotaBypass = !!readRecord(accountQuotaKey(cwd)); } catch { /* store unreadable: not a quota bypass */ }
+    }
+
+    // M6 hard invariant: never merge a tree no full suite vouched for. With the
+    // CI suite workflow present, an account limit means CI cannot run it - then
+    // only a green FULL local run on exactly this tree lets the merge through.
+    if (quotaBypass && hasCiSuite(cwd)) {
+      const green = await localFullGreen(cwd);
+      if (!green) {
+        result.success = false;
+        result.reason = "full-suite-required";
+        result.fullSuiteRequired = true;
+        result.delivered = "none";
+        result.error =
+          `CI cannot run the "suite" check (GitHub account limit) and no green FULL local suite exists for this tree. ` +
+          `PR #${pr.number} left OPEN, NOT merged. Run ship_build with testScope:"full" on the current HEAD, then call ship_release again.`;
+        return result;
+      }
+      result.fullSuiteLocal = { treeHash: green.treeHash, at: green.at };
     }
 
     // Re-assert up-to-date against base IMMEDIATELY before merging — close the
@@ -882,6 +956,22 @@ export async function handler(params) {
       }
     }
 
+    // Ring state for the promotion-gap nudge (do-ship Step 6): one bounded
+    // ls-remote here so the skill never runs one itself. Best effort.
+    if (!intermediate) {
+      try {
+        const tags = gitTry(["ls-remote", "--tags", "origin"], { ...opts, timeout: NETWORK_TIMEOUT });
+        if (tags) {
+          Object.assign(result, channelFields(tags, {
+            ageOf: (v) => {
+              const t = Number(gitTry(["for-each-ref", "--format=%(creatordate:unix)", `refs/tags/alpha/v${v}`], opts));
+              return t > 0 ? t * 1000 : null;
+            },
+          }));
+        }
+      } catch { /* the nudge falls back to its own query */ }
+    }
+
     result.success = true;
   } catch (e) {
     result.success = false;
@@ -899,6 +989,13 @@ export async function handler(params) {
       }
     } else {
       result.error = msg;
+    }
+  } finally {
+    try { lock?.release(); } catch { /* lock cleanup never fails the ship */ }
+    // A PR that did not merge stays open (incl. a draft opened early by
+    // preflight): the caller must say so instead of implying nothing was created.
+    if (!result.success && !result.merged && result.pr) {
+      result.prLeftOpen = { number: result.pr.number, url: result.pr.url };
     }
   }
 

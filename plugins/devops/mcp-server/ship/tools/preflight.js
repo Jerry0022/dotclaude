@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { gitTry, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktree, detectParentBranch, detectDefaultBranch, branchExists, fileOverlap, getConfig, NETWORK_TIMEOUT } from "../lib/git.js";
+import { gitArgs, gitTry, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktree, detectParentBranch, detectDefaultBranch, branchExists, fileOverlap, getConfig, NETWORK_TIMEOUT } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { readVersion, verifyVersionFiles } from "../lib/version.js";
 import { writeSentinel } from "../lib/sentinel.js";
@@ -19,12 +19,52 @@ import { detectComponents } from "../lib/components.js";
 import { claudeIgnoreCheck, touchesIgnorePolicy } from "../lib/claude-ignore.js";
 import { scanWorkflows } from "../lib/workflow-hygiene.js";
 import { quotaKey, readRecord, describeRecord } from "../lib/ci-quota.js";
+import { createPR, findExistingPR } from "../lib/github.js";
+import { createRequire } from "node:module";
+
+// Same reading of `validation` as ship_release, the completion card and stop.flow.guard.
+const { classify } = createRequire(import.meta.url)("../../../hooks/lib/validation-gaps.js");
 
 export const schema = z.object({
   base: z.string().optional().describe("Base branch to ship into. Omit to auto-detect: parent branch (from sub-branch naming) or the repository's default branch (origin/HEAD, typically 'main' or 'master')."),
   outOfBandGlobs: z.array(z.string()).nullable().default(null).describe("Override globs for out-of-band deploy detection (#243): paths a code merge does NOT deploy (DB migrations, edge/serverless functions). Omit/null for the defaults (**/migrations/**, supabase/migrations/**, supabase/functions/**). do-ship passes these from the ship-extension reference.md `outOfBandDeploy:` field."),
+  earlyPush: z.boolean().default(false).describe("Start CI while the local gates still run: when the repo is ready, needs no rebase and has a remote, push the branch (force-with-lease) and open a DRAFT PR. Result: earlyPr { number, url, existing? } and earlyPush { pushed, error? }. ship_release marks the draft ready and takes over; a ship that ends blocked leaves the draft open (release result prLeftOpen). Never fatal: push rejected, gh missing or an existing PR only yield earlyPush.error / earlyPr.existing."),
+  validation: z.preprocess(
+    v => { if (typeof v !== "string") return v; try { return JSON.parse(v); } catch { return v; } },
+    z.array(z.object({
+      requirement: z.string(),
+      status: z.enum(["met", "partial", "unmet"]).optional(),
+      evidence: z.string().optional(),
+      waitsOn: z.enum(["user", "deploy", "external", "pending"]).optional(),
+    })).optional(),
+  ).describe("Optional early requirement gate: the same items ship_release checks. Open own gaps are returned as validationGaps (+ a warning) so they are closed BEFORE the build; preflight stays ready. ship_release remains the final authority."),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
+
+/**
+ * Early draft PR (earlyPush): push the branch and open a draft PR so CI starts
+ * while local lint/tests/Codex still run. Never throws.
+ */
+export function openEarlyDraft({ branch, base, cwd }) {
+  const opts = { cwd };
+  try {
+    gitArgs(["push", "-u", "origin", branch, "--force-with-lease"], { cwd, timeout: 60_000 });
+  } catch (e) {
+    return { earlyPush: { pushed: false, error: `push rejected: ${String(e.stderr || e.message || e).slice(0, 300).trim()}` }, earlyPr: null };
+  }
+  try {
+    const existing = findExistingPR({ base, head: branch }, opts);
+    if (existing) return { earlyPush: { pushed: true }, earlyPr: { number: existing.number, url: existing.url, existing: true, draft: existing.isDraft === true } };
+    const title = (gitTry(["log", "-1", "--format=%s"], opts) || branch).slice(0, 70);
+    const pr = createPR({
+      title, base, head: branch, draft: true,
+      body: "Draft opened early by ship_preflight so CI runs while the local gates finish. ship_release marks it ready and replaces title and body.",
+    }, opts);
+    return { earlyPush: { pushed: true }, earlyPr: { number: pr.number, url: pr.url } };
+  } catch (e) {
+    return { earlyPush: { pushed: true, error: `draft PR not created: ${String(e.stderr || e.message || e).slice(0, 300).trim()}` }, earlyPr: null };
+  }
+}
 
 function latestMtime(dir, depth) {
   let max = 0
@@ -513,12 +553,30 @@ export async function handler(params) {
     }
   }
 
+  // Early requirement gate (explicit `validation` only - the card fallback and
+  // acceptGaps stay with ship_release, the final authority).
+  let validationGaps;
+  if (Array.isArray(params.validation) && params.validation.length) {
+    const { gaps } = classify(params.validation, { openTasks: 0 });
+    validationGaps = gaps;
+    if (gaps.length) {
+      warnings.push(`${gaps.length} requirement(s) are still your own work (${gaps.map(g => g.requirement).join("; ")}) - close them BEFORE ship_build; ship_release will refuse the merge otherwise.`);
+    }
+  }
+
   const ready = errors.length === 0;
 
   // Mark the ship pipeline as in-progress only after all hard gates passed,
   // so pre.main.guard / pre.edit.branch don't block ship internals when Claude
   // falls back to Bash. Cleared by ship_cleanup on every exit path.
   if (ready) writeSentinel(cwd);
+
+  let early = {};
+  if (params.earlyPush) {
+    early = ready && !needsRebase && !noRemote && repoMode === "git" && branch && branch !== base && ahead !== 0
+      ? openEarlyDraft({ branch, base, cwd })
+      : { earlyPush: { pushed: false, skipped: !ready ? "not ready" : needsRebase ? "needs rebase" : noRemote ? "no remote" : repoMode !== "git" ? `mode ${repoMode}` : "nothing ahead of base" }, earlyPr: null };
+  }
 
   return {
     ready,
@@ -537,6 +595,8 @@ export async function handler(params) {
     components,
     workflowHygiene,
     ciQuota,
+    ...(validationGaps && { validationGaps }),
+    ...early,
     checks,
     warnings,
     errors,
