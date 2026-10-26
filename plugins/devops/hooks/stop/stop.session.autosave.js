@@ -17,7 +17,8 @@
  *   archive the session only after it finishes — pre.session.archive blocks
  *   archiving while the worker's running marker is live.
  *
- *   Output: the "autosaved ..." line when something was saved in time; "Save
+ *   Output: the "autosaved ..." line when something was saved in time, plus
+ *   the landing-decision ask (DECIDE) unless the turn shipped; "Save
  *   finished." when this turn's last completion card was ship-successful or
  *   released and the save finished in time; otherwise silent. Never blocks,
  *   never fails the stop.
@@ -32,6 +33,11 @@ const RUNNING = {
   en: 'Saving open changes is still running — archive the session only after it finishes.',
 };
 const FINISHED = { de: 'Sicherung abgeschlossen.', en: 'Save finished.' };
+// a snapshot is a crash net, not a decision: say so on the turn it is taken
+const DECIDE = {
+  de: 'Noch nicht gelandet — shippen, mit Grund parken oder verwerfen; sonst meldet der Start-Hinweis es nach 3 Tagen.',
+  en: 'Not landed yet — ship it, park it with a reason, or discard it; otherwise the start nudge reports it after 3 days.',
+};
 const SHIP_CARDS = new Set(['ship-successful', 'released']);
 const POLL_MS = 40;
 
@@ -89,7 +95,10 @@ async function main(hook, opts = {}) {
     try { out = JSON.parse(fs.readFileSync(result, 'utf8')); } catch { /* not yet */ }
     if (out) {
       try { fs.unlinkSync(result); } catch { /* none */ }
-      if (out.message) return JSON.stringify({ systemMessage: out.message });
+      if (out.message) {
+        const ship = SHIP_CARDS.has(lastCardVariant(hook.transcript_path));
+        return JSON.stringify({ systemMessage: ship ? out.message : `${out.message} ${DECIDE[lang] || DECIDE.en}` });
+      }
       if (SHIP_CARDS.has(lastCardVariant(hook.transcript_path))) {
         return JSON.stringify({ systemMessage: FINISHED[lang] || FINISHED.en });
       }
@@ -100,7 +109,7 @@ async function main(hook, opts = {}) {
   return JSON.stringify({ systemMessage: RUNNING[lang] || RUNNING.en });
 }
 
-module.exports = { main, lastCardVariant, RUNNING, FINISHED };
+module.exports = { main, lastCardVariant, RUNNING, FINISHED, DECIDE };
 
 if (require.main === module) {
   let raw = '';

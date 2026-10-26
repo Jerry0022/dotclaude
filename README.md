@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.318.1**
+**Version: 0.319.1**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -521,7 +521,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.project.setup` — The automatic part of project setup (the former /setup-project skill; its interactive…
 - `ss.git.check` — Check for stale changes AND workspace setup issues at session start.
 - `ss.git.sync` — Starts ONE detached background git sync for this worktree.
-- `ss.orphan.nudge` — One-line nudge when the current repo has unlanded work or worktrees with uncommitted…
+- `ss.orphan.nudge` — One-line nudge when the current repo has unlanded work, worktrees with uncommitted ch…
 - `ss.ship.verify` — Surface results from the post-merge watcher (post-ship CI + optional deploy verify).
 - `ss.ship.resume` — Keep a running /do-ship stable across a compaction or a resume.
 - `ss.run.task` — Keep a running do-run's task verbatim across a compaction or a resume.

@@ -29,7 +29,10 @@ deleted tomorrow.
 3. Writes `~/.claude/orphan-report.json`.
 
 `ss.orphan.nudge.js` reads that report at session start and shows one line when
-the current repo has at-risk items; it also starts this scan detached when the
+the current repo has at-risk items or safety copies without a decision
+(autosave snapshots and `wip/`/`backup/`/`salvage/`/`salvage-land/`/`rescue/`
+copies older than 3 days, or a deliberate park older than 30 days); the line
+adds the machine-wide total when other repos have such work too. It also starts this scan detached when the
 report is missing or older than 24 h, so the daily run works without an
 external scheduler. A Desktop scheduled task running the same command once a
 day is equivalent.

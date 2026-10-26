@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.319.1] — 2026-10-26
+
+A git write that timed out on Windows no longer leaves the real git running behind the recovery. `execFileSync`'s timeout kills only Git for Windows' `cmd\git.exe` launcher; the `mingw64` git it started kept the index lock and kept writing the checkout, so the mid-checkout recovery reported "another process holds index.lock" for a lock that was its own git's.
+
+### Fixed
+- **git-sync stops the whole git process tree on a write timeout (Windows).** The recovery walks the timed-out child's descendants by parent pid, stops them and waits (bounded) until they are gone before it touches `index.lock`. `powershell.exe` is resolved from `SystemRoot`, not `PATH`. POSIX is unchanged.
+
+### Changed
+- **Plugin audit report shows blocked ship attempts per rule.** The `shipBlocksByRule` frequencies the mining already collected now render as their own table next to the gate hits (frequencies only, no savings claim).
+- **do-ship project reference under its size budget.** The self-update rationale and the Step 8 verify detail moved to `deep-knowledge/self-update-rationale.md` and `step8-finalizer.md`; every rule is kept.
+
+## [0.319.0] — 2026-10-26
+
+Unlanded work can no longer pile up unnoticed. Nothing forced a decision before: the autosave Stop hook silently snapshotted unlanded session work to `parked/autosave/*`, and the 2026-10-19 cleanup pushed rescue and salvage copies. The SessionStart nudge only counted at-risk branches and left out every parked entry, autosave included. `rescue/` and `salvage-land/` were not recognized as parked at all. So about 150 safety copies were invisible, and work in repos the user rarely opens never surfaced.
+
+### Added
+- **Session start counts safety copies without a decision.** Next to unlanded branches and dirty worktrees, the nudge counts autosave snapshots and `wip/`/`backup/`/`salvage/`/`salvage-land/`/`rescue/` copies older than 3 days, plus deliberate parks older than 30 days, as "Sicherungskopien ohne Entscheidung". Branches whose tip subject says `ARCHIVED` count as decided.
+- **Machine-wide total on every start.** When other repos have such work, the line adds "Rechner gesamt: X in Y Repos". A clean repo, or one the scan does not know, still gets "ℹ Rechner gesamt: X offen in Y Repos → /auto-cleanup". Only a clean machine stays silent.
+- **The autosave Stop line asks for a decision.** On the turn it saves a snapshot it asks to ship, park with a reason, or discard. A turn whose card was ship-successful or released is not asked.
+
+### Changed
+- **Park register:** `rescue/` and `salvage-land/` count as legacy parked copies. The new `isUndecided(entry)` marks what still waits for a decision.
+
 ## [0.318.1] — 2026-10-25
 
 The plugin's own safety nets (parked, salvage, rescue, backup copies) are now cleaned up once their content has landed, and a crashed git's leftover lock files no longer block pruning without a word. An audit found about 276 unmerged refs across 8 repos, most of them landed safety copies, plus 578 stale lock files that had made every `git fetch --prune` fail for 6 days.
