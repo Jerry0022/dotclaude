@@ -603,6 +603,32 @@ function removeTempWorktree(tmpRoot, adminDir) {
   return removed && !fs.existsSync(tmpRoot);
 }
 
+/**
+ * Remove registrations a hard-killed earlier run left behind: `devops-parity-*`
+ * temp workdirs that no longer exist and whose admin dir is older than the age
+ * guard (a parallel run's fresh registration is never touched). Never calls a
+ * global `git worktree prune`. Returns the number swept; never throws.
+ */
+function sweepStaleParityWorktrees(top, { minAgeMs = 10 * 60 * 1000, now = Date.now() } = {}) {
+  let swept = 0;
+  try {
+    const common = path.resolve(top, git(['rev-parse', '--git-common-dir'], top));
+    const root = path.join(common, 'worktrees');
+    for (const id of fs.readdirSync(root)) {
+      try {
+        const admin = path.join(root, id);
+        const ptr = fs.readFileSync(path.join(admin, 'gitdir'), 'utf8').trim();
+        const workdir = path.dirname(ptr);
+        const tmpRoot = path.dirname(workdir);
+        if (!/^devops-parity-/.test(path.basename(tmpRoot)) || fs.existsSync(workdir)) continue;
+        if (now - fs.statSync(admin).mtimeMs < minAgeMs) continue;
+        if (removeTempWorktree(tmpRoot, admin)) swept++;
+      } catch { /* leave it */ }
+    }
+  } catch { /* no registry */ }
+  return swept;
+}
+
 // ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
@@ -638,6 +664,8 @@ async function runDeployParity(o) {
   } catch {
     return finish({ reason: 'not a git repository (or no commit to build)' });
   }
+
+  try { sweepStaleParityWorktrees(top); } catch { /* never blocks a run */ }
 
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devops-parity-'));
   const workdir = path.join(tmpRoot, 'src');
@@ -728,5 +756,5 @@ module.exports = {
   DEFAULT_TIMEOUT_SEC, DETECTORS,
   detectBuildPlan, nodePlan, packageManager, tomlValue, yamlScalar,
   buildEnv, dotenvNames, localOnlyEnvNames, classifyFailure, meaningfulNames,
-  toolOf, runCmd, runDeployParity, findAdminDir, removeTempWorktree,
+  toolOf, runCmd, runDeployParity, findAdminDir, removeTempWorktree, sweepStaleParityWorktrees,
 };

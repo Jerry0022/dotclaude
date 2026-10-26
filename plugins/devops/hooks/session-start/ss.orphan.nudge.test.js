@@ -75,4 +75,27 @@ describe("ss.orphan.nudge", () => {
       expect(buildNudge({ cwd: "C:/r/app", report: report([clean]), now: NOW })).toBeNull();
     });
   });
+
+  describe("main checkout on a landed branch / landed worktrees outside .claude/worktrees", () => {
+    const entry = (extra) => ({ path: "C:/r/app", atRisk: [], ...extra });
+    test("one info line naming the branch, in both languages", () => {
+      expect(buildNudge({ cwd: "C:/r/app", report: report([entry({ mainOnLanded: "feat/linux" })]), now: NOW }))
+        .toBe("ℹ Haupt-Checkout steht auf gelandetem Branch feat/linux → auf main wechseln");
+      expect(buildNudge({ cwd: "C:/r/app", lang: "en", report: report([entry({ mainOnLanded: "feat/linux" })]), now: NOW }))
+        .toBe("ℹ main checkout sits on landed branch feat/linux → switch to main");
+    });
+    test("count of landed outside worktrees with the /auto-cleanup route; combined with the branch hint", () => {
+      expect(buildNudge({ cwd: "C:/r/app", lang: "en", report: report([entry({ landedOutside: 3 })]), now: NOW }))
+        .toBe("ℹ 3 landed worktrees outside .claude/worktrees → /auto-cleanup");
+      const both = buildNudge({ cwd: "C:/r/app", lang: "en", report: report([entry({ landedOutside: 1, mainOnLanded: "x" })]), now: NOW });
+      expect(both).toBe("ℹ main checkout sits on landed branch x → switch to main · 1 landed worktree outside .claude/worktrees → /auto-cleanup");
+    });
+    test("appended on its own line below the risk line; silent without the fields or for another repo", () => {
+      const withRisk = buildNudge({ cwd: "C:/r/app", lang: "en", report: report([{ path: "C:/r/app", atRisk: [risk()], landedOutside: 2 }]), now: NOW });
+      expect(withRisk.split("
+")).toHaveLength(2);
+      expect(buildNudge({ cwd: "C:/r/app", report: report([entry({})]), now: NOW })).toBeNull();
+      expect(buildNudge({ cwd: "C:/r/other", report: report([entry({ mainOnLanded: "x" })]), now: NOW })).toBeNull();
+    });
+  });
 });

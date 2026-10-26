@@ -44,7 +44,34 @@ function norm(p) {
  * The nudge line for `cwd`, or null.
  * @param {{cwd:string, lang?:string, report?:object|null, now?:number}} o
  */
-function buildNudge({ cwd, lang = 'de', report, now = Date.now() }) {
+function buildNudge(o) {
+  const base = buildCore(o);
+  const info = infoLine(o);
+  return base && info ? `${base}\n${info}` : base || info;
+}
+
+/** Info line: main checkout parked on a landed branch, landed worktrees outside .claude/worktrees (#879, #875). */
+function infoLine({ cwd, lang = 'de', report, now = Date.now() }) {
+  const t = Date.parse((report && report.generatedAt) || '');
+  if (!report || !Array.isArray(report.repos) || !Number.isFinite(t) || now - t > MAX_AGE_MS) return null;
+  const here = norm(cwd);
+  const entry = report.repos
+    .filter((r) => r && r.path && (here === norm(r.path) || here.startsWith(`${norm(r.path)}/`)))
+    .sort((a, b) => norm(b.path).length - norm(a.path).length)[0];
+  if (!entry) return null;
+  const en = lang === 'en';
+  const parts = [];
+  if (entry.mainOnLanded) {
+    parts.push(en ? `main checkout sits on landed branch ${entry.mainOnLanded} → switch to main` : `Haupt-Checkout steht auf gelandetem Branch ${entry.mainOnLanded} → auf main wechseln`);
+  }
+  const out = Number(entry.landedOutside) || 0;
+  if (out > 0) {
+    parts.push(en ? `${out} landed ${out === 1 ? 'worktree' : 'worktrees'} outside .claude/worktrees → /auto-cleanup` : `${out} gelandete ${out === 1 ? 'Worktree' : 'Worktrees'} außerhalb von .claude/worktrees → /auto-cleanup`);
+  }
+  return parts.length ? `ℹ ${parts.join(' · ')}` : null;
+}
+
+function buildCore({ cwd, lang = 'de', report, now = Date.now() }) {
   if (!report || !Array.isArray(report.repos)) return null;
   const t = Date.parse(report.generatedAt || '');
   if (!Number.isFinite(t) || now - t > MAX_AGE_MS) return null;
