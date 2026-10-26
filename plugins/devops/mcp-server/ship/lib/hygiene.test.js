@@ -881,7 +881,8 @@ describe("runHygiene — trigger, switches and the nudge", () => {
       let spawned = 0;
       const res = deferred(dir, { spawnWorker: () => { spawned++; return true; } });
       expect(spawned).toBe(0);
-      expect(res.autoClean).toMatchObject({ ran: false, deferred: true, running: undefined });
+      expect(res.autoClean).toMatchObject({ ran: false, deferred: true });
+      expect(res.autoClean.running).toBeUndefined();
       expect(res.card.tests).toBeUndefined();
     });
 
