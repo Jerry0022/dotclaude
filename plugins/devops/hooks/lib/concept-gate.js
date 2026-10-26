@@ -186,7 +186,7 @@ function findFinalReportIssues(html) {
     for (const m of body.slice(oqStart).matchAll(/<[a-z]+\b[^>]*\sclass=["'][^"']*\boq-label\b[^"']*["'][^>]*>([\s\S]*?)<\/[a-z]+>/gi)) tooLong('Fund label', m[1]);
   }
   for (const attr of ['data-tests', 'data-handoffs']) {
-    const at = body.search(new RegExp('\\s' + attr + '\\b'));
+    const at = body.search(new RegExp('\\s' + attr + '(?=[\\s=>/])'));
     if (at < 0) continue;
     const end = body.indexOf('</section>', at);
     const seg = body.slice(at, end < 0 ? undefined : end);

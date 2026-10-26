@@ -70,8 +70,8 @@ function parse(html) {
 }
 
 function attr(node, name) {
-  const m = new RegExp(`(?:^|\\s)${name}(?:=("|')([^"']*)\\1|(?=\\s|/|$))`, 'i').exec(node.attrs);
-  return m ? (m[2] === undefined ? '' : m[2]) : null;
+  const m = new RegExp(`(?:^|\\s)${name}(?:=(?:"([^"]*)"|'([^']*)')|(?=\\s|/|$))`, 'i').exec(node.attrs);
+  return m ? (m[1] ?? m[2] ?? '') : null;
 }
 const has = (node, name) => attr(node, name) !== null;
 const inside = (outer, n) => n !== outer && n.start >= outer.innerStart && n.start < outer.innerEnd;
@@ -99,7 +99,8 @@ function preselectionIssue(doc, el, mode, rec) {
   if (mode === 'slider') {
     const r = inputs.find(n => attr(n, 'name') === name && attr(n, 'type') === 'range');
     if (!r) return `no <input type="range" name="${name}">`;
-    return Number(attr(r, 'value')) === Number(rec) && attr(r, 'value') !== '' ? null : `the slider value "${attr(r, 'value')}" is not the recommendation "${rec}"`;
+    const v = attr(r, 'value');
+    return v != null && v !== '' && Number(v) === Number(rec) ? null : `the slider value "${attr(r, 'value')}" is not the recommendation "${rec}"`;
   }
   if (mode === 'order') {
     const h = inputs.find(n => attr(n, 'name') === name);
