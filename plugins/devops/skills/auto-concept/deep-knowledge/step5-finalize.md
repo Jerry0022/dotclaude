@@ -129,10 +129,39 @@ because the session feels like it is ending.
      table in Step 6a (`step6-closeout.md` § Disposition, cleanup procedure and disposition tables).
    - `discard` → `git rm --cached` the HTML and the decisions JSON, and
      `git rm -r --cached` the source folder `{date}-{slug}/`, if tracked.
+     Then hide the same paths from git **locally** (§ Ship-safe local
+     exclude below) — they stay on disk for the bridge, but untracked they
+     would fail the ship's clean-tree check (#931).
    Nothing to commit → no commit. Step 6a then skips the git half of its
    table for this close-out and only moves or deletes the files on disk
    (for `keep` + `moveTo`: delete the originals, the copies are already in
    place).
+
+### Ship-safe local exclude (#931)
+
+A `discard` concept is untracked by design, and part C runs before part D, so
+its HTML, decisions JSON and source folder are still on disk when `do-ship`
+runs. `ship_preflight` refuses an untracked file ("Dirty working tree: 0
+modified, N untracked") and `ship_release` would stage every one of them.
+Deleting them first (part D before C) kills the page that reports the ship.
+Instead, part C step 0 lists exactly this concept's paths in the repository's
+local exclude file, which git reads like `.gitignore` but never commits:
+
+```bash
+x="$(git rev-parse --path-format=absolute --git-common-dir)/info/exclude"
+mkdir -p "${x%/*}"
+for p in "/docs/concepts/{date}-{slug}.html" "/docs/concepts/{date}-{slug}-decisions.json" "/docs/concepts/{date}-{slug}/"; do
+  grep -qxF -- "$p" "$x" 2>/dev/null || printf '%s\n' "$p" >> "$x"
+done
+```
+
+Same in `gitignore` mode for any concept path still untracked when the ship
+starts (its `.gitignore` line is committed in the close-out commit, so this is
+only a safety net there). The clean-tree gate itself is not touched: it stays
+fail-closed for every other path. Step 6a removes the three lines again once
+the files are disposed of (`step6-closeout.md` § Disposition, cleanup
+procedure and disposition tables). Use the exact `{date}-{slug}` paths — never
+a glob, which would hide a sibling session's concept.
 
 ### Delegated ship: card data, rendered after Step 6a (#712)
 

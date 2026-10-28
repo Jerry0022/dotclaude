@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.328.1] — 2026-10-28
+
+### Fixed
+- Concept finalize with disposition `discard` ships without closing the page first: the concept's own files go into the local git exclude for the ship and come out again at close-out (#931).
+
 ## [0.328.0] — 2026-10-28
 
 ### Added

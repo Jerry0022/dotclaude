@@ -338,7 +338,9 @@ re-shipping.
    (`chore(concept): close out {slug}`) before the ship, so the release
    carries it — a disposition applied after `ship_release` is left
    uncommitted on the branch. Every file stays on disk where the bridge
-   serves it; Step 6a does the on-disk part after the stop:
+   serves it; an untracked `discard` set goes into the local git exclude so
+   the ship's clean-tree check passes (#931); Step 6a does the on-disk part
+   after the stop:
 **Before executing this step, Re-Read `deep-knowledge/step5-finalize.md` § C · Disposition staging per mode completely on every round — even if read earlier in this session** — what the index-only staging does per `disposition` mode; the durable-store copy and the Step 6a table it cites are in `deep-knowledge/step6-closeout.md` § Disposition, cleanup procedure and disposition tables.
 1. Run the full ship pipeline via the `do-ship` skill (ship_preflight →
    ship_build → ship_version_bump → ship_release → ship_cleanup) with
