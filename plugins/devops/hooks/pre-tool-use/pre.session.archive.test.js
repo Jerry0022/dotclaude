@@ -73,6 +73,21 @@ describe("pre.session.archive — the user's refusal", () => {
       expect(run("s-neg-3", prompt).status).toBe(0);
     });
 
+  test.each([
+    "fix das warum ich sie nicht archivieren kann...",
+    "die Session lässt sich nicht archivieren",
+    "warum kann ich die Session nicht archivieren?",
+    "I can't archive this session",
+  ])("an inability %j reads as a request, not a refusal", (prompt) => {
+    expect(run("s-neg-6", prompt).status).toBe(0);
+  });
+
+  test("a refusal next to an ability verb in another clause still refuses", () => {
+    const r = run("s-neg-7", "du kannst sie behalten, nicht archivieren");
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/says not to archive/);
+  });
+
   test("a released hand-over with an unrelated prompt still archives", () => {
     expect(run("s-neg-4", "ship it", { released: true }).status).toBe(0);
   });
