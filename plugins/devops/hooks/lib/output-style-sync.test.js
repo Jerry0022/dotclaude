@@ -154,7 +154,7 @@ describe("Quiet style — the reply language follows what the user typed", () =>
   const flat = fs.readFileSync(path.join(REPO_PLUGIN, TEMPLATE_REL), "utf8").replace(/\s+/g, " ");
 
   test("anchors on the user's own words, not on whatever sits in their slot", () => {
-    expect(flat).toContain("Reply in the language the user writes in — the words they typed");
+    expect(flat).toContain("Converse in Claude Code's configured language");
     expect(flat).not.toContain("the language of the user's latest message");
   });
 
