@@ -109,4 +109,24 @@ function syncQuietStyle({ home, pluginDir, cwd = process.cwd() }) {
   }
 }
 
-module.exports = { syncQuietStyle, quietConfigured, sha256, frontmatterName, TEMPLATE_REL, MANIFEST_REL };
+/**
+ * The one "customized" verdict for a pass over several style sources (#937).
+ * A stale source (an old marketplace clone) does not know the hash a newer
+ * source shipped, so a per-source 'customized' is no evidence on its own: the
+ * copy counts as customized only when some source said so and none found it
+ * current, updated or created it. Returns the target to warn about, or null.
+ */
+function customizedTarget(results) {
+  const known = results.some(r => r.status === 'current' || r.status === 'updated' || r.status === 'created');
+  if (known) return null;
+  const hit = results.find(r => r.status === 'customized');
+  return hit ? hit.target : null;
+}
+
+// `git clone` leaves `temp_git_<ts>_<rand>..clone` dirs behind when an install
+// or update is interrupted; they are no marketplace (#937).
+function isTempClone(name) {
+  return /^temp_git_.*\.clone$/.test(name);
+}
+
+module.exports = { syncQuietStyle, quietConfigured, customizedTarget, isTempClone, sha256, frontmatterName, TEMPLATE_REL, MANIFEST_REL };

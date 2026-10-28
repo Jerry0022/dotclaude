@@ -61,7 +61,7 @@ const path = require('path');
 const { t } = require('../lib/locale');
 const { latestVisible, readChannelPin } = require('../lib/channels');
 const { runOnce, releaseOnce } = require('../lib/run-once');
-const { syncQuietStyle } = require('../lib/output-style-sync');
+const { syncQuietStyle, customizedTarget, isTempClone } = require('../lib/output-style-sync');
 const { pinToTag } = require('../lib/channel-pin');
 const {
   DEFER_DELAY_MS,
@@ -227,6 +227,7 @@ const mcpAffected = [];
 let pinFailed = false;
 
 for (const marketplace of fs.readdirSync(marketplacesDir)) {
+  if (isTempClone(marketplace)) continue;
   const mDir = path.join(marketplacesDir, marketplace);
   if (!fs.statSync(mDir).isDirectory()) continue;
   if (!fs.existsSync(path.join(mDir, '.git'))) continue;
@@ -467,14 +468,20 @@ if (pinFailed || updated.some(u => !u.verified)) {
 // non-cooldown pass, not only on a version move: the copy drifts independently
 // of the cache (hand-copied once, never touched again).
 let styleSynced = false;
+const styleResults = [];
 for (const dir of styleSources) {
   const res = syncQuietStyle({ home, pluginDir: dir });
+  styleResults.push(res);
   if (res.status === 'updated' || res.status === 'created') styleSynced = true;
-  else if (res.status === 'customized') {
-    process.stderr.write(`[ss.plugin.update] ${res.target} differs from every shipped Quiet style — left as is (customized). Delete it and re-copy templates/output-style-quiet.md to track updates again.\n`);
-  } else if (res.status === 'error') {
+  else if (res.status === 'error') {
     process.stderr.write(`[ss.plugin.update] Quiet style sync failed — ${res.error}\n`);
   }
+}
+// One verdict after all sources: a stale source's 'customized' is overruled by
+// any source that knows the copy (#937).
+const customized = customizedTarget(styleResults);
+if (customized) {
+  process.stderr.write(`[ss.plugin.update] ${customized} differs from every shipped Quiet style — left as is (customized). Delete it and re-copy templates/output-style-quiet.md to track updates again.\n`);
 }
 
 // Report only what the user can act on. A SUCCESSFUL same-version cache repair
