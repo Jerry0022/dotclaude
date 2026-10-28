@@ -18,6 +18,7 @@
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.tmp.sweep.js\"", "timeout": 10 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.tokens.scan.js\"", "timeout": 5 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.project.setup.js\"", "timeout": 10 },
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.setup.firstrun.js\"", "timeout": 10 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.git.check.js\"", "timeout": 10 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.git.sync.js\"", "timeout": 20 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.orphan.nudge.js\"", "timeout": 5 },
@@ -36,7 +37,13 @@
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.tokens.guard.js\"" }
         ],
-        "matcher": "Read|Bash|Glob|Grep"
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.tokens.guard.js\"", "dispatch": false }
+        ],
+        "matcher": "Read|Glob|Grep"
       },
       {
         "hooks": [
@@ -98,7 +105,7 @@
       },
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.session.archive.js\"" }
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.session.archive.js\"", "dispatch": false }
         ],
         "matcher": "mcp__ccd_session_mgmt__archive_session"
       },
@@ -106,7 +113,13 @@
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.ask.title.js\"", "timeout": 5 }
         ],
-        "matcher": "AskUserQuestion|ExitPlanMode|mcp__ccd_session__start_session"
+        "matcher": "AskUserQuestion|ExitPlanMode"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.ask.title.js\"", "timeout": 5, "dispatch": false }
+        ],
+        "matcher": "mcp__ccd_session__start_session"
       },
       {
         "hooks": [
@@ -125,7 +138,14 @@
       {
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.agent.relay.js\"", "timeout": 10 }
-        ]
+        ],
+        "matcher": "^(?!(?:Read|Glob|Grep)$|mcp__ccd_)"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.agent.relay.js\"", "timeout": 10, "dispatch": false }
+        ],
+        "matcher": "Read|Glob|Grep|mcp__ccd_.*"
       },
       {
         "hooks": [
@@ -168,7 +188,15 @@
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.completion.js\"" },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.approval.clear.js\"", "timeout": 5 }
-        ]
+        ],
+        "matcher": "^(?!(?:Read|Glob|Grep)$|mcp__ccd_)"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.completion.js\"", "dispatch": false },
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.approval.clear.js\"", "timeout": 5, "dispatch": false }
+        ],
+        "matcher": "Read|Glob|Grep|mcp__ccd_.*"
       },
       {
         "hooks": [
@@ -205,7 +233,13 @@
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.ask.answers.js\"", "timeout": 10 },
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.ask.title.js\"", "timeout": 5 }
         ],
-        "matcher": "AskUserQuestion|ExitPlanMode|mcp__ccd_session__start_session"
+        "matcher": "AskUserQuestion|ExitPlanMode"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.ask.title.js\"", "timeout": 5, "dispatch": false }
+        ],
+        "matcher": "mcp__ccd_session__start_session"
       },
       {
         "hooks": [
@@ -254,7 +288,7 @@
     "PostToolUseFailure": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.completion.js\"" }
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.completion.js\"", "dispatch": false }
         ],
         "matcher": "mcp__ccd_session_mgmt__archive_session"
       },
@@ -267,7 +301,14 @@
       {
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.approval.clear.js\"", "timeout": 5 }
-        ]
+        ],
+        "matcher": "^(?!(?:Read|Glob|Grep)$|mcp__ccd_)"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.approval.clear.js\"", "timeout": 5, "dispatch": false }
+        ],
+        "matcher": "Read|Glob|Grep|mcp__ccd_.*"
       }
     ],
     "Stop": [

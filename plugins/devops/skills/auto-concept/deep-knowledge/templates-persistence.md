@@ -508,15 +508,13 @@ function restoreState() {
     let state = JSON.parse(raw);
     const currentVersion = document.documentElement.dataset.pageVersion || '';
     if (state._pageVersion && state._pageVersion !== currentVersion) {
-      // A DIFFERENT build (a fresh concept on the same slug, a re-init) never
-      // inherits drafts: the same `text:i1:general` key belongs to another
-      // concept there, and carrying it over is what put the previous
-      // concept's notes into a brand-new round 1. pageVersion stays fixed
-      // across rebuilds of ONE concept (concept-build.js), so a mid-round
-      // regeneration is not affected. The old blob is archived, not dropped.
-      _guardedSetItem(STORAGE_KEY + '-archive', JSON.stringify(state));
-      state = { _savedAt: Date.now(), _pageVersion: currentVersion };
-      _guardedSetItem(STORAGE_KEY, JSON.stringify(state));
+      // A different page version carries the typed text over exactly like the
+      // 24 h TTL path (batch note #12: nothing the user typed may be lost). The
+      // stale half (checkbox states, nav positions) is dropped, every `text:`
+      // key is restored and a strip says so; the untouched old blob stays one
+      // key sideways (-archive) as a backup, in case this page is a different
+      // concept that shares the slug.
+      state = _carryOverTypedWork(state);
     } else if (state._savedAt && (Date.now() - state._savedAt) > STATE_TTL_MS) {
       state = _carryOverTypedWork(state);
     }

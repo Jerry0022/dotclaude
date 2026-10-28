@@ -10,4 +10,4 @@ BLOCK) stays in SKILL.md.
 
 ## Claude API fallback
 
-**Claude API fallback (opt-in):** when Codex gave rc 75 / 124 / 127 (or is not installed), run the same review prompt once through `node "{PLUGIN_ROOT}/scripts/claude-api-safe.js" -` (stdin) and evaluate rc 0 exactly like a Codex rc 0 (same lockout rule). rc 126 (switch off) → silent; any other rc → card line `Claude-API-Review → übersprungen — <reason>`, continue. Never retry. Details: `{PLUGIN_ROOT}/deep-knowledge/api-credits.md`.
+**Claude API fallback (opt-in):** when Codex gave rc 75 / 124 / 127 (or is not installed), run the same review prompt once through `node "{PLUGIN_ROOT}/scripts/claude-api-safe.js" -` (stdin) and evaluate rc 0 exactly like a Codex rc 0 (same lockout rule). rc 126 (switch off) → silent; any other rc → card line `Claude-API-Review → übersprungen — <reason>`, continue. Never retry. **The fix / ask / BLOCK triage applies in full** — fallback findings are not advisory: an in-scope defect is fixed with a regression test before the merge, never parked as an `open` point (`manual-pipeline.md`, Codex Review Gate step 5). Details: `{PLUGIN_ROOT}/deep-knowledge/api-credits.md`.

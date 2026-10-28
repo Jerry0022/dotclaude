@@ -266,7 +266,32 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
     if (draft && draft.pin.id === pin.id) draft = null;
     writePins(it, pins);
   }
-  function discardDraft() { draft = null; render(); }
+  // A note is never held back for a blur: every keystroke that leaves text in
+  // the field upserts the pin into the store (and so into localStorage and the
+  // bridge draft) WITHOUT re-rendering — the editor keeps its focus. Before
+  // this, a new note lived only in the editor until Enter / blur, so a reload,
+  // an iteration switch or a rebuild in that window dropped what the reviewer
+  // had typed (the text sat under `upin-ta-<id>` with no pin to show it).
+  function persistTyped(it, pin, text) {
+    const t = String(text || '').trim();
+    if (!t) return;
+    const pins = readPins(it);
+    const i = pins.findIndex(p => p.id === pin.id);
+    if (i >= 0) { if (pins[i].text === t) return; pins[i].text = t; } else pins.push({ ...pin, text: t });
+    ensureStore(it);
+    const ta = storeOf(it);
+    if (!ta) return;
+    ta.value = JSON.stringify({ pins: normalise(pins) });
+    ta.setAttribute('data-touched', 'true');
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    try { _userInteracted = true; } catch (e) { /* not initialised yet */ }
+  }
+  function discardDraft() {
+    const d = draft;
+    draft = null;
+    const stored = d && readPins(d.it).some(p => p.id === d.pin.id);
+    if (stored) writePins(d.it, readPins(d.it).filter(p => p.id !== d.pin.id)); else render();
+  }
   function closeEditors(except) {
     document.querySelectorAll('.dpin-layer .upin-editor').forEach(x => {
       if (x === except || x.hidden) return;
@@ -333,12 +358,13 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
       placeEditor(w);
       w.querySelector('textarea').focus();
     });
+    ta.addEventListener('input', () => { if (live) persistTyped(it, pin, ta.value); });
     ta.addEventListener('keydown', e => {
       e.stopPropagation();
       if (e.key === 'Escape') {
         e.preventDefault();
         if (isDraft) discardDraft();
-        else { ta.value = pin.text; ed.hidden = true; setEditing(wrap, false); btn.focus(); }
+        else { ta.value = pin.text; persistTyped(it, pin, pin.text); ed.hidden = true; setEditing(wrap, false); btn.focus(); }
       } else if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
         e.preventDefault();
         if (live) savePin(it, pin, ta.value); else { ed.hidden = true; setEditing(wrap, false); }
@@ -388,7 +414,8 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
     iterations().forEach(it => {
       const live = isLive(it) && isDocIt(it);
       const pins = readPins(it);
-      const showDraft = live && draft && draft.it === it;
+      // A draft that already reached the store renders as the saved pin.
+      const showDraft = live && draft && draft.it === it && !pins.some(p => p.id === draft.pin.id);
       if (!pins.length && !showDraft) return;
       if (it.getClientRects().length) total += pins.length;   // the eye answers for what is on screen
       it.classList.add('dpin-host');

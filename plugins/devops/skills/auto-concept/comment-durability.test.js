@@ -238,13 +238,14 @@ describe("comment durability — the live round's text", () => {
     expect(window.localStorage.getItem(KEY + "-archive")).toContain("input:d-auth:yes");
   });
 
-  test("a different build (new pageVersion, same slug) never restores the old drafts — archived instead", () => {
+  test("a different page version carries typed text over like the TTL path, old blob archived as backup", () => {
     const { window } = buildDom({
-      storage: { _pageVersion: "an-older-generation", "text:i2:d-auth-note": "Notiz vom vorigen Concept" },
+      storage: { _pageVersion: "an-older-generation", "text:i2:d-auth-note": "Notiz vom vorigen Concept", "input:d-auth:yes": true },
     });
-    expect(readBlob(window)["text:i2:d-auth-note"]).toBeUndefined();
-    expect(window.document.querySelector('[data-iteration="2"] [data-comment="d-auth-note"]').value).toBe("");
-    expect(window.document.querySelector(".recovered-notes-strip")).toBeFalsy();
+    expect(readBlob(window)["text:i2:d-auth-note"]).toBe("Notiz vom vorigen Concept");
+    expect(readBlob(window)["input:d-auth:yes"]).toBeUndefined();
+    expect(window.document.querySelector('[data-iteration="2"] [data-comment="d-auth-note"]').value).toBe("Notiz vom vorigen Concept");
+    expect(window.document.querySelector(".recovered-notes-strip")).toBeTruthy();
     expect(window.localStorage.getItem(KEY + "-archive")).toContain("Notiz vom vorigen Concept");
   });
 

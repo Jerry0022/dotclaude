@@ -198,6 +198,27 @@ describe("custom markers typed via the 'Sonstiges' option", () => {
     expect(validateMarker("Let's go").warning).toBe(null);
     expect(validateMarker("jetzt").warning).toBe("wordy");
     expect(validateMarker(">>").warning).toBe(null);
+    expect(validateMarker("los").warning).toBe(null);
+  });
+
+  test("`los` fires alone and with instruction, not on German phrases", () => {
+    for (const t of ["los", "Los", "los, aber ohne B3", "los: bau", "los bau das"]) {
+      expect(startsWithMarker(t, "los")).toBe(true);
+    }
+    for (const t of ["los geht's", "los geht", "los gehts", "Los Angeles", "lose Enden", "los geht’s los"]) {
+      expect(startsWithMarker(t, "los")).toBe(false);
+    }
+    expect(stripMarker("los, aber ohne B3", "los")).toBe("aber ohne B3");
+  });
+
+  test("loadConfig migrates legacy suggestions to los and keeps custom markers", () => {
+    const p = configPath();
+    for (const [stored, want] of [[">>", "los"], [">go", "los"], [">start", "los"], ["Let's go", "Let's go"]]) {
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.writeFileSync(p, JSON.stringify({ marker: stored }), "utf8");
+      expect(loadConfig().marker).toBe(want);
+      expect(JSON.parse(fs.readFileSync(p, "utf8")).marker).toBe(want);
+    }
   });
 });
 
@@ -747,8 +768,8 @@ describe("classify — a re-activation while collecting is absorbed", () => {
 });
 
 describe("marker suggestions", () => {
-  test("are `>>`, `>go`, `>start` — English, colon-free, recommendation first", () => {
-    expect(MARKER_SUGGESTIONS).toEqual([">>", ">go", ">start"]);
+  test("are just `los` — colon-free, equal to the default", () => {
+    expect(MARKER_SUGGESTIONS).toEqual(["los"]);
     expect(MARKER_SUGGESTIONS[0]).toBe(DEFAULTS.marker);
     for (const m of MARKER_SUGGESTIONS) {
       expect(m.endsWith(":")).toBe(false);

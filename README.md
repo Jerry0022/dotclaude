@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.327.0**
+**Version: 0.328.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -26,16 +26,23 @@ keep git clean, block risky moves and stop context waste.
 - **Runs while you are away** — `/do-run` works off a backlog, a task or the leftover weekly budget, and ships each item
 - **Per-project tuning** — extend any skill with a `reference.md`, no fork
 
-<!--devops:count:hooks-->93<!--/devops:count:hooks--> hooks ·
-<!--devops:count:skills-->14<!--/devops:count:skills--> skills ·
+<!--devops:count:hooks-->100<!--/devops:count:hooks--> hooks ·
+<!--devops:count:skills-->15<!--/devops:count:skills--> skills ·
 <!--devops:count:agents-->12<!--/devops:count:agents--> agents ·
 ~0.7M tokens/week overhead (1–4 % of a Max plan), paid back 1.5–6× by the
 token guard alone — see [Token math](#token-math).
 
 ## Install
 
-Needs **git** and **Node.js 18.18+**. Desktop and CLI keep separate plugin
-stores — install where you work.
+> **Prerequisites (Windows 11 especially):** **Git for Windows** (includes
+> *Git Bash*, which Claude Code and the plugin's hooks run in) and **Node.js
+> LTS (18.18+)**. Without them the plugin cannot work. One command each:
+> `winget install Git.Git` and `winget install OpenJS.NodeJS.LTS` — then
+> restart the app fully (PATH is read at start). macOS/Linux: git and Node 18.18+.
+> At the next start the plugin names a missing git or Git Bash itself and
+> offers to install it; a missing Node cannot be detected from inside the plugin.
+
+Desktop and CLI keep separate plugin stores — install where you work.
 
 1. **Claude Code** — paste into any session (Desktop or CLI):
    ```
@@ -69,6 +76,21 @@ get every ship the moment it lands. Semantic versioning — breaking changes
 only in major versions.
 
 </details>
+
+## Setup
+
+The first start offers a short guide — once. Say **"devops setup"** any time to
+run it again. Five questions, each in plain words: what problem the setting
+solves, what it brings, and whether it then always applies or depends on your
+choice. Nothing changes before you answer.
+
+| Topic | Always or your choice |
+|---|---|
+| Quiet output style (less narration) | your choice (`/output-style`) |
+| Plan detection (Max, Team, …) | informational only |
+| API credit for side work, plan as fallback | always, until switched off |
+| Agent delegation: automatic / ask / off | always (a project may override) |
+| Language (`language` setting) | always |
 
 ## Everyday use
 
@@ -117,6 +139,7 @@ new skill, and project extensions under an old name keep loading.
 | `/auto-guide` | Hidden · Hook | Live step-by-step overlay in your browser for logins, API keys and settings Claude cannot do itself |
 | `/auto-extend` | Hidden | Scaffold or adapt project-level skill extensions |
 | `/auto-update` | Hidden | Update the plugin ("devops update") |
+| `/auto-setup` | Hidden · Hook | First-run guide: Quiet style, plan, API credit, agents, language ("devops setup") |
 
 **Former skills, now knowledge + hooks:** `/setup-readme` → `readme-standards.md`,
 `/auto-usage` → `usage.md` (the card fetches
@@ -495,7 +518,7 @@ A different stack: extend the skills per project — see [Customize](#customize)
 </details>
 
 <details>
-<summary><strong>Hooks</strong> — <!--devops:count:hooks-->93<!--/devops:count:hooks--> hooks by lifecycle and by category</summary>
+<summary><strong>Hooks</strong> — <!--devops:count:hooks-->100<!--/devops:count:hooks--> hooks by lifecycle and by category</summary>
 
 ```
 SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolUse  ──>  Stop
@@ -519,6 +542,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.tmp.sweep` — Removes the plugin's own dotclaude-* temp markers older than 48 h from the OS temp di…
 - `ss.tokens.scan` — Scan project for expensive files and update config for the pre.tokens.guard hook.
 - `ss.project.setup` — The automatic part of project setup (the former /setup-project skill; its interactive…
+- `ss.setup.firstrun` — (1) Bootstrap check (#923): git, Git Bash (Windows) and a usable node.
 - `ss.git.check` — Check for stale changes AND workspace setup issues at session start.
 - `ss.git.sync` — Starts ONE detached background git sync for this worktree.
 - `ss.orphan.nudge` — One-line nudge when the current repo has unlanded work, worktrees with uncommitted ch…
@@ -553,6 +577,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 #### PreToolUse — runs before each tool call
 
 - `pre.tokens.guard` — Block Read/Bash/Glob/Grep operations that would consume a significant percentage of t…
+- `pre.tokens.guard` — Block Read/Bash/Glob/Grep operations that would consume a significant percentage of t…
 - `pre.ship.guard` — Block manual PR creation/merging via Bash.
 - `pre.main.guard` — Prevent accidental writes on local main/master.
 - `pre.worktree.split-guard` — WARN (never block) on git-mutating work driven from the main repo root while an agent…
@@ -567,10 +592,12 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `pre.mcp.health` — Detects dead or stale MCP servers before tool calls fail cryptically.
 - `pre.session.archive` — Only the post-ship hand-over archives this session (#632).
 - `pre.ask.title` — Puts `👉 ➜ ❓ Question ┃ ` on the session title BEFORE a call blocks on the user (a qu…
+- `pre.ask.title` — Puts `👉 ➜ ❓ Question ┃ ` on the session title BEFORE a call blocks on the user (a qu…
 - `pre.strict.agent-gate` — While strict mode is active, refuse an Agent spawn whose prompt does not start with t…
 - `pre.agent.model` — Refuses an Agent spawn once when it would silently inherit the session model — no `mo…
 - `pre.agent.announce` — Makes every Agent spawn visible to the user: resolves the agent's effective model and…
 - `pre.ship.delegate` — Keeps the ship-delegation threshold where the model starts a ship itself.
+- `pre.agent.relay` — Holds back the first tool call after an agent launch whose card (pre.agent.announce)…
 - `pre.agent.relay` — Holds back the first tool call after an agent launch whose card (pre.agent.announce)…
 - `pre.run.contract` — Refuse (exit 2) the tool call that would walk past an open obligation of the do-run R…
 - `pre.governor.gate` — Admission gate of the Claude load governor.
@@ -593,12 +620,15 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 
 - `post.flow.completion` — Keeps the completion-card contract in Claude's context: on the FIRST tool call of eve…
 - `post.approval.clear` — A background agent's tool call finished: drops its permission wait (and every one the…
+- `post.flow.completion` — Keeps the completion-card contract in Claude's context: on the FIRST tool call of eve…
+- `post.approval.clear` — A background agent's tool call finished: drops its permission wait (and every one the…
 - `post.concept.gate` — Deterministic backstop for concept pages.
 - `post.claude.budget` — Deterministic context-budget gate for Claude configuration files — CLAUDE.md, SKILL.m…
 - `post.agent.nudge` — AUD-024: outside a do-run run, a single turn can change many files without ever spawn…
 - `post.design.remind` — Once per context, when a UI file is written or edited, reminds Claude of the standing…
 - `post.run.contract` — Record what happened for the do-run RUN CONTRACT (spec A events, B arming, E batch ma…
 - `post.ask.answers` — Answer-check (run-contract spec F): an AskUserQuestion answer token that equals the O…
+- `post.ask.title` — The user answered (a question, a plan approval, a start_session approval), so Claude…
 - `post.ask.title` — The user answered (a question, a plan approval, a start_session approval), so Claude…
 - `post.cleanup.gate` — Arms and feeds the /auto-cleanup deletion gate (lib/cleanup-gate.js).
 - `post.skill.marker` — Record a loaded skill in the caller's per-turn marker (lib/skill-turn-marker) — the "…
@@ -629,7 +659,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.tokens.scan` *(SessionStart)*
 - `ss.governor.attach` *(SessionStart)*
 - `prompt.governor.resume` *(UserPromptSubmit)*
-- `pre.tokens.guard` *(PreToolUse)*
+- `pre.tokens.guard` *(PreToolUse, PreToolUse)*
 - `pre.crawl.guard` *(PreToolUse)*
 - `pre.governor.gate` *(PreToolUse)*
 - `post.claude.budget` *(PostToolUse)*
@@ -668,14 +698,14 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.flow.silent-turn` *(UserPromptSubmit)*
 - `prompt.flow.title-work` *(UserPromptSubmit)*
 - `prompt.flow.appstart` *(UserPromptSubmit)*
-- `pre.ask.title` *(PreToolUse)*
+- `pre.ask.title` *(PreToolUse, PreToolUse)*
 - `substop.approval.clear` *(SubagentStop)*
 - `perm.approval.flag` *(PermissionRequest)*
 - `perm.approval.watch` *(PermissionRequest)*
-- `post.flow.completion` *(PostToolUse)*
-- `post.approval.clear` *(PostToolUse)*
+- `post.flow.completion` *(PostToolUse, PostToolUse)*
+- `post.approval.clear` *(PostToolUse, PostToolUse)*
 - `post.ask.answers` *(PostToolUse)*
-- `post.ask.title` *(PostToolUse)*
+- `post.ask.title` *(PostToolUse, PostToolUse)*
 - `post.flow.title-mode` *(PostToolUse)*
 - `stop.flow.browsertest` *(Stop)*
 - `stop.flow.guard` *(Stop)*
@@ -688,7 +718,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.burn.resume` *(UserPromptSubmit)*
 - `pre.agent.model` *(PreToolUse)*
 - `pre.agent.announce` *(PreToolUse)*
-- `pre.agent.relay` *(PreToolUse)*
+- `pre.agent.relay` *(PreToolUse, PreToolUse)*
 - `pre.run.contract` *(PreToolUse)*
 - `substop.agent.wip` *(SubagentStop)*
 - `post.agent.nudge` *(PostToolUse)*
@@ -740,6 +770,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 
 #### other
 
+- `ss.setup.firstrun` *(SessionStart)*
 - `pre.test.fullguard` *(PreToolUse)*
 - `pre.redirect.scope` *(PreToolUse)*
 - `post.test.record` *(PostToolUse)*
@@ -779,8 +810,8 @@ plugins/
 │   ├── .claude-plugin/plugin.json ← Plugin manifest (SemVer, tags v0.x.y)
 │   ├── .mcp.json                  ← MCP servers: completion card, ship, issues
 │   ├── CONVENTIONS.md             ← Naming, versioning, extension rules
-│   ├── hooks/                     ← <!--devops:count:hooks-->93<!--/devops:count:hooks--> hooks (JS) registered in hooks/dispatch/manifest.json
-│   ├── skills/                    ← <!--devops:count:skills-->14<!--/devops:count:skills--> skill definitions (SKILL.md)
+│   ├── hooks/                     ← <!--devops:count:hooks-->100<!--/devops:count:hooks--> hooks (JS) registered in hooks/dispatch/manifest.json
+│   ├── skills/                    ← <!--devops:count:skills-->15<!--/devops:count:skills--> skill definitions (SKILL.md)
 │   ├── agents/                    ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 │   ├── mcp-server/                ← Card renderer + Desktop widget, ship tools, issue matching
 │   ├── deep-knowledge/            ← Cross-cutting reference docs (<!--devops:count:dk-->56<!--/devops:count:dk--> topics)

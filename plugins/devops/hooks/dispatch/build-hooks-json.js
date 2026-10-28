@@ -29,8 +29,18 @@ const PLUGIN_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_TIMEOUT_S = 60;
 const HEADROOM_S = 5;
 
+/**
+ * Fail-open entry (#922): when node is not installed the hook exits 0 with a
+ * systemMessage instead of failing every tool call. POSIX-sh syntax (Claude
+ * Code runs hook commands through Git Bash / sh).
+ */
+const NODE_MISSING_MSG = 'devops inactive: node/git missing';
+function failOpen(command) {
+  return `command -v node >/dev/null 2>&1 || { echo '{"systemMessage":"${NODE_MISSING_MSG}"}'; exit 0; }; ${command}`;
+}
+
 function dispatcherCommand(event) {
-  return `node "\${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js" ${event}`;
+  return failOpen(`node "\${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js" ${event}`);
 }
 
 /** @returns {object} the hooks.json object */
@@ -42,7 +52,7 @@ function build(manifest) {
     for (const g of groups) {
       const keep = (g.hooks || []).filter((h) => h.dispatch === false);
       const disp = (g.hooks || []).filter((h) => h.dispatch !== false);
-      if (keep.length) separate.push({ ...g, hooks: keep.map(({ dispatch: _dispatch, ...h }) => h) });
+      if (keep.length) separate.push({ ...g, hooks: keep.map(({ dispatch: _dispatch, ...h }) => (typeof h.command === 'string' && h.command.startsWith('node ') ? { ...h, command: failOpen(h.command) } : h)) });
       for (const h of disp) dispatched.push({ matcher: g.matcher, timeout: typeof h.timeout === 'number' && h.timeout > 0 ? h.timeout : DEFAULT_TIMEOUT_S });
     }
     const entries = [];
@@ -127,5 +137,5 @@ if (require.main === module) {
 }
 
 module.exports = {
-  build, serialize, expectedText, expectedLanesText, dispatcherCommand, HOOKS_JSON, LANES_JSON, MANIFEST, DEFAULT_TIMEOUT_S, HEADROOM_S,
+  build, serialize, expectedText, expectedLanesText, dispatcherCommand, failOpen, NODE_MISSING_MSG, HOOKS_JSON, LANES_JSON, MANIFEST, DEFAULT_TIMEOUT_S, HEADROOM_S,
 };

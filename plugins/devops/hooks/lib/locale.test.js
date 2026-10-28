@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterAll } from "vitest";
+import { describe, test, expect, beforeEach, afterAll, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,6 +11,9 @@ import {
   setLocale,
   ensureLocale,
   t,
+  configuredLocale,
+  osLocale,
+  normalizeLanguage,
 } from "./locale.js";
 
 const TEST_SESSION_BASE = "vitest-locale-" + process.pid + "-" + Date.now();
@@ -235,5 +238,84 @@ describe("t (translation lookup)", () => {
   test("handles null/empty dict gracefully", () => {
     expect(t("key", "de", null)).toBe("key");
     expect(t("key", "de", {})).toBe("key");
+  });
+});
+
+describe("Claude Code language setting", () => {
+  function home(settings) {
+    const h = fs.mkdtempSync(path.join(ISOLATED_TMP, "home-"));
+    fs.mkdirSync(path.join(h, ".claude"));
+    if (settings) fs.writeFileSync(path.join(h, ".claude", "settings.json"), JSON.stringify(settings));
+    return h;
+  }
+
+  test("normalizeLanguage maps free-form values", () => {
+    expect(normalizeLanguage("german")).toBe("de");
+    expect(normalizeLanguage("Deutsch")).toBe("de");
+    expect(normalizeLanguage("de-DE")).toBe("de");
+    expect(normalizeLanguage("English")).toBe("en");
+    expect(normalizeLanguage("japanese")).toBe(null);
+    expect(normalizeLanguage(5)).toBe(null);
+  });
+
+  test("configuredLocale reads user settings; project settings win", () => {
+    const h = home({ language: "german" });
+    expect(configuredLocale({ home: h })).toBe("de");
+    const cwd = fs.mkdtempSync(path.join(ISOLATED_TMP, "proj-"));
+    fs.mkdirSync(path.join(cwd, ".claude"));
+    fs.writeFileSync(path.join(cwd, ".claude", "settings.json"), JSON.stringify({ language: "english" }));
+    expect(configuredLocale({ home: h, cwd })).toBe("en");
+    expect(configuredLocale({ home: home({}) })).toBe(null);
+  });
+
+  test("setting > remembered > heuristic: English-technical prompt yields de", () => {
+    const sid = TEST_SESSION_BASE + "-cfg-1";
+    const opts = { home: home({ language: "german" }) };
+    expect(ensureLocale(sid, "devops batch", opts)).toEqual({ lang: "de", isFresh: true });
+    setLocale(sid, "en");
+    expect(ensureLocale(sid, "please explain what this does and why", opts)).toEqual({ lang: "de", isFresh: false });
+    expect(getLocale(sid)).toBe("de");
+    expect(ensureLocale(sid, "<task-notification>x", opts).lang).toBe("de");
+  });
+
+  test("no setting: remembered locale, then heuristic", () => {
+    const opts = { home: home({}) };
+    setLocale(TEST_SESSION_BASE + "-cfg-2", "de");
+    expect(ensureLocale(TEST_SESSION_BASE + "-cfg-2", "ok", opts).lang).toBe("de");
+    purgeLocaleFiles(); // the glob fallback would otherwise hand back cfg-2's file
+    expect(ensureLocale(TEST_SESSION_BASE + "-cfg-3", "devops batch", opts).lang).toBe("en");
+  });
+});
+
+describe("OS UI locale fallback", () => {
+  let prev;
+  beforeEach(() => { prev = process.env.DOTCLAUDE_OS_LOCALE; });
+  afterEach(() => {
+    if (prev === undefined) delete process.env.DOTCLAUDE_OS_LOCALE;
+    else process.env.DOTCLAUDE_OS_LOCALE = prev;
+  });
+  function home(settings) {
+    const h = fs.mkdtempSync(path.join(ISOLATED_TMP, "home-os-"));
+    fs.mkdirSync(path.join(h, ".claude"));
+    if (settings) fs.writeFileSync(path.join(h, ".claude", "settings.json"), JSON.stringify(settings));
+    return h;
+  }
+
+  test("OS de-DE with no setting -> de, even for an English prompt", () => {
+    process.env.DOTCLAUDE_OS_LOCALE = "de-DE";
+    expect(osLocale()).toBe("de");
+    const res = ensureLocale(TEST_SESSION_BASE + "-os-1", "please explain what this does", { home: home() });
+    expect(res.lang).toBe("de");
+  });
+
+  test("setting en overrides OS de", () => {
+    process.env.DOTCLAUDE_OS_LOCALE = "de-DE";
+    expect(ensureLocale(TEST_SESSION_BASE + "-os-2", "ok", { home: home({ language: "en" }) }).lang).toBe("en");
+  });
+
+  test("an unsupported OS locale falls through to the heuristic", () => {
+    process.env.DOTCLAUDE_OS_LOCALE = "ja-JP";
+    expect(osLocale()).toBe(null);
+    expect(ensureLocale(TEST_SESSION_BASE + "-os-3", "ich kann das nicht", { home: home() }).lang).toBe("de");
   });
 });

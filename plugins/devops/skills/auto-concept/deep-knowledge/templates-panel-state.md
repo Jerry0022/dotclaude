@@ -317,6 +317,11 @@ body.content-dimmed .content-dimmer:not([hidden]) {
   pointer-events: auto;
 }
 .content-dimmer[hidden] { display: none; }
+/* One dimmer for the content area, in EVERY template (decision, free, design; it lived in the design CSS only before). While the ☰ menu is open the panel
+   backdrop is the only veil on screen: the content dimmer (past iteration,
+   sent round) stays armed underneath but paints nothing, so the two never
+   stack — it is back, still armed, the moment the menu closes. */
+body.panel-open #content-dimmer { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .content-dimmer:focus-visible {
   outline: 2px solid var(--accent-color, #58a6ff);
   outline-offset: -4px;

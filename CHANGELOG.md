@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.328.0] — 2026-10-28
+
+### Added
+- `auto-setup` skill: first-run setup guide (Quiet style, plan, API credit, delegation, language), offered once per user; SessionStart prerequisite check for git, node and Git Bash (#923); README Windows prerequisites and Setup section (#925).
+- Quiet output style is created on plugin update when it is configured but the file is missing.
+- Concept pages: favourite star in the variant chip strip; variant tiles fill completely with a darkened mirror backdrop; the analysis "Fertig" step offers "Zur nächsten Runde" / "Umsetzen" (two-click unlock).
+
+### Changed
+- Language follows Claude Code's configured `language`, then the OS locale, then the remembered session language; concept pages ignore "artifacts in English" rules (#919).
+- do-batch execute marker is now "los" ("los" alone or "los <instruction>"); old `>>`, `>go`, `>start` markers migrate.
+- Concept pages: one shared dim/blur layer on every template; auto-note bubbles avoid the menu and header; same tooltip behaviour for own and auto notes, check icon instead of the white dot; Ctrl own-pin hint as a short-lived tip (#929).
+- Variant mottos and traits name the concrete UI thing first.
+
+### Fixed
+- Concept pages no longer lose typed notes on reload, iteration switch, rebuild or version change (document and design rounds) (#926).
+- Dispatcher no longer gates Read/Glob/Grep and harness tools (#924); hook entries fail open when node is missing (#922).
+- do-ship fixes or blocks in-scope review findings instead of parking them as card open points (#920).
+
 ## [0.327.0] — 2026-10-28
 
 ### Changed
