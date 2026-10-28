@@ -932,6 +932,14 @@ returns — the single-design page is untouched.
     quick.style.maxWidth = Math.max(0, Math.floor(2 * half)) + 'px';
   }
   let quickFavOn = false;
+  // The variant the reader is looking at: the open design, or the centred
+  // overview slide.
+  function quickChipFocused(id) {
+    const it = visibleIteration();
+    if (mode() === 'design') { const d = activeDesignOf(it); return !!d && d.dataset.design === id; }
+    const cur = overviewOf(it)?.querySelector('.design-ov-slide[data-pos="cur"]');
+    return !!cur && cur.dataset.designId === id;
+  }
   function quickSeg(m, named, u, fav) {
     const seg = el('button', 'design-quick-seg');
     seg.type = 'button';
@@ -953,7 +961,12 @@ returns — the single-design page is untouched.
       st.setAttribute('aria-pressed', String(on));
       st.setAttribute('aria-label', on ? L.favUnset : L.favSet);
       st.setAttribute('data-tip', on ? L.favUnset : L.favSet);
-      st.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); toggleFavorite(m.id); });
+      // Only the focused variant's star toggles. On any other chip the ★ just
+      // marks the favourite: a click opens that variant and keeps the star.
+      st.addEventListener('click', e => {
+        e.stopPropagation(); e.preventDefault();
+        if (quickChipFocused(m.id)) toggleFavorite(m.id); else showDesignAligned(m.id);
+      });
       seg.appendChild(st);
     }
     const key = m.n <= 9 ? String(m.n) : '';
@@ -1868,17 +1881,47 @@ returns — the single-design page is untouched.
   // The editor sits inside the screen, whose frame clips it — a phone mock-up
   // is narrower than pin + editor — so it is placed by measuring: open on the
   // side with room, then clamp it inside the content box.
+  // What of the host is actually on screen: the host box cut by every
+  // overflow-clipping ancestor (framed mock-up, scroller, scaled preview) and
+  // the viewport. Measuring the host alone let a pin near the screen's top
+  // open an editor that a clipping ancestor cut off. A zero-size ancestor
+  // (no layout) is skipped.
+  function visibleBounds(host) {
+    const h = host.getBoundingClientRect();
+    let b = { left: h.left, top: h.top, right: h.right, bottom: h.bottom };
+    for (let p = host.parentElement; p && p !== document.documentElement; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (!/(auto|scroll|hidden|clip)/.test(cs.overflowX + ' ' + cs.overflowY)) continue;
+      const r = p.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      b = { left: Math.max(b.left, r.left), top: Math.max(b.top, r.top),
+        right: Math.min(b.right, r.right), bottom: Math.min(b.bottom, r.bottom) };
+    }
+    if (window.innerWidth && window.innerHeight) {
+      b = { left: Math.max(b.left, 0), top: Math.max(b.top, 0),
+        right: Math.min(b.right, window.innerWidth), bottom: Math.min(b.bottom, window.innerHeight) };
+    }
+    b.width = b.right - b.left;
+    b.height = b.bottom - b.top;
+    return b;
+  }
   function placeEditor(wrap) {
     const ed = wrap.querySelector('.upin-editor');
     const host = wrap.closest('.upin-host');
     if (!ed || ed.hidden || !host) return;
-    const b = host.getBoundingClientRect();
-    if (!b.width || !b.height) return;
     const gap = 8;
+    const b = visibleBounds(host);
+    if (!(b.width > 0) || !(b.height > 0)) return;
     delete wrap.dataset.flipX;
     delete wrap.dataset.flipY;
-    ['left', 'right', 'top', 'bottom', 'width'].forEach(p => { ed.style[p] = ''; });
+    ['left', 'right', 'top', 'bottom', 'width', 'maxHeight', 'overflowY'].forEach(p => { ed.style[p] = ''; });
     if (ed.getBoundingClientRect().width > b.width - 2 * gap) ed.style.width = Math.max(160, b.width - 2 * gap) + 'px';
+    // Taller than the visible area on any side: cap it and scroll inside (a
+    // fixed portal cannot work here — the pin sits in a transformed wrapper).
+    if (ed.getBoundingClientRect().height > b.height - 2 * gap) {
+      ed.style.maxHeight = Math.max(80, b.height - 2 * gap) + 'px';
+      ed.style.overflowY = 'auto';
+    }
     let r = ed.getBoundingClientRect();
     if (r.right > b.right - gap) { wrap.dataset.flipX = 'true'; r = ed.getBoundingClientRect(); }
     if (r.left < b.left + gap || r.right > b.right - gap) {
@@ -2096,7 +2139,7 @@ returns — the single-design page is untouched.
       layer.appendChild(drafted.wrap);
     }
     box.appendChild(layer);
-    const hb = box.getBoundingClientRect();
+    const hb = visibleBounds(box);
     layer.querySelectorAll('.upin').forEach(w => placeNoteBubble(w, hb));
     if (typeof initCommentAttachments === 'function') initCommentAttachments();
     if (drafted) { placeEditor(drafted.wrap); drafted.ta.focus(); }

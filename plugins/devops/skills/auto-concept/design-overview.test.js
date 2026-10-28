@@ -754,3 +754,71 @@ describe("B4 visuals — bleed preview, variant numbers, active chip, demo and t
     expect(stars.every((s) => s.dataset.state === "off" && s.textContent === "☆")).toBe(true);
   }, BOOT_TIMEOUT);
 });
+
+describe("note editor is never clipped by an overflow ancestor", () => {
+  test("a pin at the top edge of an overflow:hidden screen opens its editor fully inside the visible area", async () => {
+    const p = await boot(page(2));
+    const { window, document } = p;
+    const rect = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top });
+    const H = 120, W = 280, PX = 40, PY = 5;
+    const screen = document.getElementById("d2-s1");
+    const clip = screen.parentElement;
+    clip.style.overflow = "hidden";
+    const orig = window.Element.prototype.getBoundingClientRect;
+    window.Element.prototype.getBoundingClientRect = function () {
+      // The host box reaches above the clipping frame; only 0..400 is visible.
+      if (this === clip) return rect(0, 0, 300, 400);
+      if (this.classList.contains("upin-host")) return rect(0, -50, 300, 600);
+      if (this.classList.contains("upin")) return rect(PX, PY, 26, 26);
+      if (this.classList.contains("upin-editor")) {
+        const wrap = this.parentElement;
+        const w = parseFloat(this.style.width) || W;
+        const h = Math.min(H, parseFloat(this.style.maxHeight) || H);
+        const left = this.style.left ? PX + parseFloat(this.style.left) : wrap.dataset.flipX ? PX - 32 - w : PX + 32;
+        const top = this.style.top ? PY + parseFloat(this.style.top) : wrap.dataset.flipY ? PY - 30 - h : PY;
+        return rect(left, top, w, h);
+      }
+      return orig.call(this);
+    };
+    window.showDesign("d2");
+    screen.querySelector("h1").dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));
+    const r = document.querySelector("#d2-s1 .upin-editor").getBoundingClientRect();
+    window.Element.prototype.getBoundingClientRect = orig;
+    expect(r.top, "top edge inside the clipping frame").toBeGreaterThanOrEqual(8);
+    expect(r.bottom).toBeLessThanOrEqual(392);
+    expect(r.left).toBeGreaterThanOrEqual(8);
+    expect(r.right).toBeLessThanOrEqual(292);
+  }, BOOT_TIMEOUT);
+});
+
+describe("quick-nav star on a variant chip", () => {
+  const chip = (document, id) => document.querySelector(`#design-quick .design-quick-seg[data-design-id="${id}"]`);
+  const star = (document, id) => chip(document, id).querySelector(".design-quick-star");
+
+  test("a non-focused chip's star opens that variant and keeps the favourite; the focused one toggles it", async () => {
+    const { window, document } = await boot(page(3));
+    starOf(window, document, "d2b").click(); // favourite = d2b (overview)
+    window.showDesign("d2");
+    expect(activeDesign(document).dataset.design).toBe("d2");
+    expect(star(document, "d2b").dataset.state).toBe("on");
+    star(document, "d2b").click();
+    expect(activeDesign(document).dataset.design, "the star opens the variant").toBe("d2b");
+    expect(window.collectDecisions("iterate").favorite, "…and keeps the favourite").toBe("d2b");
+    star(document, "d2b").click();
+    expect(window.collectDecisions("iterate").favorite, "focused chip: toggles off").toBeNull();
+    star(document, "d2b").click();
+    expect(window.collectDecisions("iterate").favorite, "focused chip: toggles on").toBe("d2b");
+  }, BOOT_TIMEOUT);
+
+  test("pressing the star never turns the page of the active design", async () => {
+    const { window, document } = await boot(page(3));
+    window.showDesign("d2");
+    const before = [...document.querySelectorAll("#d2 section[data-screen]")].find((s) => !s.hidden)?.id;
+    const s = star(document, "d2");
+    expect(s, "the active chip carries a star").not.toBeNull();
+    s.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }));
+    const after = [...document.querySelectorAll("#d2 section[data-screen]")].find((x) => !x.hidden)?.id;
+    expect(activeDesign(document).dataset.design).toBe("d2");
+    expect(after).toBe(before);
+  }, BOOT_TIMEOUT);
+});
