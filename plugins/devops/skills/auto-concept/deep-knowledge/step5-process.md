@@ -212,6 +212,37 @@ never re-run a completed step. The checkpoint records what the previous run
    ("nicht umgesetzt, weil …"), never re-labelled as a follow-up for the
    user to sign off.
 
+   **Design concepts: build to the mocks, prove parity (#935).** A design
+   concept's approved behaviour lives in its round fragments — the mock
+   markup, CSS and keyframes — and in the user's own words on them ("mega
+   Animation", "perfekt beim Scrollen"). A prose brief that summarises the
+   decisions loses exactly that; an 8-round concept shipped without half its
+   animations and with the search above the hero instead of below it. So for
+   a design implement:
+
+   - **Parity checklist first.** Before dispatch, derive one line per approved
+     decision or behaviour from **every** round's payload (`#concept-decisions`
+     of each `rounds/NN.html`, positive remarks included, later rounds
+     overriding earlier ones). Each line names the round fragment it comes
+     from; an animation line names its keyframes, duration and easing; a
+     layout line names order and placement. Write it to
+     `docs/concepts/{name}/parity.md`.
+   - **Binding spec in every brief.** Each implementing agent gets the
+     checklist lines it owns plus the fragment paths as the binding spec
+     (`{PLUGIN_ROOT}/deep-knowledge/agent-orchestration.md` § Agent Prompt
+     Template, item 12) — never a paraphrase of them.
+   - **Parity QA.** The `devops:qa` step checks every line mock vs.
+     implementation — paired screenshots at the declared viewports and
+     sampled animation frames (`agents/qa.md` § Design parity). Nothing is
+     `met` without that evidence.
+   - **Fix rounds re-checked.** Every fix brief after a failed line is checked
+     against the checklist before it goes out ("centred and consistent" must
+     not move the search above the hero), and the touched lines are re-run
+     through parity QA after it lands.
+   - **Evidence in the report** — `templates-final-report.md` § Prüftiefe
+     (design implement): one line per checklist item with status and
+     evidence; `partial` / `unmet` lines are shortfalls.
+
    Doing it inline is the exception and needs a reason: a change small enough
    that one dispatch costs more than it saves (a one-line fix, a copy change)
    — `auto-agents`' Inline tier, which a caller may apply without loading the

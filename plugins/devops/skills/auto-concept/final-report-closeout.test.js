@@ -286,6 +286,24 @@ describe("final-report close-out sheet", () => {
     expect(cssSource).toContain(".fr-try-auth");
   });
 
+  test("a design implement builds to the mocks and proves parity (#935)", () => {
+    const rule = skill.slice(skill.indexOf("**Design concepts: build to the mocks, prove parity (#935).**"));
+    expect(rule.length).toBeGreaterThan(0);
+    const head = rule.slice(0, 2600);
+    for (const part of ["Parity checklist first", "Binding spec in every brief", "Parity QA", "Fix rounds re-checked", "Evidence in the report"]) {
+      expect(head, part).toContain(part);
+    }
+    expect(head).toContain("every** round's payload");
+    expect(head).toMatch(/keyframes, duration and easing/);
+    const root = path.join(__dirname, "..", "..");
+    const orch = fs.readFileSync(path.join(root, "deep-knowledge", "agent-orchestration.md"), "utf8");
+    expect(orch).toContain("12. **Binding spec and acceptance checklist**");
+    const qa = fs.readFileSync(path.join(root, "agents", "qa.md"), "utf8");
+    expect(qa).toContain("## Design parity (concept implement)");
+    expect(qa).toContain("document.getAnimations()");
+    expect(md).toMatch(/Design implement\s+\(#935\)/);
+  });
+
   test("a discard close-out does not reload the browser onto a deleted file", () => {
     const c = skill.slice(skill.indexOf("### D · Close out"), skill.indexOf("### Legacy final-report actions"));
     expect(c).toContain("no `/reload`");
