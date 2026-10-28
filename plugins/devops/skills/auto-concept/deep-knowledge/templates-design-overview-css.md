@@ -117,6 +117,15 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
   pointer-events: none; padding: 1.5rem; box-sizing: border-box;
 }
 .design-ov-scale > * { width: 100%; }
+/* Mirror backdrop (the darkened, blurred cover copy behind the sharp design). */
+.design-ov-mirror {
+  position: absolute; top: 0; left: 0; width: 1000px; z-index: 0; padding: 1.5rem; box-sizing: border-box;
+  transform: translate(var(--dz-ov-mx, 0px), var(--dz-ov-my, 0px)) scale(var(--dz-ov-mscale, 1)); transform-origin: 0 0;
+  filter: blur(14px) brightness(0.32) saturate(0.8); pointer-events: none;
+}
+.design-ov-mirror > * { width: 100%; }
+.design-ov-scale { z-index: 1; }
+.design-ov-slide:is([data-pos="prev"], [data-pos="next"]) .design-ov-mirror { visibility: hidden; }
 /* ── Overlay: kicker, motto, three traits — authored anchor and tint ── */
 .design-ov-overlay {
   position: absolute; z-index: 2; box-sizing: border-box; max-width: 40%;
@@ -253,7 +262,13 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-quick-seg[data-icon-only="true"] { padding: 0.2rem; }
 .design-quick-seg[data-icon-only="true"] .design-quick-name { display: none; }
 .design-quick-seg[data-icon-only="true"] .dz-new-dot { position: absolute; top: 1px; right: 1px; margin: 0; }
-.design-quick-star { color: var(--warning-color, #d29922); }
+.design-quick-star { color: var(--warning-color, #d29922); cursor: pointer; line-height: 1; }
+/* The empty ☆ shows on the active / centred chip only; ★ always. */
+.design-quick-star[data-state="off"] { display: none; }
+.design-quick-seg[data-active="true"] .design-quick-star[data-state="off"],
+.design-quick-seg[data-ov-focus="true"] .design-quick-star[data-state="off"],
+.design-quick-group .design-quick-seg .design-quick-star[data-state="off"] { display: inline; opacity: 0.8; }
+.design-quick-star:hover { opacity: 1; }
 /* The active design: its pages fan out of its own segment. */
 .design-quick-group {
   display: inline-flex; align-items: center; gap: 2px; flex: none; padding-right: 3px;
