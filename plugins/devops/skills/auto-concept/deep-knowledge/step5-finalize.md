@@ -132,7 +132,10 @@ because the session feels like it is ending.
      Then hide the same paths from git **locally** (§ Ship-safe local
      exclude below) — they stay on disk for the bridge, but untracked they
      would fail the ship's clean-tree check (#931).
-   Nothing to commit → no commit.
+   Nothing to commit → no commit. Step 6a then skips the git half of its
+   table for this close-out and only moves or deletes the files on disk
+   (for `keep` + `moveTo`: delete the originals, the copies are already in
+   place).
 
 ### Ship-safe local exclude (#931)
 
@@ -158,10 +161,7 @@ only a safety net there). The clean-tree gate itself is not touched: it stays
 fail-closed for every other path. Step 6a removes the three lines again once
 the files are disposed of (`step6-closeout.md` § Disposition, cleanup
 procedure and disposition tables). Use the exact `{date}-{slug}` paths — never
-a glob, which would hide a sibling session's concept. Step 6a then skips the git half of its
-   table for this close-out and only moves or deletes the files on disk
-   (for `keep` + `moveTo`: delete the originals, the copies are already in
-   place).
+a glob, which would hide a sibling session's concept.
 
 ### Delegated ship: card data, rendered after Step 6a (#712)
 
