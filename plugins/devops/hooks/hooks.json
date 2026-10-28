@@ -4,64 +4,116 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" SessionStart", "timeout": 25 }
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" SessionStart", "timeout": 25 }
         ]
       }
     ],
     "PreToolUse": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" PreToolUse", "timeout": 65 }
-        ]
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" PreToolUse", "timeout": 65 }
+        ],
+        "matcher": "Bash|Bash|PowerShell|Bash|PowerShell|mcp__.*github.*__(issue_write|create_issue|update_issue)|Edit|Write|NotebookEdit|Edit|Write|NotebookEdit|MultiEdit|Bash|PowerShell|Workflow|mcp__.*(ship|github|issue).*|Write|Edit|mcp__plugin_devops_.*|AskUserQuestion|ExitPlanMode|Agent|Skill|Agent|^(?!(?:Read|Glob|Grep)$|mcp__ccd_)|Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude__ship_release|mcp__plugin_devops_dotclaude__ship_run|mcp__plugin_devops_dotclaude__render_completion_card|mcp__.*__merge_pull_request"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.tokens.guard.js\"" }
+        ],
+        "matcher": "Read|Glob|Grep"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.session.archive.js\"" }
+        ],
+        "matcher": "mcp__ccd_session_mgmt__archive_session"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.ask.title.js\"", "timeout": 5 }
+        ],
+        "matcher": "mcp__ccd_session__start_session"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.agent.relay.js\"", "timeout": 10 }
+        ],
+        "matcher": "Read|Glob|Grep|mcp__ccd_.*"
       }
     ],
     "SubagentStop": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" SubagentStop", "timeout": 35 }
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" SubagentStop", "timeout": 35 }
         ]
       }
     ],
     "PermissionRequest": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/permission-request/perm.approval.flag.js\"", "timeout": 30, "asyncRewake": true },
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/permission-request/perm.approval.watch.js\"", "timeout": 3600, "asyncRewake": true }
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/permission-request/perm.approval.flag.js\"", "timeout": 30, "asyncRewake": true },
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/permission-request/perm.approval.watch.js\"", "timeout": 3600, "asyncRewake": true }
         ]
       }
     ],
     "SubagentStart": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" SubagentStart", "timeout": 15 }
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" SubagentStart", "timeout": 15 }
         ]
       }
     ],
     "PostToolUse": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" PostToolUse", "timeout": 65 }
-        ]
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" PostToolUse", "timeout": 65 }
+        ],
+        "matcher": "^(?!(?:Read|Glob|Grep)$|mcp__ccd_)|Write|Edit|NotebookEdit|Write|Edit|Edit|Write|AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude__ship_release|mcp__plugin_devops_dotclaude__ship_run|mcp__plugin_devops_dotclaude__render_completion_card|mcp__.*__merge_pull_request|AskUserQuestion|ExitPlanMode|Skill|AskUserQuestion|Skill|Skill|Bash|PowerShell|Bash|PowerShell|EnterWorktree"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.completion.js\"" },
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.approval.clear.js\"", "timeout": 5 }
+        ],
+        "matcher": "Read|Glob|Grep|mcp__ccd_.*"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.ask.title.js\"", "timeout": 5 }
+        ],
+        "matcher": "mcp__ccd_session__start_session"
       }
     ],
     "PostToolUseFailure": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" PostToolUseFailure", "timeout": 65 }
-        ]
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" PostToolUseFailure", "timeout": 10 }
+        ],
+        "matcher": "Bash|PowerShell|^(?!(?:Read|Glob|Grep)$|mcp__ccd_)"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.completion.js\"" }
+        ],
+        "matcher": "mcp__ccd_session_mgmt__archive_session"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.approval.clear.js\"", "timeout": 5 }
+        ],
+        "matcher": "Read|Glob|Grep|mcp__ccd_.*"
       }
     ],
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" Stop", "timeout": 65 }
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" Stop", "timeout": 65 }
         ]
       }
     ],
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" UserPromptSubmit", "timeout": 65 }
+          { "type": "command", "command": "command -v node >/dev/null 2>&1 || { echo '{\"systemMessage\":\"devops inactive: node/git missing\"}'; exit 0; }; node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch/dispatch.js\" UserPromptSubmit", "timeout": 65 }
         ]
       }
     ]
