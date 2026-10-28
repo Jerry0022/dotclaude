@@ -174,7 +174,12 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
   const ANNO_CHROME = [
     '.panel-fab', '.feedback-fab', '.anno-toggle-fab', '.screen-indicator',
     '.design-switcher', '.viewport-toggle', '.frozen-bar', '.feedback-dock',
-    '.concept-decision-panel', '[data-anno-avoid]'
+    '.concept-decision-panel', '[data-anno-avoid]',
+    // The quick nav (#design-quick), the eye, the hotkey tips and the strips
+    // paint over the layer too — a note under them is unreadable (reported:
+    // an auto note's bubble running into the top-centre nav row).
+    '.design-quick', '.design-header', '.dpin-eye', '.hk-nudge', '.upin-hint',
+    '.dpin-hint', '.draft-offline-strip', '.persist-warning-banner'
   ].join(', ');
 
   // The viewport narrowed by every ancestor that clips its overflow.
@@ -350,7 +355,20 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     if (all.includes(anno)) layoutAnnos(all); else layoutAnno(anno);
   }
 
+  // One tooltip behaviour for BOTH note kinds: the own pin carries its note
+  // text as data-tip (templates-design-overview.md / templates-free-pins.md),
+  // so the auto pin carries its question the same way — through the app's
+  // styled tooltip, never a title attribute. Idempotent; runs on every update.
+  function syncPinTips() {
+    document.querySelectorAll('[data-anno-pin]').forEach(pin => {
+      const q = pin.closest('[data-anno]');
+      const text = q && q.querySelector('.anno-bubble-question');
+      const label = (text && text.textContent.trim()) || pin.getAttribute('aria-label') || '';
+      if (label && pin.getAttribute('data-tip') !== label) pin.setAttribute('data-tip', label);
+    });
+  }
   function updateAnnoUI() {
+    syncPinTips();
     const screen = activeScreen();
     // Reconciliation with § Views (optional): showView() never clears the
     // previously-active screen's data-screen-active, so activeScreen()
