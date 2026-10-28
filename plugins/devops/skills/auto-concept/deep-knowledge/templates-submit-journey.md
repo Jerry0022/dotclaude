@@ -212,6 +212,25 @@ function setJourneyUnlocked(on) {
   if (target) setTimeout(() => { try { target.focus({ preventScroll: true }); } catch (e) {} }, 420);
 }
 
+// ONE veil, one rule. The dimmed, blurred content (a past iteration, a sent
+// round waiting on Claude / being implemented) is re-armed every time the ☰
+// menu opens — a veil lifted by a click comes back, like on a tab switch — and
+// while the menu is open the panel backdrop is the only dimmer on screen
+// (CSS: body.panel-open .content-dimmer is transparent), so the content area
+// never stacks two.
+(function rearmVeilOnMenuOpen() {
+  if (typeof MutationObserver !== 'function' || !document.body) return;
+  let wasOpen = document.body.classList.contains('panel-open');
+  new MutationObserver(() => {
+    const open = document.body.classList.contains('panel-open');
+    if (open && !wasOpen && typeof lockFrozenView === 'function') {
+      const b = document.body;
+      if (b.classList.contains('viewing-frozen') || b.classList.contains('concept-submitted')) lockFrozenView();
+    }
+    wasOpen = open;
+  }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+})();
+
 function renderJourney() {
   const row = document.getElementById('journey');
   const phase = journeyPhase();

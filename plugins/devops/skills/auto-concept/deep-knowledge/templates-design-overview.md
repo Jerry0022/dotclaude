@@ -611,6 +611,12 @@ returns — the single-design page is untouched.
     }
     const open = () => (shown && shown !== screens[0] ? window.showDesign(m.id, shown.id) : window.showDesign(m.id));
     preview.appendChild(cloneScreen(shown, 'ov' + m.n + '-'));
+    // Mirror backdrop: a second, blurred and strongly darkened copy scaled to
+    // COVER the tile, behind the sharp one — wherever the fitted design does
+    // not reach the tile edge, no pixel stays empty (fitPreviews sets it).
+    const mirror = cloneScreen(shown, 'ovm' + m.n + '-');
+    mirror.className = 'design-ov-mirror';
+    preview.appendChild(mirror);
     ovPreviews.set(preview, { design: m.id, screen: shown, prefix: 'ov' + m.n + '-', open });
     // No "Open ↗" button: the centre preview itself is the control (click /
     // Enter / ↓) and answers a hover with a glow, never with scaling.
@@ -866,6 +872,7 @@ returns — the single-design page is untouched.
     if (fab && fab.offsetWidth) half = Math.min(half, fab.offsetLeft - vw / 2 - GAP);
     quick.style.maxWidth = Math.max(0, Math.floor(2 * half)) + 'px';
   }
+  let quickFavOn = false;
   function quickSeg(m, named, u, fav) {
     const seg = el('button', 'design-quick-seg');
     seg.type = 'button';
@@ -874,7 +881,20 @@ returns — the single-design page is untouched.
     if (!named) seg.dataset.iconOnly = 'true';
     seg.appendChild(iconEl(m.icon, { color: m.color }));
     seg.appendChild(el('span', 'design-quick-name', m.label));
-    if (fav === m.id) seg.appendChild(el('span', 'design-quick-star', '★'));
+    // The current variant always shows its favourite state — ☆ empty or ★
+    // full (CSS reveals the empty one on the active / centred chip only), so
+    // the chip says whether it is THE favourite. Clicking it toggles, like F.
+    if (quickFavOn) {
+      const on = fav === m.id;
+      const st = el('span', 'design-quick-star', on ? '★' : '☆');
+      st.dataset.state = on ? 'on' : 'off';
+      st.setAttribute('role', 'button');
+      st.setAttribute('aria-pressed', String(on));
+      st.setAttribute('aria-label', on ? L.favUnset : L.favSet);
+      st.setAttribute('data-tip', on ? L.favUnset : L.favSet);
+      st.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); toggleFavorite(m.id); });
+      seg.appendChild(st);
+    }
     const key = m.n <= 9 ? String(m.n) : '';
     if (named && !quickNarrow()) keyTip(seg, key); else setTip(seg, m.label, key);
     // The variant already on screen is one level up: back to the overview,
@@ -1021,7 +1041,7 @@ returns — the single-design page is untouched.
   let quickKey = '';
   let quickMd = '';
   function quickShape(it, md, d, fav, qs) {
-    return [it.id || '', md, d ? d.dataset.design : '', quickLevel, fav || '', quickNarrow(),
+    return [it.id || '', md, d ? d.dataset.design : '', quickLevel, fav || '', favOn(it) ? 'f' : '', quickNarrow(),
       metas.map(m => m.id).join(','), d ? [...d.querySelectorAll('section[data-screen][id]')].map(s => s.id).join(',') : '',
       qs.map(q => q.id + ':' + q.done).join(',')].join('|');
   }
@@ -1069,6 +1089,7 @@ returns — the single-design page is untouched.
     const d = md === 'design' ? activeDesignOf(it) : null;
     const fav = validFavorite(it, readState(it));
     const qs = questionsOf(it);
+    quickFavOn = favOn(it);
     const shape = quickShape(it, md, d, fav, qs);
     if (shape === quickKey && quick.firstChild) { quickMd = md; paintQuick(it); return; }
     const u = unseenOf(it);
@@ -1448,12 +1469,24 @@ returns — the single-design page is untouched.
         const cands = [side, band].filter(c => c.w > 0 && c.h > 0);
         if (cands.length) region = cands.reduce((a, c) => (fitIn(c.w, c.h, c.strict) > fitIn(a.w, a.h, a.strict) ? c : a));
       }
-      const scale = fitIn(region.w, region.h, region.strict);
+      let scale = fitIn(region.w, region.h, region.strict);
+      // A full-app screen (wide content) or an element that would fill less
+      // than a third of the tile is shown on the WHOLE tile: the info card
+      // then overlays it (semi-transparent at rest) instead of shrinking the
+      // picture into the leftover band.
+      if (tall && (content >= 700 || (content * scale) * (tall * scale) < (w * h) / 3)) {
+        region = { x: 0, y: 0, w, h };
+        scale = fitIn(w, h, false);
+      }
       const y = region.h > 0 && tall ? region.y + Math.max(0, (region.h - tall * scale) / 2) - fromY * scale : 0;
       wrap.style.removeProperty('--dz-ov-scale');
       wrap.style.removeProperty('--dz-ov-x');
       wrap.style.removeProperty('--dz-ov-y');
       p.style.setProperty('--dz-ov-scale', String(scale));
+      const ms = tall ? Math.max(w / content, h / tall) : w / content;
+      p.style.setProperty('--dz-ov-mscale', String(ms));
+      p.style.setProperty('--dz-ov-mx', ((w - content * ms) / 2 - from * ms).toFixed(1) + 'px');
+      p.style.setProperty('--dz-ov-my', (tall ? (h - tall * ms) / 2 - fromY * ms : 0).toFixed(1) + 'px');
       p.style.setProperty('--dz-ov-x', (region.x + (region.w - content * scale) / 2 - from * scale).toFixed(1) + 'px');
       p.style.setProperty('--dz-ov-y', y.toFixed(1) + 'px');
     });

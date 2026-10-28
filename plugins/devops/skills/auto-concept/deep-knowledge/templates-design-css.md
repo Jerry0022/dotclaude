@@ -662,5 +662,10 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
    design layout with it. The 💬 FAB, its dock and the FAB's reserved row
    under the panel foot moved there too (#399) — the dock is page chrome in
    every template; only the design-side row collapse rules stay below. */
+/* One dimmer for the content area. While the ☰ menu is open the panel
+   backdrop is the only veil on screen: the content dimmer (past iteration,
+   sent round) stays armed underneath but paints nothing, so the two never
+   stack — it is back, still armed, the moment the menu closes. */
+body.panel-open #content-dimmer { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 ```
 

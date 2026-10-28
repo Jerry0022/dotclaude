@@ -258,7 +258,9 @@ describe("favourite — at most one, toggled until submit, in the payload", () =
     // F on the overview toggles the CENTRE slide's design.
     key(window, document.body, { key: "f", code: "KeyF" });
     expect(window.collectDecisions("iterate").favorite).toBeNull();
-    expect(document.querySelector("#design-quick .design-quick-star")).toBeNull();
+    expect(document.querySelector("#design-quick .design-quick-star[data-state=\"on\"]")).toBeNull();
+    // The chip keeps its EMPTY star (☆), never nothing: it says "not the favourite".
+    expect(document.querySelector("#design-quick .design-quick-star[data-state=\"off\"]").textContent).toBe("☆");
     // F on a design page toggles that design; the raw store never reaches allFields.
     window.showDesign("d2");
     key(window, document.body, { key: "f", code: "KeyF" });
@@ -715,5 +717,23 @@ describe("☰ overview row, the eye on the overview, draggable pins", () => {
     // anchorToTarget() yielding to the user's spot.
     expect(md).toContain("const PIN_DRAG_THRESHOLD = 10;");
     expect(md).toContain("if (anno.dataset.annoMoved) return;");
+  }, BOOT_TIMEOUT);
+});
+
+describe("B4 visuals — mirror backdrop and the chip's own favourite star", () => {
+  test("every overview preview carries a mirror copy behind the sharp design", async () => {
+    const { document } = await boot(page(3));
+    const prev = document.querySelector(".design-ov-slide .design-ov-preview");
+    expect(prev.querySelector(".design-ov-mirror")).not.toBeNull();
+    expect(prev.querySelectorAll(".design-ov-scale").length).toBe(1);
+    // the mirror's ids are namespaced apart from the sharp clone's
+    const ids = [...prev.querySelectorAll("[id]")].map((n) => n.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  }, BOOT_TIMEOUT);
+  test("the chip shows an empty star while no favourite is set", async () => {
+    const { document } = await boot(page(3));
+    const stars = [...document.querySelectorAll("#design-quick .design-quick-seg .design-quick-star")];
+    expect(stars.length).toBe(3);
+    expect(stars.every((s) => s.dataset.state === "off" && s.textContent === "☆")).toBe(true);
   }, BOOT_TIMEOUT);
 });
