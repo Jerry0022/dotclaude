@@ -19,7 +19,9 @@ the implement step. Persisting the HTML in git by default accumulates
 silt in `docs/concepts/`. Power users opt in to `keep` or `gitignore`
 in the sheet's files block.
 
-**Cleanup procedure (always):**
+**Cleanup procedure (always):** after a `finalize`, the `finalize:done`
+checkpoint and `/status {"phase":"closed"}` from `step5-finalize.md` § D went
+out first (#932) — the page shows its done state before the bridge stops.
 
 ```bash
 curl -s -X POST http://localhost:$PORT/shutdown > /dev/null 2>&1 || true

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.328.5] — 2026-10-28
+
+### Fixed
+- Concept pages now reach a visible done state after the finalize: the bridge posts a `closed` phase last, and the page freezes the close-out sheet, lifts the overlay and shows "concept closed" (#932)
+
 ## [0.328.4] — 2026-10-28
 
 ### Fixed

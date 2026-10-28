@@ -237,7 +237,12 @@ async function pollProcessedState() {
     if (typeof noteServerRound !== 'function') return;
     try {
       const r = await fetch('/decisions', { cache: 'no-store' });
-      if (r.ok) { _decBackoff.ok(); noteServerRound(await r.json()); }
+      if (r.ok) {
+        _decBackoff.ok();
+        const d = await r.json();
+        noteServerRound(d);
+        if (typeof noteCloseoutPhase === 'function') noteCloseoutPhase(d);
+      }
       else _decBackoff.fail(Date.now());
     } catch (e) { _decBackoff.fail(Date.now()); /* bridge away — keep the last glyph */ }
     return;
@@ -253,6 +258,10 @@ async function pollProcessedState() {
     // user sees pickup/implementation states even while the panel is
     // still in the submitted state (i.e. before /reset).
     updateStatusSteps(data);
+    // A finished finalize (#932) ends the submitted state here — it clears
+    // _submittedAt, so the processed gate below never fires for it.
+    if (typeof noteCloseoutPhase === 'function') noteCloseoutPhase(data);
+    if (!_submittedAt) return;
     const processedIso = data && data._processed_at;
     if (!processedIso) return;
     const processedMs = Date.parse(processedIso);
@@ -328,8 +337,14 @@ function renderPanelStatus() {
     || document.body.classList.contains('concept-submitted');
   const frozen = document.body.classList.contains('viewing-frozen');
   const implementing = submitted && typeof _submittedAction === 'string' && _submittedAction === 'implement';
+  const closed = document.body.classList.contains('concept-closed');
   let status, glyph, text, turn = '', turnKey;
-  if (frozen) {
+  if (closed) {
+    // Finalize done (#932): the bridge shuts down next, so no heartbeat
+    // wording — a gone bridge is the expected end, not a disconnect.
+    status = 'closed'; glyph = '✓'; text = '{{panel.status_closed}}';
+    turnKey = 'frozen';
+  } else if (frozen) {
     const tab = document.querySelector('.iteration-tab[aria-selected="true"]');
     const label = tab ? (tab.dataset.tabLabel || tab.textContent.trim()) : '';
     status = 'frozen'; glyph = '🕘'; text = label + ' · {{panel.status_frozen}}';
@@ -386,7 +401,7 @@ function renderPanelStatus() {
   // Toast: while the round is in flight, and while it is the user's turn but
   // the bridge is away ("👉 Du bist dran · alles gespeichert" + verbinde…).
   if (typeof renderSubmittedToast === 'function') {
-    renderSubmittedToast(status === 'submitted' || (!frozen && conn === 'disconnected'));
+    renderSubmittedToast(status === 'submitted' || (!frozen && !closed && conn === 'disconnected'));
   }
 }
 

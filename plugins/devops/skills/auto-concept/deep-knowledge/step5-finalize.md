@@ -201,7 +201,23 @@ asks to close out a concept that is closed a minute later. Details:
    runs on a 3 s interval and the file is about to be deleted, so a `/reload`
    here is a coin flip on whether the user's closing impression is the final
    report or an HTTP 404. The bridge shutdown that follows is the honest
-   end-of-session signal. When the concept wrote code, Step 6a moves the spec
+   end-of-session signal.
+   **Every disposition: the done signal last (#932).** Right after `/reset`
+   (and before Step 6a's `/shutdown`) post the closing checkpoint and the
+   page's done phase — without a `version`, so it is written unconditionally:
+   ```bash
+   curl -s -X POST -H "Content-Type: application/json" \
+     -d '{"action":"finalize:done","step":"closed","status":"done","artifacts":{"pr":<N|null>,"version":"<vX.Y.Z|null>"}}' \
+     http://localhost:$PORT/progress
+   curl -s -X POST -H "Content-Type: application/json" -d '{"phase":"closed"}' \
+     http://localhost:$PORT/status
+   ```
+   The page's poll turns `_phase: "closed"` into its done state ("✓ Concept
+   abgeschlossen"), and the open tab keeps showing it after the bridge is
+   gone — never a spinning "läuft" step or a reconnect warning. Give the poll
+   one cycle (~3 s) before `/shutdown`.
+
+   When the concept wrote code, Step 6a moves the spec
    into the local store instead of deleting it (`step6-closeout.md` § Keep
    the spec after code landed, #936).
 
