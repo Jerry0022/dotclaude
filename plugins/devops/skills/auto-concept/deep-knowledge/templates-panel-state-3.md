@@ -73,6 +73,8 @@ section[data-final-report] .fr-try {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 section[data-final-report] .fr-try:focus-visible { outline: 2px solid var(--text-color, #c9d1d9); outline-offset: 3px; }
+/* How to sign in on the try-it origin (#933) — one line under the image pair. */
+section[data-final-report] .fr-try-auth { margin: -0.5rem 0 1rem; text-align: center; font-size: 0.85rem; color: color-mix(in srgb, var(--text-color, #c9d1d9) 72%, transparent); }
 /* Nothing visual changed: a short flow instead of the image pair. */
 section[data-final-report] .fr-flow { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0; margin: 0 0 1rem; list-style: none; counter-reset: fr-flow; }
 section[data-final-report] .fr-flow li {

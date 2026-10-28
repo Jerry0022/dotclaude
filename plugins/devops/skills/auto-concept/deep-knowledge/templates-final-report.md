@@ -157,7 +157,7 @@ has the authoring rules):
    screenshots from browser QA and the **"▶ Selbst ausprobieren"** link
    `.fr-try` centred over them (local / preview / live URL; after a ship
    "▶ Live-Version öffnen"). Nothing visual changed → a short `.fr-flow`
-   sequence instead.
+   sequence instead. **Login-gated route → § Try-it sign-in (#933).**
 3. **One sentence "Was getan wurde"** — `.fr-sentence`.
 4. **Two columns** `.fr-cols`: **"Was kam raus"** (`.fr-wins`, the top three
    functional results, each with its own glyph disc and one bold key phrase —
@@ -169,6 +169,29 @@ has the authoring rules):
    vorbelegt — the data the 🧭 group reads) and **"🛠 Für Entwickler"** (at most
    five short lines: commit, areas + ≤ 3 key files, tests in one line, CI
    link).
+
+**Try-it sign-in (#933).** A try-it link to a route behind a login is worth
+nothing when the user cannot sign in on exactly that origin — a second dev
+port is not in the OAuth redirect allowlist, `127.0.0.1` is not `localhost`,
+and no test account is named. Before writing `.fr-try` for such a route:
+
+1. **Find the sign-in for that origin**, in this order: the project's
+   auto-concept `reference.md` § Try-it sign-in (origin, login path, test
+   account), the project's Local Test User (`{PLUGIN_ROOT}/deep-knowledge/test-strategy.md`
+   § Local Test User), then the project's own auth config (OAuth redirect
+   URIs, `.env.example`, seed users).
+2. **Start the dev server on an origin that sign-in works on**: the
+   allowlisted host spelling (`localhost` vs `127.0.0.1`) and the default
+   port. Port taken by another checkout → say so instead of silently using a
+   second port.
+3. **Write one `.fr-try-auth` line under the image pair** naming how to sign
+   in there (account source, never a password in the page — name where it
+   lives). No sign-in path works on that origin → no link, only the
+   `.fr-try-auth` note saying what is missing ("OAuth nur auf
+   localhost:4200 — Port belegt").
+
+The same rule holds for a URL in the completion card's `userTest` /
+`userFinalTest` steps (`{PLUGIN_ROOT}/deep-knowledge/completion-card-design.md`).
 
 **Belastungs-Balken** (`.fr-meter`): one per NFR class, picked as the three
 most relevant of seven — Performance, Sicherheit, Stabilität,
@@ -207,9 +230,13 @@ became of each Fund (issue link / "umgesetzt").
   <div class="fr-ba">
     <figure class="fr-shot"><img src="{date}-{slug}/shots/before.png" alt=""><figcaption>{{final.before}}</figcaption></figure>
     <figure class="fr-shot"><img src="{date}-{slug}/shots/after.png" alt=""><figcaption>{{final.after}}</figcaption></figure>
-    <a class="fr-try" href="http://localhost:5173/login" target="_blank" rel="noopener noreferrer">▶ {{final.try_it}}</a>
+    <a class="fr-try" href="{try-it URL on the sign-in origin}" target="_blank" rel="noopener noreferrer">▶ {{final.try_it}}</a>
     <!-- after a ship: ▶ {{final.open_live}} -->
   </div>
+  <!-- Login-gated route only (#933) — how to sign in on exactly this origin: -->
+  <p class="fr-try-auth">🔑 Anmelden mit dem Testkonto aus <code>docs/test-accounts.md</code> (E-Mail + Passwort)</p>
+  <!-- No sign-in works on that origin → no link, only the note:
+  <p class="fr-try-auth">🔑 Nicht direkt testbar: OAuth erlaubt nur localhost:4200, der Server läuft auf :4201</p> -->
 
   <p class="fr-label">{{final.done_what}}</p>
   <p class="fr-sentence">Die API meldet jetzt per Token an statt per Session-Cookie, und abgelaufene Tokens erneuern sich von selbst.</p>

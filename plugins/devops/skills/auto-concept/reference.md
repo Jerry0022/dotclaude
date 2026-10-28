@@ -39,6 +39,20 @@ are the same type:
 - Default language: `en` (override German UI labels)
 ```
 
+### Try-it sign-in
+
+Tell the final report how to sign in when its "▶ Selbst ausprobieren" link
+points at a login-gated route (#933). Without it Claude falls back to the
+Local Test User convention and the project's auth config:
+
+```markdown
+## Try-it sign-in
+
+- Origin: `http://localhost:4200` (OAuth redirect allowlist covers only this)
+- Login path: `/login`
+- Account: test account in `docs/test-accounts.md` (email + password)
+```
+
 ### Output Location
 
 Override where HTML files are written:

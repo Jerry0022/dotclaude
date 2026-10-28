@@ -128,7 +128,9 @@ lives in the single built `{date}-{slug}.html` and its source folder
      (before / after, in the source folder) with **"▶ Selbst ausprobieren"**
      (`.fr-try`, the local / preview / live URL) centred over them; after a
      ship "▶ Live-Version öffnen". Nothing visual changed → a short
-     `.fr-flow` sequence instead.
+     `.fr-flow` sequence instead. A login-gated route gets the one-line
+     `.fr-try-auth` sign-in note, or the note alone when no sign-in works on
+     that origin (`templates-final-report.md` → Try-it sign-in, #933).
    - **One sentence "Was getan wurde"** — `.fr-sentence`. One sentence, not a
      paragraph.
    - **"Was kam raus"** (`.fr-wins`) — the top three functional results, each
