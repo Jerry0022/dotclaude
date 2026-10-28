@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.328.4] — 2026-10-28
+
+### Fixed
+- Concept design implements build to the mocks: a parity checklist from every round, the mock fragments as binding spec in every agent brief, parity QA with paired screenshots and sampled animation frames, re-checked fix rounds, and per-line evidence in the final report (#935).
+
 ## [0.328.3] — 2026-10-28
 
 ### Changed
