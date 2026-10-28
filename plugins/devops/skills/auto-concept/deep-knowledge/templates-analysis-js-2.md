@@ -516,8 +516,54 @@
     const again = btn('an-btn2', L('Nochmal ansehen', 'Look again'));
     again.addEventListener('click', () => go(inst, inst.stages.indexOf(inst.decs[0])));
     foot.appendChild(h('div', 'an-quiet')).appendChild(again);
-    foot.appendChild(goButtons(inst, '', { noNext: true }));
+    const go2 = goButtons(inst, '', { noNext: true });
+    doneSubmitButtons().forEach(b => go2.appendChild(b));
+    foot.appendChild(go2);
     el.appendChild(foot);
+  }
+  // The last step ends in the two ways out — next round and implement — in
+  // the SAME style as "Look again" (.an-btn2) and through the SAME submit
+  // path as the dock journey: a click is a click on #submit-iterate-btn /
+  // #submit-implement-btn. Implement keeps the journey's unlock: the first
+  // click only unlocks (label turns into the confirmation, the dock lock opens
+  // with it), the second submits; a pause of 5 s or Escape re-locks.
+  function doneSubmitButtons() {
+    const q = id => document.getElementById(id);
+    const next = btn('an-btn2', L('Zur nächsten Runde', 'To the next round'));
+    next.dataset.anAct = 'iterate';
+    tip(next, L('Antworten absenden, Claude denkt die nächste Runde', 'Submit and let Claude rethink the next round'), '');
+    next.addEventListener('click', () => { const t = q('submit-iterate-btn'); if (t && !t.disabled) t.click(); });
+    const impl = btn('an-btn2', L('Jetzt umsetzen', 'Implement now'));
+    impl.dataset.anAct = 'implement';
+    impl.dataset.armed = 'false';
+    const idle = L('Jetzt umsetzen', 'Implement now');
+    let timer = 0;
+    const lock = () => {
+      clearTimeout(timer);
+      if (impl.dataset.armed !== 'true') return;
+      impl.dataset.armed = 'false'; impl.textContent = idle;
+      impl.setAttribute('data-tip', L('Zweimal klicken: keine weitere Runde, direkt umsetzen', 'Click twice: no further round, implement right away'));
+      if (typeof setJourneyUnlocked === 'function') setJourneyUnlocked(false);
+    };
+    impl.setAttribute('data-tip', L('Zweimal klicken: keine weitere Runde, direkt umsetzen', 'Click twice: no further round, implement right away'));
+    impl.addEventListener('click', () => {
+      if (impl.dataset.armed !== 'true') {
+        impl.dataset.armed = 'true';
+        impl.textContent = L('Sicher? Nochmal klicken', 'Sure? Click again');
+        impl.setAttribute('data-tip', L('Zweiter Klick setzt um', 'The second click implements'));
+        if (typeof setJourneyUnlocked === 'function') setJourneyUnlocked(true);
+        // setJourneyUnlocked() parks focus on the dock button after its
+        // cross-fade; the user is working HERE, so take it back.
+        setTimeout(() => { try { impl.focus({ preventScroll: true }); } catch (e) {} }, 450);
+        timer = setTimeout(lock, 5000);
+        return;
+      }
+      clearTimeout(timer);
+      impl.dataset.armed = 'false'; impl.textContent = idle;
+      const t = q('submit-implement-btn'); if (t && !t.disabled) t.click();
+    });
+    impl.addEventListener('keydown', e => { if (e.key === 'Escape' && impl.dataset.armed === 'true') { e.stopPropagation(); lock(); } });
+    return [next, impl];
   }
 
   /* ================= 8. keys ================= */
