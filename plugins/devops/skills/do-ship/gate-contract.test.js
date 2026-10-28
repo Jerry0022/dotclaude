@@ -277,6 +277,18 @@ describe("do-ship gate contract — safety", () => {
     expect(codex).toMatch(/rc=75\*\*.*Do NOT retry/);
   });
 
+  test("#920: the fix/ask/block triage covers every reviewer incl. the Claude-API fallback", () => {
+    const codex = section("### Codex Review Gate", "## Step 2.5");
+    expect(codex).toMatch(/Finding triage — every reviewer/);
+    expect(codex).toMatch(/Claude-API fallback/);
+    expect(codex).toMatch(/fixed before the merge, with a regression test/);
+    expect(codex).toMatch(/status: "decision"/);
+    expect(codex).toMatch(/never\*\* parked as an `open` point on a `ship-successful` card/);
+    expect(codex).toMatch(/pre-existing error that breaks the ship's own build/);
+    const fb = fs.readFileSync(path.join(__dirname, "deep-knowledge", "codex-gate.md"), "utf8");
+    expect(fb).toMatch(/triage applies in full/);
+  });
+
   test("cleanup touches only the own branch, only after a confirmed merge, stops on ExitWorktree failure", () => {
     const s = section("### Substep 2", "### Substep 3");
     expect(s).toMatch(/If `ExitWorktree` \*\*fails\*\*.*\*\*STOP\*\*/);

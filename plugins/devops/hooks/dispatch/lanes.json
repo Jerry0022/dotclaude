@@ -119,9 +119,6 @@
         "pre.mcp.health"
       ],
       [
-        "pre.session.archive"
-      ],
-      [
         "pre.ask.title"
       ],
       [
@@ -213,9 +210,6 @@
       ]
     ],
     "PostToolUseFailure": [
-      [
-        "post.flow.completion"
-      ],
       [
         "post.governor.clear"
       ],

@@ -73,4 +73,20 @@ function dropNextStepOpenItems(open) {
   return { open: kept, dropped: open.length - kept.length };
 }
 
-export { dropNextStepOpenItems, isNextStep };
+/**
+ * #920: a review / QA finding that is a defect in the shipped diff's own topic
+ * is fixed (with a regression test) before the merge, or the ship asks / ends
+ * ship-blocked - it is never parked as an open point on a ship-successful card.
+ * The ship tags each finding it lists: `finding: "in-scope"` is refused here,
+ * `"out-of-scope"` (outside the diff's topic or requirement) and untagged
+ * items stay. Same silent-drop-with-note mode as the routine-step filter.
+ * @param {Array<string|{text:string,reply?:string,finding?:string}>} [open]
+ * @returns {{ open: Array, refused: number }}
+ */
+function refuseInScopeFindings(open) {
+  if (!Array.isArray(open) || !open.length) return { open, refused: 0 };
+  const kept = open.filter(it => !(it && typeof it === 'object' && it.finding === 'in-scope'));
+  return { open: kept, refused: open.length - kept.length };
+}
+
+export { dropNextStepOpenItems, isNextStep, refuseInScopeFindings };

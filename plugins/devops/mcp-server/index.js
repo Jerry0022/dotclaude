@@ -63,7 +63,7 @@ import { ensureDeps } from "./lib/ensure-deps.js";
 import { detectRepoMode } from "./ship/lib/repo-mode.js";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
 import { dropForeignOpenItems, foreignTokensFor } from "./lib/foreign-branches.js";
-import { dropNextStepOpenItems } from "./lib/open-admission.js";
+import { dropNextStepOpenItems, refuseInScopeFindings } from "./lib/open-admission.js";
 import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending, normalizeConcept, CONCEPT_LABEL } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { summarizeShip, shipDurationTest } from "./ship/lib/ship-timings.js";
@@ -2387,6 +2387,13 @@ function openDropNote(params) {
   return `[dotclaude] ${n} open point(s) dropped: a routine next step (ship, push, release, version bump, post) is not a decision. Do it (or let the ship do it) and keep open for real decisions; on an analysis card a recommended step goes into nextStep.`;
 }
 
+/** One line naming the in-scope review findings refused as open points (#920), '' when none. */
+function openRefuseNote(params) {
+  const n = params._openRefused || 0;
+  if (!n) return '';
+  return `[dotclaude] ${n} open point(s) refused: a review finding that is a defect in the shipped diff is fixed (with a regression test) before the merge, or the ship asks (status "decision") / ends ship-blocked. Only findings outside the diff's topic may be open points.`;
+}
+
 /** The session-title instruction for this card, '' when a mode owns the title
  *  or the title is already right. The current title comes off the transcript
  *  tail, so the block names the exact value (no get_session round trip). */
@@ -2583,6 +2590,17 @@ function buildCompletionCard(params) {
       console.error(`[dotclaude-mcp] dropped ${routine.dropped} open point(s) that are the scope's routine next step`);
       params.open = routine.open;
       params._openDropped = routine.dropped;
+    }
+  }
+
+  // 0e. #920: an in-scope review finding is fixed or blocks the ship - it is never
+  //     an open point on a ship-successful card (lib/open-admission.js).
+  if (typeof params.variant === 'string' && params.variant.startsWith('ship-successful') && Array.isArray(params.open) && params.open.length) {
+    const refused = refuseInScopeFindings(params.open);
+    if (refused.refused) {
+      console.error(`[dotclaude-mcp] refused ${refused.refused} in-scope review finding(s) as open points on a ship-successful card`);
+      params.open = refused.open;
+      params._openRefused = refused.refused;
     }
   }
 
@@ -3041,6 +3059,7 @@ server.registerTool(
           z.string(),
           z.object({
             text: z.string().describe("The open point as the card shows it."),
+            finding: z.enum(["in-scope", "out-of-scope"]).optional().describe("Set on a review/QA finding. 'in-scope' = a defect in this diff's own topic: refused on ship-successful (fix it or block the ship). 'out-of-scope' = outside the diff's topic or requirement: may be an open point."),
             reply: z.string().optional().describe("The user's answer if they want this point tackled, written as the user ('Ja, die Änderung bitte auch in X machen.'). For either-or name your recommendation."),
           }),
         ])).optional(),
@@ -3158,7 +3177,7 @@ server.registerTool(
     const actionsNote = ctaActionsNote(params);
     const archiveNote = sessionArchiveNote(params, actionsNote);
 
-    return { content: cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote, openDropNote(params)) };
+    return { content: cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote, [openDropNote(params), openRefuseNote(params)].filter(Boolean).join("\n")) };
   }
 );
 

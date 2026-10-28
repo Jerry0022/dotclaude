@@ -239,6 +239,7 @@ On success, **start Step 2.5 in the background now**, before the Codex gate — 
    - **other non-zero** → surface first line of stderr, continue to Step 3
 3. If codex-plugin-cc not installed → skip silently
 4. **Claude API fallback (opt-in):** when Codex gave rc 75 / 124 / 127 (or is not installed), read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/codex-gate.md` § Claude API fallback and run it once. Never retry.
+5. **Finding triage — every reviewer (#920).** The same triage covers Codex, the Claude-API fallback and harden/polish/QA findings on the shipped diff. A finding that is a defect in the diff's own topic (logic bug, wrong behaviour, missing callback — code this branch introduced) is **fixed before the merge, with a regression test** (the build reruns after the fix commit). When the fix needs a decision → ask (`status: "decision"`; a delegated ship returns it), under `$SHIP_LOCKOUT` **BLOCK** (`ship-blocked`). Such a finding is **never** parked as an `open` point on a `ship-successful` card (`render_completion_card` refuses an `open` item tagged `finding: "in-scope"`). Only a finding outside the diff's topic or requirement may become an `open` item, tagged `finding: "out-of-scope"`. A pre-existing error that breaks the ship's own build or type-check is in scope for the ship.
 
 ## Step 2.5 — Deploy-Parity Build
 

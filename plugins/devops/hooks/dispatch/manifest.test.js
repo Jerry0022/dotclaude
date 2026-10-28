@@ -42,6 +42,30 @@ describe("hooks.json is generated from the dispatcher manifest", () => {
     }
   });
 
+  test("#924: read-only and harness tools never reach dispatch.js", () => {
+    const exempt = ["Read", "Glob", "Grep", "mcp__ccd_session__start_session", "mcp__ccd_session_mgmt__archive_session", "mcp__ccd_anything__x"];
+    for (const event of ["PreToolUse", "PostToolUse", "PostToolUseFailure"]) {
+      const disp = hooksJson.hooks[event].find((g) => g.hooks.some((h) => h.command.includes("hooks/dispatch/dispatch.js")));
+      if (!disp) continue;
+      for (const name of exempt) expect(matches(name, disp.matcher), `${event} ${name}`).toBe(false);
+      for (const m of eventModules(manifest, event, PLUGIN_ROOT).filter((x) => x.dispatch)) {
+        for (const name of exempt) expect(matches(name, m.matcher), `${event}/${m.name} ${name}`).toBe(false);
+      }
+    }
+  });
+
+  test("#922: every node entry is fail-open when node is missing", () => {
+    for (const groups of Object.values(hooksJson.hooks)) {
+      for (const g of groups) {
+        for (const h of g.hooks) {
+          expect(h.command.startsWith("command -v node >/dev/null 2>&1 || {"), h.command).toBe(true);
+          expect(h.command).toContain("exit 0");
+          expect(h.command).toContain(build.NODE_MISSING_MSG);
+        }
+      }
+    }
+  });
+
   test("the dispatcher matcher is a superset of every module matcher", () => {
     const names = new Set(["Bash", "PowerShell", "Read", "Write", "Edit", "NotebookEdit", "Glob", "Grep", "Agent", "Task", "Skill",
       "AskUserQuestion", "ExitPlanMode", "EnterWorktree", "BashOutput", "WebFetch", "mcp__github__issue_write", "mcp__x__merge_pull_request",
