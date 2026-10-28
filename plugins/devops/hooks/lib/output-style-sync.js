@@ -23,6 +23,7 @@ const fs = require('fs');
 const path = require('path');
 
 const os = require('os');
+const { projectClaudeDir } = require('./project-root');
 
 const TEMPLATE_REL = path.join('templates', 'output-style-quiet.md');
 const MANIFEST_REL = path.join('templates', 'output-style-quiet.shipped.json');
@@ -51,7 +52,7 @@ function writeAtomic(target, content) {
 /** True when `outputStyle` is "Quiet" in project or user settings (active or not). */
 function quietConfigured({ home, cwd }) {
   const dirs = [];
-  if (cwd) dirs.push(path.join(cwd, '.claude'));
+  if (cwd) dirs.push(projectClaudeDir(cwd));
   dirs.push(path.join(home || os.homedir(), '.claude'));
   for (const dir of dirs) {
     for (const name of ['settings.local.json', 'settings.json']) {
