@@ -1746,7 +1746,7 @@ returns — the single-design page is untouched.
     const t = String(text || '').trim();
     const idx = st.pins.findIndex(p => p.id === pin.id);
     if (!t) { if (idx >= 0) st.pins.splice(idx, 1); }
-    else if (idx >= 0) st.pins[idx].text = t;
+    else if (idx >= 0) { st.pins[idx].text = t; st.pins[idx].x = pin.x; st.pins[idx].y = pin.y; }
     else st.pins.push({ ...pin, text: t });
     // The write re-renders, so the draft must be gone by then — but it stays
     // (and its editor with the typed note) when there is no store to take it.
@@ -1754,9 +1754,34 @@ returns — the single-design page is untouched.
     if (draft && draft.id === pin.id) draft = null;
     writeState(it, st);
   }
+  // A note is never held back for a blur (#929, same rule as § Free Pins):
+  // every keystroke that leaves text in the field upserts the pin into the
+  // store (and so localStorage + the bridge draft) WITHOUT re-rendering — the
+  // editor keeps its focus. Before, a new design note lived only in its editor
+  // until Enter / blur, so a reload or a rebuild in that window dropped it.
+  function persistTyped(pin, text) {
+    const t = String(text || '').trim();
+    if (!t) return;
+    const it = visibleIteration();
+    if (!it || !isLive(it)) return;
+    const st = readState(it);
+    const i = st.pins.findIndex(p => p.id === pin.id);
+    if (i >= 0) { if (st.pins[i].text === t) return; st.pins[i].text = t; } else st.pins.push({ ...pin, text: t });
+    ensureStore(it);
+    const ta = storeOf(it);
+    if (!ta) return;
+    ta.value = JSON.stringify(normalise(st));
+    ta.setAttribute('data-touched', 'true');
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    try { _userInteracted = true; } catch (e) { /* not initialised yet */ }
+  }
   function discardDraft() {
+    const d = draft;
     draft = null;
     const it = visibleIteration();
+    // Esc on a fresh note that already reached the store removes it again.
+    const stored = d && isLive(it) && readState(it).pins.some(p => p.id === d.id);
+    if (stored) { const st = readState(it); st.pins = st.pins.filter(p => p.id !== d.id); writeState(it, st); return; }
     renderPins(it, readState(it), isLive(it));
   }
   // The editor sits inside the screen, whose frame clips it — a phone mock-up
@@ -1905,12 +1930,13 @@ returns — the single-design page is untouched.
       // Committing another editor may have re-rendered the layer.
       if (ed.isConnected) { ed.hidden = false; placeEditor(wrap); ta.focus(); } else openPinEditor(pin.id);
     });
+    ta.addEventListener('input', () => { if (live) persistTyped(pin, ta.value); });
     ta.addEventListener('keydown', e => {
       e.stopPropagation();
       if (e.key === 'Escape') {
         e.preventDefault();
         if (isDraft) discardDraft();
-        else { ta.value = pin.text; ed.hidden = true; btn.focus(); }
+        else { ta.value = pin.text; persistTyped(pin, pin.text); ed.hidden = true; btn.focus(); }
       } else if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
         e.preventDefault();
         if (live) savePin(pin, ta.value); else ed.hidden = true;
@@ -1937,7 +1963,8 @@ returns — the single-design page is untouched.
     const screen = activeScreenOf(d);
     if (!screen) return;
     const pins = st.pins.filter(p => p.screen === screen.id && (!p.design || p.design === d.dataset.design));
-    const showDraft = live && draft && draft.screen === screen.id;
+    // A draft that already reached the store renders as the saved pin.
+    const showDraft = live && draft && draft.screen === screen.id && !pins.some(p => p.id === draft.id);
     if (!pins.length && !showDraft) return;
     const box = contentBox(screen);
     box.classList.add('upin-host');
