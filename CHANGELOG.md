@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.328.2] — 2026-10-28
+
+### Fixed
+- Concept close-out: `discard` after built or shipped code keeps the approved spec (mocks, rounds, decisions) for 30 days in the local, gitignored concept store, so the result can still be compared with it (#936).
+
 ## [0.328.1] — 2026-10-28
 
 ### Fixed
