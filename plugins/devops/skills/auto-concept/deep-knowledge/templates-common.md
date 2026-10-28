@@ -214,7 +214,7 @@ must see their own language. The locale hint is authoritative.
 | `final.dispose_change`         | change                         | ändern |
 | `final.dispose_heading`        | This concept page              | Diese Konzeptseite |
 | `final.dispose_discard`        | Delete the page (default)      | Seite löschen (Standard) |
-| `final.dispose_discard_hint`   | Removes the HTML + its decisions JSON. The implementation is untouched. | Entfernt die HTML + ihr Decisions-JSON. Die Umsetzung bleibt unberührt. |
+| `final.dispose_discard_hint`   | Removes the HTML + its decisions JSON. The implementation is untouched; after built or shipped code the spec stays local for 30 days so you can check the result. | Entfernt die HTML + ihr Decisions-JSON. Die Umsetzung bleibt unberührt; nach gebautem oder geshipptem Code bleibt die Vorlage 30 Tage lokal zum Abgleich. |
 | `final.dispose_keep`           | Keep in project                | Im Projekt behalten |
 | `final.dispose_keep_hint`      | Files stay in docs/concepts/ and become git-tracked artefacts. | Files bleiben in docs/concepts/ und sind git-getrackte Artefakte. |
 | `final.dispose_gitignore`      | Local only / .gitignore        | Nur lokal / .gitignore |
