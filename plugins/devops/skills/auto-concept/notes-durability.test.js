@@ -133,3 +133,58 @@ describe("note chrome (static contract)", () => {
     expect(md).not.toMatch(/\.upin-pin::after \{[^}]*background: #fff/);
   });
 });
+
+describe("design rounds: own notes are committed while typing (#929)", () => {
+  const designPage = () => build({ rounds: 2, entries: 4, mode: "design", mapping: false, locale: "de", designs: 2, out: "" });
+  const dStore = (d) => JSON.parse(live(d).querySelector(':scope > textarea[data-engine-store="design-overview"]').value || '{"pins":[]}');
+  const place = async () => {
+    const p = await boot(designPage());
+    p.window.showDesign("d2");
+    p.document.querySelector("#d2-s1 h1").dispatchEvent(new p.window.MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true, clientX: 10, clientY: 10 }));
+    const ta = [...p.document.querySelectorAll("#d2-s1 .upin-editor")].find((e) => !e.hidden).querySelector("textarea");
+    return { ...p, ta };
+  };
+
+  test("text typed into a new design note reaches the store before Enter / blur, without a twin pin", async () => {
+    const { window, document, ta } = await place();
+    ta.value = "noch nicht bestaetigt";
+    ta.dispatchEvent(new window.Event("input", { bubbles: true }));
+    expect(dStore(document).pins).toHaveLength(1);
+    expect(dStore(document).pins[0].text).toBe("noch nicht bestaetigt");
+    const blob = JSON.parse(window.localStorage.getItem([...Object.keys(window.localStorage)].find((k) => /^concept-state-/.test(k) && !/archive/.test(k))));
+    expect(JSON.stringify(blob)).toContain("noch nicht bestaetigt");
+    window.showDesign("d2");
+    expect(document.querySelectorAll("#d2-s1 .upin")).toHaveLength(1);
+  }, BOOT_TIMEOUT);
+
+  test("Esc on a fresh, already committed design note removes it", async () => {
+    const { window, document, ta } = await place();
+    ta.value = "verworfen";
+    ta.dispatchEvent(new window.Event("input", { bubbles: true }));
+    keyEv(window, ta, { key: "Escape", code: "Escape" });
+    expect(dStore(document).pins).toEqual([]);
+    expect(document.querySelectorAll("#d2-s1 .upin")).toHaveLength(0);
+  }, BOOT_TIMEOUT);
+
+  test("Esc on a saved design note restores the stored text", async () => {
+    const { window, document, ta } = await place();
+    ta.value = "Original";
+    keyEv(window, ta, { key: "Enter", code: "Enter" });
+    document.querySelector("#d2-s1 .upin-pin").click();
+    const ta2 = [...document.querySelectorAll("#d2-s1 .upin-editor")].find((e) => !e.hidden).querySelector("textarea");
+    ta2.value = "Halb getippt";
+    ta2.dispatchEvent(new window.Event("input", { bubbles: true }));
+    expect(dStore(document).pins[0].text).toBe("Halb getippt");
+    keyEv(window, ta2, { key: "Escape", code: "Escape" });
+    expect(dStore(document).pins[0].text).toBe("Original");
+  }, BOOT_TIMEOUT);
+});
+
+describe("one veil on every template", () => {
+  test("the panel-open dimmer reset lives in the all-template panel CSS, not the design CSS", async () => {
+    const { readFileSync } = await import("node:fs");
+    const dir = new URL("./deep-knowledge/", import.meta.url);
+    expect(readFileSync(new URL("templates-panel-state.md", dir), "utf8")).toMatch(/body\.panel-open #content-dimmer \{ background: transparent/);
+    expect(readFileSync(new URL("templates-design-css.md", dir), "utf8")).not.toMatch(/body\.panel-open #content-dimmer/);
+  });
+});
