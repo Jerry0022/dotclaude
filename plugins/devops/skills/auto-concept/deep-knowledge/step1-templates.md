@@ -118,16 +118,37 @@ with an overview table carrying a recommendation column and jump links
    designs — never something they all share), `data-design-icon` (a built-in
    icon name or an entity-escaped inline SVG — pick it thematically per
    concept, it is how the user tells the designs apart) and optionally
-   `data-design-color` (never the accent blue), `data-design-overlay`
-   (`tl|tr|bl|br|tc|bc`, default `bl` — the corner of the preview that hides
-   the least) and `data-design-overlay-tone="warm"` (for a bluish preview).
-   The iteration carries `data-design-set="alternatives"` whenever the
+   `data-design-color` (never the accent blue). The overview card is **always
+   bottom-left**: `data-design-overlay` / `data-design-overlay-tone` are ignored
+   (the gate warns when they are set — drop them). The iteration carries `data-design-set="alternatives"` whenever the
    designs are alternatives for the same thing (the usual case — one visual
    topic per round; only then the favourite ☆ exists) or `"topics"` when they
    show different topics. The engine builds the variant overview carousel,
    the header and the quick nav from them; the gate warns when one is
    missing. See `deep-knowledge/templates-design-views.md` § Variant
    overview (≥2 designs).
+
+   **Designs that look alike → `data-ov-demo`.** When the designs of a round
+   differ only by motion (transitions, hover) or by one element, their first
+   screens are identical and the overview previews look the same (the gate warns:
+   `overview-identical-first-screen`). Put `data-ov-demo="<selector>"` on those
+   designs, naming the element that differs: the overview then shows it as a
+   looping, zoomed demo instead of a static duplicate.
+
+   **Sub-variants — a round varies the main design, or one sub-element alone.**
+   When only a sub-element (one sub-page, one component) differs between the
+   candidates and everything else would be copied, that sub-variant becomes the
+   variants of THIS round: one design per take of that sub-element, refined on
+   its own. The next round zooms back out to the main variants, unless the user
+   wants to keep working on that part. An `alternatives` round whose designs share
+   all screen labels and their first screen and differ only on one or two
+   sub-pages is blocked by the gate (`design-round-subpage-only`, P34).
+
+   **Etappen (stages) — optional.** In round 1 propose Etappen (e.g. use cases →
+   structure → design → animation) only when content, UX or visual dependencies
+   make that sensible (a later stage depends on the answers of an earlier one).
+   Never mandatory: a concept without Etappen stays valid, and the user may merge
+   stages. This is an authoring rule only; how stages are shown is not specified.
 
    **Single-screen, single-design (exactly one `data-screen`):** no
    screen-nav, no per-screen feedback textarea — the dock shows ONLY the

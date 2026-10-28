@@ -883,6 +883,135 @@ function findFinalReportPlaceholders(html) {
   }));
 }
 
+// --- Design-round differentiation (validation-gate.md V8 / P34) -------------
+
+/** Multiset-Jaccard at or above this counts two screens as near-identical. */
+const SCREEN_SIM_THRESHOLD = 0.9;
+/** Normalised screens shorter than this are too thin to compare (empty stubs). */
+const SCREEN_MIN_CHARS = 40;
+/** P34: a design pair is "sub-page only" when at most this many screens differ… */
+const SUBPAGE_MAX_DIFF = 2;
+/** …or when at least this share of the screens is near-identical. */
+const SUBPAGE_MIN_SAME_SHARE = 2 / 3;
+
+/** Strip ids / design prefixes / whitespace so two mocks compare by content. */
+function normaliseScreen(html) {
+  return String(html || '')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/\s(?:id|for|aria-labelledby|aria-controls|data-screen|data-design|data-nav-label|data-anno[\w-]*)=("|')[^"']*\1/gi, '')
+    .toLowerCase()
+    .replace(/\bd\d+[a-z]?-/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function screenTokens(norm) {
+  const m = new Map();
+  for (const t of norm.split(/[^a-z0-9äöüß]+/i).filter(Boolean)) m.set(t, (m.get(t) || 0) + 1);
+  return m;
+}
+
+/** Multiset Jaccard of two normalised screens (1 = same tokens in same counts). */
+function screenSimilarity(a, b) {
+  if (a === b) return 1;
+  const ta = screenTokens(a), tb = screenTokens(b);
+  let inter = 0, union = 0;
+  for (const k of new Set([...ta.keys(), ...tb.keys()])) {
+    const x = ta.get(k) || 0, y = tb.get(k) || 0;
+    inter += Math.min(x, y);
+    union += Math.max(x, y);
+  }
+  return union === 0 ? 1 : inter / union;
+}
+
+function screensAlike(a, b) {
+  return !!a && !!b && a.norm.length >= SCREEN_MIN_CHARS && b.norm.length >= SCREEN_MIN_CHARS
+    && screenSimilarity(a.norm, b.norm) >= SCREEN_SIM_THRESHOLD;
+}
+
+/** Iterations → designs → screens (normalised), by one token walk. */
+function parseDesignRounds(html) {
+  const body = String(html || '').replace(/<!--[\s\S]*?-->/g, m => ' '.repeat(m.length));
+  const re = /<section\b(?:[^>"']|"[^"]*"|'[^']*')*?\s(data-iteration|data-design|data-view|data-screen)=("|')([^"']*)\2(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
+  const toks = [];
+  let m;
+  while ((m = re.exec(body)) !== null) toks.push({ kind: m[1].toLowerCase(), id: m[3], tag: m[0], at: m.index, end: m.index + m[0].length });
+  const groups = [];
+  let g = null, d = null;
+  toks.forEach((t, i) => {
+    const next = i + 1 < toks.length ? toks[i + 1].at : body.length;
+    if (t.kind === 'data-iteration') { g = { n: t.id, tag: t.tag, at: t.at, designs: [] }; groups.push(g); d = null; }
+    else if (t.kind === 'data-view') { d = null; }
+    else if (t.kind === 'data-design' && g) { d = { id: t.id, tag: t.tag, at: t.at, screens: [] }; g.designs.push(d); }
+    else if (t.kind === 'data-screen' && d) {
+      d.screens.push({ id: t.id, label: (attrOf(t.tag, 'data-nav-label') || '').trim().toLowerCase(), norm: normaliseScreen(body.slice(t.end, next)) });
+    }
+  });
+  return groups;
+}
+
+/**
+ * Advisory (V8): the first screens of ≥2 designs in one round are identical
+ * or near-identical and neither design carries `data-ov-demo` — the overview
+ * then shows two indistinguishable previews.
+ * @returns {Array<{kind:string, why:string, at:number}>}
+ */
+function findIdenticalFirstScreens(html) {
+  const out = [];
+  for (const g of parseDesignRounds(html)) {
+    const ds = g.designs.filter(d => d.screens.length);
+    const flagged = new Set();
+    for (let i = 0; i < ds.length; i++) {
+      for (let j = i + 1; j < ds.length; j++) {
+        if (/\sdata-ov-demo=/i.test(ds[i].tag) || /\sdata-ov-demo=/i.test(ds[j].tag)) continue;
+        if (screensAlike(ds[i].screens[0], ds[j].screens[0])) { flagged.add(ds[i]); flagged.add(ds[j]); }
+      }
+    }
+    if (flagged.size < 2) continue;
+    const list = [...flagged];
+    out.push({ kind: 'overview-identical-first-screen', at: list[0].at,
+      why: `iteration ${g.n}: the first screens of designs ${list.map(d => `"${d.id}"`).join(', ')} are identical or near-identical, so their overview previews look the same — set data-ov-demo="<selector>" on them: the overview then shows the differing element as a looping, zoomed demo (step1-templates.md § 1a · Design iteration authoring)` });
+  }
+  return out;
+}
+
+/**
+ * Blocking (P34): a `data-design-set="alternatives"` round whose designs share
+ * their screen labels and first screen, and differ on at most
+ * SUBPAGE_MAX_DIFF screens (or ≥ SUBPAGE_MIN_SAME_SHARE are alike) — the
+ * round is really one sub-page's variants.
+ * @returns {Array<{kind:string, why:string, at:number}>}
+ */
+function findSubpageOnlyRounds(html) {
+  const out = [];
+  for (const g of parseDesignRounds(html)) {
+    if ((attrOf(g.tag, 'data-design-set') || '').trim() !== 'alternatives') continue;
+    const ds = g.designs;
+    if (ds.length < 2 || ds.some(d => d.screens.length < 2 || d.screens.some(s => !s.label))) continue;
+    const key = d => d.screens.map(s => s.label).join('\u0001');
+    if (ds.some(d => key(d) !== key(ds[0]))) continue;
+    let all = true;
+    const differing = new Set();
+    for (let i = 0; i < ds.length && all; i++) {
+      for (let j = i + 1; j < ds.length && all; j++) {
+        const n = ds[i].screens.length;
+        let same = 0;
+        ds[i].screens.forEach((s, k) => {
+          if (screensAlike(s, ds[j].screens[k])) same += 1; else differing.add(s.label);
+        });
+        if (!screensAlike(ds[i].screens[0], ds[j].screens[0])) all = false;
+        else if (!(n - same <= SUBPAGE_MAX_DIFF || same / n >= SUBPAGE_MIN_SAME_SHARE)) all = false;
+      }
+    }
+    if (!all) continue;
+    const where = differing.size ? `only ${[...differing].map(l => `"${l}"`).join(', ')} differ${differing.size === 1 ? 's' : ''}` : 'nothing differs';
+    out.push({ kind: 'design-round-subpage-only', at: g.at,
+      why: `iteration ${g.n}: ${ds.length} "alternatives" designs share every screen label and their first screen; ${where} — these are variants of a sub-page, not of the main design. Make that sub-page's takes the variants of this round (one design per take) and refine it on its own; a later round zooms back out to the main variants (step1-templates.md § 1a · Design iteration authoring → Sub-variants)` });
+  }
+  return out;
+}
+
 function findDesignAuthoringWarnings(html) {
   const body = String(html || '').replace(/<!--[\s\S]*?-->/g, m => ' '.repeat(m.length));
   const warnings = [];
@@ -918,10 +1047,9 @@ function findDesignAuthoringWarnings(html) {
         warnings.push({ kind: 'overview-authoring', at: d.at,
           why: `iteration ${g.n}, design "${d.id}": ${missing.join(', ')} missing — the variant overview slide renders without it (templates-design-views.md § Variant overview)` });
       }
-      const anchor = attrOf(d.tag, 'data-design-overlay');
-      if (anchor !== null && !/^(tl|tr|bl|br|tc|bc)$/.test(anchor.trim())) {
+      if (/\sdata-design-overlay=/i.test(d.tag)) {
         warnings.push({ kind: 'overview-overlay', at: d.at,
-          why: `iteration ${g.n}, design "${d.id}": data-design-overlay="${anchor}" is not one of tl, tr, bl, br, tc, bc — the overlay falls back to bl` });
+          why: `iteration ${g.n}, design "${d.id}": data-design-overlay is ignored — the overview card is always bottom-left; remove the attribute (V7)` });
       }
       if (traits && traits.trim()) {
         const count = traits.split('|').map(t => t.trim()).filter(Boolean).length;
@@ -943,7 +1071,7 @@ function evaluate(filePath, html) {
   }
   const missing = findMissing(html);
   const forbidden = findForbidden(html);
-  const structural = findStructural(html);
+  const structural = [...findStructural(html), ...findSubpageOnlyRounds(html)];
   const mapping = findMappingIssues(html);
   const overlap = findViewOverlap(html);
   const stale = findStaleEngine(html);
@@ -963,7 +1091,7 @@ function evaluate(filePath, html) {
     finalReport,
     analysis: a.errors,
     // Advisory, never part of `ok`.
-    warnings: [...findDesignAuthoringWarnings(html), ...findFinalReportPlaceholders(html), ...a.warnings],
+    warnings: [...findDesignAuthoringWarnings(html), ...findIdenticalFirstScreens(html), ...findFinalReportPlaceholders(html), ...a.warnings],
   };
 }
 
@@ -979,6 +1107,26 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
   collisions = collisions || [];
   finalReport = finalReport || [];
   const name = path.basename(filePath || 'concept.html');
+  const subpage = structural.filter(i => i.kind === 'design-round-subpage-only');
+  const subpageHint = [
+    '',
+    'A design round\'s variants must differ in the MAIN design. When only one sub-page differs, that sub-page',
+    'becomes the variants of THIS round (one design per take of that element) and is refined on its own; a',
+    'later round zooms back out to the main variants (P34).',
+  ];
+  if (subpage.length && subpage.length === structural.length && !missing.length && !forbidden.length && !mapping.length && !overlap.length && !stale.length && !collisions.length && !finalReport.length && !analysis.length) {
+    const lines = [`BLOCKED: a design round in "${name}" varies only a sub-page.`, ''];
+    subpage.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
+    lines.push(...subpageHint);
+    lines.push('The rest of the page passed — re-write the file and open it once this gate passes.');
+    return lines.join('\n');
+  }
+  structural = structural.filter(i => i.kind !== 'design-round-subpage-only');
+  const out = buildBlockReasonInner(name, missing, forbidden, structural, mapping, overlap, stale, collisions, finalReport, analysis);
+  return subpage.length ? [out, '', 'A design round varies only a sub-page (P34):', ...subpage.map(i => `  - ${i.kind}: ${i.why}`), ...subpageHint].join('\n') : out;
+}
+
+function buildBlockReasonInner(name, missing, forbidden, structural, mapping, overlap, stale, collisions, finalReport, analysis) {
   const onlyFinal = finalReport.length > 0 && !analysis.length && !missing.length && !forbidden.length && !structural.length && !mapping.length && !overlap.length && !stale.length && !collisions.length;
   if (onlyFinal) {
     const lines = [`BLOCKED: the final report in "${name}" breaks the close-out authoring rules.`, ''];
@@ -1144,6 +1292,11 @@ module.exports = {
   findFinalReportIssues,
   finalReportRegion,
   findDesignAuthoringWarnings,
+  findIdenticalFirstScreens,
+  findSubpageOnlyRounds,
+  SCREEN_SIM_THRESHOLD,
+  SUBPAGE_MAX_DIFF,
+  SUBPAGE_MIN_SAME_SHARE,
   findFinalReportPlaceholders,
   ENGINE_CLASSES,
   evaluate,

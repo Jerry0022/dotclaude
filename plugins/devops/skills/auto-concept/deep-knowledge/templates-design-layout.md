@@ -28,7 +28,9 @@
           <!-- ≥2 designs: every design also carries the overview authoring
                attributes (§ Variant overview (≥2 designs)) — motto, exactly
                three traits, an icon, optionally a colour, an overlay
-               anchor and tone; the iteration says data-design-set. -->
+               tone and a data-ov-demo selector (the element that differs,
+               shown as a zoomed looping demo); the card is always
+               bottom-left; the iteration says data-design-set. -->
           <section data-design="dispatch" data-nav-label="Dispatch and Apparatus" data-design-active="true"
                    data-design-motto="Every unit at a glance."
                    data-design-traits="Map-first layout | Apparatus as cards | One-click dispatch"

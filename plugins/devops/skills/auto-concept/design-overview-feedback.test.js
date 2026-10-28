@@ -116,8 +116,7 @@ describe("overview feedback — tiles", () => {
       expect(s.querySelector(":scope > .design-ov-side").textContent.trim()).toBe("");
       expect(s.querySelector(".design-ov-open")).toBeNull();
       const kick = s.querySelector(".design-ov-kicker");
-      expect(kick.querySelector(".design-ov-num")).toBeNull();
-      expect(kick.textContent).not.toContain("·");
+      expect(kick.querySelector(".design-ov-num").textContent).toMatch(/^[1-9] ·$/);
       // "Verbessert" is a line under the traits (changed variants only), never a chip.
       expect(s.querySelector('.design-ov-change[data-kind="changed"]')).toBeNull();
       const line = s.querySelector(".design-ov-improved");

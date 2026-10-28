@@ -286,6 +286,22 @@ Grep for all four positives and both negatives, every time.
 patch both rules together. 48 is a warning: note it, add the rule, but do
 not block on it.
 
+## Design-round differentiation (V7 / V8 / P34)
+
+Authoring rules for design rounds with ≥2 designs, enforced by
+`hooks/lib/concept-gate.js` (`findDesignAuthoringWarnings`,
+`findIdenticalFirstScreens`, `findSubpageOnlyRounds`); authoring detail in
+`step1-templates.md` § 1a · Design iteration authoring. Screens are compared after
+stripping comments, `<script>` / `<style>`, ids, `data-screen` / `data-nav-label`,
+`d<N>-` prefixes and whitespace, by multiset token Jaccard
+(`SCREEN_SIM_THRESHOLD` 0.9); screens under `SCREEN_MIN_CHARS` (40) are too thin to compare.
+
+| # | Rule | Severity |
+|---|------|----------|
+| V7 | A design that sets `data-design-overlay` (kind `overview-overlay`). The overview card is always bottom-left; the attribute is ignored. Supersedes the old "must be a known anchor" check in `validation-gate-phase2.md` V7. | warning |
+| V8 | First screens of ≥2 designs in one round are identical or near-identical and neither carries `data-ov-demo` (kind `overview-identical-first-screen`). Fix: `data-ov-demo="<selector>"` on the designs — the overview shows the differing element as a looping, zoomed demo. | warning |
+| P34 | A `data-design-set="alternatives"` round whose designs share every screen label (≥2 screens each), whose first screens are alike, and where per design pair at most `SUBPAGE_MAX_DIFF` (2) screens differ or ≥ `SUBPAGE_MIN_SAME_SHARE` (2/3) are alike (kind `design-round-subpage-only`, reported through `structural`). Fix: the differing sub-page's takes become the round's variants (one design per take), refined on their own; a later round zooms back out to the main variants. | **error (blocks)** |
+
 ## Engine drift on iteration append
 
 **This gate runs against the WHOLE existing file on every append, not only

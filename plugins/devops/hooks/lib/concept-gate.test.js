@@ -21,6 +21,9 @@ import {
   findViewOverlap,
   findChromeCollisions,
   ENGINE_CLASSES,
+  findIdenticalFirstScreens,
+  findSubpageOnlyRounds,
+  findDesignAuthoringWarnings,
 } from "./concept-gate.js";
 
 // The engine-currency markers as one stub — a real page carries them in the
@@ -1058,5 +1061,74 @@ describe("final report (templates-final-report.md, validation-gate.md 33b / 37b)
   test("the final-report anchors exist in templates.md — the list cannot drift from the reference", () => {
     const md = readTemplates();
     for (const e of ENGINE_FINAL) expect(md, e.token).toContain(e.token);
+  });
+});
+
+describe("design-round differentiation (validation-gate.md V7 / V8 / P34)", () => {
+  const body = (extra = "") => `<h2>Home</h2><ul><li>Garden today</li><li>Water the ferns</li><li>Repot the lemon tree</li></ul>${extra}`;
+  const screen = (label, content) => `<section data-screen="${label}" data-nav-label="${label}">${content}</section>`;
+  const design = (id, screens, attrs = "") => `<section data-design="${id}" data-design-motto="M" data-design-traits="a | b | c" data-design-icon="leaf"${attrs}>${screens.join("")}</section>`;
+  const round = (designs, set = "alternatives") => `<section data-iteration="1" data-iteration-template="design" data-design-set="${set}">${designs.join("")}</section>`;
+  const detail = (text) => `<h2>Detail</h2><p>${text} with a long enough explanation to be compared</p>`;
+
+  test("V7: any data-design-overlay is warned about (the card is always bottom-left)", () => {
+    const html = round([design("d1", [screen("Home", body())], ' data-design-overlay="tr"'), design("d2", [screen("Home", body("<p>x</p>"))])]);
+    const w = findDesignAuthoringWarnings(html).filter((x) => x.kind === "overview-overlay");
+    expect(w).toHaveLength(1);
+    expect(w[0].why).toMatch(/ignored.*bottom-left/);
+    expect(findDesignAuthoringWarnings(round([design("d1", [screen("Home", body())]), design("d2", [screen("Home", body("<p>x</p>"))])])).filter((x) => x.kind === "overview-overlay")).toEqual([]);
+  });
+
+  test("V8: identical first screens of two designs warn and name data-ov-demo; ids and d1-/d2- prefixes do not hide it", () => {
+    const a = screen("Home", `<div id="d1-hub" class="d1-card">${body()}</div>`);
+    const b = screen("Home", `<div id="d2-hub" class="d2-card">${body()}</div>`);
+    const w = findIdenticalFirstScreens(round([design("d1", [a]), design("d2", [b])]));
+    expect(w.map((x) => x.kind)).toEqual(["overview-identical-first-screen"]);
+    expect(w[0].why).toMatch(/data-ov-demo="<selector>"/);
+  });
+
+  test("V8: no warning with data-ov-demo, for clearly different first screens, or for empty stubs", () => {
+    const home = screen("Home", body());
+    expect(findIdenticalFirstScreens(round([design("d1", [home], ' data-ov-demo=".d1-card"'), design("d2", [home])]))).toEqual([]);
+    const other = screen("Home", "<h1>Calendar</h1><table><tr><td>Mon</td><td>Tue</td></tr><tr><td>Wed</td><td>Thu</td></tr></table><button>Add event</button>");
+    expect(findIdenticalFirstScreens(round([design("d1", [home]), design("d2", [other])]))).toEqual([]);
+    const empty = screen("Home", "");
+    expect(findIdenticalFirstScreens(round([design("d1", [empty]), design("d2", [empty])]))).toEqual([]);
+  });
+
+  const hubs = (id) => screen("Hub", body());
+  test("P34: alternatives that differ only on one sub-page block, and evaluate() / buildBlockReason() say so", () => {
+    const html = round([
+      design("d1", [hubs(), screen("Detail", detail("Take one")), screen("Edit", body("<p>edit</p>"))]),
+      design("d2", [hubs(), screen("Detail", "<h2>Totally</h2><ul><li>other</li><li>list</li></ul><button>go go go go go go go go</button>"), screen("Edit", body("<p>edit</p>"))]),
+    ]);
+    const issues = findSubpageOnlyRounds(html);
+    expect(issues.map((x) => x.kind)).toEqual(["design-round-subpage-only"]);
+    expect(issues[0].why).toMatch(/"detail" differs/);
+    expect(issues[0].why).toMatch(/one design per take/);
+    expect(issues[0].why).toMatch(/zooms back out/);
+    const r = evaluate("docs/concepts/c.html", html);
+    expect(r.applicable).toBe(true);
+    {
+      expect(r.structural.some((x) => x.kind === "design-round-subpage-only")).toBe(true);
+      expect(r.ok).toBe(false);
+      expect(buildBlockReason("docs/concepts/c.html", r.missing, r.forbidden, r.structural, r.mapping, r.overlap, r.stale, r.collisions, r.finalReport, r.analysis)).toMatch(/sub-page/);
+    }
+  });
+
+  test("P34: passes when the main screen differs, labels differ, the set is topics, or a single screen differs genuinely", () => {
+    const other = "<h1>Calendar</h1><table><tr><td>Mon</td><td>Tue</td></tr><tr><td>Wed</td><td>Thu</td></tr></table><button>Add event</button>";
+    const sub = (t) => screen("Detail", detail(t));
+    // main screen differs
+    expect(findSubpageOnlyRounds(round([design("d1", [hubs(), sub("a")]), design("d2", [screen("Hub", other), sub("a")])]))).toEqual([]);
+    // different screen labels
+    expect(findSubpageOnlyRounds(round([design("d1", [hubs(), sub("a")]), design("d2", [hubs(), screen("Other", detail("a"))])]))).toEqual([]);
+    // topics round
+    expect(findSubpageOnlyRounds(round([design("d1", [hubs(), sub("a")]), design("d2", [hubs(), sub("a")])], "topics"))).toEqual([]);
+    // single-screen designs with genuinely different content
+    expect(findSubpageOnlyRounds(round([design("d1", [screen("Hub", body())]), design("d2", [screen("Hub", other)])]))).toEqual([]);
+    // many screens, most differ
+    const many = (t) => ["A", "B", "C", "D"].map((l) => screen(l, `<h2>${l} ${t}</h2><p>${t} ${t} unique words for ${l} ${t} screen content here</p>`));
+    expect(findSubpageOnlyRounds(round([design("d1", many("red")), design("d2", many("blue"))]))).toEqual([]);
   });
 });

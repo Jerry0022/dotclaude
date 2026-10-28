@@ -173,7 +173,7 @@ describe("variant overview — generated only for ≥2 designs", () => {
     const overlay = cards[0].querySelector(".design-ov-overlay");
     expect(overlay.querySelector(".design-ov-motto").textContent).toBe("Weniger ist Ruhe.");
     expect([...overlay.querySelectorAll(".design-ov-traits li")].map((li) => li.textContent)).toEqual(["Ein Ziel pro Tag", "Pflanze", "Keine Pushes"]);
-    expect(overlay.querySelector(".design-ov-kicker .design-ov-num"), "icon + name, no number").toBeNull();
+    expect(overlay.querySelector(".design-ov-kicker .design-ov-num").textContent, "icon · N · name").toBe("1 ·");
     expect(overlay.querySelector(".design-ov-kicker .design-ov-name").textContent).toBe("Design 2");
     expect(cards[0].style.getPropertyValue("--dz-color")).toBe("#5f8b6a");
     // No page chips, no notes row, no second navigation.
@@ -331,7 +331,7 @@ describe("carousel — turns, overlay, no scrolling", () => {
     expect(cur()).toBe("d2c");
   }, BOOT_TIMEOUT);
 
-  test("overlay anchor + tone are authored per design; bl / bluish by default", async () => {
+  test("overlay is always bottom-left (data-design-overlay ignored); tone is authored per design", async () => {
     const html = page(3)
       .replace('<section data-design="d2b"', '<section data-design="d2b" data-design-overlay="tr" data-design-overlay-tone="warm"')
       .replace('<section data-design="d2c"', '<section data-design="d2c" data-design-overlay="middle"');
@@ -340,11 +340,12 @@ describe("carousel — turns, overlay, no scrolling", () => {
     const o = (id) => document.querySelector(`.design-ov-slide[data-design-id="${id}"] .design-ov-overlay`);
     expect(o("d2").dataset.anchor).toBe("bl");
     expect(o("d2").dataset.tone).toBeUndefined();
-    expect(o("d2b").dataset.anchor).toBe("tr");
+    expect(o("d2b").dataset.anchor, "deprecated attribute ignored").toBe("bl");
     expect(o("d2b").dataset.tone).toBe("warm");
     expect(o("d2c").dataset.anchor, "an unknown anchor falls back").toBe("bl");
     const css = md.match(/```css\n([\s\S]*?)```/g).join("\n");
-    for (const a of ["tl", "tr", "bl", "br", "tc", "bc"]) expect(css).toContain(`.design-ov-overlay[data-anchor="${a}"]`);
+    expect(css).toContain('.design-ov-overlay[data-anchor="bl"]');
+    expect(css).not.toContain('.design-ov-overlay[data-anchor="tr"]');
     expect(css).toContain('.design-ov-overlay[data-tone="warm"]');
   }, BOOT_TIMEOUT);
 
@@ -720,15 +721,31 @@ describe("☰ overview row, the eye on the overview, draggable pins", () => {
   }, BOOT_TIMEOUT);
 });
 
-describe("B4 visuals — mirror backdrop and the chip's own favourite star", () => {
-  test("every overview preview carries a mirror copy behind the sharp design", async () => {
+describe("B4 visuals — bleed preview, variant numbers, active chip, demo and the chip's own favourite star", () => {
+  test("a preview is one bleed clone (no mirror); the stage carries the design background and bleed flag", async () => {
     const { document } = await boot(page(3));
     const prev = document.querySelector(".design-ov-slide .design-ov-preview");
-    expect(prev.querySelector(".design-ov-mirror")).not.toBeNull();
+    expect(prev.querySelector(".design-ov-mirror")).toBeNull();
     expect(prev.querySelectorAll(".design-ov-scale").length).toBe(1);
-    // the mirror's ids are namespaced apart from the sharp clone's
+    expect(document.querySelector("[data-design-overview]").dataset.bleed).toBe("true");
     const ids = [...prev.querySelectorAll("[id]")].map((n) => n.id);
     expect(new Set(ids).size).toBe(ids.length);
+  }, BOOT_TIMEOUT);
+  test("every variant shows its hotkey digit in the quick nav and the ☰ rows", async () => {
+    const { document } = await boot(page(3));
+    const nums = [...document.querySelectorAll("#design-quick .design-quick-seg .design-quick-n")].map((n) => n.textContent);
+    expect(nums.length).toBeGreaterThan(0);
+    expect(nums[0]).toBe("1 ·");
+    const rows = [...document.querySelectorAll("#screen-nav .screen-nav-design-heading .screen-nav-n")].map((n) => n.textContent);
+    expect(rows.slice(0, 2)).toEqual(["1 ·", "2 ·"]);
+  }, BOOT_TIMEOUT);
+  test("data-ov-demo marks the preview and its screen; absent → none", async () => {
+    const html = page(3).replace('<section data-design="d2"', '<section data-design="d2" data-ov-demo="h1"');
+    const { document } = await boot(html);
+    const first = document.querySelector('.design-ov-slide[data-design-id="d2"] .design-ov-preview');
+    const second = document.querySelector('.design-ov-slide[data-design-id="d2b"] .design-ov-preview');
+    expect(first.dataset.demo).toBe("h1");
+    expect(second.dataset.demo).toBeUndefined();
   }, BOOT_TIMEOUT);
   test("the chip shows an empty star while no favourite is set", async () => {
     const { document } = await boot(page(3));
