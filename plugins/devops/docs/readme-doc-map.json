@@ -1,6 +1,7 @@
 {
   "_comment": "Which hand-written README section describes which plugin source. ship_preflight diffs the branch against this map and names every section whose source changed while the README did not, so /do-ship Step 2.6 (Docs-Sync) reads exactly those sections. Paths are repo-root-relative globs. Generated blocks (counts, hook roster, card examples) are kept by gen-readme-sections.mjs and need no entry.",
   "sections": [
+    { "section": "Install / Setup", "sources": ["plugins/devops/skills/auto-setup/**", "plugins/devops/hooks/session-start/ss.setup.firstrun.js", "plugins/devops/hooks/lib/devops-setup.js"] },
     { "section": "Reference — Token math", "sources": ["plugins/devops/hooks/pre-tool-use/pre.tokens.guard.js", "plugins/devops/hooks/session-start/ss.tokens.scan.js"] },
     { "section": "Install / Update / Troubleshooting", "sources": [".claude-plugin/marketplace.json", "plugins/devops/hooks/session-start/ss.plugin.update.js", "plugins/devops/skills/auto-update/**"] },
     { "section": "Reference — Supported stacks", "sources": ["plugins/devops/mcp-server/ship/tools/build.js", "plugins/local-llm/**"] },
