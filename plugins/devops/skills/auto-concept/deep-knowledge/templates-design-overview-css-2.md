@@ -75,7 +75,13 @@ body.upin-armed section[data-screen][data-screen-active="true"] * { cursor: cros
   cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; transition: transform 0.15s, opacity 0.2s;
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--upin-color) 22%, transparent), 0 0 24px color-mix(in srgb, var(--upin-color) 65%, transparent), 0 6px 14px rgba(0, 0, 0, 0.4);
 }
-.upin-pin::after { content: ''; position: absolute; inset: 0; margin: auto; width: 8px; height: 8px; border-radius: 50%; background: #fff; opacity: 0.92; }
+/* No dot: an unfilled note carries no icon, a filled one (saved text) the same
+   ✓ as an answered auto note — one status language for both kinds. The auto
+   pin's dot is removed by the :not() rule below (specificity beats
+   templates-design-css.md whatever the part order). */
+.upin-pin::after { content: ''; position: absolute; inset: 0; margin: auto; display: flex; align-items: center; justify-content: center; font-size: 1rem; font-weight: 900; line-height: 1; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.45); }
+.upin:not([data-editing="true"]) > .upin-pin::after { content: '✓'; }
+.anno .anno-pin:not([data-answered="true"])::after { content: none; }
 .upin[data-dragging="true"] { z-index: 3; }
 .upin[data-dragging="true"] .upin-pin { cursor: grabbing; transform: scale(1.15); transition: none; }
 .upin-pin:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }

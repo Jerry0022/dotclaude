@@ -52,7 +52,8 @@ the same hotkeys and tips as a design round. Three jobs:
   const T = {
     keys: '{{nudge.keys}}', variants: '{{nudge.variants}}', pages: '{{nudge.pages}}',
     dock: '{{nudge.dock}}', dismiss: '{{nudge.dismiss}}',
-    space: '{{design.key_space}}', ctrl: '{{design.key_ctrl}}', click: '{{design.keys_click}}'
+    space: '{{design.key_space}}', ctrl: '{{design.key_ctrl}}', click: '{{design.keys_click}}',
+    pinDoc: '{{doc.pin_hint}}', pinDesign: '{{design.upin_hint}}'
   };
   const body = document.body;
   const DAY = 86400000;
@@ -240,6 +241,52 @@ the same hotkeys and tips as a design round. Three jobs:
   window.conceptNudge = nudge;
   window.conceptNudgeSilenced = silenced;
 
+  // Own-pin trigger tip (Ctrl held): the SAME tab as every other tip, replacing
+  // the two older Ctrl hint pills (.upin-hint / .dpin-hint, hidden in CSS). Per
+  // press it shows for 3 s even while Ctrl stays held (no 60 s throttle, no
+  // once-per-session rule), at most 3 presses per concept, and never again once
+  // the reviewer has SAVED an own note with text (an empty pin does not count).
+  const PIN_TIP_MS = 3000, PIN_TIP_MAX = 3;
+  const pinTipKey = 'hint-pin-tip:' + location.pathname.split('/').pop().replace('.html', '');
+  function ownNoteWithText() {
+    const has = list => Array.isArray(list) && list.some(p => p && typeof p.text === 'string' && p.text.trim());
+    const parse = n => { try { return JSON.parse(n.value || n.textContent || '{}') || {}; } catch (e) { return {}; } };
+    return [...document.querySelectorAll('textarea[data-engine-store]')].some(n => has(parse(n).pins))
+      || [...document.querySelectorAll('script[data-frozen-feedback]')].some(n => has(parse(n).userPins));
+  }
+  function pinTipKind() {
+    if (body.classList.contains('viewing-frozen')) return '';
+    if (typeof window.documentPinsActive === 'function' && window.documentPinsActive()) return 'doc';
+    const it = document.querySelector('section[data-iteration][data-active]');
+    if (!it || body.dataset.viewActive === 'true' || body.dataset.overviewActive === 'true') return '';
+    return it.querySelector('section[data-screen][data-screen-active="true"]') ? 'design' : '';
+  }
+  function pinTip() {
+    if (body.classList.contains('anno-hidden') || body.classList.contains('panel-open')) return false;
+    const kind = pinTipKind();
+    if (!kind || ownNoteWithText()) return false;
+    const shows = Number(read(pinTipKey)) || 0;
+    if (shows >= PIN_TIP_MAX) return false;
+    hideNudge();
+    write(pinTipKey, String(shows + 1));
+    const node = mk('div', 'hk-nudge');
+    node.id = 'hk-nudge';
+    node.setAttribute('role', 'status');
+    node.dataset.nudge = 'pin-tip';
+    const keys = mk('span', 'hk-nudge-keys');
+    keys.appendChild(mk('kbd', 'hk-nudge-key', T.ctrl));
+    const timer = mk('i', 'hk-nudge-timer');
+    timer.style.animationDuration = PIN_TIP_MS + 'ms';
+    node.append(keys, mk('span', 'hk-nudge-text', (kind === 'doc' ? T.pinDoc : T.pinDesign).replace(/^\s*\+\s*/, '')), timer);
+    document.body.appendChild(node);
+    current = { node, timer: setTimeout(hideNudge, PIN_TIP_MS) };
+    return true;
+  }
+  window.conceptPinTip = pinTip;
+  document.addEventListener('keydown', e => {
+    if ((e.key === 'Control' || e.key === 'Meta') && !e.repeat && !fieldIn(e.target)) pinTip();
+  });
+
   // Real hotkey use ends that hotkey's tips for good (capture phase, so a
   // handler that stops the event still counts; fields excluded).
   document.addEventListener('keydown', e => {
@@ -292,6 +339,9 @@ the same hotkeys and tips as a design round. Three jobs:
    "Strg + Klick" bar (#upin-hint, wireDesignOverview) nor the Alt overlay's
    pin example. The design is behind the backdrop; a click closes the panel. */
 body.panel-open .upin-hint, body.panel-open .hk-pin-example { display: none !important; }
+/* The Ctrl hint is the 3 s pin tip (.hk-nudge, wireHotkeyHints); the two older
+   pills stay in the DOM for their own state but never paint. */
+.upin-hint, .dpin-hint { display: none !important; }
 /* Alt overlay: badges sit at the control's top-right, right-aligned, slightly overlapping. */
 .hk-overlay { position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; }
 .hk-badge {
