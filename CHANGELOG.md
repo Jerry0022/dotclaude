@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.328.3] — 2026-10-28
+
+### Changed
+- Concept final report: a try-it link to a login-gated route says how to sign in on exactly that origin, or what is missing instead of a dead link; projects can set it once in `reference.md` § Try-it sign-in. Same rule for card `userTest` URLs (#933).
+
 ## [0.328.2] — 2026-10-28
 
 ### Fixed
