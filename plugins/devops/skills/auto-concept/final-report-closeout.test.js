@@ -258,6 +258,20 @@ describe("final-report close-out sheet", () => {
     expect(close.slice(0, 1200)).toContain('"docs/concepts/{date}-{slug}/"');
   });
 
+  test("a discard after code landed keeps the spec in the local store (#936)", () => {
+    // The user compares the shipped result with the approved mocks minutes
+    // later — a plain discard had already deleted them.
+    const keep = skill.slice(skill.indexOf("**Keep the spec after code landed (#936).**"));
+    expect(keep.length).toBeGreaterThan(0);
+    const head = keep.slice(0, 1600);
+    expect(head).toContain('spec=".claude/concepts/{date}-{slug}/spec"');
+    expect(head).toContain("mv --");
+    expect(head).toMatch(/30 days/);
+    expect(skill).toMatch(/\*\*After code landed:\*\* keep the store/);
+    // The orphan sweep honours the longer window.
+    expect(skill).toContain('[ -d "$d/spec" ] && days=30');
+  });
+
   test("a discard close-out does not reload the browser onto a deleted file", () => {
     const c = skill.slice(skill.indexOf("### D · Close out"), skill.indexOf("### Legacy final-report actions"));
     expect(c).toContain("no `/reload`");

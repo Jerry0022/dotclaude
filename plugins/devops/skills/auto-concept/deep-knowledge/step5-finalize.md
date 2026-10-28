@@ -201,7 +201,9 @@ asks to close out a concept that is closed a minute later. Details:
    runs on a 3 s interval and the file is about to be deleted, so a `/reload`
    here is a coin flip on whether the user's closing impression is the final
    report or an HTTP 404. The bridge shutdown that follows is the honest
-   end-of-session signal.
+   end-of-session signal. When the concept wrote code, Step 6a moves the spec
+   into the local store instead of deleting it (`step6-closeout.md` § Keep
+   the spec after code landed, #936).
 
 ## E · Tests and hand-offs
 

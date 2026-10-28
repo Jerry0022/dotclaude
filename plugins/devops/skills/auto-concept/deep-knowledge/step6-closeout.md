@@ -73,11 +73,31 @@ half), only the on-disk moves and deletes below remain.
 
 | `mode` | `moveTo` | Action |
 |---|---|---|
-| `discard` | (any) | `rm -f -- "<html>" "<decisions.json>"` and `rm -rf -- "<source-folder>/"` — `moveTo` is ignored. |
+| `discard` | (any) | `rm -f -- "<html>" "<decisions.json>"` and `rm -rf -- "<source-folder>/"` — `moveTo` is ignored. **After code landed** (part B built follow-ups, an `implement` round ran, or part C shipped): move instead of delete — § Keep the spec after code landed. |
 | `keep` | null | No file change; `git add -- "<source-folder>/"`. Files remain at their original git-tracked path. |
 | `keep` | set | `mkdir -p -- "<moveTo>"` then `git mv -- "<html>" "<moveTo>/"` (if tracked, else `mv -- "<html>" "<moveTo>/"`); same for the decisions JSON and the source folder. Files remain git-tracked at the new path. |
 | `gitignore` | null | Files stay at original path. Append `docs/concepts/{date}-{slug}.*` and `docs/concepts/{date}-{slug}/` to `.gitignore` if not already covered. Run `git rm --cached -- "<html>" "<decisions.json>"` and `git rm -r --cached -- "<source-folder>/"` to untrack them if they were already added. |
 | `gitignore` | set | `mkdir -p -- "<moveTo>"` then `mv -- "<html>" "<moveTo>/"`; same for the decisions JSON and the source folder. Append `<moveTo>/{date}-{slug}.*` and `<moveTo>/{date}-{slug}/` to `.gitignore` if not already covered. Run `git rm --cached -- "<original-html>" "<original-decisions.json>"` and `git rm -r --cached -- "<original-source-folder>/"` on the original tracked entries. |
+
+**Keep the spec after code landed (#936).** A `discard` that follows built or
+shipped code would delete the only record of what the user approved — the
+mocks, rounds and decisions — minutes before they compare it with the result.
+So when this concept wrote code (an `implement` round, part B, or a successful
+part C), `discard` moves the three artefacts into the gitignored durable store
+instead of deleting them:
+
+```bash
+spec=".claude/concepts/{date}-{slug}/spec"
+mkdir -p -- "$spec"
+mv -- "docs/concepts/{date}-{slug}.html" "docs/concepts/{date}-{slug}-decisions.json" "$spec/" 2>/dev/null
+[ -d "docs/concepts/{date}-{slug}" ] && mv -- "docs/concepts/{date}-{slug}" "$spec/source"
+```
+
+The store then stays (no `rm -rf` of it in the durable-store table below), the
+orphan sweep keeps it for 30 days instead of 7, and the completion card gets
+one 👉 hand-off line naming `.claude/concepts/{date}-{slug}/spec/` — "Vorlage
+zum Abgleich, 30 Tage lokal". It is outside git, so it never blocks a ship and
+never reaches the repo. A concept that wrote no code discards as before.
 
 **Drop the local exclude lines (#931).** If part C wrote this concept's paths
 to the local exclude file (`step5-finalize.md` § Ship-safe local exclude),
@@ -105,7 +125,7 @@ directory nobody looks at.
 
 | `mode` | Store action |
 |---|---|
-| `discard` | `rm -rf -- ".claude/concepts/{date}-{slug}"` — journal and attachments go with the concept. Subject to the UNPROCESSED guard below. |
+| `discard` | `rm -rf -- ".claude/concepts/{date}-{slug}"` — journal and attachments go with the concept. Subject to the UNPROCESSED guard below. **After code landed:** keep the store — it now holds `spec/` (§ Keep the spec after code landed). |
 | `keep` | Keep the store. If it holds attachments, copy them to `docs/concepts/{date}-{slug}-attachments/` and `git add` them, so the kept record is self-contained instead of pointing into an ignored directory. Skip when there are none. |
 | `gitignore` | Leave the store in place — it is already outside git. No extra `.gitignore` entry is needed beyond the blanket `.claude/concepts/` rule. |
 
@@ -137,9 +157,13 @@ for d in .claude/concepts/*/; do
   slug="$(basename "$d")"
   [ -e "docs/concepts/$slug.html" ] && continue          # live concept
   [ -e "$d/UNPROCESSED" ] && continue                    # unseen work — keep
-  [ -n "$(find "$d/state.json" -mtime +7 2>/dev/null)" ] && rm -rf -- "$d"
+  days=7; [ -d "$d/spec" ] && days=30                    # kept spec (#936)
+  [ -n "$(find "$d/state.json" -mtime +$days 2>/dev/null)" ] && rm -rf -- "$d"
 done
 ```
+
+A store with a `spec/` folder is a spec kept after code landed (§ Keep the
+spec after code landed): it is swept after 30 days, not 7.
 
 **Safety rules:**
 
