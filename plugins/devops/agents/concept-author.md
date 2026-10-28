@@ -65,6 +65,9 @@ bridge protocol and every message to the user.
 
 ## Rules
 
+- Variant mottos/traits (`data-design-motto`/`-traits`): name the concrete UI
+  thing in plain words first, flair only on top, no replacing metaphor
+  (step2-generate.md "Variant copy").
 - Content only: no bridge calls (`curl`), no `/reload`, no `/reset`, no
   commits, no messages to the user, no files outside the source folder.
 - Do not ask questions. Turn a gap in the brief into a stated assumption in the
