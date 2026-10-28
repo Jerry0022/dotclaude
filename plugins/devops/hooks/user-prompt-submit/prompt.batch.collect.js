@@ -483,7 +483,7 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
  * Injected when the marker fires but the queue parses to nothing.
  *
  * Exiting silently here was data loss disguised as a normal turn: the model saw
- * a bare `>> mach jetzt` with no context and truthfully answered that it had no
+ * a bare `los mach jetzt` with no context and truthfully answered that it had no
  * notes, while `.claude/batch.md` sat there with ten. Anything that can make the
  * parse fail — a manual edit, a destroyed separator, an editor's CRLF — has to
  * end in a report naming the file, not in a confident denial.

@@ -28,10 +28,13 @@ recommendation instead. `validateMarker(raw)` from `batch-state.js` normalises
 it; only `ok: false` goes back to the user, quoting the reason (`empty`, `too-long` = over 32 characters,
 `harness-reserved` = starts with `!`, `/`, `#` or `@` — name the mechanism in one
 clause and ask for a different one). A `warning: 'wordy'` marker (letters only,
-e.g. `jetzt`) is **accepted** — say once, in a single clause, that a collected
+e.g. `jetzt`; never raised for the default `los`) is **accepted** — say once, in a single clause, that a collected
 prompt starting with those words would fire the merge, then move on. Matching is
 case-insensitive and requires a word boundary, so retyping it in lower case still
-works.
+works. The default `los` fires alone, as `los,`/`los:`, or as `los <text>` at the
+start of the prompt; `los geht`/`gehts`/`geht's`, `Los Angeles` and `lose Enden`
+do not fire (`NOT_MARKER_CONTINUATION` in `batch-state.js`). Legacy stored markers
+`>>`, `>go`, `>start` migrate to `los` in `loadConfig` (persisted); custom ones stay.
 
 ## Session title prefix (Step 2.2b)
 

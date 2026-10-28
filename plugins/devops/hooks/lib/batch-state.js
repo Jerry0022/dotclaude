@@ -39,8 +39,9 @@ const { parseOpenUrlPrompt } = require('./open-url');
 const HARNESS_RESERVED_PREFIXES = ['!', '/', '#', '@'];
 
 const DEFAULTS = {
-  // `>>` and not `!`: see HARNESS_RESERVED_PREFIXES.
-  marker: '>>',
+  // A plain word, not a symbol: easier to type than `>>` (user decision). `!` is
+  // unusable regardless, see HARNESS_RESERVED_PREFIXES.
+  marker: 'los',
   inactivityMinutes: 10,
   // Failsafe bounds — either one deactivates collection on its own, so a bug in
   // marker comparison can never lock the user out of their own session.
@@ -49,14 +50,15 @@ const DEFAULTS = {
 };
 
 /**
- * The three markers the skill offers on first run, in display order. The
- * first is the recommendation. All English, no trailing colon — a colon reads
- * as a label, and the user types the marker dozens of times per session.
+ * The marker the skill offers on first run: the German word "los". The former
+ * symbol suggestions (`>>`, `>go`, `>start`) were dropped; a stored config
+ * still holding one of them migrates to `los` in `loadConfig`.
  *
  * Suggestions, not a closed set: whatever the user types via "Other" is the
  * marker, subject only to `validateMarker`.
  */
-const MARKER_SUGGESTIONS = ['>>', '>go', '>start'];
+const MARKER_SUGGESTIONS = ['los'];
+const LEGACY_MARKER_SUGGESTIONS = ['>>', '>go', '>start'];
 
 /**
  * Machine-prompt patterns. Prompts matching these are NEVER collected.
@@ -205,6 +207,13 @@ function loadConfig() {
   } catch { /* missing or corrupt — defaults below */ }
   const cfg = { ...DEFAULTS, ...raw };
   delete cfg.markerFallback;
+  if (typeof raw.marker === 'string' && LEGACY_MARKER_SUGGESTIONS.includes(raw.marker.trim())) {
+    // Old suggestion → new default, persisted once. A custom marker never gets here.
+    cfg.marker = DEFAULTS.marker;
+    try {
+      fs.writeFileSync(configPath(), JSON.stringify({ ...raw, marker: cfg.marker }, null, 2) + '\n', 'utf8');
+    } catch { /* read-only config — the in-memory migration still applies */ }
+  }
   const v = validateMarker(cfg.marker);
   if (!v.ok) {
     return {
@@ -890,7 +899,7 @@ function validateMarker(raw) {
   }
   // A letters-only phrase can also be the honest start of a collected prompt.
   // Word-boundary matching keeps that rare, but the user should hear it once.
-  const wordy = /^[\p{L}\p{N} ]+$/u.test(marker) ? 'wordy' : null;
+  const wordy = /^[\p{L}\p{N} ]+$/u.test(marker) && marker.toLowerCase() !== DEFAULTS.marker ? 'wordy' : null;
   return { ok: true, marker, warning: wordy };
 }
 
@@ -910,7 +919,14 @@ function validateMarker(raw) {
  * punctuation is part of the match, so `stripMarker` never leaves it at the
  * start of the payload. A marker that is punctuation only keeps its full text,
  * and a symbol marker (`>>`) gains no optional tail.
+ *
+ * The default marker `los` fires on `los` alone, `los,` / `los:` and `los <text>`
+ * ("los, aber ohne B3"). It does NOT fire when the next word is a common German
+ * or place-name continuation ("los geht", "los gehts", "los geht's", "Los
+ * Angeles", see NOT_MARKER_CONTINUATION), nor on "lose Enden" (word boundary).
+ * Those prompts are collected as notes.
  */
+const NOT_MARKER_CONTINUATION = /^\s+(?:geht(?:['’]?s)?|ging(?:s|['’]s)?|angeles)(?![\p{L}\p{N}_])/iu;
 const MARKER_TAIL = /[:;,.!?]+$/;
 
 function markerMatch(text, marker) {
@@ -922,7 +938,10 @@ function markerMatch(text, marker) {
   const wordEnd = /[\p{L}\p{N}_]$/u.test(stem);
   const boundary = wordEnd ? '(?![\\p{L}\\p{N}_])' : '';
   const tail = wordEnd || stem !== v.marker ? '(?:\\s*[:;,.!?]+)?' : '';
-  return new RegExp(`^\\s*${escaped}${boundary}${tail}`, 'iu').exec(text);
+  const m = new RegExp(`^\\s*${escaped}${boundary}${tail}`, 'iu').exec(text);
+  if (m && stem.toLowerCase() === 'los' && m[0].trim().toLowerCase() === 'los'
+    && NOT_MARKER_CONTINUATION.test(text.slice(m[0].length))) return null;
+  return m;
 }
 
 function startsWithMarker(text, marker) {
