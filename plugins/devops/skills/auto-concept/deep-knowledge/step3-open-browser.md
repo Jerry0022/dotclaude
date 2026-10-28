@@ -227,6 +227,16 @@ title is `⏳ ` (`⏳ ➜ 🧭 Concept ┃ ` once the card names the phase); the
 `👉 🧭` back. A generic hourglass is the bare icon, never a worded
 `⏳ Working – `.
 
+**`👉 🧭` only once the round is delivered (#930).** In a follow-up round
+the `waiting` card — and with it the `👉` title — comes after the build
+passed, the page was reloaded and `/reset` returned, never on a card rendered
+before `/reset`: until then the old round, or nothing, is on the page. The
+way back is earlier than Claude's own pickup: `post.concept.title` reads the
+concept store on every tool call, and once a submission is in `state.json`
+and not yet picked up, it hands Claude the `⏳ ➜ 🧭 Concept ┃ ` rename for
+the next tool call — also mid-way through another task. Only Claude can
+rename a session, so an idle session still waits for the pickup waker.
+
 **Both tools exist only in the Desktop app.** Deferred is not unavailable: when they sit in the deferred-tools list, load
 both once with `ToolSearch` `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`, then call them
 (`{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`). In a terminal session, an

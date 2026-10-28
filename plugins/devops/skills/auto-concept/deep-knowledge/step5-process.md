@@ -26,6 +26,9 @@ stale wake changes nothing. Deferred is not unavailable: when the tools sit in t
 deferred-tools list, load both once with `ToolSearch`
 `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`,
 then call them. Skip silently only when the tools are truly missing or fail.
+When the `post.concept.title` hook already handed over this rename (it
+fires on the first tool call after the submission landed, #930), the title
+is already `⏳ ➜ 🧭 Concept ┃ ` and this step finds nothing to change.
 
 This round then MUST end with its completion card (`concept` field + `cwd`,
 phase per the table in Step 3) — that card is what turns `⏳ ` back into
