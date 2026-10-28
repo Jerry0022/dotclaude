@@ -53,8 +53,30 @@ describe("syncQuietStyle", () => {
     expect(fs.readFileSync(target, "utf8")).toBe(NEW);
   });
 
+  test("creates the file when settings name Quiet (user or project) but it is missing", () => {
+    write(path.join(home, ".claude", "settings.json"), JSON.stringify({ outputStyle: "Quiet" }));
+    expect(syncQuietStyle({ home, pluginDir, cwd: tmp }).status).toBe("created");
+    expect(fs.readFileSync(target, "utf8")).toBe(NEW);
+    fs.rmSync(target);
+    fs.rmSync(path.join(home, ".claude", "settings.json"));
+    write(path.join(tmp, "proj", ".claude", "settings.json"), JSON.stringify({ outputStyle: "quiet" }));
+    expect(syncQuietStyle({ home, pluginDir, cwd: path.join(tmp, "proj") }).status).toBe("created");
+  });
+
+  test("a different configured style does not create it", () => {
+    write(path.join(home, ".claude", "settings.json"), JSON.stringify({ outputStyle: "Explanatory" }));
+    expect(syncQuietStyle({ home, pluginDir, cwd: tmp }).status).toBe("not-installed");
+    expect(fs.existsSync(target)).toBe(false);
+  });
+
+  test("a customized copy stays untouched even when Quiet is configured", () => {
+    write(path.join(home, ".claude", "settings.json"), JSON.stringify({ outputStyle: "Quiet" }));
+    write(target, NEW.replace("New body.", "Mine."));
+    expect(syncQuietStyle({ home, pluginDir, cwd: tmp }).status).toBe("customized");
+  });
+
   test("never creates the file when the user has not opted in", () => {
-    expect(syncQuietStyle({ home, pluginDir }).status).toBe("not-installed");
+    expect(syncQuietStyle({ home, pluginDir, cwd: tmp }).status).toBe("not-installed");
     expect(fs.existsSync(target)).toBe(false);
   });
 
