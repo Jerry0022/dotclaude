@@ -45,6 +45,9 @@
         "ss.project.setup"
       ],
       [
+        "ss.setup.firstrun"
+      ],
+      [
         "ss.git.check"
       ],
       [

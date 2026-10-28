@@ -196,6 +196,7 @@ const UNITS = {
   "auto-fix":      { layer: 2, visibility: "hidden",    invokes: ["auto-agents"] },
   "auto-guide":    { layer: 2, visibility: "hidden",    invokes: [] },
   "auto-extend":   { layer: 2, visibility: "hidden",    invokes: [] },
+  "auto-setup":    { layer: 0, visibility: "hidden",    invokes: [] },
   "auto-update":   { layer: 2, visibility: "hidden",    invokes: [] },
   "do-ship":       { layer: 3, visibility: "menu",      invokes: ["auto-harden", "auto-polish"] },
   "auto-harden":   { layer: 4, visibility: "hidden",    invokes: ["auto-agents"] },
