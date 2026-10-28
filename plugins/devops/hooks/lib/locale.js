@@ -22,6 +22,9 @@
  *   const msg  = t('desktop_test.question', lang, DICT);
  */
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { sessionFile, readSessionFile, writeSessionFile } = require('./session-id');
 
 const DEFAULT_LOCALE = 'en';
@@ -154,6 +157,42 @@ function setLocale(sessionId, lang) {
   } catch {}
 }
 
+// Claude Code's own language setting: the `language` key of settings.json
+// (free-form, e.g. "german", "Deutsch", "de"). Precedence of the locale:
+// configured language > remembered session language > per-prompt heuristic.
+const LANGUAGE_ALIASES = {
+  de: 'de', german: 'de', deutsch: 'de',
+  en: 'en', english: 'en', englisch: 'en',
+};
+
+/** Map a settings `language` value to a SUPPORTED locale, or null. */
+function normalizeLanguage(value) {
+  if (typeof value !== 'string') return null;
+  const key = value.trim().toLowerCase().split(/[-_\s]/)[0];
+  return LANGUAGE_ALIASES[key] || null;
+}
+
+/**
+ * Claude Code's configured language as a SUPPORTED locale, or null when unset
+ * or unsupported (then the remembered/heuristic locale decides). Reads
+ * project `.claude/settings.local.json`, `.claude/settings.json`, then
+ * `~/.claude/settings.json`; the first file that sets `language` wins.
+ */
+function configuredLocale({ cwd, home } = {}) {
+  const dirs = [];
+  if (cwd) dirs.push(path.join(cwd, '.claude'));
+  dirs.push(path.join(home || os.homedir(), '.claude'));
+  for (const dir of dirs) {
+    for (const name of ['settings.local.json', 'settings.json']) {
+      try {
+        const lang = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')).language;
+        if (typeof lang === 'string' && lang.trim()) return normalizeLanguage(lang);
+      } catch {}
+    }
+  }
+  return null;
+}
+
 /**
  * First call per session: detect from `prompt` and persist. Later calls
  * follow the language of the latest prompt, but only when it carries a clear
@@ -163,8 +202,16 @@ function setLocale(sessionId, lang) {
  * Returns `{ lang, isFresh }` — `isFresh` is true only on the first call
  * per session, so callers can announce the locale to Claude exactly once.
  */
-function ensureLocale(sessionId, prompt) {
+function ensureLocale(sessionId, prompt, opts) {
   const cached = readSessionFile(SESSION_PREFIX, sessionId);
+  const configured = configuredLocale(opts);
+  if (configured) {
+    // Claude Code's language wins over remembered and heuristic locale — also
+    // for generated prompts: it is the user's setting, not a prompt signal.
+    const was = cached && cached.content.trim();
+    if (was !== configured) setLocale(sessionId, configured);
+    return { lang: configured, isFresh: !cached && !isInjectedPrompt(prompt) };
+  }
   if (isInjectedPrompt(prompt)) {
     // Never detect from, cache from or announce on a generated prompt.
     const lang = cached && cached.content.trim();
@@ -212,6 +259,8 @@ module.exports = {
   SUPPORTED,
   detectFromPrompt,
   detectSignal,
+  configuredLocale,
+  normalizeLanguage,
   getLocale,
   setLocale,
   ensureLocale,

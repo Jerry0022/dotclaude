@@ -33,7 +33,7 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const path = require('path');
 const { sessionFile, writeSessionFile } = require('../lib/session-id');
-const { ensureLocale, peekLocale } = require('../lib/locale');
+const { ensureLocale, peekLocale, configuredLocale } = require('../lib/locale');
 const { isNonUserPrompt } = require('../lib/non-user-prompt');
 const { readBudget, maybeRefreshUsage, nudgeSuffix, budgetLine } = require('../lib/budget');
 const { readDelegation } = require('../lib/delegation');
@@ -281,8 +281,8 @@ process.stdin.on('end', () => {
   // language the user writes in now (short "ok"/"ja" prompts keep the cache).
   const nonUser = isNonUserPrompt(rawMessage);
   const { lang, isFresh } = nonUser
-    ? { lang: peekLocale(sessionId), isFresh: false }
-    : ensureLocale(sessionId, rawMessage);
+    ? { lang: configuredLocale({ cwd: hook.cwd }) || peekLocale(sessionId), isFresh: false }
+    : ensureLocale(sessionId, rawMessage, { cwd: hook.cwd });
 
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT
     || path.resolve(__dirname, '..', '..');

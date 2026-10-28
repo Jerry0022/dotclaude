@@ -34,9 +34,12 @@ wanted.
 
 ### Localisation (mandatory — do NOT hard-code German/English)
 
-Read the `[ui-locale: xx]` hint injected by `prompt.knowledge.dispatch`. If
-the hint is absent, infer from the user's chat language (the language they
-are writing to Claude in THIS conversation). Then:
+Read the `[ui-locale: xx]` hint injected by `prompt.knowledge.dispatch` (it
+follows Claude Code's `language` setting first). If the hint is absent, use
+Claude Code's configured language, else the user's chat language. A concept
+page is conversation with the user, not a project artifact: a project or
+global "artifacts in English" rule (code, commits, repo docs) does NOT apply
+to it. Then:
 
 1. Set `<html lang="{locale}">` on the generated page.
 2. Render every user-facing label (decision panel, buttons, feedback dock,
@@ -54,10 +57,11 @@ are writing to Claude in THIS conversation). Then:
    next session has it cached. Fallback per-key: `en` value if translation
    is impossible.
 
-User-authored content (concept title, subtitle, variant descriptions,
-pro/con lists, mockup copy, finding text, …) is always in the user's
-language — same rule, same locale hint. Do not mix languages inside one
-page.
+All user-read content (briefing, questions, options, consequences, concept
+title, subtitle, variant descriptions, pro/con lists, mockup copy, findings,
+evidence, final report) is in the `[ui-locale]` language, independent of any
+"artifacts in English" rule — same locale hint. Do not mix languages inside
+one page; quoted originals and code identifiers are the only exceptions.
 
 ### Design
 - Modern, clean design, **dark by default** (`<html data-theme="dark">`; a
