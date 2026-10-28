@@ -206,6 +206,12 @@
       },
       {
         "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.concept.title.js\"", "timeout": 5 }
+        ],
+        "matcher": "^(?!(?:Read|Glob|Grep)$|mcp__ccd_)"
+      },
+      {
+        "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.claude.budget.js\"" }
         ],
         "matcher": "Write|Edit"
