@@ -164,7 +164,12 @@ has the authoring rules):
    lively, never a plain bullet list) and **"Was es aushält"** (`.fr-meters`,
    the top three non-functional results as Belastungs-Balken).
 5. **Prüftiefe-Leiter** — `.fr-depth`: the strongest reached level named big,
-   the 7-step `.fr-ladder`, one foot line on the gaps.
+   the 7-step `.fr-ladder`, one foot line on the gaps. **Design implement
+   (#935):** the parity checklist goes into the "🛠 Für Entwickler" fold as
+   one line per checklist item with its parity status (`met` / `partial` /
+   `unmet`) and the evidence (screenshot pair, sampled frame); the
+   Zusammenfassung names every `partial` / `unmet` line as a shortfall. A
+   line counts as met only with that evidence, never on an agent's word.
 6. Folds: **"🔍 N Funde unterwegs"** (the Funde, per Fund was / wo / warum
    vorbelegt — the data the 🧭 group reads) and **"🛠 Für Entwickler"** (at most
    five short lines: commit, areas + ≤ 3 key files, tests in one line, CI

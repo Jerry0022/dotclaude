@@ -50,6 +50,27 @@ missing, disabled or at its usage limit, so the review never holds you up.
 - **Automatically run** Codex review via Bash: `bash "{PLUGIN_ROOT}/scripts/codex-safe.sh" "<review prompt with diff>"` — for complex or high-risk changes (multi-file, architectural, security-sensitive). Skip for trivial single-file fixes. Handle exit codes per codex-integration.md: rc=124 → log timeout and continue without findings; rc=75 → usage limit (stored until reset) — continue without findings, no retry; rc=126/127 → skip silently; other non-zero → note and continue. **Never** invoke `/codex:rescue` via the Agent tool.
 - Report findings in structured format
 
+## Design parity (concept implement)
+
+When the brief carries a **parity checklist** and mock fragment paths (an
+auto-concept design implement, #935), judge against the mocks, not against the
+prose brief. For every checklist line:
+
+- **Layout / static** — paired screenshots, mock fragment vs. implementation,
+  at each viewport the concept declared (else phone / tablet / desktop).
+  Order, placement and wrapping must match; a section above instead of below
+  is a fail.
+- **Animation** — sample frames on both sides: `document.getAnimations()`,
+  pause each, set `currentTime` to 0 %, 50 % and 100 % of its duration and
+  screenshot; compare keyframe names, duration and easing. An animation the
+  mock has and the build lacks is a fail, not a nit.
+- **Interaction states** — focus, hover, scroll behaviour the user approved
+  ("perfekt beim Scrollen"): reproduce and screenshot.
+
+Report one row per line: `met` / `partial` / `unmet` + the evidence (screenshot
+paths, sampled values). A line without evidence is `unmet`. Never pass a
+parity line because an implementing agent said it is done.
+
 ## Full-suite runs: record the green result
 
 Run the full suite through the recorder so a later ship does not run it again

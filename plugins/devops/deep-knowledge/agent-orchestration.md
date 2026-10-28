@@ -243,6 +243,14 @@ Every spawned agent MUST receive:
    description is a summary, not a substitute: an agent working a UI note from
    the description alone builds what the merge turn understood, not what the
    user showed. In two of four analysed batch runs 11 screenshots reached no agent.
+12. **Binding spec and acceptance checklist** — when the work implements an
+   approved design (an auto-concept design implement, `step5-process.md`
+   § 5b), the prompt carries the parity checklist lines the agent owns and
+   the mock fragment paths (`docs/concepts/{name}/rounds/NN.html`) as the
+   **binding spec**, with the instruction *"Read every listed round fragment;
+   its markup, CSS and keyframes are the spec, not a reference. Report each
+   checklist line you own as built with evidence, or as not built with the
+   reason."* A prose summary of the decisions never replaces them (#935).
 
 ### Interaction Directives
 
