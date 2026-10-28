@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.327.0] — 2026-10-28
+
+### Changed
+- Completion card: content buttons with only a generic "ask me what" prompt (Ändern/Change, Frage/Question) are no longer drawn; Ändern appears only with open points and carries the prepared answer (#927)
+
 ## [0.326.0] — 2026-10-26
 
 Faster ships without giving up determinism: one orchestrated `ship_run`, the full suite once per tree (on CI when available), cleanup after the card, and a hard merge gate.
