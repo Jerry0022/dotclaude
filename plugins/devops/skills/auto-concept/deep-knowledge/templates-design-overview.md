@@ -961,7 +961,10 @@ returns — the single-design page is untouched.
     // A click on the ACTIVE variant's chip turns to the design's next page
     // (last → first); the ▾ caret lists them. A single-page design: back to
     // the overview, that variant centred. Other chips switch the design.
-    press(seg, () => {
+    // `press` fires on pointerdown, before the star's own click handler can
+    // stop it: a press that starts on the ☆/★ only toggles the favourite.
+    press(seg, e => {
+      if (e && e.target && e.target.closest && e.target.closest('.design-quick-star')) return;
       if (typeof closePanel === 'function') closePanel();
       const it = visibleIteration();
       const cur = mode() === 'design' ? activeDesignOf(it) : null;
@@ -1920,6 +1923,43 @@ returns — the single-design page is untouched.
   // body[data-note-editing] (hide the others while one note is open) lives in
   // the annotation layer (templates-design-wiring.md) so single-design pages
   // get it too; own-pin editors open here and are picked up by its observer.
+  // A saved note's collapsed bubble reuses the annotation bubble markup/CSS
+  // (.anno-bubble > .anno-bubble-summary > .anno-bubble-question); clicking it
+  // opens the editor exactly like the pin does.
+  function noteBubble(text, label, open) {
+    const bub = el('div', 'anno-bubble upin-bubble');
+    bub.dataset.open = 'false';
+    const sum = el('button', 'anno-bubble-summary');
+    sum.type = 'button';
+    sum.setAttribute('aria-label', label);
+    sum.appendChild(el('span', 'anno-bubble-question', text));
+    sum.addEventListener('click', open);
+    bub.appendChild(sum);
+    return bub;
+  }
+  // Same side logic as the annotation bubbles: right first, then left, bottom,
+  // top — the side with the least area outside the frame wins, a remainder is
+  // shifted in. Pure measuring, no state besides data-anno-side.
+  function placeNoteBubble(wrap, b) {
+    const bub = wrap.querySelector('.upin-bubble');
+    if (!bub || !b) return;
+    const gap = 8;
+    bub.style.translate = '';
+    const out = r => Math.max(0, b.left + gap - r.left) + Math.max(0, r.right - (b.right - gap))
+      + Math.max(0, b.top + gap - r.top) + Math.max(0, r.bottom - (b.bottom - gap));
+    let best = null;
+    for (const side of ['right', 'left', 'bottom', 'top']) {
+      wrap.dataset.annoSide = side;
+      const o = out(bub.getBoundingClientRect());
+      if (!best || o < best.o - 0.5) best = { side, o };
+      if (!o) break;
+    }
+    wrap.dataset.annoSide = best.side;
+    const r = bub.getBoundingClientRect();
+    const dx = r.left < b.left + gap ? b.left + gap - r.left : (r.right > b.right - gap ? b.right - gap - r.right : 0);
+    const dy = r.top < b.top + gap ? b.top + gap - r.top : (r.bottom > b.bottom - gap ? b.bottom - gap - r.bottom : 0);
+    if (dx || dy) bub.style.translate = dx + 'px ' + dy + 'px';
+  }
   function pinNode(pin, k, live, isDraft) {
     const wrap = el('div', 'upin');
     wrap.dataset.upinId = pin.id;
@@ -1956,7 +1996,9 @@ returns — the single-design page is untouched.
       foot.appendChild(del);
     }
     ed.appendChild(foot);
+    wrap.dataset.annoSide = 'right';
     wrap.append(btn, ed);
+    if (!isDraft && pin.text) wrap.appendChild(noteBubble(pin.text, label, () => btn.click()));
     // The WHOLE pin is the drag handle (a press only becomes a drag after a
     // few px, so a click still opens the note). The spot is stored as percent
     // of the content box, like at placement.
@@ -2054,6 +2096,8 @@ returns — the single-design page is untouched.
       layer.appendChild(drafted.wrap);
     }
     box.appendChild(layer);
+    const hb = box.getBoundingClientRect();
+    layer.querySelectorAll('.upin').forEach(w => placeNoteBubble(w, hb));
     if (typeof initCommentAttachments === 'function') initCommentAttachments();
     if (drafted) { placeEditor(drafted.wrap); drafted.ta.focus(); }
   }

@@ -66,6 +66,10 @@ body.upin-armed section[data-screen][data-screen-active="true"] * { cursor: cros
 .upin-layer { position: absolute; inset: 0; pointer-events: none; z-index: 30; }
 .upin {
   --upin-color: #d2a8ff;
+  /* A saved note shows its text in the SAME bubble an auto annotation uses
+     (.anno-bubble, templates-design-css.md): the accent variable is swapped
+     for the own-note colour, nothing else is copied. */
+  --anno-accent: var(--upin-color);
   position: absolute; left: var(--upin-x); top: var(--upin-y);
   transform: translate(-4px, -100%); pointer-events: auto;
 }
@@ -85,13 +89,21 @@ body.upin-armed section[data-screen][data-screen-active="true"] * { cursor: cros
 .upin[data-dragging="true"] { z-index: 3; }
 .upin[data-dragging="true"] .upin-pin { cursor: grabbing; transform: scale(1.15); transition: none; }
 .upin-pin:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+/* Open = the open annotation bubble: same width, corners, border, stripe and
+   glow, same grow-in — only the accent is the note colour. */
 .upin-editor {
-  position: absolute; left: 32px; top: 0; width: min(280px, 70vw);
-  padding: 0.6rem 0.7rem; border-radius: 12px; box-sizing: border-box;
-  background: var(--panel-bg, #161b22); color: var(--text-color, #e6edf3);
-  border: 0; box-shadow: 0 0 26px color-mix(in srgb, var(--upin-color) 35%, transparent), 0 14px 30px rgba(0, 0, 0, 0.5);
-  cursor: auto;
+  position: absolute; left: 32px; top: 0; width: min(360px, 80vw);
+  padding: 0.6rem 0.7rem 0.6rem calc(0.7rem + 3px); border-radius: var(--anno-bubble-radius, 10px); box-sizing: border-box;
+  background: var(--anno-bubble-bg, var(--panel-bg, #161b22)); color: var(--text-color, #e6edf3);
+  border: 1px solid color-mix(in srgb, var(--upin-color) 30%, var(--border-color, #30363d));
+  box-shadow: inset 3px 0 0 var(--upin-color), 0 0 26px color-mix(in srgb, var(--upin-color) 42%, transparent), 0 12px 30px rgba(0, 0, 0, 0.5);
+  cursor: auto; animation: annoBubbleOpen 0.22s ease-out;
 }
+@media (prefers-reduced-motion: reduce) { .upin-editor { animation: none; } }
+/* Saved + closed: the collapsed bubble (an .anno-bubble) beside the pin; it
+   steps aside while the editor is open. */
+.upin-editor:not([hidden]) ~ .upin-bubble { display: none; }
+.upin-bubble .anno-bubble-summary { appearance: none; -webkit-appearance: none; }
 .upin[data-flip-x="true"] .upin-editor { left: auto; right: 32px; }
 .upin[data-flip-y="true"] .upin-editor { top: auto; bottom: 30px; }
 .upin-editor[hidden] { display: none; }

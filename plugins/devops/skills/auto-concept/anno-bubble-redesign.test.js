@@ -146,3 +146,54 @@ describe("one note open: the other own notes stay, dimmed", () => {
     expectDimmedNotRemoved(window, document, wraps);
   }, BOOT_TIMEOUT);
 });
+
+describe("a saved own note shows the annotation bubble in the note colour", () => {
+  function expectBubble(window, document, wraps, texts) {
+    wraps.forEach((w, i) => {
+      const bub = w.querySelector(".anno-bubble.upin-bubble");
+      expect(bub).not.toBeNull();
+      expect(bub.dataset.open).toBe("false");
+      expect(bub.querySelector(".anno-bubble-summary .anno-bubble-question").textContent).toBe(texts[i]);
+      expect(["right", "left", "top", "bottom"]).toContain(w.dataset.annoSide);
+      expect(window.getComputedStyle(bub).display).not.toBe("none");
+    });
+  }
+
+  test("css: same bubble rules, accent swapped to the note colour, shared side logic", () => {
+    expect(rule(".upin")).toMatch(/--anno-accent: var\(--upin-color\)/);
+    expect(css).toMatch(/\.upin\[data-anno-side="left"\] \.anno-bubble,\n\.anno\[data-anno-side="left"\] \.anno-bubble \{ transform-origin: right center; \}/);
+    expect(css).toMatch(/\.upin-editor:not\(\[hidden\]\) ~ \.upin-bubble \{ display: none; \}/);
+    expect(css).toMatch(/\.upin:not\(\[data-editing="true"\]\) \.upin-bubble,/);
+    expect(rule(".upin-editor")).toMatch(/inset 3px 0 0 var\(--upin-color\)/);
+  });
+
+  test("design round: saved note = collapsed bubble with its text; editing hides it", async () => {
+    const html = build({ rounds: 2, entries: 4, mode: "design", mapping: false, locale: "de", designs: 2, out: "" });
+    const { window, document, errors } = await boot(html);
+    expect(errors).toEqual([]);
+    window.showDesign("d2");
+    ctrlClick(window, document.querySelector("#d2-s1 h1"));
+    const ta = openEditor(document, "#d2-s1").querySelector("textarea");
+    ta.value = "meine Notiz";
+    enter(window, ta);
+    const wraps = [...document.querySelectorAll("#d2-s1 .upin")];
+    expect(wraps).toHaveLength(1);
+    expectBubble(window, document, wraps, ["meine Notiz"]);
+    // Clicking the bubble opens the editor like the pin does.
+    wraps[0].querySelector(".anno-bubble-summary").click();
+    expect(openEditor(document, "#d2-s1")).toBeTruthy();
+  }, BOOT_TIMEOUT);
+
+  test("document round: saved note = collapsed bubble with its text", async () => {
+    const html = build({ rounds: 2, entries: 4, mode: "decision", mapping: false, locale: "de", designs: 1, out: "" });
+    const { window, document, errors } = await boot(html);
+    expect(errors).toEqual([]);
+    const live = document.querySelector("section[data-iteration][data-active]");
+    ctrlClick(window, live.querySelector("section[id]:not([data-iteration]) p"));
+    const ta = openEditor(document, ".dpin-layer").querySelector("textarea");
+    ta.value = "Dokument-Notiz";
+    enter(window, ta);
+    await tick();
+    expectBubble(window, document, [...document.querySelectorAll(".dpin-layer .upin")], ["Dokument-Notiz"]);
+  }, BOOT_TIMEOUT);
+});

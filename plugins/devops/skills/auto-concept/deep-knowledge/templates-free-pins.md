@@ -219,6 +219,7 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
       wrap.dataset.orphan = block.tagName.toLowerCase() !== pin.anchor.kind ? 'true' : 'false';
       wrap.style.setProperty('--upin-x', Math.round(r.left - ir.left + (pin.x / 100) * r.width) + 'px');
       wrap.style.setProperty('--upin-y', Math.round(r.top - ir.top + (pin.y / 100) * r.height) + 'px');
+      placeNoteBubble(wrap, visibleBounds(wrap));
     });
   }
   // Nearest clipping ancestors (overflow != visible) intersected with the viewport.
@@ -310,6 +311,43 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
     });
     if (typeof window.closeAnnoBubbles === 'function') window.closeAnnoBubbles();
   }
+  // A saved note's collapsed bubble reuses the annotation bubble markup/CSS
+  // (.anno-bubble > .anno-bubble-summary > .anno-bubble-question); clicking it
+  // opens the editor exactly like the pin does.
+  function noteBubble(text, label, open) {
+    const bub = el('div', 'anno-bubble upin-bubble');
+    bub.dataset.open = 'false';
+    const sum = el('button', 'anno-bubble-summary');
+    sum.type = 'button';
+    sum.setAttribute('aria-label', label);
+    sum.appendChild(el('span', 'anno-bubble-question', text));
+    sum.addEventListener('click', open);
+    bub.appendChild(sum);
+    return bub;
+  }
+  // Same side logic as the annotation bubbles: right first, then left, bottom,
+  // top — the side with the least area outside the frame wins, a remainder is
+  // shifted in. Pure measuring, no state besides data-anno-side.
+  function placeNoteBubble(wrap, b) {
+    const bub = wrap.querySelector('.upin-bubble');
+    if (!bub || !b) return;
+    const gap = 8;
+    bub.style.translate = '';
+    const out = r => Math.max(0, b.left + gap - r.left) + Math.max(0, r.right - (b.right - gap))
+      + Math.max(0, b.top + gap - r.top) + Math.max(0, r.bottom - (b.bottom - gap));
+    let best = null;
+    for (const side of ['right', 'left', 'bottom', 'top']) {
+      wrap.dataset.annoSide = side;
+      const o = out(bub.getBoundingClientRect());
+      if (!best || o < best.o - 0.5) best = { side, o };
+      if (!o) break;
+    }
+    wrap.dataset.annoSide = best.side;
+    const r = bub.getBoundingClientRect();
+    const dx = r.left < b.left + gap ? b.left + gap - r.left : (r.right > b.right - gap ? b.right - gap - r.right : 0);
+    const dy = r.top < b.top + gap ? b.top + gap - r.top : (r.bottom > b.bottom - gap ? b.bottom - gap - r.bottom : 0);
+    if (dx || dy) bub.style.translate = dx + 'px ' + dy + 'px';
+  }
   function pinNode(it, pin, k, live, isDraft) {
     const wrap = el('div', 'upin');
     wrap.dataset.upinId = pin.id;
@@ -343,7 +381,9 @@ touched. **Pins are not draggable** in a document (the anchor is the block).
       foot.appendChild(del);
     }
     ed.appendChild(foot);
+    wrap.dataset.annoSide = 'right';
     wrap.append(btn, ed);
+    if (!isDraft && pin.text) wrap.appendChild(noteBubble(pin.text, label, () => btn.click()));
     if (isDraft) wrap.dataset.editing = 'true';
     btn.addEventListener('click', () => {
       const wasHidden = ed.hidden;

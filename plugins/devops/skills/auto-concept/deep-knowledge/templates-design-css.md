@@ -444,6 +444,7 @@ body.panel-open .anno-toggle-fab { opacity: 0; pointer-events: none; }
 body[data-note-editing="true"] .anno:not([data-editing="true"]) .anno-bubble,
 body[data-note-editing="true"] .anno:not([data-editing="true"]) .anno-pin,
 body[data-note-editing="true"] .upin:not([data-editing="true"]) .upin-pin,
+body[data-note-editing="true"] .upin:not([data-editing="true"]) .upin-bubble,
 body[data-note-editing="true"] .upin:not([data-editing="true"]) .upin-editor { opacity: 0.35; animation: none; transition: opacity 0.15s ease; }
 /* Collapsed: ONE line pill — 10px corners, the accent as a stripe on the
    left edge (pure styling), a soft accent glow. No number, no chevron. */
@@ -524,17 +525,29 @@ textarea[hidden] + .attach-slot,
 textarea[hidden] + .attach-bar { display: none; }
 /* Leader line + bubble offset, one rule pair per side. The line is a short
    fixed-length connector (14px), never computed at runtime. */
+.upin[data-anno-side="right"] .anno-bubble,
 .anno[data-anno-side="right"] .anno-bubble { transform-origin: left center; }
+.upin[data-anno-side="left"] .anno-bubble,
 .anno[data-anno-side="left"] .anno-bubble { transform-origin: right center; }
+.upin[data-anno-side="top"] .anno-bubble,
 .anno[data-anno-side="top"] .anno-bubble { transform-origin: center bottom; }
+.upin[data-anno-side="bottom"] .anno-bubble,
 .anno[data-anno-side="bottom"] .anno-bubble { transform-origin: center top; }
+.upin[data-anno-side="right"] .anno-bubble,
 .anno[data-anno-side="right"] .anno-bubble { left: calc(var(--anno-pin-size, 28px) + 14px); top: 50%; transform: translateY(-50%); }
+.upin[data-anno-side="right"] .anno-bubble::before,
 .anno[data-anno-side="right"] .anno-bubble::before { content: ''; position: absolute; top: 50%; left: -14px; width: 14px; height: 2px; background: var(--anno-accent, var(--accent-color, #58a6ff)); transform: translateY(-50%); }
+.upin[data-anno-side="left"] .anno-bubble,
 .anno[data-anno-side="left"] .anno-bubble { right: calc(var(--anno-pin-size, 28px) + 14px); top: 50%; transform: translateY(-50%); }
+.upin[data-anno-side="left"] .anno-bubble::before,
 .anno[data-anno-side="left"] .anno-bubble::before { content: ''; position: absolute; top: 50%; right: -14px; width: 14px; height: 2px; background: var(--anno-accent, var(--accent-color, #58a6ff)); transform: translateY(-50%); }
+.upin[data-anno-side="top"] .anno-bubble,
 .anno[data-anno-side="top"] .anno-bubble { left: 50%; bottom: calc(var(--anno-pin-size, 28px) + 14px); transform: translateX(-50%); }
+.upin[data-anno-side="top"] .anno-bubble::before,
 .anno[data-anno-side="top"] .anno-bubble::before { content: ''; position: absolute; left: 50%; bottom: -14px; width: 2px; height: 14px; background: var(--anno-accent, var(--accent-color, #58a6ff)); transform: translateX(-50%); }
+.upin[data-anno-side="bottom"] .anno-bubble,
 .anno[data-anno-side="bottom"] .anno-bubble { left: 50%; top: calc(var(--anno-pin-size, 28px) + 14px); transform: translateX(-50%); }
+.upin[data-anno-side="bottom"] .anno-bubble::before,
 .anno[data-anno-side="bottom"] .anno-bubble::before { content: ''; position: absolute; left: 50%; top: -14px; width: 2px; height: 14px; background: var(--anno-accent, var(--accent-color, #58a6ff)); transform: translateX(-50%); }
 
 /* ── Design switcher — ghost bar, top centre ──
