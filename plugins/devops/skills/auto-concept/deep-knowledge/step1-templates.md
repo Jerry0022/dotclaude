@@ -91,6 +91,16 @@ with an overview table carrying a recommendation column and jump links
    list → populated list). Every state the user should be able to give
    feedback on separately becomes its own `<section data-screen>`.
 
+   **A changed element is mocked in full, as it is today.** When a design
+   reworks an existing element (a menu, a header, a panel), the mock shows
+   every part that element has today — toggles such as dark mode, buttons,
+   counters, sub-lists — not a reduced sketch of only the new idea. What the
+   round does not mention changing is drawn exactly as today. A thin mock
+   hides what would silently change: the reviewer approves the idea, and the
+   implementation then drops or restyles parts nobody asked to touch. Read
+   the element's current markup (engine docs or the app's source) before
+   mocking it.
+
    **Several competing visual directions** (e.g. 21 layout variants that
    don't fit a 340px card) are several **designs within the same `design`
    iteration**, each with its own `data-design` wrapper and its own 1..n
