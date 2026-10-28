@@ -200,6 +200,12 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   **Exception — the `test` card's steps (#750):** its `userTest` steps come
   first and are always shown, never folded and not counted against the three;
   the open points follow and only they fold into `+N weitere`.
+- **A login-gated URL in a test step says how to sign in (#933).** A
+  `userTest` / `userFinalTest` step that opens a route behind a login names
+  the sign-in for exactly that origin in the same line (test account source,
+  never a password), and uses the origin sign-in works on (allowlisted host
+  and port). No sign-in works there → the step says what is missing instead
+  of a URL that dead-ends at a failed login.
 - **The next step is no point (#751).** On `test` and `ready` cards the card server drops every `open` item that is the approved scope's routine next step (ship, push, release, version bump, post, merge, `nach main`, `ausgeben`, Discord — `mcp-server/lib/open-admission.js`, step 0d). An item ending in `?` is a real question and stays. The drop is silent on the card, logged to stderr, and the tool result names the count; the next step belongs in `nextStep`.
 - **A task chip is no point.** On the Desktop app a finding outside the work
   is flagged with `spawn_task`: the chip is the offer, one click starts the fix

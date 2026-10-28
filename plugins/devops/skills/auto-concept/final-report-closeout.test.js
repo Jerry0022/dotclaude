@@ -272,6 +272,20 @@ describe("final-report close-out sheet", () => {
     expect(skill).toContain('[ -d "$d/spec" ] && days=30');
   });
 
+  test("a login-gated try-it link says how to sign in on that origin (#933)", () => {
+    const rule = md.slice(md.indexOf("**Try-it sign-in (#933).**"));
+    expect(rule.length).toBeGreaterThan(0);
+    const head = rule.slice(0, 1800);
+    expect(head).toContain("§ Try-it sign-in");
+    expect(head).toContain("Local Test User");
+    expect(head).toMatch(/never a password/);
+    expect(head).toMatch(/no link, only the/);
+    // The example carries the sign-in line and no hard-coded /login URL.
+    expect(htmlSource).toContain('class="fr-try-auth"');
+    expect(htmlSource).not.toContain("http://localhost:5173/login");
+    expect(cssSource).toContain(".fr-try-auth");
+  });
+
   test("a discard close-out does not reload the browser onto a deleted file", () => {
     const c = skill.slice(skill.indexOf("### D · Close out"), skill.indexOf("### Legacy final-report actions"));
     expect(c).toContain("no `/reload`");
