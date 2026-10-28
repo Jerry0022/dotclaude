@@ -54,6 +54,6 @@ export default defineConfig({
     // inherit this into every child env — the same escape hatch the
     // completion-card tests use. Suites that test the refresh itself override
     // it per call.
-    env: { DEVOPS_COMPLETION_NO_USAGE: "1" },
+    env: { DEVOPS_COMPLETION_NO_USAGE: "1", DOTCLAUDE_OS_LOCALE: "none" }, // none: OS locale must not leak into locale tests
   },
 });

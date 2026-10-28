@@ -193,6 +193,29 @@ function configuredLocale({ cwd, home } = {}) {
   return null;
 }
 
+let osLocaleCache;
+
+/**
+ * The OS UI locale as a SUPPORTED locale, or null. Cached per process; never
+ * spawns a shell. `DOTCLAUDE_OS_LOCALE` overrides detection ("none" = none; Windows drops empty env values).
+ * Order: env override, LC_ALL/LC_MESSAGES/LANG, then Intl (the Windows UI
+ * language). C/POSIX values are skipped.
+ */
+function osLocale() {
+  const override = process.env.DOTCLAUDE_OS_LOCALE;
+  if (override !== undefined) return normalizeLanguage(override);
+  if (osLocaleCache !== undefined) return osLocaleCache;
+  let found = null;
+  for (const v of [process.env.LC_ALL, process.env.LC_MESSAGES, process.env.LANG]) {
+    if (v && !/^(C|POSIX)(\.|$)/.test(v)) { found = normalizeLanguage(v); break; }
+  }
+  if (!found) {
+    try { found = normalizeLanguage(Intl.DateTimeFormat().resolvedOptions().locale); } catch {}
+  }
+  osLocaleCache = found;
+  return found;
+}
+
 /**
  * First call per session: detect from `prompt` and persist. Later calls
  * follow the language of the latest prompt, but only when it carries a clear
@@ -204,7 +227,9 @@ function configuredLocale({ cwd, home } = {}) {
  */
 function ensureLocale(sessionId, prompt, opts) {
   const cached = readSessionFile(SESSION_PREFIX, sessionId);
-  const configured = configuredLocale(opts);
+  // Claude Code's `language` setting, else the OS UI locale (the user's German
+  // may come from the desktop app / OS rather than a settings key).
+  const configured = configuredLocale(opts) || osLocale();
   if (configured) {
     // Claude Code's language wins over remembered and heuristic locale — also
     // for generated prompts: it is the user's setting, not a prompt signal.
@@ -260,6 +285,7 @@ module.exports = {
   detectFromPrompt,
   detectSignal,
   configuredLocale,
+  osLocale,
   normalizeLanguage,
   getLocale,
   setLocale,

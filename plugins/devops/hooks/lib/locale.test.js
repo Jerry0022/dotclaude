@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterAll } from "vitest";
+import { describe, test, expect, beforeEach, afterAll, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +12,7 @@ import {
   ensureLocale,
   t,
   configuredLocale,
+  osLocale,
   normalizeLanguage,
 } from "./locale.js";
 
@@ -283,5 +284,38 @@ describe("Claude Code language setting", () => {
     expect(ensureLocale(TEST_SESSION_BASE + "-cfg-2", "ok", opts).lang).toBe("de");
     purgeLocaleFiles(); // the glob fallback would otherwise hand back cfg-2's file
     expect(ensureLocale(TEST_SESSION_BASE + "-cfg-3", "devops batch", opts).lang).toBe("en");
+  });
+});
+
+describe("OS UI locale fallback", () => {
+  let prev;
+  beforeEach(() => { prev = process.env.DOTCLAUDE_OS_LOCALE; });
+  afterEach(() => {
+    if (prev === undefined) delete process.env.DOTCLAUDE_OS_LOCALE;
+    else process.env.DOTCLAUDE_OS_LOCALE = prev;
+  });
+  function home(settings) {
+    const h = fs.mkdtempSync(path.join(ISOLATED_TMP, "home-os-"));
+    fs.mkdirSync(path.join(h, ".claude"));
+    if (settings) fs.writeFileSync(path.join(h, ".claude", "settings.json"), JSON.stringify(settings));
+    return h;
+  }
+
+  test("OS de-DE with no setting -> de, even for an English prompt", () => {
+    process.env.DOTCLAUDE_OS_LOCALE = "de-DE";
+    expect(osLocale()).toBe("de");
+    const res = ensureLocale(TEST_SESSION_BASE + "-os-1", "please explain what this does", { home: home() });
+    expect(res.lang).toBe("de");
+  });
+
+  test("setting en overrides OS de", () => {
+    process.env.DOTCLAUDE_OS_LOCALE = "de-DE";
+    expect(ensureLocale(TEST_SESSION_BASE + "-os-2", "ok", { home: home({ language: "en" }) }).lang).toBe("en");
+  });
+
+  test("an unsupported OS locale falls through to the heuristic", () => {
+    process.env.DOTCLAUDE_OS_LOCALE = "ja-JP";
+    expect(osLocale()).toBe(null);
+    expect(ensureLocale(TEST_SESSION_BASE + "-os-3", "ich kann das nicht", { home: home() }).lang).toBe("de");
   });
 });

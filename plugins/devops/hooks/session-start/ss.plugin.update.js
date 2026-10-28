@@ -469,7 +469,7 @@ if (pinFailed || updated.some(u => !u.verified)) {
 let styleSynced = false;
 for (const dir of styleSources) {
   const res = syncQuietStyle({ home, pluginDir: dir });
-  if (res.status === 'updated') styleSynced = true;
+  if (res.status === 'updated' || res.status === 'created') styleSynced = true;
   else if (res.status === 'customized') {
     process.stderr.write(`[ss.plugin.update] ${res.target} differs from every shipped Quiet style — left as is (customized). Delete it and re-copy templates/output-style-quiet.md to track updates again.\n`);
   } else if (res.status === 'error') {
