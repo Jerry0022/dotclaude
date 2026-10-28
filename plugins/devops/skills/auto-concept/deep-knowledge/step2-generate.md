@@ -87,6 +87,17 @@ one page; quoted originals and code identifiers are the only exceptions.
   "Verbessert: …" under the top-3 points. Details: templates-design-screens.md,
   templates-design-views.md § Variant overview.
 
+**Variant copy: name the thing first** (`data-design-motto` / `data-design-traits`).
+Binding. After one read the user must know WHAT the variant is. Name the concrete
+UI thing in plain words first (header, 76 px tall, bevelled edges, back button
+left); a little flair is fine; never a metaphor that replaces the thing.
+- Before: motto "Ein Panel wie eine Konsole." + trait "Wuchtige Panzerplatte mit
+  Fasen, 76 px hoch" (what is a Panzerplatte?).
+- After: motto "Hoher Header mit Konsolen-Look." + trait "Header 76 px hoch mit
+  abgeschrägten Kanten".
+- Traits: concrete, measurable or visible (size, position, shape, count); the
+  motto may carry the flair word, but only next to the plain noun.
+
 ### Page Header (keep it lean)
 
 The `<header>` inside `.concept-content` renders the concept title ONCE.
