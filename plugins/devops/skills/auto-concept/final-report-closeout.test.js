@@ -243,6 +243,21 @@ describe("final-report close-out sheet", () => {
     expect(resume).toContain("startsWith('finalize')");
   });
 
+  test("a discard concept is excluded locally before the ship and released after (#931)", () => {
+    // Untracked concept files fail ship_preflight's clean-tree check; deleting
+    // them before the ship would kill the page that reports the result.
+    const c = skill.slice(skill.indexOf("### C · Ship"), skill.indexOf("### D · Close out"));
+    expect(c).toContain("info/exclude");
+    expect(c).toContain('"/docs/concepts/{date}-{slug}/"');
+    expect(c).toMatch(/never\s+a glob/);
+    const close = skill.slice(skill.indexOf("**Drop the local exclude lines (#931).**"));
+    expect(close.length).toBeGreaterThan(0);
+    expect(close.slice(0, 1200)).toContain("info/exclude");
+    expect(close.slice(0, 1200)).toContain("filter(l=>!p.includes(");
+    // Git Bash path-converts a leading-slash argument for node — no `/docs/`.
+    expect(close.slice(0, 1200)).toContain('"docs/concepts/{date}-{slug}/"');
+  });
+
   test("a discard close-out does not reload the browser onto a deleted file", () => {
     const c = skill.slice(skill.indexOf("### D · Close out"), skill.indexOf("### Legacy final-report actions"));
     expect(c).toContain("no `/reload`");

@@ -79,6 +79,23 @@ half), only the on-disk moves and deletes below remain.
 | `gitignore` | null | Files stay at original path. Append `docs/concepts/{date}-{slug}.*` and `docs/concepts/{date}-{slug}/` to `.gitignore` if not already covered. Run `git rm --cached -- "<html>" "<decisions.json>"` and `git rm -r --cached -- "<source-folder>/"` to untrack them if they were already added. |
 | `gitignore` | set | `mkdir -p -- "<moveTo>"` then `mv -- "<html>" "<moveTo>/"`; same for the decisions JSON and the source folder. Append `<moveTo>/{date}-{slug}.*` and `<moveTo>/{date}-{slug}/` to `.gitignore` if not already covered. Run `git rm --cached -- "<original-html>" "<original-decisions.json>"` and `git rm -r --cached -- "<original-source-folder>/"` on the original tracked entries. |
 
+**Drop the local exclude lines (#931).** If part C wrote this concept's paths
+to the local exclude file (`step5-finalize.md` § Ship-safe local exclude),
+remove exactly those three lines after the on-disk action above — and only
+when the files are gone or now covered by `.gitignore`/the index (a
+`gitignore` or `keep` disposition). Other lines in the file belong to the
+user or to other sessions and stay:
+
+```bash
+x="$(git rev-parse --path-format=absolute --git-common-dir)/info/exclude"
+[ -f "$x" ] && node -e "const fs=require('fs'),[f,...p]=process.argv.slice(1);fs.writeFileSync(f,fs.readFileSync(f,'utf8').split('\n').filter(l=>!p.includes(l.trim().replace(/^\//,''))).join('\n'))" "$x" \
+  "docs/concepts/{date}-{slug}.html" "docs/concepts/{date}-{slug}-decisions.json" "docs/concepts/{date}-{slug}/"
+```
+
+The arguments carry no leading `/` on purpose: Git Bash rewrites a native
+program's `/docs/…` argument into `C:/Program Files/Git/docs/…`, and the
+filter would then match nothing.
+
 **Also dispose of the durable store.** The bridge keeps every submission,
 progress checkpoint and pasted image under
 `.claude/concepts/{date}-{slug}/` (§ Durable store in `concept-server.py`).
