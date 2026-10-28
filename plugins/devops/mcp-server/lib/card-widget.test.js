@@ -72,8 +72,8 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
 
   test("guideHandoff rides alongside a card's own buttons, after them", () => {
     const de = buttonsFor("ready", "de", { guideHandoff: { service: "Supabase" } });
-    expect(de.map((a) => a.label)).toEqual(["Ship", "Ändern", "Web-Guide starten"]);
-    expect(de[2].prompt).toBe("Führ mich per Web-Guide durch Supabase");
+    expect(de.map((a) => a.label)).toEqual(["Ship", "Web-Guide starten"]);
+    expect(de[1].prompt).toBe("Führ mich per Web-Guide durch Supabase");
 
     const en = buttonsFor("ready", "en", { guideHandoff: { service: "Supabase" } });
     expect(en.at(-1)).toMatchObject({ label: "Start web guide", prompt: "Guide me through Supabase with the web guide" });
@@ -136,8 +136,9 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
   });
 
   test("noShip drops every ship button — a repo without a remote cannot ship (#500)", () => {
-    const ready = buttonsFor("ready", "de", { noShip: true });
-    expect(ready.map((a) => a.label)).toEqual(["Ändern"]);
+    expect(buttonsFor("ready", "de", { noShip: true })).toEqual([]);
+    const ready = buttonsFor("ready", "de", { noShip: true, replies: ["A."] });
+    expect(ready.map((a) => a.label)).toEqual(["Nachbessern"]);
     expect(ready[0].primary).toBe(true); // the row keeps its accented verb
     expect(buttonsFor("test", "en", { noShip: true }).map((a) => a.label)).toEqual([]);
     const reworkOnly = buttonsFor("test", "en", { noShip: true, replies: ["A."] });
@@ -150,12 +151,14 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     }
   });
 
-  test("ready offers Ship (primary, plain 'ship') and Ändern, in both languages", () => {
+  // A content button with only a generic "ask me what" prompt is a dead click
+  // (#927): without open points the ready card offers Ship alone.
+  test("ready offers Ship (primary, plain 'ship') alone without open points, in both languages", () => {
     const de = buttonsFor("ready", "de");
-    expect(de.map((a) => a.label)).toEqual(["Ship", "Ändern"]);
+    expect(de.map((a) => a.label)).toEqual(["Ship"]);
     expect(de[0]).toMatchObject({ prompt: "ship", primary: true });
     const en = buttonsFor("ready", "en");
-    expect(en.map((a) => a.label)).toEqual(["Ship", "Change"]);
+    expect(en.map((a) => a.label)).toEqual(["Ship"]);
   });
 
   test("ready with open points: Ändern becomes Nachbessern and carries the prepared answer", () => {
@@ -167,9 +170,9 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     const en = buttonsFor("ready", "en", { replies: ["A.", "B."] });
     expect(en[1].label).toBe("Rework");
     expect(en[1].prompt).toBe("Please tackle all open points:\n\n- A.\n- B.");
-    // no replies → the generic button, unchanged
-    expect(buttonsFor("ready", "de", { replies: [] })[1].label).toBe("Ändern");
-    expect(buttonsFor("ready", "de", { replies: ["  "] })[1].label).toBe("Ändern");
+    // no replies → no generic "ask me what" button (#927)
+    expect(buttonsFor("ready", "de", { replies: [] }).map((a) => a.label)).toEqual(["Ship"]);
+    expect(buttonsFor("ready", "de", { replies: ["  "] }).map((a) => a.label)).toEqual(["Ship"]);
   });
 
   test("test's Nachbessern carries the answer; ship-successful appends Nachbessern after its promote verbs", () => {
@@ -257,7 +260,7 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     const step = "Bau im Governor eine Summen-Drossel ein.";
     const de = buttonsFor("analysis", "de", { nextStep: step });
     expect(de[0]).toMatchObject({ label: "Empfehlung umsetzen", prompt: step, tooltip: step, primary: true });
-    expect(de[1].label).toBe("Frage");
+    expect(de).toHaveLength(1); // no generic "Frage" button (#927)
     expect(buttonsFor("analysis", "en", { nextStep: step })[0].label).toBe("Do recommended step");
     expect(buttonsFor("analysis", "de", { nextStep: "/do-run x" })[0].prompt).toBe("do-run x");
     expect(buttonsFor("analysis", "de")[0]).toMatchObject({ label: "Umsetzen", prompt: "Setz die Analyse jetzt um." });
@@ -564,7 +567,7 @@ describe("cardWidgetHtml", () => {
     expect(html).toContain("Build abc123");
     expect(html).toContain("Shippen?");
     expect(html).toContain("Noch offen: Doku");
-    expect(html.match(/<span role="button" tabindex="0"/g)).toHaveLength(2);
+    expect(html.match(/<span role="button" tabindex="0"/g)).toHaveLength(1);
     expect(html).not.toContain("<button");
     expect(html).toContain('class="ti ti-rocket"');
     expect(html).toContain("method: 'ui/message'");

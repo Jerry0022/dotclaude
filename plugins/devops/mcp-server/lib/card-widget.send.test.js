@@ -137,11 +137,11 @@ describe("card widget buttons — Code-tab host", () => {
 
   test("composer not empty: every attempt refused, button says to clear it", async () => {
     const w = mount({ composer: "half-typed draft" });
-    w.click(w.buttons[1]);
+    w.click(w.buttons[0]);
     await w.advance(SEND_RETRY_WINDOW_MS + 2000);
     expect(w.host.prefills).toBe(0);
     expect(w.host.composer).toBe("half-typed draft");
-    expect(w.state(w.buttons[1])).toBe("Nicht übernommen, Eingabefeld leeren und erneut klicken");
+    expect(w.state(w.buttons[0])).toBe("Nicht übernommen, Eingabefeld leeren und erneut klicken");
     // Bounded: re-posts stop once the click's activation is gone.
     expect(w.host.posted.length).toBeLessThanOrEqual(Math.ceil(SEND_RETRY_WINDOW_MS / SEND_RETRY_INTERVAL_MS) + 1);
     expect(w.host.posted[w.host.posted.length - 1].at).toBeLessThanOrEqual(ACTIVATION_MS);

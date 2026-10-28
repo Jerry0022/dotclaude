@@ -350,12 +350,13 @@ describe("--render-card CLI fallback", () => {
     expect(plainNone).not.toContain('<span role="button"');
   });
 
-  test("ready without open points keeps the plain Ändern button", async () => {
+  test("ready without open points drops the generic Ändern button (#927)", async () => {
     const { stderr } = await renderCardFull(
       { variant: "ready", summary: "Ohne", lang: "de", session_id: S("conclude-none"), userFinalTest: ["Im Desktop klicken"] },
       { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" },
     );
-    expect(stderr).toContain("Ändern<span aria-hidden=\"true\"> ↗</span>");
+    expect(stderr).not.toContain("Ändern<span aria-hidden=\"true\"> ↗</span>");
+    expect(stderr).toContain("Ship<span aria-hidden=\"true\"> ↗</span>");
     expect(stderr).not.toContain("Nachbessern");
   });
 
