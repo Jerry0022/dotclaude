@@ -1728,7 +1728,7 @@ describe("render_completion_card — a pending question replaces the ship offer 
     const d = mod.buildDecisionBlock({ variant: "ready", summary: "x", validation: [{ requirement: "A", status: "met", evidence: "t" }] }, "de", "ready", delivery, state);
     expect(d.heading).toBe("👉 📦 Ready — Shippen?");
     expect(d.noShip).toBe(false);
-    expect(await labels(d)).toEqual(["Ship", "Ändern"]);
+    expect(await labels(d)).toEqual(["Ship"]);
     const en = mod.buildDecisionBlock({ variant: "ready", summary: "x" }, "en", "ready", delivery, state);
     expect(en.heading).toBe("👉 📦 Ready — Ship?");
     const text = await cardText({ variant: "ready", summary: "Fertig", lang: "de", session_id: "test-714-plain" });
@@ -1793,17 +1793,15 @@ describe("render_completion_card — analysis card shows open items and their re
     expect(d.points.join("\n")).toContain("Build-ID-Fix");
     expect(d.replies).toEqual(["Ja, shippe den Build-ID-Fix."]);
     const l = await labels(d, lang);
-    expect(l).toHaveLength(3);
-    expect(l).toContain(lang === "de" ? "Umsetzen" : "Implement");
-    expect(l).toContain(lang === "de" ? "Frage" : "Question");
+    expect(l).toEqual(lang === "de" ? ["Umsetzen", "Nachbessern"] : ["Implement", "Rework"]);
   });
 
-  test("an analysis card without open renders as before: two buttons, no points", async () => {
+  test("an analysis card without open: Umsetzen alone, no points", async () => {
     const mod = await import("./index.js");
     const d = mod.buildDecisionBlock({ variant: "analysis", summary: "x" }, "de", "analysis", {}, { mode: "git" });
     expect(d.points).toEqual([]);
     expect(d.replies).toEqual([]);
-    expect(await labels(d, "de")).toEqual(["Umsetzen", "Frage"]);
+    expect(await labels(d, "de")).toEqual(["Umsetzen"]);
   });
 
   test("the rendered card names the open point", async () => {

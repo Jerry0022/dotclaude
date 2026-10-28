@@ -57,14 +57,16 @@ export function isDesktopSession(env = process.env) {
  * `tooltip` — shown on hover, explaining what the click triggers (§ 2.6).
  * `conclude` marks the button that turns into the prepared answer to the
  * card's open points when it has any (see `CONCLUDE` / `conclusionPrompt`).
- * `onlyOpen` drops that button when there is nothing to conclude (#784): the
- * test card's Nachbessern shows up only with concrete open points.
+ * `onlyOpen` drops that button when there is nothing to conclude (#784, #927):
+ * a content button with only a generic "ask me what" prompt is a dead click,
+ * so Ändern / Nachbessern show up only with concrete open points. Pure action
+ * buttons (Ship, Promote, Umsetzen …) keep their standard prompt.
  */
 export const BUTTONS = {
   de: {
     ready: [
       { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Startet die Ship-Pipeline mit dem aktuellen Stand." },
-      { label: "Ändern", icon: "edit", prompt: "Ich möchte noch etwas ändern, bevor wir shippen — frag mich, was.", tooltip: "Hält den Ship an und fragt zuerst, was noch anders sein soll.", conclude: true },
+      { label: "Ändern", icon: "edit", prompt: "Ich möchte noch etwas ändern, bevor wir shippen — frag mich, was.", tooltip: "Hält den Ship an und fragt zuerst, was noch anders sein soll.", conclude: true, onlyOpen: true },
     ],
     // A red row's Fix ends in the row's other path — ship (2026-10-25: "then
     // render the card again" sent the user one more click to the same goal).
@@ -98,7 +100,6 @@ export const BUTTONS = {
     ],
     analysis: [
       { label: "Umsetzen", icon: "player-play", prompt: "Setz die Analyse jetzt um.", primary: true, tooltip: "Beginnt die Umsetzung der Analyse." },
-      { label: "Frage", icon: "message-question", prompt: "Ich habe eine Rückfrage zur Analyse — frag mich, welche.", tooltip: "Klärt offene Fragen vor der Umsetzung." },
     ],
     aborted: [
       { label: "Nochmal", icon: "refresh", prompt: "Versuch es nochmal mit einem anderen Ansatz — nenn mir zuerst kurz die Alternativen.", primary: true, tooltip: "Nennt zuerst die Alternativen, dann ein neuer Versuch." },
@@ -115,7 +116,7 @@ export const BUTTONS = {
   en: {
     ready: [
       { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Starts the ship pipeline with the current state." },
-      { label: "Change", icon: "edit", prompt: "I want to change something before we ship — ask me what.", tooltip: "Pauses the ship and asks what should change first.", conclude: true },
+      { label: "Change", icon: "edit", prompt: "I want to change something before we ship — ask me what.", tooltip: "Pauses the ship and asks what should change first.", conclude: true, onlyOpen: true },
     ],
     "ready-red": [
       { label: "Fix", icon: "tool", prompt: "Fix the red findings of the last card first (red tests or unmet requirements), then ship.", primary: true, tooltip: "I fix the red findings first, then ship." },
@@ -145,7 +146,6 @@ export const BUTTONS = {
     ],
     analysis: [
       { label: "Implement", icon: "player-play", prompt: "Implement the analysis now.", primary: true, tooltip: "Starts implementing the analysis." },
-      { label: "Question", icon: "message-question", prompt: "I have a question about the analysis — ask me which.", tooltip: "Clears open questions before implementing." },
     ],
     aborted: [
       { label: "Retry", icon: "refresh", prompt: "Try again with a different approach — name the alternatives briefly first.", primary: true, tooltip: "Names the alternatives first, then a new attempt." },

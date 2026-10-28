@@ -35,7 +35,7 @@ Two visual blocks. Nothing between them, nothing under the second one.
 › one context line (optional)              │  Block 2 · "what to decide"
 1. reservation / test step                 │  (Desktop: quiet accent-tinted box)
 2. reservation / test step                 │
-[Ship ↗] [Ändern ↗]                        ┘  (Desktop widget only; terminal: nothing)
+[Ship ↗] [Nachbessern ↗]                   ┘  (Desktop widget only; terminal: nothing)
 ---
 ```
 
@@ -256,9 +256,16 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   and one `- ` bullet per answer in card order. Final tests stay out — they
   are the user's own steps. On `test` the partial/unmet `validation` entries
   count as open points too ("<requirement> — <evidence> — bitte angehen.").
-  Without open points `ready` keeps `Ändern`; `test` shows **no**
-  `Nachbessern` at all (#784) — nothing to fix is no dead-end click; Ship and
-  App starten stay.
+  Without open points neither `ready`'s `Ändern` nor `test`'s
+  `Nachbessern` is drawn (#784, #927) — nothing to fix is no dead-end click;
+  Ship and App starten stay.
+- **No generic content buttons (#927).** A button whose prompt would only be
+  a standard "ask me what / which" phrase (Ändern, Nachbessern, Frage, a bare
+  Weiter) is a dead click: the user could just as well type into the input
+  box. Such a button is drawn only with a situation-specific prompt (the
+  prepared answer, a named next step); otherwise it is left out. Action
+  buttons that need no content (Ship, Promote, Deploy, Umsetzen, Fix, Skip,
+  Tests laufen lassen) stay with their standard prompt.
 - No `SHIP oder ÄNDERN` line anymore — the buttons say it. The terminal
   shows the question heading alone.
 - **Stale session server.** A session keeps the MCP server process it started
@@ -275,10 +282,10 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 
 | Variant / state | Heading (de) | Points | Buttons | Notes |
 |---|---|---|---|---|
-| `ready` | `👉 📦 Ready — Shippen?` | final tests | Ship · Ändern | nothing open |
+| `ready` | `👉 📦 Ready — Shippen?` | final tests | Ship | nothing open — no generic Ändern (#927) |
 | `ready` / `test` (no `userTest` steps) + open point or `waitsOn: "user"` | `👉 ❓ Question — {top open point}` / `👉 ❓ Question — Wartet auf dich: {requirement} — wie entscheidest du?` | remaining open + final tests | Ship dropped; Ändern / Nachbessern with the prepared answer | #714 — ship only when nothing is open |
 | `test` with `userTest` steps + open point | `👉 🧪 Test — …` (the Test heading stays; session title too) | every `userTest` step first (never folded), then the open points (≤ 3, rest `+N weitere`) | as plain `test`; Nachbessern carries the prepared answer | #750 — the steps to test are the next move, the open points ride along |
-| `ready` / `test`, no remote | `🟩 📦 Committed — Lokal committet — noch etwas?` · `👉 🧪 Test — Erst testen?` | as `ready` / `test` | Ship dropped; Ändern / Nachbessern stays and turns primary | `state.mode: "git-no-remote"`, or detected from `cwd` when the caller passes no mode (no `origin`) — nothing to push, PR or merge (#500). Keys after a ship attempt (ready-red, ship-blocked, vv-unverified) keep their buttons: a local ship still commits. `ship-successful` without `state.merged` downgrades to this row with its own note; with it (a local merge) it stays. **A `ready` card with unshipped work is not drawn at all:** the tool returns a `[LOCAL SHIP]` instruction instead, Claude runs `/do-ship` (commit, local merge, local tag), and that ship's card ends the turn. |
+| `ready` / `test`, no remote | `🟩 📦 Committed — Lokal committet — noch etwas?` · `👉 🧪 Test — Erst testen?` | as `ready` / `test` | Ship dropped; Nachbessern (with open points only) turns primary | `state.mode: "git-no-remote"`, or detected from `cwd` when the caller passes no mode (no `origin`) — nothing to push, PR or merge (#500). Keys after a ship attempt (ready-red, ship-blocked, vv-unverified) keep their buttons: a local ship still commits. `ship-successful` without `state.merged` downgrades to this row with its own note; with it (a local merge) it stays. **A `ready` card with unshipped work is not drawn at all:** the tool returns a `[LOCAL SHIP]` instruction instead, Claude runs `/do-ship` (commit, local merge, local tag), and that ship's card ends the turn. |
 | `ready` + red tests / partial | `👉 ⚠️ Red tests — Trotzdem shippen mit 2 roten Tests?` | open (fix first) | Fix · Trotzdem shippen | ⚠ red; line 1 = Nicht erreicht |
 | `ship-blocked` | `👉 🚧 Blocked — {reason} umgehen und trotzdem shippen?` | the gate's finding | Fix · Skip | ⛔ only here |
 | `ship-successful` | `🟩 🚀 Released Alpha — v{v} — nach Beta promoten?` (ring) / `🟩 🚀 Released Alpha — v{v} → main.` (plain, no promote) / `🟩 🚀 Released Beta — v{v} — nach Stable promoten?` · `🟩 🚀 Released Stable — v{v} — stable.` (ship + promote in one run); 👉 instead of 🟩 when an open point, a `userFinalTest` or a `waitsOn: "user"` requirement rides along — the promote offer alone is optional and keeps 🟩 | open + final tests | Promote beta (primary) + Promote stable / only Promote stable when the ladder already sits on beta / none — each + Nachbessern with open points; + App starten with a launch path | context line = distance to beta |
@@ -290,7 +297,7 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 | `ready-files` | `👉 📦 Files — Fertig auf der Platte — noch etwas?` | final tests | — | pipeline = file line |
 | `test` | `👉 🧪 Test — Erst testen, dann shippen?` | open + userTest steps | Ship · Nachbessern only with open points or partial/unmet requirements (→ prepared answer) · App starten with a launch path | unverified part = `◐` post |
 | `test-minimal` | `🟩 ✨ Started — viel Spaß` | — | — | title + one line + heading; no evidence, budget, pipeline, widget — so no `App starten` either |
-| `analysis` | `🟩 📊 Analysis — gelesen — umsetzen oder Fragen?` | `open` points (with ❓/👉 icons), if any (#759) | Umsetzen · Frage (with `nextStep`: Empfehlung umsetzen — sends that step); with `open` replies + Nachbessern carrying them | pipeline = `➖ keine Änderungen`; only when nothing changed anywhere — an answer or investigation (#624). Work done outside the repo → `fallback`; implementation handed to still-running agents → `ready`/`test` + `pending`; a mode activation → its override; finished unshipped commits in a linked side session → `ready` + `open: [{ text, reply: "ship" }]`, never `analysis` (#759) |
+| `analysis` | `🟩 📊 Analysis — gelesen — umsetzen oder Fragen?` | `open` points (with ❓/👉 icons), if any (#759) | Umsetzen (with `nextStep`: Empfehlung umsetzen — sends that step); with `open` replies + Nachbessern carrying them | pipeline = `➖ keine Änderungen`; only when nothing changed anywhere — an answer or investigation (#624). Work done outside the repo → `fallback`; implementation handed to still-running agents → `ready`/`test` + `pending`; a mode activation → its override; finished unshipped commits in a linked side session → `ready` + `open: [{ text, reply: "ship" }]`, never `analysis` (#759) |
 | `aborted` | `🟥 📦 Aborted — abgebrochen wegen {reason} — anders versuchen?`; a named abort (`cta.activity`: ship, promote, test, concept, batch, analysis, agents) keeps its activity: `🟥 🚀 Ship — …` | — | Nochmal | context line = alternatives |
 | `fallback` | `🟩 🖥️ System — erledigt — noch etwas?` | — | — | also for work finished outside the repo with no repo diff: a DB op, a delete, a deploy, a data migration, a settings change (#624) |
 | `paused` | `🟦 ✋ Paused — weiter, wann du willst` | — | — | context line `› Schreib hier, um weiterzumachen.`; results = what was stopped and what was kept; for work the user pauses to continue later (#548), never `fallback`; title `🟦 ➜ ✋ Paused ┃ `; the run contract treats it as non-final. Also for work whose next step is a Claude Code restart, a reboot or a usage-limit reset (#583) — never `analysis` / `ready` / `fallback` then: `pause: { reason: restart \| reboot \| usage-reset, resetAt? }` names it in the heading (`🟦 🔌 Restart — Claude Code neu starten`, `🟦 💻 Reboot — PC neu starten`, `🟦 🔋 Limit reset — weiter nach dem Limit-Reset (23:40)`), the context line (the one resume action) and the title (`🟦 ➜ 🔌 Restart ┃ `); `reason: user` keeps the plain copy |
