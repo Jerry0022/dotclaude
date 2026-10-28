@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.328.5**
+**Version: 0.329.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -26,7 +26,7 @@ keep git clean, block risky moves and stop context waste.
 - **Runs while you are away** — `/do-run` works off a backlog, a task or the leftover weekly budget, and ships each item
 - **Per-project tuning** — extend any skill with a `reference.md`, no fork
 
-<!--devops:count:hooks-->100<!--/devops:count:hooks--> hooks ·
+<!--devops:count:hooks-->101<!--/devops:count:hooks--> hooks ·
 <!--devops:count:skills-->15<!--/devops:count:skills--> skills ·
 <!--devops:count:agents-->12<!--/devops:count:agents--> agents ·
 ~0.7M tokens/week overhead (1–4 % of a Max plan), paid back 1.5–6× by the
@@ -518,7 +518,7 @@ A different stack: extend the skills per project — see [Customize](#customize)
 </details>
 
 <details>
-<summary><strong>Hooks</strong> — <!--devops:count:hooks-->100<!--/devops:count:hooks--> hooks by lifecycle and by category</summary>
+<summary><strong>Hooks</strong> — <!--devops:count:hooks-->101<!--/devops:count:hooks--> hooks by lifecycle and by category</summary>
 
 ```
 SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolUse  ──>  Stop
@@ -623,6 +623,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `post.flow.completion` — Keeps the completion-card contract in Claude's context: on the FIRST tool call of eve…
 - `post.approval.clear` — A background agent's tool call finished: drops its permission wait (and every one the…
 - `post.concept.gate` — Deterministic backstop for concept pages.
+- `post.concept.title` — Takes the concept's "your move" title back the moment a submission lands (#930).
 - `post.claude.budget` — Deterministic context-budget gate for Claude configuration files — CLAUDE.md, SKILL.m…
 - `post.agent.nudge` — AUD-024: outside a do-run run, a single turn can change many files without ever spawn…
 - `post.design.remind` — Once per context, when a UI file is written or edited, reminds Claude of the standing…
@@ -736,6 +737,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `pre.readme.standards` *(PreToolUse)*
 - `pre.strict.agent-gate` *(PreToolUse)*
 - `post.concept.gate` *(PostToolUse)*
+- `post.concept.title` *(PostToolUse)*
 - `post.design.remind` *(PostToolUse)*
 - `post.skill.marker` *(PostToolUse)*
 - `post.skill.overrides` *(PostToolUse)*
@@ -810,7 +812,7 @@ plugins/
 │   ├── .claude-plugin/plugin.json ← Plugin manifest (SemVer, tags v0.x.y)
 │   ├── .mcp.json                  ← MCP servers: completion card, ship, issues
 │   ├── CONVENTIONS.md             ← Naming, versioning, extension rules
-│   ├── hooks/                     ← <!--devops:count:hooks-->100<!--/devops:count:hooks--> hooks (JS) registered in hooks/dispatch/manifest.json
+│   ├── hooks/                     ← <!--devops:count:hooks-->101<!--/devops:count:hooks--> hooks (JS) registered in hooks/dispatch/manifest.json
 │   ├── skills/                    ← <!--devops:count:skills-->15<!--/devops:count:skills--> skill definitions (SKILL.md)
 │   ├── agents/                    ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 │   ├── mcp-server/                ← Card renderer + Desktop widget, ship tools, issue matching

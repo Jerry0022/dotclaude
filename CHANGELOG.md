@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.329.0] — 2026-10-28
+
+### Added
+- `post.concept.title` hook: once a concept submission lands, the next tool call hands Claude the rename from `👉 ➜ 🧭 Concept ┃` to `⏳ ➜ 🧭 Concept ┃`, so the sidebar stops saying "your move" after the user already submitted (#930)
+
+### Fixed
+- The concept "your move" title and card are documented to appear only after the round is delivered (`/reset` done), never on a card before it (#930)
+
 ## [0.328.5] — 2026-10-28
 
 ### Fixed
