@@ -1,5 +1,23 @@
 import { describe, test, expect } from "vitest";
-import { dropNextStepOpenItems, isNextStep } from "./open-admission.js";
+import { dropNextStepOpenItems, isNextStep, refuseInScopeFindings } from "./open-admission.js";
+
+describe("refuseInScopeFindings (#920)", () => {
+  test("refuses an in-scope finding, keeps out-of-scope, untagged and strings", () => {
+    const r = refuseInScopeFindings([
+      { text: "Voiced line names the wrong picture - angleichen?", finding: "in-scope" },
+      { text: "Unrelated legacy route type error", finding: "out-of-scope" },
+      { text: "Untagged decision" },
+      "plain string",
+    ]);
+    expect(r.refused).toBe(1);
+    expect(r.open).toHaveLength(3);
+  });
+
+  test("empty and absent input pass through", () => {
+    expect(refuseInScopeFindings(undefined)).toEqual({ open: undefined, refused: 0 });
+    expect(refuseInScopeFindings([])).toEqual({ open: [], refused: 0 });
+  });
+});
 
 describe("dropNextStepOpenItems", () => {
   test("drops the routine next step (German)", () => {
