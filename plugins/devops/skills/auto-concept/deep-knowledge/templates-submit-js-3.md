@@ -100,6 +100,8 @@ async function restoreInFlightCloseout() {
     const res = await fetch('/decisions', { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
+    // A reload between /status closed and /shutdown (#932).
+    if (data && data._phase === 'closed') { markCloseoutDone(); return; }
     // Processed means `submitted: false` — /reset replaces the payload. The
     // `_processed_at` stamp is NOT that signal: the bridge keeps the stamp of
     // the LAST /reset across new submissions.
@@ -131,6 +133,30 @@ function markCloseoutStalled() {
   if (!sheet) return;
   setCloseoutFrozen(true);
   setCloseoutButtonState('stalled');
+}
+
+// #932: the finalize is over. Claude POSTs /status {"phase":"closed"} as the
+// close-out's last bridge call (after /reset, before /shutdown — every
+// disposition, discard included). The poll sees it and the sheet shows its
+// done state, which the open tab keeps after the bridge is gone — it says
+// "abgeschlossen" instead of a spinning step or a reconnect warning. Nothing
+// is stored: the bridge serves this page, so there is no reload after it.
+function markCloseoutDone() {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet || sheet.dataset.finalizeState === 'done') return;
+  setCloseoutFrozen(true);
+  setCloseoutButtonState('done');
+  document.body.classList.remove('concept-submitted', 'content-dimmed');
+  if (typeof hideContentDimmer === 'function') hideContentDimmer();
+  // Stops the PROCESSED_SAFETY_MS net: a closed finalize is never "stalled".
+  _submittedAt = 0;
+  _submittedReloadCounter = null;
+  _submittedAction = null;
+  document.body.classList.add('concept-closed');
+  if (typeof renderPanelStatus === 'function') renderPanelStatus();
+}
+function noteCloseoutPhase(data) {
+  if (data && data._phase === 'closed') markCloseoutDone();
 }
 
 // No "Runden ansehen" link on the sheet: earlier rounds are one click away

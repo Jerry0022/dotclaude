@@ -98,6 +98,7 @@ must see their own language. The locale hint is authoritative.
 | `panel.status_working` | saved | gespeichert |
 | `panel.toast_open` | Open the panel | Panel öffnen |
 | `panel.status_frozen`          | read-only                      | nur lesen |
+| `panel.status_closed`          | concept closed                 | Concept abgeschlossen |
 | `panel.submit_implement_sub` | no further round | keine weitere Runde |
 | `panel.turn_you` | Your turn | Du bist dran |
 | `panel.turn_rethinking` | rethinking | überdenkt |

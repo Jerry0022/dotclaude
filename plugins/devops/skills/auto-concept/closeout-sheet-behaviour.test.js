@@ -550,6 +550,21 @@ describe("a finalize that outlives its tab, and the done state", () => {
     expect(p.sheet().dataset.frozen).toBe("true");
   });
 
+  test("a 'closed' phase from the bridge ends the finalize in its done state (#932)", () => {
+    const p = page({ funde: FUNDE });
+    p.window.submitFinalize(true);
+    expect(p.window.__submitted().action).toBe("finalize");
+    p.window.noteCloseoutPhase({ _phase: "implemented" });
+    expect(p.sheet().dataset.finalizeState).toBe("running");
+    p.window.noteCloseoutPhase({ _phase: "closed" });
+    expect(p.sheet().dataset.finalizeState).toBe("done");
+    expect(p.document.getElementById("closeout-close").hidden).toBe(false);
+    expect(p.document.body.classList.contains("concept-closed")).toBe(true);
+    expect(p.document.body.classList.contains("concept-submitted")).toBe(false);
+    // The safety net can no longer mark it stalled.
+    expect(p.window.__submitted().at).toBe(0);
+  });
+
   test("data-closed: only 🧪/👉 with the chosen mode, and one '✓ Concept abgeschlossen · schließen'", () => {
     const p = page({
       closed: true,
