@@ -1062,6 +1062,61 @@ function findDesignAuthoringWarnings(html) {
 }
 
 /**
+ * Etappen (stages) rules, read from the built page's `#concept-stages` JSON
+ * script (concept-build.js injects it only when page.json declares stages).
+ * Blocking kinds `stages-*`; the panel-head title limit is advisory.
+ * @returns {{errors:Array<{kind:string,why:string,at:number}>, warnings:Array<{kind:string,why:string,at:number}>}}
+ */
+function findStageIssues(html) {
+  const body = String(html || '').replace(/<!--[\s\S]*?-->/g, m => ' '.repeat(m.length));
+  const errors = [], warnings = [];
+  const sm = /<script\b[^>]*\bid=("|')concept-stages\1[^>]*>([\s\S]*?)<\/script\s*>/i.exec(body);
+  const topRe = /<section\b(?:[^>"']|"[^"]*"|'[^']*')*?\sdata-iteration=("|')([^"']*)\1(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
+  const rounds = [];
+  let m;
+  while ((m = topRe.exec(body)) !== null) rounds.push({ n: m[2], tag: m[0], at: m.index, stage: attrOf(m[0], 'data-stage') });
+  if (!sm) {
+    const stray = rounds.find(r => r.stage);
+    if (stray) errors.push({ kind: 'stages-undeclared', at: stray.at, why: `iteration ${stray.n} carries data-stage="${stray.stage}" but the page has no #concept-stages script — declare "stages" in page.json (step1-templates.md § Etappen)` });
+    return { errors, warnings };
+  }
+  let data;
+  try { data = JSON.parse(sm[2]); } catch { data = null; }
+  const stages = data && Array.isArray(data.stages) ? data.stages : null;
+  if (!stages || !stages.length) {
+    errors.push({ kind: 'stages-malformed', at: sm.index, why: '#concept-stages is not JSON with a non-empty "stages" array' });
+    return { errors, warnings };
+  }
+  if (stages.length > 7) errors.push({ kind: 'stages-too-many', at: sm.index, why: `${stages.length} stages — at most 7 (A–G)` });
+  const ids = stages.map(s => String((s && s.id) || ''));
+  ids.forEach((id, i) => {
+    const want = String.fromCharCode(65 + i);
+    if (id !== want) errors.push({ kind: 'stages-ids', at: sm.index, why: `stage ${i + 1} has id "${id}", expected "${want}" — ids are consecutive capital letters from A` });
+  });
+  stages.forEach(s => {
+    const name = s && typeof s.name === 'string' ? s.name.trim() : '';
+    if (!name) errors.push({ kind: 'stages-name', at: sm.index, why: `stage "${s && s.id}" has no name` });
+    else if ([...name].length > 24) errors.push({ kind: 'stages-name', at: sm.index, why: `stage "${s.id}" name is ${[...name].length} chars — at most 24 ("${name}")` });
+  });
+  let last = -1;
+  for (const r of rounds) {
+    if (!r.stage) { errors.push({ kind: 'stages-round-untagged', at: r.at, why: `iteration ${r.n} has no data-stage — every round of a staged concept carries one` }); continue; }
+    const idx = ids.indexOf(r.stage);
+    if (idx < 0) { errors.push({ kind: 'stages-round-unknown', at: r.at, why: `iteration ${r.n}: data-stage="${r.stage}" is not a declared stage (${ids.join(', ')})` }); continue; }
+    if (idx < last) errors.push({ kind: 'stages-order', at: r.at, why: `iteration ${r.n}: stage ${r.stage} comes after a later stage — stages advance in order` });
+    last = Math.max(last, idx);
+  }
+  const liveRound = rounds[rounds.length - 1];
+  if (liveRound && liveRound.stage && data.current && data.current !== liveRound.stage) {
+    errors.push({ kind: 'stages-current', at: sm.index, why: `#concept-stages current="${data.current}" but the live round ${liveRound.n} is stage ${liveRound.stage}` });
+  }
+  if (typeof data.title === 'string' && [...data.title].length > 32) {
+    warnings.push({ kind: 'stages-title', at: sm.index, why: `concept title is ${[...data.title].length} chars — the panel head fits 32; shorten page.json "title"` });
+  }
+  return { errors, warnings };
+}
+
+/**
  * Full evaluation for a written file.
  * @returns {{applicable:boolean, ok:boolean, missing:Array, forbidden:Array, structural:Array, mapping:Array, overlap:Array}}
  */
@@ -1071,7 +1126,8 @@ function evaluate(filePath, html) {
   }
   const missing = findMissing(html);
   const forbidden = findForbidden(html);
-  const structural = [...findStructural(html), ...findSubpageOnlyRounds(html)];
+  const st = findStageIssues(html);
+  const structural = [...findStructural(html), ...findSubpageOnlyRounds(html), ...st.errors];
   const mapping = findMappingIssues(html);
   const overlap = findViewOverlap(html);
   const stale = findStaleEngine(html);
@@ -1091,7 +1147,7 @@ function evaluate(filePath, html) {
     finalReport,
     analysis: a.errors,
     // Advisory, never part of `ok`.
-    warnings: [...findDesignAuthoringWarnings(html), ...findIdenticalFirstScreens(html), ...findFinalReportPlaceholders(html), ...a.warnings],
+    warnings: [...findDesignAuthoringWarnings(html), ...findIdenticalFirstScreens(html), ...findFinalReportPlaceholders(html), ...a.warnings, ...st.warnings],
   };
 }
 
@@ -1294,6 +1350,7 @@ module.exports = {
   findDesignAuthoringWarnings,
   findIdenticalFirstScreens,
   findSubpageOnlyRounds,
+  findStageIssues,
   SCREEN_SIM_THRESHOLD,
   SUBPAGE_MAX_DIFF,
   SUBPAGE_MIN_SAME_SHARE,

@@ -158,7 +158,21 @@ with an overview table carrying a recommendation column and jump links
    structure → design → animation) only when content, UX or visual dependencies
    make that sensible (a later stage depends on the answers of an earlier one).
    Never mandatory: a concept without Etappen stays valid, and the user may merge
-   stages. This is an authoring rule only; how stages are shown is not specified.
+   stages.
+
+   *Declaring them:* `page.json` gets `"stages": [{ "id": "A", "name": "Use Cases" }, …]`
+   (or `concept-build.js init … --stages "A:Use Cases,B:Struktur"`) — 1 to 7 entries, ids
+   consecutive capitals A–G, name at most 24 characters. Optional `"icon": "🧭"` (emoji before
+   the concept name in the ☰ panel head, default 🧭); the concept name is `page.json.title`, at
+   most 32 characters. Every round section of a staged concept carries `data-stage="<id>"`; the
+   rounds of one stage are consecutive and stages advance in order (the gate checks this, see
+   validation-gate.md § Etappen). The build injects them as `<script type="application/json"
+   id="concept-stages">` — never write that script by hand. In the LAST stage there is no
+   "Nächste Etappe"; the implement step is offered again.
+
+   *Layout:* Claude arranges stages horizontally (tabs), vertically or combined per concept —
+   whatever overwhelms the user least — and at the end always offers the most complete overview
+   possible.
 
    **Single-screen, single-design (exactly one `data-screen`):** no
    screen-nav, no per-screen feedback textarea — the dock shows ONLY the

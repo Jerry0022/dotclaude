@@ -1,4 +1,4 @@
-# Concept templates, part 25 of 46: Shared systems — decision panel state CSS (continued 2)
+# Concept templates, part 25 of 48: Shared systems — decision panel state CSS (continued 2)
 
 ```css
 /* Close-out sheet — the final report's to-do inbox. A flex column end to

@@ -523,3 +523,60 @@ describe("concept-build — CLI and hook", () => {
     expect(res.status).toBe(2);
   });
 });
+
+describe("concept-build — Etappen (stages)", () => {
+  const stages = [{ id: "A", name: "Use Cases" }, { id: "B", name: "Struktur" }, { id: "C", name: "Feinschliff" }];
+  const stagesOf = html => JSON.parse(doc(html).querySelector("script#concept-stages").textContent);
+
+  test("build injects #concept-stages with the live round's stage; data-stage survives freezing", () => {
+    const { dir, home } = project();
+    cb.init(dir, { title: "Billing", locale: "en" });
+    const page = JSON.parse(fs.readFileSync(path.join(dir, "page.json"), "utf8"));
+    fs.writeFileSync(path.join(dir, "page.json"), JSON.stringify({ ...page, stages, icon: "🧭" }));
+    write(dir, 1, decisionRound(1, "", { baked: true, attrs: ' data-stage="A"' }));
+    write(dir, 2, decisionRound(2, "", { attrs: ' data-stage="B"' }));
+    const r = cb.build(dir, { home });
+    expect(r.ok).toBe(true);
+    expect(stagesOf(r.html)).toEqual({ stages, current: "B", icon: "🧭", title: "Billing" });
+    const d = doc(r.html);
+    expect(d.querySelector('section[data-iteration="1"]').getAttribute("data-stage")).toBe("A");
+    expect(d.querySelector('section[data-iteration="1"]').hasAttribute("hidden")).toBe(true);
+    expect(d.querySelector('section[data-iteration="2"]').getAttribute("data-stage")).toBe("B");
+  });
+
+  test("no stages in page.json -> no #concept-stages script, nothing else changes", () => {
+    const { dir, home } = project();
+    cb.init(dir, { title: "T", locale: "en" });
+    write(dir, 1, decisionRound(1));
+    const r = cb.build(dir, { home });
+    expect(r.ok).toBe(true);
+    expect(r.html).not.toContain('id="concept-stages"');
+  });
+
+  test("a design round gets the script too; icon defaults to the compass", () => {
+    const { dir, home } = project();
+    cb.init(dir, { title: "D", locale: "en", mode: "design", stages: "A:One,B:Two" });
+    write(dir, 1, designRound(1).replace("<section ", '<section data-stage="A" '));
+    const r = cb.build(dir, { home });
+    expect(r.ok).toBe(true);
+    expect(stagesOf(r.html)).toMatchObject({ current: "A", icon: "🧭", stages: [{ id: "A", name: "One" }, { id: "B", name: "Two" }] });
+  });
+
+  test("a staged round without data-stage blocks the build (gate)", () => {
+    const { dir, home } = project();
+    cb.init(dir, { title: "T", locale: "en", stages: "A:One,B:Two" });
+    write(dir, 1, decisionRound(1));
+    const r = cb.build(dir, { home });
+    expect(r.ok).toBe(false);
+    expect(r.gate).toContain("stages-round-untagged");
+  });
+
+  test("init --stages validates ids, count and name length", () => {
+    const { dir } = project();
+    const page = cb.init(dir, { title: "T", stages: "A:Use Cases, B:Struktur" });
+    expect(page.stages).toEqual([{ id: "A", name: "Use Cases" }, { id: "B", name: "Struktur" }]);
+    expect(() => cb.init(dir, { title: "T", stages: "A:x,C:y", force: true })).toThrow(/consecutive/);
+    expect(() => cb.init(dir, { title: "T", stages: "A:" + "x".repeat(25), force: true })).toThrow(/1-24/);
+    expect(() => cb.init(dir, { title: "T", stages: "A:a,B:b,C:c,D:d,E:e,F:f,G:g,H:h", force: true })).toThrow(/at most 7/);
+  });
+});

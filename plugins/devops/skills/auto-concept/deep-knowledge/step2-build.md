@@ -27,7 +27,7 @@ docs/concepts/
                                 the user's browser address it exactly as before.
                                 Never written, read in full or edited by hand.
   {ts}-{slug}/                ← the SOURCE folder
-    page.json                 { title, subtitle, locale, mode, pageVersion, lastBuild }
+    page.json                 { title, subtitle, locale, mode, pageVersion, lastBuild, stages?, icon? }   (stages/icon: step1-templates.md § Etappen)
     head.html                 optional: this concept's tokens / content CSS / CSP meta / fonts
     rounds/01.html            <section data-iteration="1" data-iteration-template="…"> … </section>
     rounds/02.html            one file per round, NN = the round number

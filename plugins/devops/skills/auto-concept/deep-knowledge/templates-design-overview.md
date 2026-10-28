@@ -1,4 +1,4 @@
-# Concept templates, part 16 of 46: Template: design — variant overview JS
+# Concept templates, part 16 of 48: Template: design — variant overview JS
 
 ## Variant overview JS — `wireDesignOverview()`
 
@@ -1364,6 +1364,7 @@ returns — the single-design page is untouched.
     document.querySelectorAll('#screen-nav .screen-nav-design-heading').forEach(h => {
       const m = metas.find(x => x.id === h.dataset.designId);
       if (!m) return;
+      if (m.color && h.parentElement) h.parentElement.style.setProperty('--nav-rail', m.color);
       const label = h.firstElementChild;
       if (label && !label.querySelector('.dz-icon')) label.insertBefore(iconEl(m.icon, { size: 's', color: m.color }), label.firstChild);
       // `icon N · name`, same digit as the hotkey.

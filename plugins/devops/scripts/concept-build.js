@@ -15,7 +15,7 @@
  *   docs/concepts/{name}.html, which bridge, watchers, hooks and close-out
  *   keep addressing as before:
  *
- *     page.json        { title, subtitle, locale, mode, pageVersion, lastBuild }
+ *     page.json        { title, subtitle, locale, mode, pageVersion, lastBuild, stages?, icon? }
  *     head.html        optional: the page's design tokens / content base CSS /
  *                      CSP meta / fonts. Falls back to
  *                      {project}/.claude/skills/auto-concept/head.html, then
@@ -28,7 +28,7 @@
  *                      have been baked (data-baked) with the user's answers.
  *
  *   Commands:
- *     init   <dir> --title T [--subtitle S] [--locale de] [--mode decision|design|mixed|free]
+ *     init   <dir> --title T [--subtitle S] [--locale de] [--mode decision|design|mixed|free] [--stages "A:Name,B:Name"]
  *            [--report]  report-only page: round 01 is the final-report skeleton
  *     build  <dir> [--out <file>] [--force]
  *                                       assemble + gate; writes atomically and only when
@@ -602,7 +602,8 @@ function assemble({ page, head, fragments, slug = 'concept', md = readTemplates(
     || page.mode === 'design' || page.mode === 'mixed';
   const version = page.pageVersion || stamp();
   const title = page.title || 'Concept';
-  const headExtra = `<meta name="generator" content="${GENERATOR}">\n${head}`;
+  const stagesHtml = stagesScript(page, live);
+  const headExtra =`<meta name="generator" content="${GENERATOR}">\n${head}`;
   let html;
 
   if (anyDesign) {
@@ -617,7 +618,7 @@ function assemble({ page, head, fragments, slug = 'concept', md = readTemplates(
         `<!DOCTYPE html>\n<html lang="${esc(page.locale || 'en')}" data-theme="dark" data-page-version="${esc(version)}" data-template="${liveTemplate}">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>${esc(title)}</title>\n${headExtra}\n<style>\n${css}\n</style>\n</head>`)
       .replace(/<body style="overflow: hidden">/, () => `<body${liveTemplate === 'design' ? ' style="overflow: hidden"' : ''}>`)
       .replace(/<main>[\s\S]*?<\/main>/, () => `${pageHeader(page)}<main>\n${sectionsHtml}\n</main>`)
-      .replace(/<\/body>\s*<\/html>\s*$/, () => `<script type="application/json" id="concept-decisions">\n{"submitted": false, "decisions": [], "comments": {"general": {"text": "", "attachments": []}, "items": []}}\n</script>\n<script>\n${js}\n</script>\n</body>\n</html>\n`);
+      .replace(/<\/body>\s*<\/html>\s*$/, () => `${stagesHtml}<script type="application/json" id="concept-decisions">\n{"submitted": false, "decisions": [], "comments": {"general": {"text": "", "attachments": []}, "items": []}}\n</script>\n<script>\n${js}\n</script>\n</body>\n</html>\n`);
   } else {
     const skel = htmlBlocks.find(b => b.code.startsWith('<!DOCTYPE html>'));
     if (!skel) throw new Error('common skeleton not found in the concept templates');
@@ -628,13 +629,40 @@ function assemble({ page, head, fragments, slug = 'concept', md = readTemplates(
       .replace(/<style>\/\* all CSS inline \*\/<\/style>/, () => `<style>\n${css}\n</style>`)
       .replace(/<h1>\{title\}<\/h1>\s*<p class="subtitle">[^<]*<\/p>/, () => `<h1>${esc(title)}</h1>\n        ${sub}`)
       .replace(/<main>[\s\S]*?<\/main>/, () => `<main>\n${sectionsHtml}\n</main>`)
-      .replace(/<script>\/\* all JS inline \*\/<\/script>/, () => `<script>\n${js}\n</script>`);
+      .replace(/<script>\/\* all JS inline \*\/<\/script>/, () => `${stagesHtml}<script>\n${js}\n</script>`);
   }
 
   html = html.replace(/(<nav class="iteration-tabs"[^>]*>)[\s\S]*?(<\/nav>)/, (_, a, b) => `${a}\n${tabsHtml(rounds, liveN)}\n${b}`);
   html = substitute(html, locale, slug);
   html = html.replace(/\{generation-timestamp\}/g, version);
   return { html, rounds: rounds.map(r => r.n), liveN, liveTemplate, problems };
+}
+
+/**
+ * Etappen: the `#concept-stages` JSON script (only when page.json declares
+ * stages). `current` = stage of the live (last) round; falls back to the first
+ * stage when the live round carries no data-stage (the gate flags that).
+ */
+function stagesScript(page, live) {
+  const stages = Array.isArray(page.stages) ? page.stages.filter(s => s && s.id) : [];
+  if (!stages.length) return '';
+  const own = live ? getAttr(live.attrs, 'data-stage') : '';
+  const current = own && stages.some(s => s.id === own) ? own : stages[0].id;
+  const data = { stages: stages.map(s => ({ id: String(s.id), name: String(s.name || '') })), current, icon: page.icon || '🧭', title: page.title || 'Concept' };
+  const json = JSON.stringify(data).replace(/</g, '\\u003c');
+  return `<script type="application/json" id="concept-stages">\n${json}\n</script>\n`;
+}
+
+/**
+ * Parse `--stages "A:Use Cases,B:Structure"` into page.json stages. The
+ * gate re-checks the built page; init rejects obviously bad input early.
+ */
+function parseStages(spec) {
+  if (spec === undefined || spec === null || spec === true || spec === '') return null;
+  return String(spec).split(',').map(x => x.trim()).filter(Boolean).map(x => {
+    const i = x.indexOf(':');
+    return i < 0 ? { id: x, name: '' } : { id: x.slice(0, i).trim(), name: x.slice(i + 1).trim() };
+  });
 }
 
 /**
@@ -715,6 +743,16 @@ function init(dir, opts) {
     // key on it, so a rebuild must never change it.
     pageVersion: stamp(),
   };
+  const stages = parseStages(opts.stages);
+  if (stages) {
+    if (stages.length > 7) throw new Error('--stages: at most 7 stages (A-G)');
+    stages.forEach((s, i) => {
+      const want = String.fromCharCode(65 + i);
+      if (s.id !== want) throw new Error(`--stages: stage ${i + 1} must have id "${want}" (consecutive capitals from A), got "${s.id}"`);
+      if (!s.name || [...s.name].length > 24) throw new Error(`--stages: stage ${s.id} needs a name of 1-24 characters`);
+    });
+    page.stages = stages;
+  }
   writePage(dir, page);
   if (reportOnly) {
     const first = path.join(dir, 'rounds', '01.html');
@@ -852,7 +890,7 @@ function report(r, dry) {
 }
 
 const USAGE = `usage:
-  concept-build.js init   <dir> --title T [--subtitle S] [--locale de] [--mode decision|design|mixed|free] [--allow-main]
+  concept-build.js init   <dir> --title T [--subtitle S] [--locale de] [--mode decision|design|mixed|free] [--stages "A:Use Cases,B:Structure"] [--allow-main]
   concept-build.js init   <dir> --report --title T [--locale de]   (report-only: round 01 = final-report skeleton)
   concept-build.js build  <dir> [--out file.html] [--force]
   concept-build.js check  <dir>

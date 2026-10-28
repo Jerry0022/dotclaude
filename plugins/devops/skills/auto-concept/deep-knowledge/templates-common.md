@@ -1,4 +1,4 @@
-# Concept templates, part 01 of 46: Overview, UI locale
+# Concept templates, part 01 of 48: Overview, UI locale
 
 # Concept HTML Templates
 
@@ -146,6 +146,20 @@ must see their own language. The locale hint is authoritative.
 | `iteration.final_tab`          | Final report                   | Abschlussbericht |
 | `iteration.reality_tab`        | Reality check                  | Realitäts-Check |
 | `nav.sections`                 | Sections                       | Abschnitte |
+| `stage.tabs`                   | Stages                         | Etappen |
+| `stage.label`                  | Stage                          | Etappe |
+| `stage.next`                   | Next stage                     | Nächste Etappe |
+| `stage.next_tip`               | On to stage {next} · {name}    | Weiter zu Etappe {next} · {name} |
+| `stage.struct`                 | Structure                      | Struktur |
+| `stage.kind_one`               | 1 direction                    | 1 Richtung |
+| `stage.kind_pick`              | {n} directions, one picked     | {n} Richtungen, eine gewählt |
+| `stage.kind_open`              | {n} directions                 | {n} Richtungen |
+| `stage.kind_seq`               | {n} topics in a row            | {n} Themen nacheinander |
+| `stage.kind_doc`               | {n} sections                   | {n} Abschnitte |
+| `stage.older`                  | Earlier rounds of this stage   | Frühere Runden dieser Etappe |
+| `stage.ahead`                  | Starts after the current stage. | Beginnt nach der aktuellen Etappe. |
+| `stage.prev`                   | Previous stages                | Vorherige Etappen |
+| `stage.more`                   | More stages                    | Weitere Etappen |
 | `reality.headline`             | The default branch moved while this concept was open | Der Default-Branch hat sich bewegt, während dieses Konzept offen war |
 | `reality.intro`                | These changes landed after this concept was written. Implementing it unchanged would produce wrong, dead or duplicate code — so this round asks you about them first. | Diese Änderungen sind gelandet, nachdem dieses Konzept geschrieben wurde. Unverändert umgesetzt würde das falschen, toten oder doppelten Code erzeugen — deshalb fragt diese Runde sie zuerst ab. |
 | `reality.reassure`             | Your implement order is not lost: submitting this round with "Implement with feedback" implements directly, with no further check. | Dein Implement-Auftrag ist nicht verloren: Wenn du diese Runde mit „Mit Feedback implementieren" abschickst, wird direkt implementiert — ohne erneute Prüfung. |

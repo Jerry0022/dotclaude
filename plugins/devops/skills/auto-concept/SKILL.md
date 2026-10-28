@@ -281,6 +281,9 @@ sheet. Branch on it:
    the concept page
 **Before executing this step, Re-Read `deep-knowledge/step5-process.md` § 5b · iterate steps 3–5 completely on every round — even if read earlier in this session** — advancing the reality-check baseline, mapping proposals and ad-hoc items, proceeding to 5c.
 
+**`action: "next-stage"` (staged concepts, "Nächste Etappe" button):** like iterate — concept page only, no code — but the next round carries the next stage's `data-stage`.
+**Before executing this step, Re-Read `deep-knowledge/step5-process.md` § 5b · next-stage completely on every round — even if read earlier in this session** — payload fields, next-round `data-stage`, build recomputes `current`.
+
 **`action: "implement"` ("Mit Feedback implementieren" button):**
 
 **Channel extras.** Started with a `--from=<name>` other than `do-batch` →

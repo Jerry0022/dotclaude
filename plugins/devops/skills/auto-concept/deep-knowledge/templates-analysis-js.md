@@ -1,4 +1,4 @@
-# Concept templates, part 45 of 46: Template: analysis — engine UI JS (palette, stages, stepper, choreography)
+# Concept templates, part 45 of 48: Template: analysis — engine UI JS (palette, stages, stepper, choreography)
 
 ## Engine UI — palette, stages, stepper, choreography (JS)
 

@@ -1,4 +1,4 @@
-# Concept templates, part 23 of 46: Shared systems — section navigation (continued 2)
+# Concept templates, part 23 of 48: Shared systems — section navigation (continued 2)
 
 ```javascript
 function buildSectionNav() {

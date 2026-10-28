@@ -1,4 +1,4 @@
-# Concept templates, part 41 of 46: Shared systems — iteration tabs
+# Concept templates, part 41 of 48: Shared systems — iteration tabs
 
 ## Iteration Tabs
 
@@ -331,8 +331,14 @@ function showIteration(n) {
       // Phase icon: "🧭 Runde N" while concepting, "🏁 Abschluss" on the
       // final report — the head names the phase the session is in.
       const finalTab = isFinal || (hereTab && hereTab.hasAttribute('data-final-report'));
-      const phase = finalTab ? '🏁 {{final.phase}}' : '🧭 ' + label;
-      round.dataset.phase = finalTab ? 'final' : 'round';
+      // The LIVE round's head names the concept ("<icon> <title>", icon from
+      // #concept-stages, default 🧭); the round number moved into the nav
+      // ("Übersicht · Runde N" / the "Runde N" row, § Etappen). A frozen
+      // round keeps "🧭 Runde N · archiviert" exactly as before.
+      const named = !finalTab && isLive && typeof conceptHeadName === 'function' ? conceptHeadName() : '';
+      const phase = finalTab ? '🏁 {{final.phase}}' : (named || '🧭 ' + label);
+      round.dataset.phase = finalTab ? 'final' : (named ? 'concept' : 'round');
+      if (named) round.dataset.tip = named; else delete round.dataset.tip;
       round.dataset.hereRoundBase = phase + (isLive ? '' : ' · {{nav.archived}}');
       round.textContent = round.dataset.hereRoundBase;
     }

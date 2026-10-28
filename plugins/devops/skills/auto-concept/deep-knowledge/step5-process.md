@@ -175,6 +175,23 @@ never re-run a completed step. The checkpoint records what the previous run
 5. Proceed to Step 5c (append next iteration with refined options that
    reflect the Miteinbeziehen/Verwerfen choices)
 
+## 5b · next-stage
+
+Payload: `action:"next-stage"`, `stage:"B"` (the stage just worked), `next:"C"`. It behaves
+like `iterate` — concept page only, **no code, files or external systems change** — with one
+difference: the next round belongs to the next stage.
+
+1. Run iterate steps 3–5 above (reality-check baseline, mappings, ad-hoc items), bake the
+   submitted round as usual.
+2. Write the next round fragment with `data-stage="<next>"` (the payload's `next`); all later
+   rounds stay in that stage until the user advances again. Refuse a `next` that is not the
+   stage directly after `stage` in `page.json.stages`.
+3. `concept-build.js build` — it recomputes `current` in the injected `#concept-stages` from the
+   live round's `data-stage`, so nothing else needs updating. (`page.json` keeps only the
+   stage list; do not store a separate "current".)
+4. Then the usual 5c tail: `/reload` before `/reset` (the server counts `next-stage` as a
+   reload-required action, like `iterate`).
+
 ## 5b · implement steps 1–4
 
 1. **Summarize** what was selected/rejected/commented. **Mappings:** the

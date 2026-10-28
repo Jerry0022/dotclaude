@@ -302,6 +302,25 @@ stripping comments, `<script>` / `<style>`, ids, `data-screen` / `data-nav-label
 | V8 | First screens of ≥2 designs in one round are identical or near-identical and neither carries `data-ov-demo` (kind `overview-identical-first-screen`). Fix: `data-ov-demo="<selector>"` on the designs — the overview shows the differing element as a looping, zoomed demo. | warning |
 | P34 | A `data-design-set="alternatives"` round whose designs share every screen label (≥2 screens each), whose first screens are alike, and where per design pair at most `SUBPAGE_MAX_DIFF` (2) screens differ or ≥ `SUBPAGE_MIN_SAME_SHARE` (2/3) are alike (kind `design-round-subpage-only`, reported through `structural`). Fix: the differing sub-page's takes become the round's variants (one design per take), refined on their own; a later round zooms back out to the main variants. | **error (blocks)** |
 
+## Etappen (stages)
+
+Read from the built page's `#concept-stages` JSON script (`findStageIssues` in `concept-gate.js`).
+A page without that script and without `data-stage` is not affected. Errors are reported through
+`structural`.
+
+| # | Rule | Severity |
+|---|------|----------|
+| E1 | `stages-undeclared` — a round carries `data-stage` but the page has no `#concept-stages` (declare `stages` in page.json) | **error (blocks)** |
+| E2 | `stages-malformed` — the script is not JSON with a non-empty `stages` array | **error (blocks)** |
+| E3 | `stages-too-many` — more than 7 stages | **error (blocks)** |
+| E4 | `stages-ids` — ids are not consecutive capital letters from A | **error (blocks)** |
+| E5 | `stages-name` — a stage name is empty or longer than 24 characters | **error (blocks)** |
+| E6 | `stages-round-untagged` — a round has no `data-stage` although stages exist | **error (blocks)** |
+| E7 | `stages-round-unknown` — `data-stage` names an undeclared stage | **error (blocks)** |
+| E8 | `stages-order` — a round's stage is earlier than a previous round's (stages must be non-decreasing) | **error (blocks)** |
+| E9 | `stages-current` — `current` differs from the live round's stage | **error (blocks)** |
+| E10 | `stages-title` — concept title longer than 32 characters (panel head limit) | warning |
+
 ## Engine drift on iteration append
 
 **This gate runs against the WHOLE existing file on every append, not only

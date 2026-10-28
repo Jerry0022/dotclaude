@@ -52,6 +52,8 @@ Index of the concept engine reference: the three templates (decision, design, fr
 | 44 | [templates-analysis-css.md](templates-analysis-css.md) | 341 | Template: analysis — Styling CSS (Full + Lite) |
 | 45 | [templates-analysis-js.md](templates-analysis-js.md) | 579 | Template: analysis — Engine UI JS (palette, stages, stepper, choreography) |
 | 46 | [templates-analysis-js-2.md](templates-analysis-js-2.md) | 609 | Template: analysis — Engine UI JS (continued) |
+| 47 | [templates-stages.md](templates-stages.md) | 186 | Etappen (stages) — contract, panel head name, round row, tabs, structure button, next-stage station · CSS |
+| 48 | [templates-stages-js.md](templates-stages-js.md) | 446 | Etappen JS |
 
 ## Using the parts
 

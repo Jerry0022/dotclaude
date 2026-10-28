@@ -23,6 +23,7 @@ import {
   ENGINE_CLASSES,
   findIdenticalFirstScreens,
   findSubpageOnlyRounds,
+  findStageIssues,
   findDesignAuthoringWarnings,
 } from "./concept-gate.js";
 
@@ -1130,5 +1131,41 @@ describe("design-round differentiation (validation-gate.md V7 / V8 / P34)", () =
     // many screens, most differ
     const many = (t) => ["A", "B", "C", "D"].map((l) => screen(l, `<h2>${l} ${t}</h2><p>${t} ${t} unique words for ${l} ${t} screen content here</p>`));
     expect(findSubpageOnlyRounds(round([design("d1", many("red")), design("d2", many("blue"))]))).toEqual([]);
+  });
+});
+
+describe("findStageIssues (Etappen)", () => {
+  const sec = (n, stage) => `<section data-iteration="${n}" data-iteration-template="decision"${stage ? ` data-stage="${stage}"` : ""}><p>x</p></section>`;
+  const page = (data, rounds) => `<main>${rounds.join("\n")}</main>\n<script type="application/json" id="concept-stages">${JSON.stringify(data)}</script>`;
+  const ok = { stages: [{ id: "A", name: "Use Cases" }, { id: "B", name: "Struktur" }], current: "B", icon: "🧭", title: "Billing" };
+  const kinds = h => findStageIssues(h).errors.map(i => i.kind);
+
+  test("a valid staged page passes", () => {
+    const r = findStageIssues(page(ok, [sec(1, "A"), sec(2, "A"), sec(3, "B")]));
+    expect(r.errors).toEqual([]);
+    expect(r.warnings).toEqual([]);
+  });
+  test("no script and no data-stage = no concern", () => {
+    expect(findStageIssues(`<main>${sec(1)}</main>`)).toEqual({ errors: [], warnings: [] });
+  });
+  test("data-stage without declared stages is flagged", () => {
+    expect(kinds(`<main>${sec(1, "A")}</main>`)).toEqual(["stages-undeclared"]);
+  });
+  test("non-consecutive ids, >7 stages, long names", () => {
+    expect(kinds(page({ ...ok, stages: [{ id: "A", name: "a" }, { id: "C", name: "c" }] }, [sec(1, "A")]))).toContain("stages-ids");
+    const eight = "ABCDEFGH".split("").map(id => ({ id, name: id }));
+    expect(kinds(page({ ...ok, stages: eight, current: "A" }, [sec(1, "A")]))).toContain("stages-too-many");
+    expect(kinds(page({ ...ok, stages: [{ id: "A", name: "x".repeat(25) }], current: "A" }, [sec(1, "A")]))).toContain("stages-name");
+  });
+  test("round without or with unknown data-stage, order going backwards, wrong current", () => {
+    expect(kinds(page(ok, [sec(1, "A"), sec(2)]))).toContain("stages-round-untagged");
+    expect(kinds(page(ok, [sec(1, "Z")]))).toContain("stages-round-unknown");
+    expect(kinds(page(ok, [sec(1, "B"), sec(2, "A")]))).toContain("stages-order");
+    expect(kinds(page({ ...ok, current: "A" }, [sec(1, "A"), sec(2, "B")]))).toContain("stages-current");
+  });
+  test("a title beyond 32 chars only warns", () => {
+    const r = findStageIssues(page({ ...ok, title: "x".repeat(33) }, [sec(1, "A"), sec(2, "B")]));
+    expect(r.errors).toEqual([]);
+    expect(r.warnings.map(w => w.kind)).toEqual(["stages-title"]);
   });
 });
