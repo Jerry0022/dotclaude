@@ -26,6 +26,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { sessionFile, readSessionFile, writeSessionFile } = require('./session-id');
+const { projectClaudeDir } = require('./project-root');
 
 const DEFAULT_LOCALE = 'en';
 const SUPPORTED = ['en', 'de'];
@@ -180,7 +181,7 @@ function normalizeLanguage(value) {
  */
 function configuredLocale({ cwd, home } = {}) {
   const dirs = [];
-  if (cwd) dirs.push(path.join(cwd, '.claude'));
+  if (cwd) dirs.push(projectClaudeDir(cwd));
   dirs.push(path.join(home || os.homedir(), '.claude'));
   for (const dir of dirs) {
     for (const name of ['settings.local.json', 'settings.json']) {
