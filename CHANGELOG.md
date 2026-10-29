@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.331.0] — 2026-10-29
+
+### Added
+- `ship_run` gains a `landPr` mode that squash-merges a green, mergeable, non-draft Dependabot PR without a version bump; anything else is refused with a reason, and the ship guard still blocks raw `gh pr merge` (#955).
+
 ## [0.330.10] — 2026-10-29
 
 ### Fixed

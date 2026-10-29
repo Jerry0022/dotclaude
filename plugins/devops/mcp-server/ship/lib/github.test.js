@@ -6,7 +6,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { execSync, execFileSync } from "node:child_process";
-import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch, markPRReady } from "./github.js";
+import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch, markPRReady, readPRForLand, landEligibility } from "./github.js";
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -512,5 +512,37 @@ describe("deleteRemoteBranch — URL-encodes the ref path", () => {
     deleteRemoteBranch("claude/issue#42 x", {});
     const args = execFileSync.mock.calls[0][1];
     expect(args[args.length - 1]).toBe("repos/{owner}/{repo}/git/refs/heads/claude/issue%2342%20x");
+  });
+});
+
+describe("readPRForLand / landEligibility (#955)", () => {
+  const green = [{ __typename: "CheckRun", name: "test", status: "COMPLETED", conclusion: "SUCCESS" }, { __typename: "StatusContext", context: "ci", state: "SUCCESS" }];
+  const pr = (over = {}) => ({ author: "app/dependabot", isDraft: false, mergeable: "MERGEABLE", state: "OPEN", statusCheckRollup: green, ...over });
+
+  test("reads and normalises the gh JSON", () => {
+    execFileSync.mockReturnValue(JSON.stringify({ author: { login: "app/dependabot" }, isDraft: false, mergeable: "MERGEABLE", statusCheckRollup: green, headRefName: "dependabot/npm/x", baseRefName: "main", state: "OPEN" }));
+    const r = readPRForLand(37, { cwd: "/r" });
+    expect(r).toMatchObject({ author: "app/dependabot", headRefName: "dependabot/npm/x", baseRefName: "main" });
+    expect(execFileSync.mock.calls[0][1]).toEqual(expect.arrayContaining(["pr", "view", "37", "--json"]));
+  });
+
+  test("green Dependabot PR is eligible (both author spellings)", () => {
+    expect(landEligibility(pr())).toEqual({ ok: true });
+    expect(landEligibility(pr({ author: "dependabot[bot]" }))).toEqual({ ok: true });
+  });
+
+  test.each([
+    ["human author", { author: "octocat" }, /not Dependabot/],
+    ["draft", { isDraft: true }, /draft/],
+    ["conflicting", { mergeable: "CONFLICTING" }, /not mergeable/],
+    ["closed", { state: "CLOSED" }, /CLOSED/],
+    ["no checks", { statusCheckRollup: [] }, /no checks/],
+    ["pending check", { statusCheckRollup: [{ name: "t", status: "IN_PROGRESS", conclusion: "" }] }, /not green: t/],
+    ["failed check", { statusCheckRollup: [{ name: "t", status: "COMPLETED", conclusion: "FAILURE" }] }, /not green: t/],
+    ["failed status", { statusCheckRollup: [{ __typename: "StatusContext", context: "ci", state: "PENDING" }] }, /not green: ci/],
+  ])("refuses: %s", (_n, over, re) => {
+    const v = landEligibility(pr(over));
+    expect(v.ok).toBe(false);
+    expect(v.reason).toMatch(re);
   });
 });

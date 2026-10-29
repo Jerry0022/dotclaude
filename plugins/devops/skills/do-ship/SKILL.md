@@ -56,6 +56,7 @@ A ship always lands on **alpha**. Naming a higher channel means "ship if anythin
 | `--cwd=<path>` | Every `ship_*` MCP call passes this path as `cwd`, git runs as `git -C <path>`, the Step 1e passes get `--cwd=<path>`. `ExitWorktree` is **never** called — `--cwd` implies `--keep`. Pre-Steps B/C still refer to this session. |
 | `--keep` | `ship_run({ …, keep: true })` — no branch or worktree teardown, only sentinel + lockout marker cleared. |
 | `--queued` | `ship_run({ …, queued: true })` — no hygiene; summary suffix `(Queue n/N)`; a blocked outcome is parked by the caller, not retried here. |
+| land a green Dependabot PR | `ship_run({ cwd, landPr: <n> })` — squash-merges it, no worktree/bump/changelog; `land-refused` unless bot-authored, non-draft, mergeable, all checks green. `gh pr merge` stays guarded. |
 | `.claude/.ship-queue` marker, `--delegated`, `--card-data`, `--resume`, `--inline` | read `deep-knowledge/composed-ships.md` (§ Queue marker, § Run flags) before Pre-Step A. |
 
 ## Pre-steps — model-side, before `ship_run`
@@ -104,6 +105,7 @@ Handle the need, then call `ship_run` again with the same params (plus what `res
 | `full-suite-required` | `ship_run` already ran one full local build; still red/absent → `ship-blocked` |
 | `checks-failed` | real red checks → `ship-blocked` with names + links. `ciQuotaDecisionNeeded` → ask the user (skip-checks / wait), re-call with `quotaDecision`; never `skipChecks` on your own (`deep-knowledge/release-results.md` § Account-limited CI) |
 | `release-failed` | `ship-blocked` with `detail.error`; `prLeftOpen` names the open draft |
+| `land-refused` | `landPr` only: the PR is not an eligible Dependabot PR — report `detail.reason`, land nothing, never fall back to `gh pr merge` |
 | `tool-error` | re-call once; again → the fallback pipeline from the stage named |
 
 **Never retry a merged release.** `ship_run` reads `merged` first and never calls release again for a landed merge; never call `ship_release` yourself after a `merged` result either (double-ship).

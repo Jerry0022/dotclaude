@@ -29,6 +29,8 @@ import { readVersion, bumpVersion } from "../lib/version.js";
 import { versionFilesSchema } from "./version-bump.js";
 import { recordTiming, summarizeShip, shipDurationTest } from "../lib/ship-timings.js";
 import { probeCiQuota } from "../lib/ci-quota-probe.js";
+import { readPRForLand, landEligibility, mergePR, deleteRemoteBranch } from "../lib/github.js";
+import { detectRepoMode, refusesGitWrites } from "../lib/repo-mode.js";
 
 const validationItems = z.preprocess(
   (v) => { if (typeof v !== "string") return v; try { return JSON.parse(v); } catch { return v; } },
@@ -42,13 +44,14 @@ const validationItems = z.preprocess(
 
 export const NEEDS = [
   "preflight-failed", "uncommitted-work", "conflict", "rebase-required", "validation-gaps", "build-red", "codex-judgment",
-  "bump-required", "major-bump", "bump-mismatch", "full-suite-required", "checks-failed", "release-failed", "tool-error",
+  "bump-required", "major-bump", "bump-mismatch", "full-suite-required", "checks-failed", "release-failed", "tool-error", "land-refused",
 ];
 
 export const schema = z.object({
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
-  title: z.string().describe("PR title (conventional commit, ≤70 chars)"),
-  body: z.string().describe("PR body (Closes #N first when applicable)"),
+  title: z.string().optional().describe("PR title (conventional commit, ≤70 chars). Not needed with landPr."),
+  landPr: z.number().int().positive().optional().describe("Land this existing GREEN Dependabot PR (squash, delete branch) instead of shipping the cwd branch: no preflight, bump or changelog. Refuses with needs \"land-refused\" unless the PR is Dependabot-authored, non-draft, mergeable and every check is green."),
+  body: z.string().optional().describe("PR body (Closes #N first when applicable). Not needed with landPr."),
   bump: z.enum(["patch", "minor", "major", "none"]).optional().describe("Bump decided by the model (final ship to main). Omitted on a final ship → returns needs \"bump-required\". Ignored for intermediate ships."),
   majorConfirmed: z.boolean().default(false).describe("The USER confirmed a major bump. Without it bump \"major\" returns needs \"major-bump\"."),
   changelogEntry: z.string().nullable().default(null).describe("The CHANGELOG entry body the model wrote (markdown sections, no heading needed). ship_run inserts it at the top under a heading in the repo's existing format (e.g. `## [X.Y.Z] — YYYY-MM-DD`) before ship_version_bump. Skipped when that version's heading already exists."),
@@ -162,7 +165,29 @@ function defaultDeps() {
     recordTiming,
     summarize: summarizeShip,
     now: () => Date.now(),
+    github: { readPR: readPRForLand, merge: mergePR, deleteBranch: deleteRemoteBranch },
+    repoMode: detectRepoMode,
   };
+}
+
+/** landPr mode (#955): merge one green Dependabot PR; no worktree, preflight, bump or changelog. */
+async function landDependabotPr(params, deps) {
+  const { cwd, landPr } = params;
+  const refuse = (reason, extra = {}) => ({ ok: false, stage: "land", needs: "land-refused", detail: { pr: landPr, reason, ...extra }, resume: {}, partial: { ok: false, stage: "land", stagesRun: [], stagesSkipped: [], warnings: [] } });
+  const mode = deps.repoMode(cwd);
+  if (refusesGitWrites(mode) || mode === "git-no-remote") return refuse(`repo mode "${mode}" cannot land a PR`);
+  let pr;
+  try { pr = deps.github.readPR(landPr, { cwd }); } catch (e) { return refuse(`could not read PR #${landPr}: ${e.message}`); }
+  const verdict = landEligibility(pr);
+  if (!verdict.ok) return refuse(verdict.reason);
+  let merged;
+  try { merged = deps.github.merge(landPr, pr.baseRefName, { cwd }, { strategy: "squash", skipDeleteBranch: true }); } catch (e) {
+    return { ok: false, stage: "land", needs: "tool-error", detail: { pr: landPr, error: e.message }, resume: {}, partial: { ok: false, stage: "land", stagesRun: [], stagesSkipped: [], warnings: [] } };
+  }
+  const warnings = merged.warning ? [merged.warning] : [];
+  const del = pr.headRefName ? deps.github.deleteBranch(pr.headRefName, { cwd }) : { ok: false, error: "no head ref" };
+  if (!del.ok) warnings.push(`remote branch ${pr.headRefName} not deleted: ${del.error || "unknown"}`);
+  return { ok: true, stage: "land", landed: { pr: landPr, base: pr.baseRefName, branch: pr.headRefName, mergeSha: merged.sha, verified: merged.verified }, stagesRun: [], stagesSkipped: [], warnings };
 }
 
 function overlapStrategy(pre) {
@@ -193,6 +218,7 @@ export async function handler(params, injected = {}) {
     return { ok: false, disabled: true, reason: "DEVOPS_SHIP_RUN=0", fallback: "skills/do-ship/deep-knowledge/manual-pipeline.md" };
   }
   const deps = { ...defaultDeps(), ...injected };
+  if (params.landPr) return landDependabotPr(params, deps);
   const tools = deps.tools || await defaultTools();
   const { cwd, lang } = params;
   const out = { ok: true, stage: "start", stagesRun: [], stagesSkipped: [], warnings: [] };

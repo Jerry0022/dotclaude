@@ -48,6 +48,10 @@ describe("isManualShipCommand — real invocations", () => {
     expect(isManualShipCommand('gh pr create --title x --body y')).toBe(true);
   });
 
+  test("gh pr merge of a Dependabot PR stays blocked (#955: landed via ship_run landPr)", () => {
+    expect(isManualShipCommand('gh pr merge 37 --squash --delete-branch --admin')).toBe(true);
+  });
+
   test("gh pr merge", () => {
     expect(isManualShipCommand('gh pr merge 5 --squash')).toBe(true);
   });
