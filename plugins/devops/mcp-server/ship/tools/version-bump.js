@@ -7,9 +7,18 @@ import { z } from "zod";
 import { readVersion, bumpVersion, updateVersionFiles, verifyVersionFiles } from "../lib/version.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
 
+// Project-declared version files (#941), captured by do-ship Step 0 from the
+// ship extension's `versionFiles:` field. Shared by ship_preflight and ship_run.
+export const versionFilesSchema = z.array(z.object({
+  path: z.string(),
+  key: z.string().optional(),
+  pattern: z.string().optional(),
+})).optional().describe("Extra version files the project declares: { path, key } (JSON, dotted key) or { path, pattern } (regex source, first capture group = the version). Bumped with the built-in files and checked by version-consistent.");
+
 export const schema = z.object({
   bump: z.enum(["patch", "minor", "major", "none"]).describe("Semantic version bump type"),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
+  versionFiles: versionFilesSchema,
 });
 
 export async function handler(params) {
@@ -43,10 +52,11 @@ export async function handler(params) {
   const vNew = bumpVersion(vOld, bump);
 
   // Update all version files (except CHANGELOG — Claude handles that editorially)
-  const filesUpdated = updateVersionFiles(vOld, vNew, cwd);
+  const versionFiles = params.versionFiles || [];
+  const filesUpdated = updateVersionFiles(vOld, vNew, cwd, versionFiles);
 
   // Verify all files match
-  const verification = verifyVersionFiles(vNew, cwd);
+  const verification = verifyVersionFiles(vNew, cwd, versionFiles);
 
   return {
     success: verification.consistent,

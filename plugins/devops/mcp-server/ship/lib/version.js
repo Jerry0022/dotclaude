@@ -4,7 +4,7 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, relative, isAbsolute } from "node:path";
 import { resolveGitRoot } from "./resolve-root.js";
 
 /**
@@ -88,7 +88,7 @@ export function bumpVersion(current, bump) {
 /**
  * Update all version files. Returns list of { file, updated } objects.
  */
-export function updateVersionFiles(oldVersion, newVersion, cwd = process.cwd()) {
+export function updateVersionFiles(oldVersion, newVersion, cwd = process.cwd(), versionFiles = []) {
   const type = detectProjectType(cwd);
   const results = [];
 
@@ -232,14 +232,65 @@ export function updateVersionFiles(oldVersion, newVersion, cwd = process.cwd()) 
     } catch { /* no marketplace.json at repo root — skip */ }
   }
 
+  for (const entry of versionFiles) results.push(updateDeclaredVersionFile(entry, newVersion, cwd));
+
   return results;
+}
+
+/**
+ * Version files a project declares on top of the built-in ones (#941) — e.g.
+ * a `version.ts` with `APP_VERSION`. An entry is `{ path, key }` (a JSON file,
+ * dotted key) or `{ path, pattern }` (a regex source whose FIRST capture group
+ * is the version). Paths are relative to cwd.
+ */
+function readDeclaredVersion({ path: relPath, key, pattern }, cwd) {
+  const absPath = resolve(cwd, relPath);
+  if (relative(resolve(cwd), absPath).startsWith("..") || isAbsolute(relative(resolve(cwd), absPath))) {
+    return { error: "path outside the project" };
+  }
+  let content;
+  try { content = readFileSync(absPath, "utf8"); } catch { return { error: "not found" }; }
+  if (key) {
+    let obj;
+    try { obj = JSON.parse(content); } catch { return { error: "not valid JSON" }; }
+    const nested = key.split(".");
+    let target = obj;
+    for (let i = 0; i < nested.length - 1; i++) target = target?.[nested[i]];
+    const last = nested[nested.length - 1];
+    if (!target || typeof target[last] !== "string") return { error: `key '${key}' missing or not a string` };
+    return {
+      found: target[last],
+      write: (v) => { target[last] = v; writeFileSync(absPath, JSON.stringify(obj, null, 2) + "\n"); },
+    };
+  }
+  if (pattern) {
+    let re;
+    try { re = new RegExp(pattern); } catch { return { error: "invalid pattern" }; }
+    const m = re.exec(content);
+    if (!m || m[1] === undefined) return { error: "pattern not found" };
+    const start = m.index + m[0].indexOf(m[1]);
+    return {
+      found: m[1],
+      write: (v) => writeFileSync(absPath, content.slice(0, start) + v + content.slice(start + m[1].length)),
+    };
+  }
+  return { error: "entry needs key or pattern" };
+}
+
+function updateDeclaredVersionFile(entry, newVersion, cwd) {
+  const file = entry.path;
+  const r = readDeclaredVersion(entry, cwd);
+  if (r.error) return { file, updated: false, declared: true, reason: r.error };
+  if (r.found === newVersion) return { file, updated: false, declared: true, reason: "already up to date" };
+  r.write(newVersion);
+  return { file, updated: true, declared: true };
 }
 
 /**
  * Verify all version files match the expected version.
  * Returns { consistent, mismatches }.
  */
-export function verifyVersionFiles(expectedVersion, cwd = process.cwd()) {
+export function verifyVersionFiles(expectedVersion, cwd = process.cwd(), versionFiles = []) {
   const type = detectProjectType(cwd);
   const mismatches = [];
 
@@ -368,6 +419,13 @@ export function verifyVersionFiles(expectedVersion, cwd = process.cwd()) {
         mismatches.push({ file: "(repo-root) CHANGELOG.md", expected: expectedVersion, found: match[1] });
       }
     } catch { /* skip */ }
+  }
+
+  // Declared files are never skipped: a missing one is a mismatch too (#941).
+  for (const entry of versionFiles) {
+    const r = readDeclaredVersion(entry, cwd);
+    if (r.error) mismatches.push({ file: entry.path, expected: expectedVersion, found: `(${r.error})` });
+    else if (r.found !== expectedVersion) mismatches.push({ file: entry.path, expected: expectedVersion, found: r.found });
   }
 
   return { consistent: mismatches.length === 0, mismatches };

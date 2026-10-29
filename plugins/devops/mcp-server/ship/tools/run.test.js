@@ -101,6 +101,23 @@ describe("ship_run — happy path", () => {
   });
 });
 
+describe("ship_run — declared version files (#941)", () => {
+  test("versionFiles reach ship_preflight and ship_version_bump", async () => {
+    const versionFiles = [{ path: "src/version.ts", pattern: "V = '([^']+)'" }];
+    const h = harness();
+    await handler(P({ versionFiles }), h.deps);
+    expect(h.calls.find((c) => c[0] === "ship_preflight")[1].versionFiles).toEqual(versionFiles);
+    expect(h.calls.find((c) => c[0] === "ship_version_bump")[1].versionFiles).toEqual(versionFiles);
+  });
+
+  test("absent → neither call carries the field", async () => {
+    const h = harness();
+    await handler(P(), h.deps);
+    expect(h.calls.find((c) => c[0] === "ship_preflight")[1]).not.toHaveProperty("versionFiles");
+    expect(h.calls.find((c) => c[0] === "ship_version_bump")[1]).not.toHaveProperty("versionFiles");
+  });
+});
+
 describe("ship_run — decision points", () => {
   test.each([
     ["preflight-failed", { ship_preflight: () => ({ ready: false, errors: ["dirty"] }) }, {}],

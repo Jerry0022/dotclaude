@@ -70,10 +70,10 @@ grep -q "\[$VERSION\]" CHANGELOG.md
 ```
 If no match → WARN: "CHANGELOG missing entry for $VERSION. Will add in Step 3."
 
-```bash
-# 5c. Check for project-specific version files from extension
-# Read extension reference.md for additional version file paths
-```
+5c. Project-specific version files: the extension's `versionFiles:` entries
+(`extensions.md` § Captured fields) reach `ship_preflight` / `ship_run` as
+`versionFiles`; `version-consistent` checks each one, and a missing or
+unmatched file is a mismatch, never a skip.
 
 These warnings don't block the ship — they ensure Step 3 (Version Bump)
 knows what needs updating. But they MUST be reported before proceeding.
