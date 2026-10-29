@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.329.1] — 2026-10-29
+
+### Fixed
+- Plugin update no longer reports the Quiet output style as "customized" when a stale marketplace clone does not know a hash a newer source shipped; leftover `temp_git_*..clone` directories are no longer treated as marketplaces (#937).
+
 ## [0.329.0] — 2026-10-28
 
 ### Added
