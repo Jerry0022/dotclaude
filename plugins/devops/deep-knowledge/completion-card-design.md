@@ -529,8 +529,9 @@ stable?`, `🟩 🎊 Stable — v0.179.0 — done.`, `⏳ 🤖 Team — not done
   Enter. It opens in the OS default browser (`rundll32
   url.dll,FileProtocolHandler` / `open` / `xdg-open`, never a shell) and
   blocks the prompt, so reopening never reaches Claude and spends no tokens.
-  The ack under the harness's red "blocked" panel says exactly that, so the
-  block does not read as a failure. Only a prompt that is
+  The block is a JSON verdict (`hooks/lib/block-prompt.js`), so the panel
+  holds one short line — `✓ Seite im Browser geöffnet — kostet keine Tokens.`
+  — not the hook path and a paragraph (#958). Only a prompt that is
   exactly the prefix plus one loopback URL is handled. The hook probes the
   URL first (1.5 s, any HTTP response counts as alive, self-signed loopback
   certs accepted): a dead page is never opened — the prompt passes through

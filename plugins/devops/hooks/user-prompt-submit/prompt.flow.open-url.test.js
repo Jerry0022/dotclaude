@@ -23,36 +23,27 @@ function opener(result) {
 }
 
 describe("prompt.flow.open-url", () => {
-  test("opens the page and blocks the prompt with an all-clear first line", async () => {
+  // #958: a JSON block verdict, not exit 2 + stderr — on exit 2 the harness
+  // prefixed the panel with the hook command and appended attribution. The
+  // panel now holds one short line: no tag, no URL, no justification.
+  test("opens the page and blocks the prompt with one short line", async () => {
     const { open, urls } = opener(true);
     const res = await handle({ prompt: `Im Standardbrowser öffnen: ${URL_}` }, { open, probe: alive });
     expect(urls).toEqual([URL_]);
-    expect(res.exitCode).toBe(2);
-    expect(res.stderr.split("\n")[0]).toBe(`[open-url] ✓ Seite im Standardbrowser geöffnet: ${URL_}`);
+    expect(res).toEqual({ exitCode: 0, stderr: "", block: "✓ Seite im Browser geöffnet — kostet keine Tokens." });
   });
 
   test("answers in the prompt's language", async () => {
     const { open } = opener(true);
     const res = await handle({ prompt: `Open in default browser: ${URL_}` }, { open, probe: alive });
-    expect(res.exitCode).toBe(2);
-    expect(res.stderr).toBe(renderAck(URL_, "en"));
-    expect(res.stderr).toContain("Opened in your default browser");
+    expect(res.block).toBe(renderAck("en"));
+    expect(res.block).toBe("✓ Opened in your browser — no tokens spent.");
   });
 
-  // #542: "kostet keinen Turn" was jargon — the owner had to guess that the
-  // point is opening the page without spending tokens. The ack now says that
-  // the red "blocked" headline is intended and the input never reached Claude.
-  test("says in plain words that the block is intended and spends no tokens", () => {
-    const de = renderAck(URL_, "de").split("\n")[1];
-    expect(de).toContain("„blockiert“ ist gewollt");
-    expect(de).toContain("ohne deine Eingabe an Claude zu schicken");
-    expect(de).toContain("spart Tokens");
-    const en = renderAck(URL_, "en").split("\n")[1];
-    expect(en).toContain('"blocked" notice is intended');
-    expect(en).toContain("without sending your input to Claude");
-    expect(en).toContain("costs no tokens");
-    for (const text of [renderAck(URL_, "de"), renderAck(URL_, "en")]) {
-      expect(text).not.toMatch(/keinen Turn|no turn/);
+  test("the ack is one line without tag, URL or justification", () => {
+    for (const text of [renderAck("de"), renderAck("en")]) {
+      expect(text).not.toContain("\n");
+      expect(text).not.toMatch(/\[open-url\]|http|blockiert|blocked/);
     }
   });
 
@@ -60,7 +51,7 @@ describe("prompt.flow.open-url", () => {
     for (const key of ["user_message", "message"]) {
       const { open, urls } = opener(true);
       const res = await handle({ [key]: `Im Standardbrowser öffnen: ${URL_}` }, { open, probe: alive });
-      expect(res.exitCode, key).toBe(2);
+      expect(res.block, key).toBeTruthy();
       expect(urls).toEqual([URL_]);
     }
   });
