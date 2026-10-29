@@ -62,12 +62,21 @@ export function syncKeptBranch(cwd, branch, base) {
   if (gitTry(["rev-parse", "--abbrev-ref", "HEAD"], opts) !== branch) return { synced: false, reason: "not-on-branch" };
   const dirty = porcelainLines(cwd);
   if (dirty === null || dirty.length > 0) return { synced: false, reason: "dirty-tree" };
-  if (!gitTry(["config", "--get", `branch.${branch}.merge`], opts)) return { synced: false, reason: "no-upstream" };
+  // The upstream must be origin/<branch> itself — another upstream says nothing
+  // about whether the ship's remote branch is gone.
+  if (gitTry(["config", "--get", `branch.${branch}.remote`], opts) !== "origin" ||
+      gitTry(["config", "--get", `branch.${branch}.merge`], opts) !== `refs/heads/${branch}`) {
+    return { synced: false, reason: "no-upstream" };
+  }
+  const headSha = gitTry(["rev-parse", "HEAD"], opts);
+  // Last pushed tip, read before the prune drops it: local commits on top of it
+  // never reached the remote, so the squash cannot contain them.
+  const pushedSha = gitTry(["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${branch}`], opts);
+  if (pushedSha && pushedSha !== headSha) return { synced: false, reason: "unpushed-commits" };
   gitTry(["fetch", "--prune", "origin"], { cwd, timeout: NETWORK_TIMEOUT });
   if (gitTry(["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${branch}`], opts)) {
     return { synced: false, reason: "upstream-present" };
   }
-  const headSha = gitTry(["rev-parse", "HEAD"], opts);
   const baseSha = gitTry(["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${base}`], opts);
   if (!headSha || !baseSha) return { synced: false, reason: "unresolved-ref" };
   if (headSha === baseSha) return { synced: false, reason: "already-on-base" };

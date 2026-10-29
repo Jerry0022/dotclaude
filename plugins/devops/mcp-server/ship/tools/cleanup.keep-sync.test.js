@@ -42,15 +42,19 @@ const BASE = "bbbb222";
 // tree equal to origin/main's.
 function repo(over = {}) {
   const s = {
-    current: BRANCH, upstream: `refs/heads/${BRANCH}`, remoteBranch: null,
+    current: BRANCH, remote: "origin", upstream: `refs/heads/${BRANCH}`,
+    // tracking ref before the prune (last pushed tip) and after it
+    pushed: HEAD, remoteBranch: null,
     head: HEAD, base: BASE, headTree: "t1", baseTree: "t1", ...over,
   };
+  let fetched = false;
   gitTry.mockImplementation((args) => {
     const a = args.join(" ");
     if (a === "rev-parse --abbrev-ref HEAD") return s.current;
-    if (a.startsWith("config --get branch.")) return s.upstream;
-    if (a.startsWith("fetch")) return "";
-    if (a === `rev-parse --verify --quiet refs/remotes/origin/${BRANCH}`) return s.remoteBranch;
+    if (a === `config --get branch.${BRANCH}.remote`) return s.remote;
+    if (a === `config --get branch.${BRANCH}.merge`) return s.upstream;
+    if (a.startsWith("fetch")) { fetched = true; return ""; }
+    if (a === `rev-parse --verify --quiet refs/remotes/origin/${BRANCH}`) return fetched ? s.remoteBranch : s.pushed;
     if (a === "rev-parse HEAD") return s.head;
     if (a === "rev-parse --verify --quiet refs/remotes/origin/main") return s.base;
     if (a === `rev-parse ${s.head}^{tree}`) return s.headTree;
@@ -90,6 +94,25 @@ describe("syncKeptBranch (#942)", () => {
     expect(syncKeptBranch(CWD, BRANCH, "main").reason).toBe("no-upstream");
   });
 
+  test("upstream is not origin/<branch> → untouched", () => {
+    repo({ upstream: "refs/heads/other" });
+    expect(syncKeptBranch(CWD, BRANCH, "main").reason).toBe("no-upstream");
+    repo({ remote: "fork" });
+    expect(syncKeptBranch(CWD, BRANCH, "main").reason).toBe("no-upstream");
+    expect(gitArgs).not.toHaveBeenCalled();
+  });
+
+  test("local commits on top of the last pushed tip (even with an equal tree) → untouched", () => {
+    repo({ pushed: "eeee555" });
+    expect(syncKeptBranch(CWD, BRANCH, "main").reason).toBe("unpushed-commits");
+    expect(gitArgs).not.toHaveBeenCalled();
+  });
+
+  test("tracking ref already pruned before cleanup → falls back to the tree check", () => {
+    repo({ pushed: null });
+    expect(syncKeptBranch(CWD, BRANCH, "main").synced).toBe(true);
+  });
+
   test("dirty tree or another branch checked out → untouched", () => {
     execFileSync.mockReturnValue(" M a.js\n");
     expect(syncKeptBranch(CWD, BRANCH, "main").reason).toBe("dirty-tree");
@@ -100,7 +123,7 @@ describe("syncKeptBranch (#942)", () => {
   });
 
   test("already on the base commit → nothing to move", () => {
-    repo({ head: BASE });
+    repo({ head: BASE, pushed: BASE });
     expect(syncKeptBranch(CWD, BRANCH, "main").reason).toBe("already-on-base");
   });
 });
