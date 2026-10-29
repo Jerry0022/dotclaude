@@ -71,6 +71,38 @@ export function parseLockWait(output) {
   return holder ? { waitedMs: null, gaveUp: false, holder } : null;
 }
 
+/** Longest lock wait that extends a step limit — the suite-lock itself gives up and runs anyway after 30 min. */
+export const MAX_LOCK_EXTENSION_MS = 35 * 60_000;
+
+/**
+ * Live lock-wait meter fed with the step's stderr chunks as they arrive. The
+ * step limit must not run while the suite-lock holds the run back (a green run
+ * was stopped at 300 s after waiting 147 s on another worktree's suite), so the
+ * caller adds `waitedMs()` — measured wall time, or the reported `acquired after
+ * N s` when that is larger — to the limit, capped at MAX_LOCK_EXTENSION_MS.
+ * Only the first wait of a run is metered.
+ */
+export function createLockWatch(now = Date.now) {
+  let since = null;
+  let waited = 0;
+  let done = false;
+  let tail = "";
+  return {
+    feed(chunk) {
+      if (done) return;
+      tail = (tail + stripAnsi(chunk)).slice(-4000);
+      if (since === null && /\[suite-lock\] another full test run is active/.test(tail)) since = now();
+      if (since !== null && /\[suite-lock\] (?:acquired after|waited \d+ min)/.test(tail)) {
+        waited = Math.max(now() - since, parseLockWait(tail)?.waitedMs || 0);
+        since = null;
+        done = true;
+      }
+    },
+    waitedMs: () => waited + (since === null ? 0 : now() - since),
+    waiting: () => since !== null,
+  };
+}
+
 export function suiteLockFile() {
   return process.env.DOTCLAUDE_SUITE_LOCK_FILE || join(tmpdir(), "dotclaude-vitest-suite.lock");
 }

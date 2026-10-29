@@ -7,16 +7,17 @@
  */
 
 import { z } from "zod";
-import { execSync, spawnSync } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compareVersions } from "../lib/channels.js";
+import { killTree } from "../../lib/run-child.js";
 import { findGreen, recordResult, treeKey, usualDurationMs } from "../lib/test-results.js";
 import { quotaKey, readRecord } from "../lib/ci-quota.js";
 import {
   ciSuiteWorkflowPresent, changedVsBase, decideTestScope, hasGithubOrigin,
-  buildLoad, buildPreRunWarning, classifyFailure, isEnvCleanupFailure, parseFailingTests, parseLockWait, readLockHolder, sampleCpu,
+  MAX_LOCK_EXTENSION_MS, buildLoad, buildPreRunWarning, classifyFailure, createLockWatch, isEnvCleanupFailure, parseFailingTests, parseLockWait, readLockHolder, sampleCpu,
 } from "../lib/test-step.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -159,67 +160,133 @@ function timeoutNote(step, res) {
   };
 }
 
-function run(cmd, cwd, limitSec = DEFAULT_STEP_TIMEOUT_SEC) {
-  try {
-    const output = execSync(cmd, { windowsHide: true,
-      cwd,
-      encoding: "utf8",
-      timeout: limitSec * 1000,
-      // Node's default maxBuffer (~1 MiB) kills a chatty-but-green test run
-      // with ENOBUFS, which then read as a failed test step.
-      maxBuffer: 64 * 1024 * 1024,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    return { success: true, output: output.slice(-2000) }; // tail 2k chars
-  } catch (e) {
-    const tail = (e.stderr || e.stdout || e.message || "").toString().slice(-2000);
-    // Name the harness-side failure kinds so they are not mistaken for a red test.
-    let failure;
-    if (e.code === "ENOBUFS") failure = "output-overflow";
-    else if (e.code === "ETIMEDOUT" || (e.killed && e.signal)) failure = "timeout";
-    const out = { success: false, output: tail };
-    if (failure) {
-      out.failure = failure;
-      if (failure === "timeout") out.limitSec = limitSec;
-      out.output = `[${failure}: the command was stopped by the ship harness, not by a failing test — ${failure === "timeout" ? `${limitSec} s limit` : "output exceeded 64 MiB"}]\n` + tail;
+/** Output cap per stream (the former spawnSync/execSync maxBuffer); beyond it the step is stopped as output-overflow. */
+const MAX_OUTPUT = 64 * 1024 * 1024;
+/** Progress heartbeat while a step runs, and how often its limit is checked. */
+const HEARTBEAT_MS = 30_000;
+const TICK_MS = 1000;
+
+/** 4m10s / 45s. */
+function fmtDur(ms) {
+  const s = Math.round(ms / 1000);
+  return s >= 60 ? `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s` : `${s}s`;
+}
+
+function capture() {
+  const chunks = [];
+  let size = 0;
+  return {
+    /** false once the cap is exceeded (the chunk is dropped). */
+    push(b) {
+      const buf = Buffer.isBuffer(b) ? b : Buffer.from(String(b));
+      if (size + buf.length > MAX_OUTPUT) return false;
+      chunks.push(buf);
+      size += buf.length;
+      return true;
+    },
+    text: () => Buffer.concat(chunks).toString("utf8"),
+  };
+}
+
+/**
+ * One shell command, asynchronously: the event loop stays free (a blocked loop
+ * sends no MCP progress), stdout and stderr are kept apart, `progress` gets a
+ * heartbeat every 30 s. The step limit does not run while the machine-wide
+ * suite-lock holds the run back — it is extended by the measured lock wait
+ * (createLockWatch), capped. Resolves, never rejects:
+ * { status, signal, stdout, stderr, failure: "timeout"|"output-overflow"|null, error }.
+ */
+function spawnCapped(cmd, cwd, limitSec, { label = "step", progress = null } = {}) {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const watch = createLockWatch();
+    const out = capture();
+    const err = capture();
+    let failure = null;
+    let settled = false;
+    let child;
+    let tick;
+    let beat;
+    const finish = (status, signal, error = null) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(tick);
+      clearInterval(beat);
+      resolve({ status, signal, stdout: out.text(), stderr: err.text(), failure, error });
+    };
+    const stop = (kind) => {
+      if (failure) return;
+      failure = kind;
+      killTree(child).then(() => finish(null, "SIGTERM"));
+    };
+    try {
+      child = spawn(cmd, {
+        cwd, shell: true, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
+        // POSIX: own process group, so the kill reaches the shell's grandchildren too.
+        detached: process.platform !== "win32",
+      });
+    } catch (e) {
+      resolve({ status: null, signal: null, stdout: "", stderr: "", failure: null, error: e });
+      return;
     }
-    return out;
-  }
+    child.stdout.on("data", (b) => { if (!out.push(b)) stop("output-overflow"); });
+    child.stderr.on("data", (b) => {
+      watch.feed(String(b));
+      if (!err.push(b)) stop("output-overflow");
+    });
+    tick = setInterval(() => {
+      if (Date.now() - started > limitSec * 1000 + Math.min(MAX_LOCK_EXTENSION_MS, watch.waitedMs())) stop("timeout");
+    }, TICK_MS);
+    if (progress) {
+      beat = setInterval(() => {
+        const waited = watch.waitedMs();
+        progress(`${label}: running ${fmtDur(Date.now() - started)}${waited >= 1000 ? `, lock wait ${fmtDur(waited)}` : ""}`);
+      }, HEARTBEAT_MS);
+    }
+    child.on("error", (e) => finish(null, null, e));
+    child.on("close", (code, signal) => finish(code, signal));
+  });
+}
+
+/** Harness-side failure kind of a finished step, or undefined for a plain non-zero exit. */
+function harnessFailure(r) {
+  if (r.failure) return r.failure;
+  return r.status === null && r.signal ? "timeout" : undefined;
+}
+
+/** Name a harness-side failure in the step output so it is not mistaken for a red test. */
+function nameFailure(out, failure, limitSec, tail) {
+  out.failure = failure;
+  if (failure === "timeout") out.limitSec = limitSec;
+  out.output = `[${failure}: the command was stopped by the ship harness, not by a failing test — ${failure === "timeout" ? `${limitSec} s limit` : "output exceeded 64 MiB"}]\n` + tail;
+  return out;
+}
+
+async function run(cmd, cwd, limitSec = DEFAULT_STEP_TIMEOUT_SEC, ctx = {}) {
+  const r = await spawnCapped(cmd, cwd, limitSec, ctx);
+  if (!r.error && !r.failure && r.status === 0) return { success: true, output: r.stdout.slice(-2000) }; // tail 2k chars
+  const tail = (r.stderr || r.stdout || r.error?.message || "").slice(-2000);
+  const out = { success: false, output: tail };
+  const failure = harnessFailure(r);
+  return failure ? nameFailure(out, failure, limitSec, tail) : out;
 }
 
 /** Tail kept of a red test step's output; failing test names are returned separately and in full. */
 const RED_TAIL = 4000;
 
 /**
- * The test step via spawnSync so stdout AND stderr are both kept on success
- * too — the suite-lock wait lines go to stderr, the vitest failure summary to
- * stdout. `full` is for parsing only and never returned.
+ * The test step: stdout AND stderr are both kept on success too — the
+ * suite-lock wait lines go to stderr, the vitest failure summary to stdout.
+ * `full` is for parsing only and never returned.
  */
-function runTest(cmd, cwd, limitSec) {
-  const r = spawnSync(cmd, {
-    cwd,
-    shell: true,
-    encoding: "utf8",
-    timeout: limitSec * 1000,
-    maxBuffer: 64 * 1024 * 1024,
-    stdio: ["pipe", "pipe", "pipe"],
-    windowsHide: true,
-  });
-  const stdout = (r.stdout || "").toString();
-  const stderr = (r.stderr || "").toString();
-  const full = stderr ? `${stdout}\n${stderr}` : stdout;
-  if (!r.error && r.status === 0) return { success: true, output: stdout.slice(-2000), full };
-  let failure;
-  if (r.error?.code === "ENOBUFS") failure = "output-overflow";
-  else if (r.error?.code === "ETIMEDOUT" || (r.signal && r.status === null)) failure = "timeout";
+async function runTest(cmd, cwd, limitSec, ctx = {}) {
+  const r = await spawnCapped(cmd, cwd, limitSec, { label: "test", ...ctx });
+  const full = r.stderr ? `${r.stdout}\n${r.stderr}` : r.stdout;
+  if (!r.error && !r.failure && r.status === 0) return { success: true, output: r.stdout.slice(-2000), full };
   const tail = (full || r.error?.message || "").slice(-RED_TAIL);
   const out = { success: false, output: tail, full };
-  if (failure) {
-    out.failure = failure;
-    if (failure === "timeout") out.limitSec = limitSec;
-    out.output = `[${failure}: the command was stopped by the ship harness, not by a failing test — ${failure === "timeout" ? `${limitSec} s limit` : "output exceeded 64 MiB"}]\n` + tail;
-  }
-  return out;
+  const failure = harnessFailure(r);
+  return failure ? nameFailure(out, failure, limitSec, tail) : out;
 }
 
 /**
@@ -227,7 +294,7 @@ function runTest(cmd, cwd, limitSec) {
  * failure, failure classification and the load signal (#762). Returns
  * { step, extra } — extra holds testsReused / load / failureKind / failingTests.
  */
-async function testStep(testCmd, cwd, limitSec, reuseGreen, planScope = null) {
+async function testStep(testCmd, cwd, limitSec, reuseGreen, planScope = null, ctx = {}) {
   const fullScope = (reason) => ({ testScope: "full", fullSuiteVia: "local", testScopeReason: reason });
   const key = treeKey(cwd);
   if (reuseGreen !== false && key) {
@@ -254,7 +321,7 @@ async function testStep(testCmd, cwd, limitSec, reuseGreen, planScope = null) {
       return { step: { step: "test", cmd: testCmd, success: true, skipped: true, output: plan.reason }, extra: scopeExtra };
     }
     const relStarted = Date.now();
-    const res = runTest(plan.cmd, cwd, limitSec);
+    const res = await runTest(plan.cmd, cwd, limitSec, ctx);
     const { full, ...stepRes } = res;
     const step = { step: "test", cmd: plan.cmd, ...stepRes, durationMs: Date.now() - relStarted };
     const extra = { ...scopeExtra };
@@ -270,11 +337,11 @@ async function testStep(testCmd, cwd, limitSec, reuseGreen, planScope = null) {
   const preRun = buildPreRunWarning({ holder: holderAtStart, cpu, usualMs: usualDurationMs(cwd, testCmd) });
   if (preRun) console.error(`[ship_build] ${preRun.note}`);
   const started = Date.now();
-  let res = runTest(testCmd, cwd, limitSec);
+  let res = await runTest(testCmd, cwd, limitSec, ctx);
   let retried = null;
   if (!res.success && !res.failure && isEnvCleanupFailure(res.full)) {
     retried = { reason: "EPERM/EBUSY temp-cleanup pattern", firstOutput: res.output.slice(-1500) };
-    res = runTest(testCmd, cwd, limitSec);
+    res = await runTest(testCmd, cwd, limitSec, ctx);
     retried.secondPassed = res.success;
   }
   const durationMs = Date.now() - started;
@@ -319,11 +386,12 @@ function getBuildId(cwd) {
   }
 }
 
-export async function handler(params) {
+export async function handler(params, ctx = {}) {
   const cwd = params.cwd;
   if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const { buildIdOnly } = params;
   const limitSec = params.stepTimeoutSec ?? DEFAULT_STEP_TIMEOUT_SEC;
+  const progress = ctx.progress ?? null; // MCP progress heartbeat (cli.js -> server); null = none
 
   if (buildIdOnly) {
     return { success: true, buildId: getBuildId(cwd), skipped: true };
@@ -342,8 +410,8 @@ export async function handler(params) {
   // silently — a stale index that never regenerates is exactly the F5 bug.
   // Capture each run() and surface a warning when a generator fails.
   const genWarnings = [];
-  const runGenerator = (label, cmd) => {
-    const r = run(cmd, cwd);
+  const runGenerator = async (label, cmd) => {
+    const r = await run(cmd, cwd);
     if (!r.success) {
       genWarnings.push({ generator: label, error: (r.output || "").slice(-300) });
     }
@@ -352,30 +420,30 @@ export async function handler(params) {
 
   // Regenerate deep-knowledge INDEX.md (idempotent, skips if unchanged)
   // 1. Plugin's own deep-knowledge
-  runGenerator("dk-index:plugin", `"${process.execPath}" "${DK_INDEX_SCRIPT()}"`);
+  await runGenerator("dk-index:plugin", `"${process.execPath}" "${DK_INDEX_SCRIPT()}"`);
   // 2. Project's deep-knowledge (if it exists)
   const projectDk = join(cwd, "deep-knowledge");
   if (existsSync(projectDk)) {
     // DK_INDEX_SCRIPT is a lazy accessor — it MUST be CALLED. Interpolating the
     // bare function stringified its source into the command, so the project
     // deep-knowledge index never regenerated (F5). Match line above: DK_INDEX_SCRIPT().
-    runGenerator("dk-index:project", `"${process.execPath}" "${DK_INDEX_SCRIPT()}" "${projectDk}"`);
+    await runGenerator("dk-index:project", `"${process.execPath}" "${DK_INDEX_SCRIPT()}" "${projectDk}"`);
   }
   // 3. Project map (full codebase index)
-  runGenerator("project-map", `"${process.execPath}" "${PROJECT_MAP_SCRIPT()}" "${cwd}"`);
+  await runGenerator("project-map", `"${process.execPath}" "${PROJECT_MAP_SCRIPT()}" "${cwd}"`);
   // 4. README + architecture.html auto-marker sections (no-ops outside the
   //    plugin source repo, i.e. when cwd/plugins/devops is absent). Prefers the
   //    repo's own generator — see readmeSectionsScript().
   const readme = readmeSectionsScript(cwd);
   if (readme.script) {
-    runGenerator("readme-sections", `"${process.execPath}" "${readme.script}" "${cwd}"`);
+    await runGenerator("readme-sections", `"${process.execPath}" "${readme.script}" "${cwd}"`);
   } else {
     genWarnings.push({ generator: "readme-sections", error: readme.skip });
   }
 
   // Build (skip if no build script detected/provided)
   if (buildCmd) {
-    const buildResult = run(buildCmd, cwd, limitSec);
+    const buildResult = await run(buildCmd, cwd, limitSec, { label: "build", progress });
     steps.push({ step: "build", cmd: buildCmd, ...buildResult });
     if (!buildResult.success) {
       return { success: false, buildId: null, steps, failedAt: "build", ...timeoutNote("build", buildResult), warnings: genWarnings };
@@ -384,7 +452,7 @@ export async function handler(params) {
 
   // Lint
   if (lintCmd) {
-    const lintResult = run(lintCmd, cwd, limitSec);
+    const lintResult = await run(lintCmd, cwd, limitSec, { label: "lint", progress });
     steps.push({ step: "lint", cmd: lintCmd, ...lintResult });
     if (!lintResult.success) {
       return { success: false, buildId: null, steps, failedAt: "lint", ...timeoutNote("lint", lintResult), warnings: genWarnings };
@@ -402,7 +470,7 @@ export async function handler(params) {
       changed: changedVsBase(cwd),
       cwd,
     });
-    const { step: testResult, extra } = await testStep(testCmd, cwd, limitSec, params.reuseGreen, planScope);
+    const { step: testResult, extra } = await testStep(testCmd, cwd, limitSec, params.reuseGreen, planScope, { progress });
     testExtra = extra;
     steps.push(testResult);
     if (!testResult.success) {

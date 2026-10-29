@@ -22,6 +22,9 @@
  *   would take the card tool down with it. Out of process the event loop stays
  *   free, a ship crash is one failed tool result, and a hung step is
  *   tree-killed at its timeout.
+ *   When the client sends a progressToken, the server answers a long call with
+ *   MCP progress notifications (lib/progress.js): the CLI reports its step as
+ *   `[ship-progress]` stderr lines, a 30 s heartbeat covers a silent child.
  *
  *   Only the schemas are imported here (each tool module on its own — a broken
  *   module drops that one tool, not the server).
@@ -29,6 +32,7 @@
 
 import { fileURLToPath } from "node:url";
 import { runChild } from "../lib/run-child.js";
+import { createProgressReporter, progressLineParser } from "./lib/progress.js";
 
 export const SHIP_CLI = fileURLToPath(new URL("./cli.js", import.meta.url));
 
@@ -102,7 +106,8 @@ function parseResult(stdout) {
  * Run one ship tool out of process. Never throws.
  * @param {string} name tool name
  * @param {object} params zod-parsed params
- * @param {{ cliPath?: string, timeoutMs?: number }} [opts]
+ * @param {{ cliPath?: string, timeoutMs?: number, onProgress?: (msg: string) => void }} [opts]
+ *   onProgress gets the CLI's `[ship-progress]` stderr lines (MCP progress heartbeat)
  */
 export async function runShipTool(name, params, opts = {}) {
   const cli = opts.cliPath || SHIP_CLI;
@@ -114,6 +119,7 @@ export async function runShipTool(name, params, opts = {}) {
     // run-contract fallback for a Bash-invoked CLI, the MCP result counts itself.
     env: { ...process.env, DOTCLAUDE_SHIP_VIA_SERVER: "1" },
     timeoutMs,
+    onStderr: opts.onProgress ? progressLineParser(opts.onProgress) : undefined,
   });
   if (r.timedOut) {
     return text({
@@ -148,7 +154,15 @@ export async function registerShipTools(server, opts = {}) {
     server.registerTool(
       name,
       { title, description, inputSchema: m.value.schema },
-      async (params) => runShipTool(name, params, opts),
+      async (params, extra) => {
+        // A long step must show life: without progress Claude Code drops the call after 30 min of silence.
+        const progress = createProgressReporter(extra, name);
+        try {
+          return await runShipTool(name, params, { ...opts, ...(progress ? { onProgress: progress.note } : {}) });
+        } finally {
+          progress?.stop();
+        }
+      },
     );
     registered.push(name);
   });

@@ -82,6 +82,8 @@ ship_run({ cwd: "<cwd>", title: "feat: …", body: "Closes #N …", bump: "minor
            build: { buildCmd, lintCmd, testCmd }, keep: <5a decision>, queued: <--queued>, lang: "de" })
 ```
 
+Do not pass `build.testCmd` when it equals the auto-detected test script: an explicit `testCmd` disables the related-tests scope (the CI `suite` check then runs the full suite) and forces the full suite locally (`deep-knowledge/quality-gates.md` § Full suite).
+
 `codexGate: true` makes `ship_run` stop after a green build (`stage: "build-done"`, `needs: "codex-judgment"`): start the deploy-parity build in the background (`{PLUGIN_ROOT}/deep-knowledge/deploy-parity.md` § In the ship — `failed` → BLOCK), run the Codex review via `bash "{PLUGIN_ROOT}/scripts/codex-safe.sh"` (never `/codex:rescue`; rc 0 clean/auto-fixable → fix and go on, judgment → ask Fixen / Ignorieren / Abbrechen, lockout → BLOCK; rc 75 / 124 / 126 / 127 / other → go on, never retry — `deep-knowledge/codex-gate.md`), then call `ship_run` again with the same params plus `codex: { rc, outcome }`. **Triage applies to every reviewer** (Codex, the Claude-API fallback, harden/polish/QA): a defect in the diff's own topic is fixed with a regression test before the merge, or asked (`status: "decision"`) / BLOCKed under lockout — never an `open` item on the `ship-successful` card (only `finding: "out-of-scope"` items may be; in-scope ones are refused). A pre-existing error that breaks the ship's own build or type-check is in scope. A fix commit changes the tree, so the build reruns.
 
 ## Decision points — `{ ok: false, stage, needs, detail, resume }`
