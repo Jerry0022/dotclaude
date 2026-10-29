@@ -1,0 +1,118 @@
+<section data-iteration="4" data-iteration-template="free" data-final-report>
+  <div class="fr-head">
+    <span class="fr-phase">🏁 {{final.phase}}</span>
+    <h2 class="fr-title">Analyse &amp; Entscheidungen — neu gedacht</h2>
+  </div>
+
+  <div class="fr-ba">
+    <figure class="fr-shot"><img src="20261025-2344-analyse-entscheidungen-neu/shots/before.jpg" alt="Vorher: Analyse-Seite mit anderthalb Entscheidungen pro Bildschirm"><figcaption>{{final.before}}</figcaption></figure>
+    <figure class="fr-shot"><img src="20261025-2344-analyse-entscheidungen-neu/shots/after.jpg" alt="Nachher: eine Entscheidung pro Bühne, Analyse rechts im Drittel"><figcaption>{{final.after}}</figcaption></figure>
+    <a class="fr-try" href="http://localhost:8827/docs/concepts/20261025-2344-analyse-entscheidungen-neu/demo/full.html" target="_blank" rel="noopener noreferrer">▶ {{final.try_it}}</a>
+  </div>
+
+  <p class="fr-label">{{final.done_what}}</p>
+  <p class="fr-sentence">Analyse-Konzepte führen dich jetzt vom Briefing über höchstens drei Themenfelder Entscheidung für Entscheidung durch – mit Grafik statt Textwand und passenden Controls statt immer „Verwerfen / Miteinbeziehen“.</p>
+
+  <div class="fr-cols">
+    <div class="fr-card">
+      <p class="fr-label">{{final.results}}</p>
+      <ul class="fr-wins">
+        <li><span class="fr-win-icon" aria-hidden="true">🧭</span><span><b>Geführt statt gescrollt:</b> Briefing → Themenfeld → eine Entscheidung pro Bühne, Stepper oben zeigt, wo du bist.</span></li>
+        <li><span class="fr-win-icon" aria-hidden="true">🎛</span><span><b>7 Entscheidungsmodi</b> – Einzelwahl, Auswahl, Ja/Nein/Anders, Regler, Reihenfolge, Prüfen, Wortwahl; Empfehlung ★ immer vorausgewählt.</span></li>
+        <li><span class="fr-win-icon" aria-hidden="true">📊</span><span><b>35 Darstellungsweisen</b> im Katalog, Analyse in 3 Stufen kurz/lang, animiert – und als <b>Lite</b> in jedem Design-Concept.</span></li>
+      </ul>
+    </div>
+    <div class="fr-card">
+      <p class="fr-label">{{final.holds}}</p>
+      <div class="fr-meters">
+        <div class="fr-meter" data-met="true" style="--fr-tested: 100%; --fr-target: 100%">
+          <span class="fr-meter-name">🧱 Stabilität</span>
+          <b class="fr-meter-value">10 707 / 10 709</b>
+          <div class="fr-meter-bar" aria-hidden="true"></div>
+          <p class="fr-meter-context">Tests grün; die 2 roten fehlen nur am Paket zod in dieser Arbeitskopie, nicht an der Änderung. <span class="fr-meter-verdict">✓ {{final.target_met}}</span></p>
+        </div>
+        <div class="fr-meter" data-met="true" style="--fr-tested: 100%; --fr-target: 100%">
+          <span class="fr-meter-name">🔁 Kompatibilität</span>
+          <b class="fr-meter-value">alte Seiten ✓</b>
+          <div class="fr-meter-bar" aria-hidden="true"></div>
+          <p class="fr-meter-context">Eine alte Seite mit Verwerfen/Miteinbeziehen baut, rendert und liefert dieselbe Payload wie vorher. <span class="fr-meter-verdict">✓ {{final.target_met}}</span></p>
+        </div>
+        <div class="fr-meter" data-met="true" style="--fr-tested: 100%; --fr-target: 100%">
+          <span class="fr-meter-name">🗃 Datenintegrität</span>
+          <b class="fr-meter-value">7 / 7 Modi</b>
+          <div class="fr-meter-bar" aria-hidden="true"></div>
+          <p class="fr-meter-context">Jede Entscheidung kommt typisiert mit Empfehlung, Abweichung und „unberührt“ an und übersteht das Einfrieren (Ziel 7/7, geschätzt). <span class="fr-meter-verdict">✓ {{final.target_met}}</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="fr-depth">
+    <p class="fr-label">{{final.depth}}</p>
+    <p class="fr-ladder-top">{{final.level_local}}<small>Stufe 4 von 7</small></p>
+    <ol class="fr-ladder">
+      <li data-level="1" data-state="done">{{final.level_code}}</li>
+      <li data-level="2" data-state="done">{{final.level_dry}}</li>
+      <li data-level="3" data-state="done">{{final.level_interplay}}</li>
+      <li data-level="4" data-state="done">{{final.level_local}}</li>
+      <li data-level="5" data-state="na">{{final.level_prod}}</li>
+      <li data-level="6" data-state="open">{{final.level_live}}</li>
+      <li data-level="7" data-state="you">{{final.level_accept}}</li>
+    </ol>
+    <p class="fr-ladder-foot">Im Browser mit Demo-Seiten durchgespielt; im echten Einsatz (nächstes Analyse-Concept nach dem Ship) noch nicht.</p>
+  </div>
+
+  <details class="fr-fold" data-open-questions>
+    <summary>🔍 2 Funde unterwegs</summary>
+    <ul class="fr-funde">
+      <li data-oq-id="oq-split-part"
+          data-issue-title="[REFACTOR] Split templates-analysis.md into parts within the 600-line budget"
+          data-issue-type="refactor"
+          data-issue-body="The new engine part templates-analysis.md is ~1800 lines (contract + one CSS and one JS fence) against the 600-line part convention. Nothing enforces the limit, so all tests pass. Split into templates-analysis.md (contract), -css.md and -js.md (+ -js-2.md) and renumber the 'part NN of MM' headers via the templates.md reading order."
+          data-issue-module="auto-concept"
+          data-oq-origin="found"
+          data-route-default="now"
+          data-route-reason="klein">
+        <span class="oq-label">Neuer Engine-Teil ist zu lang</span>
+        <dl class="fr-fkv">
+          <dt>{{final.fund_what}}</dt><dd>templates-analysis.md hat ≈ 1800 statt höchstens 600 Zeilen.</dd>
+          <dt>{{final.fund_where}}</dt><dd>auto-concept, Engine-Teile</dd>
+          <dt>{{final.fund_why}}</dt><dd>⚡ Jetzt — mechanisches Aufteilen, keine Verhaltensänderung.</dd>
+        </dl>
+      </li>
+      <li data-oq-id="oq-bridge-retry"
+          data-issue-title="[BUG] Concept page retries bridge endpoints without backoff when no bridge runs"
+          data-issue-type="bug"
+          data-issue-body="QA served a built concept page from a plain static server: /heartbeat, /reload, /decisions and /draft returned 404 and the page fired ~430 requests in a few minutes, also to 127.0.0.1:8791. Harmless with a live bridge, but a page opened without one hammers the host. Add exponential backoff for 404/connection errors."
+          data-issue-module="auto-concept"
+          data-oq-origin="found"
+          data-route-default="issue"
+          data-route-reason="außerhalb"
+          >
+        <span class="oq-label">Seite ohne Bridge fragt pausenlos nach</span>
+        <dl class="fr-fkv">
+          <dt>{{final.fund_what}}</dt><dd>≈ 430 Anfragen in wenigen Minuten, wenn keine Bridge läuft.</dd>
+          <dt>{{final.fund_where}}</dt><dd>Heartbeat-/Reload-Polling aller Concept-Seiten</dd>
+          <dt>{{final.fund_why}}</dt><dd>📌 Issue — betrifft die Bridge-Logik, nicht diese Änderung.</dd>
+        </dl>
+      </li>
+    </ul>
+  </details>
+
+  <section data-tests hidden aria-label="{{final.group_tests}}">
+    <ul>
+      <li data-todo-id="t-demo" data-crit="mid" data-guide="web">Demo durchklicken: Briefing → Themenfeld → Entscheidung, Animation und Hotkeys</li>
+      <li data-todo-id="t-order" data-crit="low" data-guide="web">Modus „Reihenfolge“ einmal umsortieren (Pfeile / Alt+↑↓)</li>
+    </ul>
+  </section>
+
+  <details class="fr-fold">
+    <summary>🛠 {{final.dev_fold}}</summary>
+    <ul class="fr-dev">
+      <li>Branch <code>claude/devops-analyse-konzepte-699e5c</code> · Commits f027e4dff, 70914d659, d5f9e8b61, 47cfd2164, 884e3d523, 086187700</li>
+      <li><code>templates-analysis.md</code> (Vertrag + UI), <code>concept-gate-analysis.js</code> (A1–A8), <code>analysis-palette.md</code> / <code>decision-modes.md</code></li>
+      <li>Fixes: Titel in design/mixed-Seiten, Inhaltsverzeichnis zählt verschachtelte Entscheidungen</li>
+      <li>Tests: 10 707 grün, 1 übersprungen, 2 rot (zod fehlt in der Arbeitskopie) · Lint sauber · 37 neue Tests</li>
+    </ul>
+  </details>
+</section>

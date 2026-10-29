@@ -1,0 +1,82 @@
+[
+  {
+    "iteration": 1,
+    "action": "implement",
+    "decisions": [
+      {
+        "id": "m0-telemetrie",
+        "label": "M0 · Ship-Telemetrie",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "m1-hygiene",
+        "label": "M1 · Hygiene nach der Card",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "m2-tags",
+        "label": "M2 · Tag-Drift im Tool",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "m3-test-once",
+        "label": "M3 · Ein Testlauf pro Tree",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "m4-retries",
+        "label": "M4 · Wiederholungen vermeiden",
+        "evaluation": "include",
+        "note": "das müsste dann aber nur projektweit sein un dnicht maschinenweit! Check nochmal ob es was bringt und ob wir in ein dead end laufen könnten. WEenn dann mach es wirklich robust"
+      },
+      {
+        "id": "m5-parallel",
+        "label": "M5 · Pipeline parallelisieren",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "m6-ci-suite",
+        "label": "M6 · Volle Suite auf CI",
+        "evaluation": "include",
+        "note": "Aber achte darauf, dass die github actions auch aufgebraucht sein könnten! Das muss unbedingt gehandled werden, passiert regelmäßig!"
+      },
+      {
+        "id": "m7-ship-run",
+        "label": "M7 · ship_run-Orchestrator",
+        "evaluation": "include",
+        "note": "OK!"
+      }
+    ],
+    "comments": {
+      "general": {
+        "text": "",
+        "attachments": []
+      },
+      "items": [
+        {
+          "id": "m4-retries-note",
+          "text": "das müsste dann aber nur projektweit sein un dnicht maschinenweit! Check nochmal ob es was bringt und ob wir in ein dead end laufen könnten. WEenn dann mach es wirklich robust",
+          "attachments": []
+        },
+        {
+          "id": "m6-ci-suite-note",
+          "text": "Aber achte darauf, dass die github actions auch aufgebraucht sein könnten! Das muss unbedingt gehandled werden, passiert regelmäßig!",
+          "attachments": []
+        },
+        {
+          "id": "m7-ship-run-note",
+          "text": "OK!",
+          "attachments": []
+        }
+      ]
+    },
+    "extraChat": [
+      "CI-Kontingent früh erkennen statt warten und überspringen"
+    ]
+  }
+]

@@ -1,0 +1,276 @@
+<section data-iteration="1" data-iteration-template="decision" data-baked>
+  <script type="application/json" data-frozen-feedback>{"general":{"text":"","attachments":[]}}</script>
+<style>
+[data-iteration="1"] .ss-intro{margin:0 0 1.5rem}
+[data-iteration="1"] .ss-intro h2{margin:0 0 .4rem;font-size:1.35rem}
+[data-iteration="1"] .ss-intro p{margin:.3rem 0;color:var(--text-secondary);line-height:1.55}
+[data-iteration="1"] .ss-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:1rem 0 1.5rem}
+[data-iteration="1"] .ss-kpi{background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:10px;padding:14px 16px}
+[data-iteration="1"] .ss-kpi b{display:block;font-size:1.7rem;line-height:1.1;color:var(--text-primary)}
+[data-iteration="1"] .ss-kpi span{font-size:.85rem;color:var(--text-secondary)}
+[data-iteration="1"] .ss-kpi.ss-goal b{color:var(--success-color)}
+[data-iteration="1"] .ss-block{margin:0 0 2rem}
+[data-iteration="1"] .ss-block h3{margin:0 0 .6rem;font-size:1.15rem}
+[data-iteration="1"] .ss-block p,[data-iteration="1"] .ss-block li{line-height:1.55}
+[data-iteration="1"] .ss-bars{display:flex;flex-direction:column;gap:7px;margin:.8rem 0}
+[data-iteration="1"] .ss-bar{display:grid;grid-template-columns:230px 1fr 92px;gap:10px;align-items:center;font-size:.9rem}
+[data-iteration="1"] .ss-track{background:var(--bg-subtle);border-radius:5px;height:16px;overflow:hidden}
+[data-iteration="1"] .ss-fill{height:100%;background:var(--accent-color);border-radius:5px}
+[data-iteration="1"] .ss-fill.ss-hot{background:var(--danger-color)}
+[data-iteration="1"] .ss-fill.ss-warm{background:var(--warning-color)}
+[data-iteration="1"] .ss-num{text-align:right;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+[data-iteration="1"] .ss-table{width:100%;border-collapse:collapse;font-size:.9rem;margin:.6rem 0}
+[data-iteration="1"] .ss-table th,[data-iteration="1"] .ss-table td{border-bottom:1px solid var(--border-color);padding:7px 8px;text-align:left;vertical-align:top}
+[data-iteration="1"] .ss-table th{color:var(--text-secondary);font-weight:600}
+[data-iteration="1"] .ss-table td.ss-r{text-align:right;font-variant-numeric:tabular-nums}
+[data-iteration="1"] .ss-note{font-size:.85rem;color:var(--text-tertiary);margin-top:.4rem}
+[data-iteration="1"] .ss-tag{display:inline-block;font-size:.75rem;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--bg-subtle);color:var(--text-secondary);margin-right:4px}
+[data-iteration="1"] .ss-tag.ss-s{color:var(--success-color)}
+[data-iteration="1"] .ss-tag.ss-m{color:var(--warning-color)}
+[data-iteration="1"] .ss-tag.ss-l{color:var(--danger-color)}
+[data-iteration="1"] .ss-gain{font-weight:600;color:var(--success-color)}
+[data-iteration="1"] .ss-card h4{margin:0 0 .35rem;font-size:1.05rem}
+[data-iteration="1"] .ss-card [data-iteration="1"] .ss-meta{margin:.2rem 0 .6rem}
+[data-iteration="1"] .ss-card dl{display:grid;grid-template-columns:120px 1fr;gap:4px 12px;margin:.5rem 0 .8rem;font-size:.92rem}
+[data-iteration="1"] .ss-card dt{color:var(--text-secondary)}
+[data-iteration="1"] .ss-card dd{margin:0}
+@media (max-width:700px){[data-iteration="1"] .ss-bar{grid-template-columns:1fr;}[data-iteration="1"] .ss-card dl{grid-template-columns:1fr}}
+</style>
+
+<div class="iteration-intro ss-intro">
+  <h2>Runde 1 · Wo die Ship-Zeit hingeht und was sie drittelt</h2>
+  <p>Ausgewertet: die letzten 30 Ships aus den Session-Transkripten (23.–25.10.2026, alle Repos, davon 17 als delegierter Subagent-Ship). Gemessen ist jeder Tool-Aufruf zwischen Ship-Start und Completion-Card; die Zeit zwischen den Aufrufen ist Modell-Denkzeit.</p>
+  <p>Jede Maßnahme unten ist einzeln wählbar. Vorausgewählt ist, was ich empfehle. Keine streicht ein Gate: Determinismus und Prüfumfang bleiben gleich oder steigen.</p>
+</div>
+
+<section id="ss-befund" data-nav-label="Befund in Zahlen" class="ss-block">
+  <h3>Befund in Zahlen</h3>
+  <div class="ss-kpis">
+    <div class="ss-kpi"><b>22,8 min</b><span>Median pro Ship</span></div>
+    <div class="ss-kpi"><b>29,4 min</b><span>Mittelwert (Spitze 113 min)</span></div>
+    <div class="ss-kpi"><b>40–110</b><span>Tool-Aufrufe pro Ship</span></div>
+    <div class="ss-kpi ss-goal"><b>≤ 8–10 min</b><span>Ziel (⅓)</span></div>
+  </div>
+  <p>Zeitanteile, summiert über alle 30 Ships (882 min):</p>
+  <div class="ss-bars">
+    <div class="ss-bar"><span>ship_build (Lint + volle Suite)</span><div class="ss-track"><div class="ss-fill ss-hot" style="width:100%"></div></div><span class="ss-num">27 % · 7,8 m</span></div>
+    <div class="ss-bar"><span>Modell-Denkzeit zwischen Aufrufen</span><div class="ss-track"><div class="ss-fill ss-hot" style="width:93%"></div></div><span class="ss-num">25 % · 7,3 m</span></div>
+    <div class="ss-bar"><span>Sonstige Bash-Aufrufe</span><div class="ss-track"><div class="ss-fill ss-warm" style="width:40%"></div></div><span class="ss-num">11 % · 3,2 m</span></div>
+    <div class="ss-bar"><span>Manuelle Testläufe (vitest/npm test)</span><div class="ss-track"><div class="ss-fill ss-warm" style="width:39%"></div></div><span class="ss-num">10 % · 3,0 m</span></div>
+    <div class="ss-bar"><span>ship_hygiene (vor der Card)</span><div class="ss-track"><div class="ss-fill ss-warm" style="width:27%"></div></div><span class="ss-num">7 % · 2,1 m</span></div>
+    <div class="ss-bar"><span>ship_release (PR, CI-Wait, Merge, Tag)</span><div class="ss-track"><div class="ss-fill" style="width:26%"></div></div><span class="ss-num">7 % · 2,0 m</span></div>
+    <div class="ss-bar"><span>git status / ls-remote durch das Modell</span><div class="ss-track"><div class="ss-fill" style="width:17%"></div></div><span class="ss-num">4 % · 1,3 m</span></div>
+    <div class="ss-bar"><span>Read/Edit/ToolSearch/Titel</span><div class="ss-track"><div class="ss-fill" style="width:14%"></div></div><span class="ss-num">4 % · 1,1 m</span></div>
+    <div class="ss-bar"><span>ship_preflight (inkl. Wiederholungen)</span><div class="ss-track"><div class="ss-fill" style="width:10%"></div></div><span class="ss-num">3 % · 0,8 m</span></div>
+    <div class="ss-bar"><span>Codex, Parity, Bump, Cleanup, Card</span><div class="ss-track"><div class="ss-fill" style="width:12%"></div></div><span class="ss-num">4 % · 1,0 m</span></div>
+  </div>
+  <table class="ss-table">
+    <thead><tr><th>Ship-Tool</th><th class="ss-r">Aufrufe</th><th class="ss-r">Median</th><th class="ss-r">p90</th><th class="ss-r">Max</th></tr></thead>
+    <tbody>
+      <tr><td>ship_build</td><td class="ss-r">47</td><td class="ss-r">222 s</td><td class="ss-r">634 s</td><td class="ss-r">1802 s (MCP-Abbruch)</td></tr>
+      <tr><td>ship_hygiene</td><td class="ss-r">9</td><td class="ss-r">394 s</td><td class="ss-r">807 s</td><td class="ss-r">807 s</td></tr>
+      <tr><td>ship_release</td><td class="ss-r">41</td><td class="ss-r">75 s</td><td class="ss-r">177 s</td><td class="ss-r">343 s</td></tr>
+      <tr><td>ship_preflight</td><td class="ss-r">46</td><td class="ss-r">21 s</td><td class="ss-r">64 s</td><td class="ss-r">186 s</td></tr>
+      <tr><td>ship_version_bump</td><td class="ss-r">34</td><td class="ss-r">3 s</td><td class="ss-r">11 s</td><td class="ss-r">23 s</td></tr>
+    </tbody>
+  </table>
+  <p class="ss-note">Grenzen der Messung: ältere Transkripte (vor dem 23.10.) sind nicht mehr vollständig vorhanden. Einige Ship-Fenster in langen Hauptsessions enthalten Nebenarbeit; das bläht vor allem die Denkzeit auf. Der Median ist deshalb aussagekräftiger als der Mittelwert.</p>
+</section>
+
+<section id="ss-ursachen" data-nav-label="Fünf Ursachen" class="ss-block">
+  <h3>Fünf Ursachen</h3>
+  <ol>
+    <li><b>Die Suite läuft gegen Last statt allein.</b> Die dotclaude-Suite braucht sauber ca. 50 s (laut <code>vitest.config.mjs</code>). Im Ship-Build waren es 160–260 s, im Fehlerfall 900 s bis zum Timeout. Ursache: viele parallele Sessions, eine maschinenweite Suite-Sperre, spawn-lastige Tests auf Windows.</li>
+    <li><b>Dieselbe Prüfung läuft mehrfach.</b> In 11 von 30 Ships lief <code>ship_build</code> zwei- bis viermal, in 15 von 30 <code>ship_preflight</code> mehrfach, in 8 von 30 <code>ship_release</code> mehrfach. Dazu kommen manuelle Suite-Läufe in der Rebase-Schleife (3 min pro Ship). Auslöser: ein paralleler Ship landet während der Checks (<code>baseAdvancedDuringChecks</code>), <code>validation-gaps</code> erst beim Release, eine Harden-Korrektur bricht den Build.</li>
+    <li><b>Das Modell orchestriert, was Code orchestrieren könnte.</b> 40–110 Aufrufe pro Ship mit je 5–10 s Denkzeit dazwischen. Die Reihenfolge steht in 486 Zeilen <code>SKILL.md</code> plus rund 15 nachgeladenen Referenzdateien. Das ist langsam und weniger deterministisch als Code.</li>
+    <li><b>Aufräumen blockiert die Card.</b> <code>ship_hygiene</code> entfernt Worktrees synchron vor der Card: Median 6,5 min, maximal 13,5 min. Für die Qualität des Ships spielt das keine Rolle.</li>
+    <li><b>Die Promotion-Gap-Abfrage läuft als Modell-Bash.</b> <code>git status; git ls-remote --tags origin</code> lief mehrfach 650–1280 s, bis das Bash-Timeout griff. <code>ship_release</code> fragt dieselben Tags ohnehin schon ab.</li>
+  </ol>
+</section>
+
+<section id="ss-massnahmen" data-nav-label="Maßnahmen" class="ss-block">
+  <h3>Maßnahmen</h3>
+  <p>Unabhängig wählbar; die Ersparnis ist der Durchschnitt pro Ship. Reihenfolge = Empfehlung (Quick Wins zuerst).</p>
+</section>
+
+<section id="m0-telemetrie" data-nav-label="M0 · Ship-Telemetrie" class="variant-card ss-card">
+  <h4>M0 · Ship-Telemetrie als Messbasis</h4>
+  <div class="ss-meta"><span class="ss-tag ss-s">Aufwand S</span><span class="ss-tag">Phase 1</span></div>
+  <dl>
+    <dt>Wo</dt><dd>Alle <code>ship_*</code>-Tools, neue Datei <code>~/.claude/ship-timings.jsonl</code></dd>
+    <dt>Was</dt><dd>Jeder Ship-Schritt schreibt Start, Dauer, Ergebnis, Wiederholung und Wartezeit auf die Suite-Sperre. Die Card zeigt eine Zeile „Ship 7:40 min (Build 2:10)“.</dd>
+    <dt>Warum</dt><dd>Diese Analyse musste 4000 Transkripte durchsuchen. Ohne Messung lässt sich das ⅓-Ziel weder nachweisen noch halten.</dd>
+    <dt>Ersparnis</dt><dd>keine direkte; Voraussetzung für die Erfolgskontrolle</dd>
+  </dl>
+  <div class="variant-evaluation" data-decision="m0-telemetrie" data-label="M0 · Ship-Telemetrie">
+    <div class="eval-group">
+      <label class="eval-option"><input type="radio" name="eval-m0-telemetrie" value="discard"><span class="eval-label">Verwerfen</span></label>
+      <label class="eval-option"><input type="radio" name="eval-m0-telemetrie" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+    </div>
+    <div class="field-row decision-comment-row">
+      <label for="m0-telemetrie-note">{{decision.comment_label}}</label>
+      <textarea id="m0-telemetrie-note" data-comment="m0-telemetrie-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+    </div>
+  </div>
+</section>
+
+<section id="m1-hygiene" data-nav-label="M1 · Hygiene nach der Card" class="variant-card ss-card">
+  <h4>M1 · ship_hygiene aus dem kritischen Pfad nehmen</h4>
+  <div class="ss-meta"><span class="ss-tag ss-s">Aufwand S</span><span class="ss-tag">Phase 1</span><span class="ss-gain">−2,1 min</span></div>
+  <dl>
+    <dt>Wo</dt><dd><code>mcp-server/ship/lib/hygiene.js</code> (<code>runHygiene</code>), do-ship Step 6</dd>
+    <dt>Was</dt><dd>Die Card fragt nur noch einen schnellen Scan ab (Zählung, kein Entfernen, unter 5 s). Das Entfernen läuft danach losgelöst mit niedriger Priorität, wie schon <code>startOrphanScan</code>. Das Ergebnis erscheint beim nächsten Session-Start im bestehenden Orphan-Hinweis.</dd>
+    <dt>Alternative</dt><dd>Nur das Budget von 180 s auf 30 s senken: spart weniger und lässt halbe Aufräumläufe zurück.</dd>
+    <dt>Kosten</dt><dd>Die Zeile „N Worktrees entfernt“ steht nicht mehr auf derselben Card, sondern beim nächsten Start. Auf Determinismus und Qualität hat das keinen Einfluss.</dd>
+  </dl>
+  <div class="variant-evaluation" data-decision="m1-hygiene" data-label="M1 · Hygiene nach der Card">
+    <div class="eval-group">
+      <label class="eval-option"><input type="radio" name="eval-m1-hygiene" value="discard"><span class="eval-label">Verwerfen</span></label>
+      <label class="eval-option"><input type="radio" name="eval-m1-hygiene" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+    </div>
+    <div class="field-row decision-comment-row">
+      <label for="m1-hygiene-note">{{decision.comment_label}}</label>
+      <textarea id="m1-hygiene-note" data-comment="m1-hygiene-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+    </div>
+  </div>
+</section>
+
+<section id="m2-tags" data-nav-label="M2 · Tag-Drift im Tool" class="variant-card ss-card">
+  <h4>M2 · Promotion-Gap und Kanal-Stand in ship_release berechnen</h4>
+  <div class="ss-meta"><span class="ss-tag ss-s">Aufwand S</span><span class="ss-tag">Phase 1</span><span class="ss-gain">−1,3 min</span></div>
+  <dl>
+    <dt>Wo</dt><dd><code>ship/tools/release.js</code> (hat <code>ls-remote --tags</code> schon), do-ship Step 6 „Promotion-gap nudge“, Step 5c <code>git status</code></dd>
+    <dt>Was</dt><dd><code>ship_release</code> gibt <code>channels</code>, <code>betaLag</code> und <code>stableLag</code> zurück, <code>ship_cleanup</code> den Porcelain-Status. Das Modell ruft dafür kein <code>git</code> mehr selbst auf, mit Netzwerk-Timeout wie die übrigen Git-Aufrufe im Tool.</dd>
+    <dt>Kosten</dt><dd>Keine. Gleiche Daten, deterministisch statt frei formuliert, mit hartem Timeout statt Hänger bis zum 10-min-Limit.</dd>
+  </dl>
+  <div class="variant-evaluation" data-decision="m2-tags" data-label="M2 · Tag-Drift im Tool">
+    <div class="eval-group">
+      <label class="eval-option"><input type="radio" name="eval-m2-tags" value="discard"><span class="eval-label">Verwerfen</span></label>
+      <label class="eval-option"><input type="radio" name="eval-m2-tags" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+    </div>
+    <div class="field-row decision-comment-row">
+      <label for="m2-tags-note">{{decision.comment_label}}</label>
+      <textarea id="m2-tags-note" data-comment="m2-tags-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+    </div>
+  </div>
+</section>
+
+<section id="m3-test-once" data-nav-label="M3 · Ein Testlauf pro Tree" class="variant-card ss-card">
+  <h4>M3 · Genau ein voller Testlauf pro Tree</h4>
+  <div class="ss-meta"><span class="ss-tag ss-s">Aufwand S–M</span><span class="ss-tag">Phase 1</span><span class="ss-gain">−3,0 min</span></div>
+  <dl>
+    <dt>Wo</dt><dd><code>preflight-rebase.md</code> § Rebase loop (Schritt „full test suite“), <code>ship/lib/test-results.js</code> (Green-Reuse)</dd>
+    <dt>Was</dt><dd>Die Rebase-Schleife startet keine eigene Suite mehr; die Prüfung macht <code>ship_build</code> auf dem rebasten Tree. Jeder grüne volle Lauf, ob <code>npm test</code> von Hand oder vom Build, wird mit dem Git-Tree-Hash gespeichert. <code>ship_build</code> überspringt nur bei identischem Tree. Ein Hook unterbindet manuelle Voll-Läufe während eines laufenden Ships.</dd>
+    <dt>Kosten</dt><dd>Keine. Der Tree-Hash-Schlüssel ist exakt: Ein anderer Tree heißt immer ein neuer Lauf.</dd>
+  </dl>
+  <div class="variant-evaluation" data-decision="m3-test-once" data-label="M3 · Ein Testlauf pro Tree">
+    <div class="eval-group">
+      <label class="eval-option"><input type="radio" name="eval-m3-test-once" value="discard"><span class="eval-label">Verwerfen</span></label>
+      <label class="eval-option"><input type="radio" name="eval-m3-test-once" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+    </div>
+    <div class="field-row decision-comment-row">
+      <label for="m3-test-once-note">{{decision.comment_label}}</label>
+      <textarea id="m3-test-once-note" data-comment="m3-test-once-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+    </div>
+  </div>
+</section>
+
+<section id="m4-retries" data-nav-label="M4 · Wiederholungen vermeiden" class="variant-card ss-card">
+  <h4>M4 · Wiederholungen vermeiden: Landing-Lock und frühe Gates</h4>
+  <div class="ss-meta"><span class="ss-tag ss-m">Aufwand M</span><span class="ss-tag">Phase 2</span><span class="ss-gain">−2,5 min</span></div>
+  <dl>
+    <dt>Wo</dt><dd><code>ship/tools/release.js</code>, <code>preflight.js</code>, <code>ship-harden.js</code></dd>
+    <dt>Was</dt><dd>(a) Ein maschinenweiter Landing-Lock pro Repo: Ein Ship holt ihn vor dem letzten Rebase und gibt ihn nach dem Merge frei. Ein paralleler Ship wartet kurz, statt nach seinem CI-Lauf mit <code>baseAdvancedDuringChecks</code> neu anzufangen. (b) Der <code>validation</code>-Check läuft schon im Preflight, nicht erst nach dem Build. (c) Harden-Korrekturen laufen vor dem Build, damit ein Build-Bruch nicht einen zweiten Build kostet.</dd>
+    <dt>Alternative</dt><dd>GitHub Merge Queue: sauberer, aber bei Solo-Betrieb mit einem einzigen Rechner unnötig schwer.</dd>
+    <dt>Kosten</dt><dd>Parallele Ships stehen kurz an, werden dafür aber nicht verworfen. Der Merge-Schutz (Rebase-Pflicht, Tree-Abgleich) bleibt unverändert.</dd>
+  </dl>
+  <div class="variant-evaluation" data-decision="m4-retries" data-label="M4 · Wiederholungen vermeiden">
+    <div class="eval-group">
+      <label class="eval-option"><input type="radio" name="eval-m4-retries" value="discard"><span class="eval-label">Verwerfen</span></label>
+      <label class="eval-option"><input type="radio" name="eval-m4-retries" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+    </div>
+    <div class="field-row decision-comment-row">
+      <label for="m4-retries-note">{{decision.comment_label}}</label>
+      <textarea id="m4-retries-note" data-comment="m4-retries-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">das müsste dann aber nur projektweit sein un dnicht maschinenweit! Check nochmal ob es was bringt und ob wir in ein dead end laufen könnten. WEenn dann mach es wirklich robust</textarea>
+    </div>
+  </div>
+</section>
+
+<section id="m5-parallel" data-nav-label="M5 · Pipeline parallelisieren" class="variant-card ss-card">
+  <h4>M5 · Pipeline parallelisieren</h4>
+  <div class="ss-meta"><span class="ss-tag ss-m">Aufwand M</span><span class="ss-tag">Phase 2</span><span class="ss-gain">−1,5 min</span></div>
+  <dl>
+    <dt>Wo</dt><dd>do-ship Steps 2 / 2.5 / 4, <code>ship_release</code></dd>
+    <dt>Was</dt><dd>Direkt nach dem Preflight den Branch pushen und einen Draft-PR öffnen: Die CI läuft dann schon, während lokal Lint und Codex arbeiten. Codex-Review und Deploy-Parity laufen gleichzeitig mit dem Build statt danach. <code>ship_release</code> findet den offenen PR und wartet nur noch auf den Rest.</dd>
+    <dt>Kosten</dt><dd>Ein roter lokaler Build lässt einen Draft-PR zurück; der Ship-blocked-Pfad schließt ihn. Alle Gates bleiben bestehen, sie laufen nur gleichzeitig statt nacheinander.</dd>
+  </dl>
+  <div class="variant-evaluation" data-decision="m5-parallel" data-label="M5 · Pipeline parallelisieren">
+    <div class="eval-group">
+      <label class="eval-option"><input type="radio" name="eval-m5-parallel" value="discard"><span class="eval-label">Verwerfen</span></label>
+      <label class="eval-option"><input type="radio" name="eval-m5-parallel" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+    </div>
+    <div class="field-row decision-comment-row">
+      <label for="m5-parallel-note">{{decision.comment_label}}</label>
+      <textarea id="m5-parallel-note" data-comment="m5-parallel-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+    </div>
+  </div>
+</section>
+
+<section id="m6-ci-suite" data-nav-label="M6 · Volle Suite auf CI" class="variant-card ss-card">
+  <h4>M6 · Volle Suite als gesharderter CI-Check, lokal nur betroffene Tests</h4>
+  <div class="ss-meta"><span class="ss-tag ss-l">Aufwand L</span><span class="ss-tag">Phase 3</span><span class="ss-gain">−5,5 min (+1 min CI-Wait)</span></div>
+  <dl>
+    <dt>Wo</dt><dd><code>.github/workflows/</code> (neuer Job), <code>ship/tools/build.js</code> (<code>testCmd</code>), Projekt-Extension <code>.claude/skills/do-ship/reference.md</code></dd>
+    <dt>Was</dt><dd>dotclaude ist public, GitHub Actions kosten also nichts. Ein Pflicht-Check fährt die volle Suite auf <code>windows-latest</code> in 4 Shards (<code>vitest --shard</code>) plus den bestehenden POSIX-Job. Lokal prüft <code>ship_build</code> Lint und <code>vitest related</code> auf den Diff, als schnellen ersten Filter. Gemergt wird nur, wenn der volle CI-Lauf grün ist; das Pre-Merge-Gate existiert schon.</dd>
+    <dt>Warum</dt><dd>Größter Einzelposten. Saubere VMs ohne Suite-Sperre und ohne Last durch Nachbar-Sessions sind <i>deterministischer</i> als der Dev-PC; die 900-s-Timeouts und der 1802-s-MCP-Abbruch waren reine Last.</dd>
+    <dt>Alternative</dt><dd>Lokal bleiben, aber die Suite-Sperre zur Warteschlange mit Vorrang für Ships machen: spart ca. 2 min, löst die Last aber nicht.</dd>
+    <dt>Kosten</dt><dd>Der CI-Wait wächst um ca. 1 min (Windows-Runner + <code>npm ci</code>-Cache), M5 fängt das ab. Gilt pro Repo; andere Projekte behalten den lokalen Lauf, bis sie eine eigene CI haben.</dd>
+  </dl>
+  <div class="variant-evaluation" data-decision="m6-ci-suite" data-label="M6 · Volle Suite auf CI">
+    <div class="eval-group">
+      <label class="eval-option"><input type="radio" name="eval-m6-ci-suite" value="discard"><span class="eval-label">Verwerfen</span></label>
+      <label class="eval-option"><input type="radio" name="eval-m6-ci-suite" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+    </div>
+    <div class="field-row decision-comment-row">
+      <label for="m6-ci-suite-note">{{decision.comment_label}}</label>
+      <textarea id="m6-ci-suite-note" data-comment="m6-ci-suite-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">Aber achte darauf, dass die github actions auch aufgebraucht sein könnten! Das muss unbedingt gehandled werden, passiert regelmäßig!</textarea>
+    </div>
+  </div>
+</section>
+
+<section id="m7-ship-run" data-nav-label="M7 · ship_run-Orchestrator" class="variant-card ss-card">
+  <h4>M7 · Ein deterministischer <code>ship_run</code> statt 40–110 Modell-Schritten</h4>
+  <div class="ss-meta"><span class="ss-tag ss-l">Aufwand L</span><span class="ss-tag">Phase 3</span><span class="ss-gain">−8 min</span></div>
+  <dl>
+    <dt>Wo</dt><dd>Neues MCP-Tool in <code>mcp-server/ship/</code>; do-ship <code>SKILL.md</code> schrumpft zum Treiber</dd>
+    <dt>Was</dt><dd>Ein Aufruf läuft in Code durch: Preflight, Rebase bei konfliktfreier Lage, Harden, Build mit Codex und Parity parallel, Bump, Release, Cleanup und Hygiene-Start. Er kehrt nur an echten Entscheidungspunkten zurück: mehrdeutiger Konflikt, Codex-Befund mit Ermessen, Major-Bump, roter Build. Das Modell schreibt nur noch, was Urteil braucht: Bump-Art, CHANGELOG-Eintrag, Purpose-Check, Card. Die Checkpoint-Datei für Resume gibt es schon.</dd>
+    <dt>Warum</dt><dd>Die Modell-Denkzeit ist mit 25 % der zweitgrößte Posten, Bash- und Meta-Aufrufe kommen mit weiteren 20 % hinzu. Code führt die Reihenfolge jedes Mal gleich aus; Prosa-Regeln nicht. Außerdem fallen die meisten delegierten Subagent-Ships weg (17 von 30), die jedes Mal einen neuen Kontext aufbauen.</dd>
+    <dt>Kosten</dt><dd>Größter Umbau. Sicherheitsnetz: der bestehende Schritt-für-Schritt-Pfad bleibt als Fallback (Flag), bis die Telemetrie (M0) Gleichstand bei den Gates zeigt.</dd>
+  </dl>
+  <div class="variant-evaluation" data-decision="m7-ship-run" data-label="M7 · ship_run-Orchestrator">
+    <div class="eval-group">
+      <label class="eval-option"><input type="radio" name="eval-m7-ship-run" value="discard"><span class="eval-label">Verwerfen</span></label>
+      <label class="eval-option"><input type="radio" name="eval-m7-ship-run" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+    </div>
+    <div class="field-row decision-comment-row">
+      <label for="m7-ship-run-note">{{decision.comment_label}}</label>
+      <textarea id="m7-ship-run-note" data-comment="m7-ship-run-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">OK!</textarea>
+    </div>
+  </div>
+</section>
+
+<section id="ss-rechnung" data-nav-label="Rechnung und Reihenfolge" class="ss-block">
+  <h3>Rechnung und Reihenfolge</h3>
+  <table class="ss-table">
+    <thead><tr><th>Phase</th><th>Maßnahmen</th><th class="ss-r">Ø Ship danach</th><th class="ss-r">Faktor</th></tr></thead>
+    <tbody>
+      <tr><td>Heute</td><td>–</td><td class="ss-r">29,4 min (Median 22,8)</td><td class="ss-r">1,0×</td></tr>
+      <tr><td>Phase 1 · Quick Wins</td><td>M0, M1, M2, M3</td><td class="ss-r">≈ 23 min</td><td class="ss-r">≈ 1,3×</td></tr>
+      <tr><td>Phase 2</td><td>+ M4, M5</td><td class="ss-r">≈ 19 min</td><td class="ss-r">≈ 1,5×</td></tr>
+      <tr><td>Phase 3</td><td>+ M6, M7</td><td class="ss-r">≈ 7–9 min</td><td class="ss-r">≈ 3,3–4×</td></tr>
+    </tbody>
+  </table>
+  <p><b>Klartext:</b> Das ⅓-Ziel erreichen nur M6 und M7 zusammen. Die Quick Wins bringen spürbar etwas und kosten wenig, unter ⅔ der heutigen Zeit kommen sie allein aber nicht. Die Werte sind vorsichtig gerechnet, denn die Posten überlappen sich: Mit M7 fallen manuelle Tests und Bash-Aufrufe ohnehin weg.</p>
+  <p class="ss-note">Was ich bewusst nicht vorschlage: Codex-Gate, Purpose-Check oder Harden/Polish streichen, Tests nur auf „geänderte Dateien“ ohne vollen Lauf vor dem Merge, Green-Reuse über Tree-Änderungen hinweg. Alles davon wäre schneller, kostet aber Determinismus oder Qualität.</p>
+</section>
+</section>

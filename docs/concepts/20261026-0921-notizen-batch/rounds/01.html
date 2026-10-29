@@ -1,0 +1,435 @@
+<section data-iteration="1" data-iteration-template="design" data-design-set="alternatives" data-baked>
+  <script type="application/json" data-frozen-feedback>{"general":{"text":"","attachments":[]},"designs":{},"screens":{},"views":{}}</script>
+  <style>
+    .mk-stage { position: relative; width: 100%; max-width: 1100px; height: 100%; min-height: 520px; margin: 0 auto; padding: 2.5rem 2rem; box-sizing: border-box; background: #0d1117; color: #c9d1d9; font: 14px/1.5 system-ui, sans-serif; overflow: hidden; }
+    .mk-page { position: absolute; inset: 2.5rem 2rem; border: 1px solid #30363d; border-radius: 10px; background: #161b22; }
+    .mk-hero { margin: 2rem; height: 7rem; border-radius: 8px; background: linear-gradient(135deg, #1f2a3a, #22303f); }
+    .mk-row { margin: 1rem 2rem; height: 0.7rem; width: 55%; border-radius: 4px; background: #21262d; }
+    .mk-row.mk-short { width: 35%; }
+    .mk-footer { position: absolute; left: 2rem; right: 2rem; bottom: 2rem; height: 3rem; border-radius: 6px; background: #1c2128; border: 1px dashed #3d444d; display: flex; align-items: center; padding: 0 1rem; color: #6e7681; font-size: 12px; }
+    .mk-label { position: absolute; top: 0.6rem; left: 2.4rem; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #6e7681; }
+    .mk-cap { position: absolute; font-size: 11px; color: #6e7681; letter-spacing: 0.04em; text-transform: uppercase; }
+
+    /* D1 — Pille: Ankerring, durchgezogene Linie, eine Zeile mit Punkt-Badge */
+    .d1-anchor { position: absolute; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #58a6ff; background: rgba(88,166,255,.25); box-shadow: 0 0 0 4px rgba(88,166,255,.12); }
+    .d1-line { position: absolute; height: 2px; background: #58a6ff; transform-origin: left center; }
+    .d1-pill { position: absolute; display: flex; align-items: center; gap: 0.55rem; max-width: 330px; padding: 0.45rem 0.8rem 0.45rem 0.45rem; border-radius: 999px; background: #1f2630; border: 1px solid #3a4452; box-shadow: 0 6px 18px rgba(0,0,0,.4); }
+    .d1-num { flex: none; width: 22px; height: 22px; border-radius: 50%; background: #58a6ff; color: #0d1117; font-weight: 700; font-size: 12px; display: grid; place-items: center; }
+    .d1-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #d29922; box-shadow: 0 0 0 3px rgba(210,153,34,.2); }
+    .d1-q { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e6edf3; }
+    .d1-caret { flex: none; width: 14px; height: 14px; color: #8b949e; }
+    .d1-open { position: absolute; width: 330px; padding: 0.8rem 0.9rem; border-radius: 14px; background: #1f2630; border: 1px solid #3a4452; box-shadow: 0 10px 28px rgba(0,0,0,.45); }
+    .d1-open .d1-head { display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.6rem; }
+    .d1-chip { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0 0 0.6rem; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(210,153,34,.14); color: #e3b341; font-size: 12px; }
+    .d1-field { height: 3.2rem; border-radius: 8px; border: 1px solid #3a4452; background: #0d1117; }
+
+    /* D2 — Karte mit Akzentkante: pulsierender Ursprung, gestrichelte Linie, Farbe statt Wort */
+    .d2-anchor { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: #58a6ff; }
+    .d2-anchor::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 2px solid rgba(88,166,255,.45); }
+    .d2-line { position: absolute; height: 0; border-top: 2px dashed #58a6ff; transform-origin: left center; }
+    .d2-card { position: absolute; display: flex; align-items: center; gap: 0.6rem; max-width: 340px; padding: 0.5rem 0.75rem 0.5rem 0.9rem; border-radius: 8px; background: #1b222c; border: 1px solid #30363d; border-left: 4px solid #d29922; box-shadow: 0 6px 18px rgba(0,0,0,.4); }
+    .d2-card.d2-plain { border-left-color: #58a6ff; }
+    .d2-num { flex: none; font-weight: 700; color: #58a6ff; font-size: 12px; }
+    .d2-q { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e6edf3; }
+    .d2-plus { flex: none; width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; color: #8b949e; background: #262d37; font-size: 13px; line-height: 1; }
+    .d2-open { position: absolute; width: 340px; border-radius: 8px; background: #1b222c; border: 1px solid #30363d; border-left: 4px solid #d29922; box-shadow: 0 10px 28px rgba(0,0,0,.45); overflow: hidden; }
+    .d2-open .d2-top { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.75rem 0.6rem 0.9rem; }
+    .d2-imp { margin: 0; padding: 0.55rem 0.9rem; background: rgba(210,153,34,.10); border-top: 1px solid rgba(210,153,34,.25); border-bottom: 1px solid rgba(210,153,34,.25); color: #e3b341; font-size: 12px; }
+    .d2-imp b { font-weight: 600; margin-right: 0.4rem; }
+    .d2-field { margin: 0.7rem 0.9rem 0.8rem; height: 3.2rem; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; }
+
+    /* D3 — Minimal-Tag: Fadenkreuz-Ursprung, feine Linie, kein Pfeil, ganze Fläche klickbar */
+    .d3-anchor { position: absolute; width: 18px; height: 18px; }
+    .d3-anchor::before, .d3-anchor::after { content: ""; position: absolute; background: #58a6ff; }
+    .d3-anchor::before { left: 8px; top: 0; width: 2px; height: 18px; }
+    .d3-anchor::after { top: 8px; left: 0; height: 2px; width: 18px; }
+    .d3-halo { position: absolute; width: 30px; height: 30px; border-radius: 50%; background: radial-gradient(circle, rgba(88,166,255,.35), transparent 70%); }
+    .d3-line { position: absolute; height: 1px; background: linear-gradient(90deg, #58a6ff, rgba(88,166,255,.35)); transform-origin: left center; }
+    .d3-tag { position: absolute; display: flex; align-items: baseline; gap: 0.5rem; max-width: 320px; padding: 0.35rem 0.7rem; border-radius: 6px; background: rgba(22,27,34,.92); border: 1px solid #30363d; backdrop-filter: blur(4px); }
+    .d3-num { flex: none; font-size: 11px; font-weight: 700; color: #58a6ff; }
+    .d3-q { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e6edf3; text-decoration: underline; text-decoration-color: rgba(230,237,243,.25); text-underline-offset: 3px; }
+    .d3-open { position: absolute; width: 320px; padding: 0.75rem 0.85rem; border-radius: 8px; background: rgba(22,27,34,.96); border: 1px solid #30363d; box-shadow: 0 10px 28px rgba(0,0,0,.45); }
+    .d3-open .d3-q { white-space: normal; text-decoration: none; }
+    .d3-imp { display: block; margin: 0.6rem 0; padding: 0.45rem 0.65rem; border-radius: 6px; background: #21262d; color: #c9d1d9; font-size: 12px; }
+    .d3-imp b { color: #e3b341; font-weight: 600; margin-right: 0.4rem; }
+    .d3-field { height: 3.2rem; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; }
+  </style>
+
+  <header class="iteration-intro">
+    <h2>{{iteration.tab}} 1 · Notizen im Concept</h2>
+    <p>Drei Entwürfe für die Notiz-Blase (#3, #4). Dazu drei Fragen: der Plan für #1 und #6, der Umfang von #2 und was #5 meint.</p>
+  </header>
+
+  <section data-design="pille" data-nav-label="Pille"
+           data-design-active="true"
+           data-design-motto="Eine Zeile, ein Ring."
+           data-design-traits="Ursprung als leuchtender Ring|Verbessert als oranger Punkt in der Zeile|Feiner Haken statt ›"
+           data-design-icon="compass" data-design-color="#3fb950" data-design-overlay="tl">
+    <section id="d1-s1" data-nav-label="Eingeklappt und offen" data-screen data-screen-active="true">
+      <div class="mk-stage">
+        <div class="mk-page">
+          <div class="mk-hero"></div><div class="mk-row"></div><div class="mk-row mk-short"></div>
+          <div class="mk-footer">Footer der Seite</div>
+        </div>
+        <span class="mk-cap" style="left:7%;top:44%">Eingeklappt</span>
+        <span class="d1-anchor" style="left:22%;top:86%"></span>
+        <span class="d1-line" style="left:calc(22% + 12px);top:calc(86% + 5px);width:120px;transform:rotate(-38deg)"></span>
+        <div class="d1-pill" style="left:30%;top:63%">
+          <span class="d1-num">1</span><span class="d1-dot"></span>
+          <span class="d1-q">Der Footer hat keinen Hintergrund mehr – passt das?</span>
+          <svg class="d1-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6l4 4 4-4"/></svg>
+        </div>
+        <span class="mk-cap" style="left:62%;top:8%">Offen</span>
+        <div class="d1-open" style="left:62%;top:13%">
+          <div class="d1-head"><span class="d1-num">1</span><span class="d1-q" style="white-space:normal">Der Footer hat keinen Hintergrund mehr – passt das?</span></div>
+          <p class="d1-chip">● Verbessert · Transparent, Fan-Badge, Neuigkeiten</p>
+          <div class="d1-field"></div>
+        </div>
+      </div>
+      <div class="anno-layer" data-anno-layer>
+        <div class="anno" data-anno="d1-s1-a1" data-anno-side="right" data-anno-target=".d1-anchor">
+          <button class="anno-pin" type="button" data-anno-pin="d1-s1-a1" aria-expanded="false" aria-controls="anno-bubble-d1-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+          <div class="anno-bubble" id="anno-bubble-d1-s1-a1" data-anno-bubble="d1-s1-a1" data-open="false">
+            <button type="button" class="anno-bubble-summary" data-anno-summary="d1-s1-a1" aria-expanded="false" aria-controls="anno-bubble-d1-s1-a1">
+              <span class="anno-bubble-question">Ring am Ursprung: ruhig oder kurz pulsierend beim Öffnen?</span>
+              <span class="anno-chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="anno-bubble-body">
+              <textarea class="anno-answer" data-comment="anno-d1-s1-a1" data-annotation="d1-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}">gern kurz pulsierend beim öffnen aber dann einheitlich!</textarea>
+              <div class="attach-slot" data-attach-slot="anno-d1-s1-a1"></div>
+            </div>
+          </div>
+        </div>
+        <div class="anno" data-anno="d1-s1-a2" data-anno-side="right" data-anno-target=".d1-dot">
+          <button class="anno-pin" type="button" data-anno-pin="d1-s1-a2" aria-expanded="false" aria-controls="anno-bubble-d1-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+          <div class="anno-bubble" id="anno-bubble-d1-s1-a2" data-anno-bubble="d1-s1-a2" data-open="false">
+            <button type="button" class="anno-bubble-summary" data-anno-summary="d1-s1-a2" aria-expanded="false" aria-controls="anno-bubble-d1-s1-a2">
+              <span class="anno-bubble-question">Reicht ein oranger Punkt für „Verbessert“, oder fehlt dann das Wort?</span>
+              <span class="anno-chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="anno-bubble-body">
+              <textarea class="anno-answer" data-comment="anno-d1-s1-a2" data-annotation="d1-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}">ja reicht vollkommen, super</textarea>
+              <div class="attach-slot" data-attach-slot="anno-d1-s1-a2"></div>
+            </div>
+          </div>
+        </div>
+        <div class="anno" data-anno="d1-s1-a3" data-anno-side="left" data-anno-target=".d1-chip">
+          <button class="anno-pin" type="button" data-anno-pin="d1-s1-a3" aria-expanded="false" aria-controls="anno-bubble-d1-s1-a3" aria-label="{{anno.pin_label}}">3</button>
+          <div class="anno-bubble" id="anno-bubble-d1-s1-a3" data-anno-bubble="d1-s1-a3" data-open="false">
+            <button type="button" class="anno-bubble-summary" data-anno-summary="d1-s1-a3" aria-expanded="false" aria-controls="anno-bubble-d1-s1-a3">
+              <span class="anno-bubble-question">Offen: „Verbessert“ als Chip mit Innenabstand – so?</span>
+              <span class="anno-chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="anno-bubble-body">
+              <textarea class="anno-answer" data-comment="anno-d1-s1-a3" data-annotation="d1-s1-a3" data-attachable placeholder="{{anno.answer_placeholder}}">ja super! wobei orange ja fragen color ist. </textarea>
+              <div class="attach-slot" data-attach-slot="anno-d1-s1-a3"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <section data-design="kante" data-nav-label="Akzentkante" hidden
+           data-design-motto="Farbe statt Wort."
+           data-design-traits="Pulsierender Ursprung mit gestrichelter Linie|Verbessert als orange Kante links|Plus-Knopf statt ›"
+           data-design-icon="layers" data-design-color="#d29922" data-design-overlay="tl">
+    <section id="d2-s1" data-nav-label="Eingeklappt und offen" data-screen data-screen-active="true">
+      <div class="mk-stage">
+        <div class="mk-page">
+          <div class="mk-hero"></div><div class="mk-row"></div><div class="mk-row mk-short"></div>
+          <div class="mk-footer">Footer der Seite</div>
+        </div>
+        <span class="mk-cap" style="left:7%;top:44%">Eingeklappt</span>
+        <span class="d2-anchor" style="left:22%;top:86%"></span>
+        <span class="d2-line" style="left:calc(22% + 10px);top:calc(86% + 4px);width:120px;transform:rotate(-38deg)"></span>
+        <div class="d2-card" style="left:30%;top:63%">
+          <span class="d2-num">1</span>
+          <span class="d2-q">Der Footer hat keinen Hintergrund mehr – passt das?</span>
+          <span class="d2-plus">+</span>
+        </div>
+        <div class="d2-card d2-plain" style="left:30%;top:52%">
+          <span class="d2-num">2</span>
+          <span class="d2-q">Neue Frage ohne Verbesserung (blaue Kante)</span>
+          <span class="d2-plus">+</span>
+        </div>
+        <span class="mk-cap" style="left:62%;top:8%">Offen</span>
+        <div class="d2-open" style="left:62%;top:13%">
+          <div class="d2-top"><span class="d2-num">1</span><span class="d2-q" style="white-space:normal">Der Footer hat keinen Hintergrund mehr – passt das?</span><span class="d2-plus">×</span></div>
+          <p class="d2-imp"><b>Verbessert</b>Transparent, Fan-Badge, Neuigkeiten</p>
+          <div class="d2-field"></div>
+        </div>
+      </div>
+      <div class="anno-layer" data-anno-layer>
+        <div class="anno" data-anno="d2-s1-a1" data-anno-side="right" data-anno-target=".d2-anchor">
+          <button class="anno-pin" type="button" data-anno-pin="d2-s1-a1" aria-expanded="false" aria-controls="anno-bubble-d2-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+          <div class="anno-bubble" id="anno-bubble-d2-s1-a1" data-anno-bubble="d2-s1-a1" data-open="false">
+            <button type="button" class="anno-bubble-summary" data-anno-summary="d2-s1-a1" aria-expanded="false" aria-controls="anno-bubble-d2-s1-a1">
+              <span class="anno-bubble-question">Gestrichelte Linie: zu unruhig neben dem Design?</span>
+              <span class="anno-chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="anno-bubble-body">
+              <textarea class="anno-answer" data-comment="anno-d2-s1-a1" data-annotation="d2-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+              <div class="attach-slot" data-attach-slot="anno-d2-s1-a1"></div>
+            </div>
+          </div>
+        </div>
+        <div class="anno" data-anno="d2-s1-a2" data-anno-side="right" data-anno-target=".d2-plain">
+          <button class="anno-pin" type="button" data-anno-pin="d2-s1-a2" aria-expanded="false" aria-controls="anno-bubble-d2-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+          <div class="anno-bubble" id="anno-bubble-d2-s1-a2" data-anno-bubble="d2-s1-a2" data-open="false">
+            <button type="button" class="anno-bubble-summary" data-anno-summary="d2-s1-a2" aria-expanded="false" aria-controls="anno-bubble-d2-s1-a2">
+              <span class="anno-bubble-question">Kante orange = verbessert, blau = neu: ist das ohne Wort klar?</span>
+              <span class="anno-chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="anno-bubble-body">
+              <textarea class="anno-answer" data-comment="anno-d2-s1-a2" data-annotation="d2-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+              <div class="attach-slot" data-attach-slot="anno-d2-s1-a2"></div>
+            </div>
+          </div>
+        </div>
+        <div class="anno" data-anno="d2-s1-a3" data-anno-side="left" data-anno-target=".d2-imp">
+          <button class="anno-pin" type="button" data-anno-pin="d2-s1-a3" aria-expanded="false" aria-controls="anno-bubble-d2-s1-a3" aria-label="{{anno.pin_label}}">3</button>
+          <div class="anno-bubble" id="anno-bubble-d2-s1-a3" data-anno-bubble="d2-s1-a3" data-open="false">
+            <button type="button" class="anno-bubble-summary" data-anno-summary="d2-s1-a3" aria-expanded="false" aria-controls="anno-bubble-d2-s1-a3">
+              <span class="anno-bubble-question">Offen: „Verbessert“ als volles Band über die Breite – gut so?</span>
+              <span class="anno-chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="anno-bubble-body">
+              <textarea class="anno-answer" data-comment="anno-d2-s1-a3" data-annotation="d2-s1-a3" data-attachable placeholder="{{anno.answer_placeholder}}">band finde ich zu viel... aber ich fidnee super das links an der box so ein farbstreifen ist, aber nciht für verbesserung sondern einfach so!</textarea>
+              <div class="attach-slot" data-attach-slot="anno-d2-s1-a3"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <section data-design="tag" data-nav-label="Minimal-Tag" hidden
+           data-design-motto="Nur der Satz."
+           data-design-traits="Fadenkreuz mit Lichthof als Ursprung|Verbessert nur im offenen Zustand|Kein Pfeil – die ganze Zeile ist der Knopf"
+           data-design-icon="sparkles" data-design-color="#a371f7" data-design-overlay="tl">
+    <section id="d3-s1" data-nav-label="Eingeklappt und offen" data-screen data-screen-active="true">
+      <div class="mk-stage">
+        <div class="mk-page">
+          <div class="mk-hero"></div><div class="mk-row"></div><div class="mk-row mk-short"></div>
+          <div class="mk-footer">Footer der Seite</div>
+        </div>
+        <span class="mk-cap" style="left:7%;top:44%">Eingeklappt</span>
+        <span class="d3-halo" style="left:calc(22% - 6px);top:calc(86% - 6px)"></span>
+        <span class="d3-anchor" style="left:22%;top:86%"></span>
+        <span class="d3-line" style="left:calc(22% + 14px);top:calc(86% + 8px);width:120px;transform:rotate(-38deg)"></span>
+        <div class="d3-tag" style="left:30%;top:63%">
+          <span class="d3-num">1</span>
+          <span class="d3-q">Der Footer hat keinen Hintergrund mehr – passt das?</span>
+        </div>
+        <span class="mk-cap" style="left:62%;top:8%">Offen</span>
+        <div class="d3-open" style="left:62%;top:13%">
+          <span class="d3-num">1</span> <span class="d3-q">Der Footer hat keinen Hintergrund mehr – passt das?</span>
+          <span class="d3-imp"><b>Verbessert</b>Transparent, Fan-Badge, Neuigkeiten</span>
+          <div class="d3-field"></div>
+        </div>
+      </div>
+      <div class="anno-layer" data-anno-layer>
+        <div class="anno" data-anno="d3-s1-a1" data-anno-side="right" data-anno-target=".d3-anchor">
+          <button class="anno-pin" type="button" data-anno-pin="d3-s1-a1" aria-expanded="false" aria-controls="anno-bubble-d3-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+          <div class="anno-bubble" id="anno-bubble-d3-s1-a1" data-anno-bubble="d3-s1-a1" data-open="false">
+            <button type="button" class="anno-bubble-summary" data-anno-summary="d3-s1-a1" aria-expanded="false" aria-controls="anno-bubble-d3-s1-a1">
+              <span class="anno-bubble-question">Fadenkreuz am Ursprung: präzise genug oder zu technisch?</span>
+              <span class="anno-chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="anno-bubble-body">
+              <textarea class="anno-answer" data-comment="anno-d3-s1-a1" data-annotation="d3-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+              <div class="attach-slot" data-attach-slot="anno-d3-s1-a1"></div>
+            </div>
+          </div>
+        </div>
+        <div class="anno" data-anno="d3-s1-a2" data-anno-side="right" data-anno-target=".d3-tag">
+          <button class="anno-pin" type="button" data-anno-pin="d3-s1-a2" aria-expanded="false" aria-controls="anno-bubble-d3-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+          <div class="anno-bubble" id="anno-bubble-d3-s1-a2" data-anno-bubble="d3-s1-a2" data-open="false">
+            <button type="button" class="anno-bubble-summary" data-anno-summary="d3-s1-a2" aria-expanded="false" aria-controls="anno-bubble-d3-s1-a2">
+              <span class="anno-bubble-question">Ohne Pfeil: erkennt man noch, dass die Zeile aufklappt?</span>
+              <span class="anno-chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="anno-bubble-body">
+              <textarea class="anno-answer" data-comment="anno-d3-s1-a2" data-annotation="d3-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+              <div class="attach-slot" data-attach-slot="anno-d3-s1-a2"></div>
+            </div>
+          </div>
+        </div>
+        <div class="anno" data-anno="d3-s1-a3" data-anno-side="left" data-anno-target=".d3-imp">
+          <button class="anno-pin" type="button" data-anno-pin="d3-s1-a3" aria-expanded="false" aria-controls="anno-bubble-d3-s1-a3" aria-label="{{anno.pin_label}}">3</button>
+          <div class="anno-bubble" id="anno-bubble-d3-s1-a3" data-anno-bubble="d3-s1-a3" data-open="false">
+            <button type="button" class="anno-bubble-summary" data-anno-summary="d3-s1-a3" aria-expanded="false" aria-controls="anno-bubble-d3-s1-a3">
+              <span class="anno-bubble-question">Eingeklappt gar kein Hinweis auf „Verbessert“ – vermisst du ihn?</span>
+              <span class="anno-chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="anno-bubble-body">
+              <textarea class="anno-answer" data-comment="anno-d3-s1-a3" data-annotation="d3-s1-a3" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+              <div class="attach-slot" data-attach-slot="anno-d3-s1-a3"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <section data-view="plan-bundles" data-view-kind="decision" data-nav-label="Plan und Abdeckung" hidden>
+    <div class="view-frame">
+      <h2>Plan aus den 6 Notizen – was soll umgesetzt werden?</h2>
+      <p>Die Notizen betreffen alle die Concept-Engine: die Vorlagen in <code>plugins/devops/skills/auto-concept/deep-knowledge/templates-*.md</code> und die Tests daneben. Jeder Punkt unten ist ein eigenständiges Paket. Vorausgewählt ist alles, was du in den Notizen festgelegt hast.</p>
+      <p><b>Abdeckung:</b> #1 übernommen (Paket B1) · #2 übernommen, Umfang offen (Frage „Notizen überall“) · #3 übernommen (die drei Entwürfe, Paket B2) · #4 zusammengeführt mit #3 · #5 Frage („devops backlog“) · #6 übernommen (Paket B3) · #7 (kam während des Zusammenführens dazu) übernommen (Paket B4).</p>
+
+      <div class="variant-evaluation" data-decision="b1-hidden-pins" data-label="B1 Neue Notizen trotz Ausblenden sichtbar">
+        <h3>B1 · Neue Notizen bleiben im Ausblende-Modus sichtbar (#1)</h3>
+        <p><b>Heute:</b> Das Auge setzt <code>body.anno-hidden</code> und versteckt die ganze Ebene mit den eigenen Notizen (<code>.upin-layer { display:none }</code>). Eine Strg+Klick-Notiz, die du dann setzt, ist sofort unsichtbar.</p>
+        <p><b>Neu:</b> Eine Notiz, die du <i>während</i> des Ausblendens anlegst, wird markiert und bleibt sichtbar. Notizen von vorher bleiben ausgeblendet, bis du wieder einblendest. Danach gilt die Markierung nicht mehr, beim nächsten Ausblenden verschwinden also alle wieder. Ein neuer Test prüft: eine frische Notiz ist bei ausgeblendeten Notizen sichtbar, eine alte nicht.</p>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-b1-hidden-pins" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-b1-hidden-pins" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="b1-hidden-pins-note">{{decision.comment_label}}</label>
+          <textarea id="b1-hidden-pins-note" data-comment="b1-hidden-pins-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="variant-evaluation" data-decision="b2-bubble" data-label="B2 Notiz-Blase neu gestalten">
+        <h3>B2 · Notiz-Blase neu gestalten (#3, #4)</h3>
+        <p><b>Dein Screenshot zeigt:</b> Der Ursprung der Linie ist nicht zu sehen, „Verbessert“ klebt ohne Abstand am Rand, die eingeklappte Blase hat zwei Zeilen, und das „›“ wirkt billig.</p>
+        <p><b>Neu, in jedem Entwurf:</b> ein sichtbarer Ursprungspunkt, eingeklappt genau eine Zeile, „Verbessert“ mit Innenabstand und ein neues Symbol statt „›“. Welcher Look, entscheidest du bei den drei Entwürfen (Pille, Akzentkante, Minimal-Tag) im 💬-Dock. Ein ★ markiert deinen Favoriten.</p>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-b2-bubble" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-b2-bubble" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="b2-bubble-note">{{decision.comment_label}}</label>
+          <textarea id="b2-bubble-note" data-comment="b2-bubble-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="variant-evaluation" data-decision="b3-dock-keys" data-label="B3 Tastatur im Notizen-Panel">
+        <h3>B3 · Tastatur im Notizen-Panel (#6)</h3>
+        <ul>
+          <li><b>Strg+Enter</b> in einem Notizfeld springt ins nächste Feld. Im letzten Feld schließt es das Panel.</li>
+          <li><b>Strg+Leertaste</b> schließt das Panel sofort.</li>
+          <li><b>Strg+Enter löst nichts mehr aus.</b> Der Tipp „Strg + Enter schickt die Runde ab“ fliegt raus. Umsetzen geht nur noch per Klick im Menü-Panel.</li>
+        </ul>
+        <p>Betroffen sind die Tipps (de/en), der Hinweis <code>nudge.submit</code>, das Hotkey-Tracking und der Handler, der heute abschickt.</p>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-b3-dock-keys" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-b3-dock-keys" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="b3-dock-keys-note">{{decision.comment_label}}</label>
+          <textarea id="b3-dock-keys-note" data-comment="b3-dock-keys-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="variant-evaluation" data-decision="b4-dim-pins" data-label="B4 Andere eigene Notizen abdimmen">
+        <h3>B4 · Andere eigene Notizen abdimmen statt ausblenden (#7)</h3>
+        <p><b>Heute:</b> Ist eine eigene Notiz offen oder fokussiert, verschwinden die Blasen der anderen eigenen Notizen. Die automatischen Notizen bleiben dagegen im Hintergrund abgedimmt sichtbar, und das gefällt dir.</p>
+        <p><b>Neu:</b> Eigene Notizen verhalten sich genauso: Ist eine andere Notiz offen oder fokussiert, bleiben sie abgedimmt sichtbar. Das gilt im Design wie in Dokument-Runden.</p>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-b4-dim-pins" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-b4-dim-pins" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="b4-dim-pins-note">{{decision.comment_label}}</label>
+          <textarea id="b4-dim-pins-note" data-comment="b4-dim-pins-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section data-view="notes-everywhere" data-view-kind="decision" data-nav-label="Notizen überall" hidden>
+    <div class="view-frame">
+      <h2>Auf welchen Seiten sollen eigene Notizen (Strg+Klick) zusätzlich gehen? (#2)</h2>
+      <p><b>Heute:</b> Eigene Notizen gehen auf Design-Entwürfen und in Fragen- und Freitext-Runden (Dokument-Pins). Laut Vorlage ausdrücklich nicht im Abschlussbericht. Die Fragen-Seiten <i>innerhalb</i> einer Design-Runde (wie diese hier) und die Übersicht sind nicht abgedeckt. Jeder Punkt ist unabhängig, wähl alle, die du willst.</p>
+
+      <div class="variant-evaluation" data-decision="pins-design-views" data-label="Fragen-Seiten in Design-Runden">
+        <h3>Fragen-Seiten in Design-Runden</h3>
+        <p>Seiten wie „Notizen überall“ oder „Plan und Abdeckung“. Hier zielt dein „auch Fragen-Seiten“ am direktesten hin. Technisch wie die Dokument-Pins, mit Anker auf Absatz, Listenpunkt oder Zeile.</p>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-pins-design-views" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-pins-design-views" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="pins-design-views-note">{{decision.comment_label}}</label>
+          <textarea id="pins-design-views-note" data-comment="pins-design-views-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="variant-evaluation" data-decision="pins-final-report" data-label="Abschlussbericht">
+        <h3>Abschlussbericht</h3>
+        <p>Notizen zu einzelnen Ergebnissen im Bericht. Kosten: Der Abschluss-Dialog muss sie mitschicken und verarbeiten (Issue, Nachbesserung).</p>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-pins-final-report" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-pins-final-report" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="pins-final-report-note">{{decision.comment_label}}</label>
+          <textarea id="pins-final-report-note" data-comment="pins-final-report-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="variant-evaluation" data-decision="pins-overview" data-label="Übersicht der Entwürfe">
+        <h3>Übersicht der Entwürfe</h3>
+        <p>Die Vorschau im Karussell ist ein Standbild und klickt sich in den Entwurf. Eine Notiz dort hätte keinen festen Anker. Für Notizen zu einem Entwurf gibt es das 💬-Dock. Ich rate ab.</p>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-pins-overview" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-pins-overview" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="pins-overview-note">{{decision.comment_label}}</label>
+          <textarea id="pins-overview-note" data-comment="pins-overview-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section data-view="devops-backlog" data-view-kind="decision" data-nav-label="devops backlog?" hidden>
+    <div class="view-frame">
+      <h2>Was meinst du mit „und mach devops backlog“? (#5)</h2>
+      <p>Die Notiz ist kurz. Hier die Lesarten, die ich sehe. Vorausgewählt ist die wahrscheinlichste.</p>
+
+      <div class="variant-evaluation" data-decision="backlog-run-after" data-label="Danach den Backlog abarbeiten">
+        <h3>Danach den devops-Backlog abarbeiten</h3>
+        <p>Nach dieser Umsetzung starte ich <code>do-run</code> im Backlog-Modus für dieses Repo (offene Issues und Milestones). Das ist ein eigener, längerer Lauf mit den üblichen Fragen am Anfang.</p>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-backlog-run-after" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-backlog-run-after" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="backlog-run-after-note">{{decision.comment_label}}</label>
+          <textarea id="backlog-run-after-note" data-comment="backlog-run-after-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="variant-evaluation" data-decision="backlog-issues" data-label="Als Issues in den Backlog">
+        <h3>Diese Punkte als Issues in den Backlog legen</h3>
+        <p>Nichts sofort bauen. Die Pakete B1–B3 und die Fragen werden zu GitHub-Issues und später mit dem Backlog abgearbeitet.</p>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-backlog-issues" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-backlog-issues" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="backlog-issues-note">{{decision.comment_label}}</label>
+          <textarea id="backlog-issues-note" data-comment="backlog-issues-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="variant-evaluation" data-decision="backlog-ignore" data-label="Nur ein Merker, nichts tun">
+        <h3>Nur ein Merker – nichts tun</h3>
+        <p>Die Notiz war ein Gedanke für später. Ich übergehe sie.</p>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-backlog-ignore" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-backlog-ignore" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="backlog-ignore-note">{{decision.comment_label}}</label>
+          <textarea id="backlog-ignore-note" data-comment="backlog-ignore-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+</section>

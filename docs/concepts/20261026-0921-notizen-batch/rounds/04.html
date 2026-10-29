@@ -1,0 +1,48 @@
+<section data-iteration="4" data-iteration-template="free" data-final-report>
+  <header class="iteration-intro">
+    <h2>Abschlussbericht · Notizen im Concept</h2>
+    <p>Alle 7 Batch-Notizen sind umgesetzt, auf dem Branch <code>claude/batch-8d92a4</code>, noch nicht geshippt.</p>
+  </header>
+
+  <section id="fr-summary" data-nav-label="Zusammenfassung">
+    <h3>Zusammenfassung</h3>
+    <p>In drei Commits ist die Concept-Engine überarbeitet: <code>644bf3a76</code> (Notiz-IDs pro Runde), <code>f050a0e90</code> (Ausblenden, Fragen-Seiten, Tastatur) und <code>e994e39c4</code> (Blase, Abdimmen, Abschlussbericht). Die neue Blase siehst du auf Concept-Seiten erst, wenn die Plugin-Version mit diesen Commits installiert ist. Diese Seite läuft noch mit der alten Engine.</p>
+    <ul>
+      <li><b>#1 Ausblenden:</b> Eine Strg+Klick-Notiz, die du bei ausgeblendeten Notizen setzt, bleibt sichtbar. Ältere Notizen kommen erst mit dem Wiedereinblenden zurück, und beim nächsten Ausblenden verschwinden alle.</li>
+      <li><b>#2 Notizen überall:</b> Eigene Notizen gehen jetzt auch auf Fragen-Seiten in Design-Runden und im Abschlussbericht. Auf der Übersicht gehen sie weiterhin nicht, wie entschieden.</li>
+      <li><b>#3 und #4 Blase:</b> Die eingeklappte Blase ist eine Pille mit genau einer Zeile, blauem Streifen links und Glow. Sie hat keine Zahl und keinen Pfeil mehr. Der Ursprung sieht aus wie deine eigenen Notizen, nur blau, und pulsiert einmal beim Öffnen. Das Öffnen ist animiert. „Verbessert“ steht nicht mehr als Wort da, der Hinweis liegt auf einer zarten grünen Fläche.</li>
+      <li><b>#6 Tastatur:</b> Strg+Enter springt im Notizen-Panel ins nächste Feld und schließt das Panel im letzten. Strg+Leertaste schließt es sofort. Strg+Enter schickt nichts mehr ab, Umsetzen geht nur per Klick, und die Tipps sind angepasst.</li>
+      <li><b>#7 Abdimmen:</b> Ist eine Notiz offen, bleiben alle anderen sichtbar und sind abgedimmt, eigene wie automatische, im Design wie in Dokument-Runden.</li>
+      <li><b>Unterwegs gefunden und behoben:</b> In Runde 2 ließen sich die automatischen Notizen nicht aufklappen, weil sich die Notiz-IDs zwischen den Runden wiederholt haben. Die Engine sucht Notizen jetzt nur noch in der sichtbaren Runde, und ab Runde 2 tragen alle IDs das Runden-Präfix.</li>
+    </ul>
+  </section>
+
+  <section id="fr-files" data-nav-label="Geänderte Dateien">
+    <h3>Geänderte Dateien</h3>
+    <p>Alle unter <code>plugins/devops/skills/auto-concept/</code>:</p>
+    <ul>
+      <li><code>templates-design-wiring.md</code>: Notizen werden nur in der sichtbaren Runde gesucht, und ein Klick auf den grünen Hinweis öffnet die Blase.</li>
+      <li><code>templates-design-css.md</code> und <code>templates-design-overview-css-2.md</code>: Pille, Pin, Glow, Animation, Abdimmen und der Ausblende-Modus pro Pin.</li>
+      <li><code>templates-design-screens.md</code>: das Muster ohne Pfeil und Zahl, die Regel für den Hinweis, das Runden-Präfix für IDs und <code>userPins</code> aus Fragen-Seiten.</li>
+      <li><code>templates-design-overview.md</code> und <code>templates-free-pins.md</code>: Notizen bleiben im Ausblende-Modus sichtbar, Notizen auf Fragen-Seiten und im Abschlussbericht, Abdimmen in Dokument-Runden. Dazu fällt der Strg+Enter-Submit weg.</li>
+      <li><code>templates-panel-feedback-dock.md</code>, <code>templates-design-hotkeys.md</code>, <code>templates-common.md</code> und <code>step2-feedback.md</code>: die Tastatur im Notizen-Panel, die Tipps, das <code>?</code>-Blatt und die Texte.</li>
+      <li><code>templates-submit-js-3.md</code>: <code>userPins</code> wird beim Abschluss mitgeschickt.</li>
+      <li><code>plugins/devops/agents/concept-author.md</code>: Der Runden-Autor vergibt ab Runde 2 IDs mit Präfix <code>r{N}-</code>.</li>
+    </ul>
+  </section>
+
+  <section id="fr-tests" data-nav-label="Tests / Verifikation">
+    <h3>Tests / Verifikation</h3>
+    <ul>
+      <li>Die Concept-Suite hat 875 von 875 Tests bestanden, in 56 Dateien.</li>
+      <li>Neu sind vier Testdateien: <code>anno-round-scope.test.js</code> (schlägt ohne den Fix fehl), <code>hidden-fresh-pins.test.js</code>, <code>dock-ctrl-keys.test.js</code> und <code>anno-bubble-redesign.test.js</code>.</li>
+      <li>Im Browser geprüft: Diese Seite, mit der neuen Engine in einer Kopie gebaut, zeigt Pille, Pin, grünen Hinweis, keinen Pfeil und abgedimmte andere Notizen.</li>
+      <li>Nicht geprüft: Mehrere Templates sind jetzt über ihrem Zeilen-Budget, <code>templates-design-css.md</code> mit 666 von 600 und <code>templates-design-wiring.md</code> mit 641 von 600. Ich habe sie nicht aufgeteilt, weil die Reihenfolge der Code-Blöcke für den Build zählt.</li>
+    </ul>
+  </section>
+
+  <section id="fr-next" data-nav-label="Danach">
+    <h3>Danach</h3>
+    <p>Du hast #5 entschieden: Nach diesem Concept arbeite ich den devops-Backlog mit <code>do-run</code> ab. Das ist ein eigener Lauf mit den üblichen Fragen am Anfang. Shippen geht über das Abschlussblatt rechts im ☰-Menü.</p>
+  </section>
+</section>
