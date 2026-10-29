@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.334.0] — 2026-10-29
+
+### Added
+- Concept notes: Ctrl+Enter closes an auto or own note and opens the next unhandled auto note.
+- Analysis view: the note field sits directly under the options (3 rows, attach icon inside); a selected option can be deselected — deselected with an empty note counts as unseen.
+- Analysis view: "All as list" is a discreet icon in the header row; the final "Fertig" stage shows FAB-style action buttons bottom right.
+
+### Fixed
+- Analysis view: a fresh round no longer shows all questions as answered after merely clicking through.
+
 ## [0.333.0] — 2026-10-29
 
 ### Added
