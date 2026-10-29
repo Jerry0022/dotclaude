@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.330.6] — 2026-10-29
+
+### Fixed
+- The knowledge dispatch now leaves room for its sibling first-prompt hooks, so the combined hook context stays under the harness limit and the session-title instruction is no longer lost in a persisted file (#959).
+
 ## [0.330.5] — 2026-10-29
 
 ### Fixed
