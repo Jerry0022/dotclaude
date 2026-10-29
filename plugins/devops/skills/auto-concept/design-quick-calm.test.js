@@ -91,7 +91,7 @@ describe("calm view — status messages, tips and corner chrome go too", () => {
 });
 
 describe("quick nav — one level up, in-place repaint, direction", () => {
-  test("the page already on screen and the variant already on screen lead back to the overview, centred on it", async () => {
+  test("the page already on screen leads back to the overview; the active variant chip turns to the next page, last → first", async () => {
     const { window, document } = await boot(page(3));
     window.showDesign("d2b");
     const pages = () => [...document.querySelectorAll("#design-quick .design-quick-page")];
@@ -100,9 +100,14 @@ describe("quick nav — one level up, in-place repaint, direction", () => {
     expect(document.body.dataset.overviewActive).toBe("true");
     expect(centre(document).dataset.designId).toBe("d2b");
     window.showDesign("d2b");
-    document.querySelector("#design-quick .design-quick-group > .design-quick-seg").click();
-    expect(document.body.dataset.overviewActive).toBe("true");
-    expect(centre(document).dataset.designId).toBe("d2b");
+    const ids = [...document.querySelectorAll("#design-quick .design-quick-page")].map((b) => b.dataset.screenId);
+    const activeId = () => document.querySelector("#design-quick .design-quick-page[data-active=\"true\"]").dataset.screenId;
+    expect(activeId()).toBe(ids[0]);
+    const chip = () => document.querySelector("#design-quick .design-quick-group > .design-quick-seg");
+    for (let i = 1; i < ids.length; i++) { chip().click(); expect(activeId()).toBe(ids[i]); }
+    chip().click();
+    expect(activeId(), "last → first").toBe(ids[0]);
+    expect(document.body.dataset.overviewActive).not.toBe("true");
   }, BOOT_TIMEOUT);
 
   test("a page step repaints the same buttons; aria-current and the Tab keycap move along", async () => {

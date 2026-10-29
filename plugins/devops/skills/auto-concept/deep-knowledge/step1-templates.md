@@ -91,6 +91,16 @@ with an overview table carrying a recommendation column and jump links
    list → populated list). Every state the user should be able to give
    feedback on separately becomes its own `<section data-screen>`.
 
+   **A changed element is mocked in full, as it is today.** When a design
+   reworks an existing element (a menu, a header, a panel), the mock shows
+   every part that element has today — toggles such as dark mode, buttons,
+   counters, sub-lists — not a reduced sketch of only the new idea. What the
+   round does not mention changing is drawn exactly as today. A thin mock
+   hides what would silently change: the reviewer approves the idea, and the
+   implementation then drops or restyles parts nobody asked to touch. Read
+   the element's current markup (engine docs or the app's source) before
+   mocking it.
+
    **Several competing visual directions** (e.g. 21 layout variants that
    don't fit a 340px card) are several **designs within the same `design`
    iteration**, each with its own `data-design` wrapper and its own 1..n
@@ -118,16 +128,53 @@ with an overview table carrying a recommendation column and jump links
    designs — never something they all share), `data-design-icon` (a built-in
    icon name or an entity-escaped inline SVG — pick it thematically per
    concept, it is how the user tells the designs apart) and optionally
-   `data-design-color` (never the accent blue), `data-design-overlay`
-   (`tl|tr|bl|br|tc|bc`, default `bl` — the corner of the preview that hides
-   the least) and `data-design-overlay-tone="warm"` (for a bluish preview).
-   The iteration carries `data-design-set="alternatives"` whenever the
+   `data-design-color` (never the accent blue). The overview card is **always
+   bottom-left**: `data-design-overlay` / `data-design-overlay-tone` are ignored
+   (the gate warns when they are set — drop them). The iteration carries `data-design-set="alternatives"` whenever the
    designs are alternatives for the same thing (the usual case — one visual
    topic per round; only then the favourite ☆ exists) or `"topics"` when they
    show different topics. The engine builds the variant overview carousel,
    the header and the quick nav from them; the gate warns when one is
    missing. See `deep-knowledge/templates-design-views.md` § Variant
    overview (≥2 designs).
+
+   **Designs that look alike → `data-ov-demo`.** When the designs of a round
+   differ only by motion (transitions, hover) or by one element, their first
+   screens are identical and the overview previews look the same (the gate warns:
+   `overview-identical-first-screen`). Put `data-ov-demo="<selector>"` on those
+   designs, naming the element that differs: the overview then shows it as a
+   looping, zoomed demo instead of a static duplicate.
+
+   **Sub-variants — a round varies the main design, or one sub-element alone.**
+   When only a sub-element (one sub-page, one component) differs between the
+   candidates and everything else would be copied, that sub-variant becomes the
+   variants of THIS round: one design per take of that sub-element, refined on
+   its own. The next round zooms back out to the main variants, unless the user
+   wants to keep working on that part. An `alternatives` round whose designs share
+   all screen labels and their first screen and differ only on one or two
+   sub-pages is blocked by the gate (`design-round-subpage-only`, P34).
+
+   **Etappen (stages) — optional.** In round 1 propose Etappen (e.g. use cases →
+   structure → design → animation) only when content, UX or visual dependencies
+   make that sensible (a later stage depends on the answers of an earlier one).
+   Never mandatory: a concept without Etappen stays valid, and the user may merge
+   stages.
+
+   *Declaring them:* `page.json` gets `"stages": [{ "id": "A", "name": "Use Cases" }, …]`
+   (or `concept-build.js init … --stages "A:Use Cases,B:Struktur"`) — 1 to 7 entries, ids
+   consecutive capitals A–G, name at most 24 characters. Optional `"icon": "🧭"` (emoji before
+   the concept name in the ☰ panel head, default 🧭); the concept name is `page.json.title`, at
+   most 32 characters. Every round section of a staged concept carries `data-stage="<id>"`; the
+   rounds of one stage are consecutive and stages advance in order (the gate checks this, see
+   validation-gate.md § Etappen). The build injects them as `<script type="application/json"
+   id="concept-stages">` — never write that script by hand. In the LAST stage there is no
+   "Nächste Etappe"; the implement step is offered again.
+
+   *Layout:* Claude arranges stages horizontally (tabs), vertically or combined per concept —
+   whatever overwhelms the user least — and at the end always offers the most complete overview
+   possible. The engine shows them only in the ☰ panel, as a stepper whose nodes carry each
+   Etappe's kind glyph (read from its newest round); there is no Etappen glyph on the page
+   itself (`templates-stages.md`).
 
    **Single-screen, single-design (exactly one `data-screen`):** no
    screen-nav, no per-screen feedback textarea — the dock shows ONLY the
@@ -316,10 +363,21 @@ Lite never gets topics or a briefing; Full never hides inside a design round.
 what was analysed and found) → **Potential** (one prominent number, e.g.
 "≈ 51 M Tokens", as a `kpi`) → the **Themenfelder** as chips linked to the
 potential by connector lines (`data-share` = their part of it) → the
-**"Los geht's"** CTA that names the duration ("≈ 6 min"). The motivation is
+**"Los geht's"** button in the round's bar, beside the duration ("≈ 6 min"). The motivation is
 short and punchy — two sentences at most, no "was wir gemessen haben"
 sub-header, no "Deine drei Themenfelder" heading, no level numbers. A Full
 without what / why / potential fails the gate (A1).
+
+**One screen, no page scroll (Full).** The engine fits a Full round to the
+viewport (`templates-analysis-css.md` § fitted Full): the stepper is one line
+(only the open Themenfeld shows its dots), every stage ends in the same bar
+at the same spot — the optional note across the full width right above it,
+its 📎 inside the field — and the topic intro and the review show their
+decisions as an overview grid, not a list. Content that does not fit is
+condensed (layout first, then type) and only as a last resort scrolls inside
+its own box. Author for that budget: the round's `.iteration-intro` is one
+heading + one sentence (it opens the briefing), questions fit two lines,
+option consequences one or two, and no stage is a long list.
 
 **Themenfelder.** At most **3** per Full with at most **7** decisions each —
 3 and 7 are the golden numbers (gate A4 warns beyond). Group by what the

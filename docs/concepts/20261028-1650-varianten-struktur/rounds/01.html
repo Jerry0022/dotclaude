@@ -1,0 +1,538 @@
+<section data-iteration="1" data-iteration-template="decision" data-analysis="full" data-baked>
+  <script type="application/json" data-frozen-feedback>{"general":{"text":"","attachments":[]}}</script>
+
+  <section id="r1-briefing" data-analysis-briefing data-nav-label="Briefing">
+    <p data-briefing-what>Wir haben die fünf neuesten Konzeptseiten aus vier Projekten geprüft: Varianten zeigen in der Übersicht oft dasselbe Bild, und ob Richtung, Thema oder Detail zur Wahl steht, bleibt unsichtbar.</p>
+    <p data-briefing-why>Das kostet in jeder Runde Aufmerksamkeit, und Konzepte mit vielen Schritten laufen ohne Etappen-Struktur (bis zu 14 Runden).</p>
+    <div data-briefing-potential data-viz="kpi"
+         data-viz-spec='{"value":"4 / 5","unit":"Konzepte","label":"mischen Richtungen, Themen und Detail-Varianten"}'>4 / 5 Konzepte</div>
+    <a data-briefing-topic="r1-t1" data-share="20">Übersicht &amp; Navigation</a>
+    <a data-briefing-topic="r1-t2" data-share="35">Varianten, die gleich aussehen</a>
+    <a data-briefing-topic="r1-t3" data-share="45">Struktur &amp; Etappen</a>
+    <p data-briefing-duration>≈ 6 min</p>
+    <div data-alevel="1" data-title="Briefing">
+      <div data-slot="short"><div data-viz="kpi" data-viz-spec='{"value":"4 / 5","unit":"Konzepte"}'></div></div>
+      <div data-slot="long">
+        <div data-viz="donut" data-viz-spec='{"parts":[{"label":"mischen Richtung, Thema, Detail","value":4},{"label":"reine Entscheidungsrunde","value":1}],"text":"4 von 5 Konzepten mischen die Arten."}'></div>
+        <p>Vier der fünf Konzepte vergleichen Dinge, die keine echten Richtungen sind: Bewegung, Teilelemente oder Themen nacheinander. Nur crew-chat-energie war eine reine Entscheidungsrunde. Die Einordnung stammt von Claude aus Titeln und Labels.</p>
+        <div data-evidence hidden><ul><li>Star-Citizen-Companion-Web: <code>2026-10-28-verse-unterseiten-struktur</code> — 3 Designs mit denselben 6 Unterseiten, Hub von Design 2 ≡ 3 (md5 2c997ca8)</li><li>madmaze: <code>2026-10-22-crew-leiste-kompakt</code> — 3 Designs, ein Screen „Phase 2 + 3 im Vergleich“ dreimal</li><li>madmaze: <code>2026-10-22-crew-chat-energie</code> — Entscheidungsrunde, 7 nummerierte Themen</li><li>deep-contact: <code>2026-10-21-funk</code> — 7 Design-Runden, 7 nummerierte Schritte, 3 Mottos wiederholt</li><li>SC-Companion-App: <code>20261021-1530-ship-fitting-3d-ansicht</code> — 14 Design-Runden, Themen nacheinander</li></ul></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="r1-t1" data-topic data-nav-label="Übersicht &amp; Navigation">
+    <div data-alevel="2" data-title="Übersicht &amp; Navigation">
+      <div data-slot="short">Vier kleine Korrekturen: ein fester Ort für die Karte, ein echter Hintergrund, ein Klick, eine Ziffer.<div data-viz="text" data-viz-spec='{"text":"Vier Quick-Wins an der Übersicht"}'></div></div>
+      <div data-slot="long">
+        <div data-viz="flow" data-viz-spec='{"steps":[{"label":"Karte","value":"immer links unten"},{"label":"Panel","value":"randlos"},{"label":"Chip","value":"Klick rotiert"},{"label":"Ziffer","value":"1 · 2 · 3"}],"text":"Vier Korrekturen der Übersicht."}'></div>
+        <p>Die Übersicht lässt die Karte springen, zeigt die Vorschau als Kachel und benennt Varianten nur mit Namen. Vier kleine Änderungen machen sie ruhiger und auffindbarer.</p>
+        <div data-evidence hidden><ul><li>verse (Anker tr / br / bl), Screenshot des Nutzers (Kachel oben rechts)</li><li><code>templates-design-overview.md</code>, <code>templates-design-overview-css.md</code></li><li><code>templates-design-views.md:487</code></li></ul></div>
+      </div>
+    </div>
+
+    <section id="r1-anchor" data-nav-label="Feste Ecke der Karte" data-decision="r1-anchor" data-decision-mode="yesnoalt"
+             data-label="Feste Ecke der Karte" data-rec="yes"
+             data-rec-why="In verse springt die Karte von Folie zu Folie (tr, br, bl); eine feste Ecke macht sie zu einem Anker, den man nicht suchen muss."
+             data-applies-to="Übersicht aller Konzeptseiten mit Varianten" data-finding="r1-anchor-f">
+      <p data-applies>Gilt für: Übersicht aller Konzeptseiten mit Varianten</p>
+      <h3 data-question>Steht die Varianten-Karte in der Übersicht immer links unten?</h3>
+      <p data-context>Die Karte trägt Eyebrow, Motto, drei Merkmale und den Stern.</p>
+      <div data-options>
+        <label data-opt="yes" data-recommended>
+          <input type="radio" name="dm-r1-anchor" value="yes" checked>
+          <span data-opt-label>Ja, immer links unten</span>
+          <span data-opt-consequence>Die Karte springt nie mehr; <code>data-design-overlay</code> entfällt und das Gate warnt bei Angabe.</span>
+        </label>
+        <label data-opt="no">
+          <input type="radio" name="dm-r1-anchor" value="no">
+          <span data-opt-label>Nein, Anker pro Variante bleibt</span>
+          <span data-opt-consequence>Jede Variante wählt ihre Ecke, die Karte darf weiter springen.</span>
+        </label>
+        <label data-opt="alt">
+          <input type="radio" name="dm-r1-anchor" value="alt">
+          <span data-opt-label>Anders …</span>
+          <span data-opt-consequence>Du sagst in einem Satz, was stattdessen gelten soll.</span>
+        </label>
+      </div>
+      <input type="text" name="dm-r1-anchor-alt" placeholder="Was stattdessen?" value="">
+      <textarea data-comment="r1-anchor-note" placeholder="Notiz (optional)"></textarea>
+      <input type="hidden" name="dm-r1-anchor-touched" value="1">
+      <input type="hidden" name="dm-r1-anchor-issue" value="">
+      <input type="hidden" name="dm-r1-anchor-epic" value="">
+      <div data-alevel="3" data-title="Feste Ecke der Karte">
+        <div data-slot="short">In verse wandert die Karte durch drei Ecken.<div data-viz="kpi" data-viz-spec='{"value":"3","unit":"Ecken","label":"in 3 Folien"}'></div></div>
+        <div data-slot="long">
+          <div data-viz="flow" data-viz-spec='{"steps":[{"label":"Anflug","value":"tr"},{"label":"Holo-Deck","value":"br"},{"label":"Kapitel","value":"bl"}],"text":"Die Karte springt je Variante in eine andere Ecke."}'></div>
+          <p>Jede Variante setzt ihren eigenen Anker, deshalb sucht das Auge die Karte bei jeder Folie neu. Standard ist heute links unten, aber jede Variante darf es überschreiben.</p>
+          <div data-evidence hidden><ul><li>Seite: Star-Citizen-Companion-Web, <code>2026-10-28-verse-unterseiten-struktur</code> — Anker <code>tr</code> / <code>br</code> / <code>bl</code> je Design</li><li>Engine: <code>templates-design-overview-css.md:140-145</code> (CSS), <code>templates-design-overview.md:283-287</code> (Auslesen)</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="r1-panel" data-nav-label="Hintergrund der Bühne" data-decision="r1-panel" data-decision-mode="single"
+             data-label="Hintergrund der Bühne" data-rec="bleed"
+             data-rec-why="In verse liegt die Vorschau als Kachel oben rechts auf einem dunklen Panel; nur randlos ist das Panel wirklich die Variante."
+             data-applies-to="Übersicht aller Konzeptseiten mit Varianten" data-finding="r1-panel-f" data-finding-quant="false">
+      <p data-applies>Gilt für: Übersicht aller Konzeptseiten mit Varianten</p>
+      <h3 data-question>Wie füllt die Variante das Übersichts-Panel?</h3>
+      <p data-context>Heute ist die Vorschau eine abgerundete Kachel, die Bühne dahinter hat keinen eigenen Hintergrund.</p>
+      <div data-options>
+        <label data-opt="bleed" data-recommended>
+          <input type="radio" name="dm-r1-panel" value="bleed" checked>
+          <span data-opt-label>Randlos: die Vorschau füllt die ganze Bühne</span>
+          <span data-opt-consequence>Der Hintergrund ist der Hintergrund der Variante, die Karte liegt darüber.</span>
+        </label>
+        <label data-opt="tint">
+          <input type="radio" name="dm-r1-panel" value="tint">
+          <span data-opt-label>Kachel behalten, Bühne in der Farbe der Variante</span>
+          <span data-opt-consequence>Die Bühne nimmt die Hintergrundfarbe der Variante an, der Kachelrand bleibt sichtbar.</span>
+        </label>
+        <label data-opt="mirror">
+          <input type="radio" name="dm-r1-panel" value="mirror">
+          <span data-opt-label>Weichgezeichneten Spiegel vollflächig hinter die Kachel legen</span>
+          <span data-opt-consequence>Der Spiegel füllt die Bühne, die Farben stimmen nur ungefähr.</span>
+        </label>
+        <label data-opt="other">
+          <input type="radio" name="dm-r1-panel" value="other">
+          <span data-opt-label>Keine davon / anders …</span>
+          <span data-opt-consequence>Die Notiz sagt, was stattdessen gelten soll (Pflicht).</span>
+        </label>
+      </div>
+      <textarea data-comment="r1-panel-note" placeholder="Notiz (optional)"></textarea>
+      <input type="hidden" name="dm-r1-panel-touched" value="1">
+      <input type="hidden" name="dm-r1-panel-issue" value="">
+      <input type="hidden" name="dm-r1-panel-epic" value="">
+      <div data-alevel="3" data-title="Hintergrund der Bühne">
+        <div data-slot="short">Die Bühne gehört noch nicht der Variante.<div data-viz="text" data-viz-spec='{"text":"Kachel auf neutralem Panel"}'></div></div>
+        <div data-slot="long">
+          <div data-viz="text" data-viz-spec='{"text":"**Heute:** abgerundete Kachel (22 px) auf `--bg-secondary`, Design-Klon bei 1000 px skaliert. **Problem:** die Bühne dahinter hat keinen eigenen Hintergrund, der Rand wirkt wie ein Fremdkörper. **Ausweg:** die Vorschau selbst bis an den Rand ziehen."}'></div>
+          <p>Der unscharfe Spiegel hinter der Kachel deckt die Bühne nur teilweise und mit gedämpften Farben. Randlos zeigt die Variante, wie sie wirklich aussieht.</p>
+          <div data-evidence hidden><ul><li>Screenshot des Nutzers (verse): Kachel oben rechts auf dunklem Panel, Karte links unten</li><li>Engine: <code>templates-design-overview-css.md</code> — <code>.design-ov-preview</code> (Radius 22 px, <code>var(--bg-secondary)</code>), <code>.design-ov-mirror</code>; Bühne <code>.design-ov</code> ohne eigenen Hintergrund</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="r1-rotate" data-nav-label="Klick auf den aktiven Chip" data-decision="r1-rotate" data-decision-mode="yesnoalt"
+             data-label="Klick auf den aktiven Chip" data-rec="yes"
+             data-rec-why="Bei sechs Unterseiten je Variante (verse) ist die Liste für jeden Schritt ein Umweg; ein Klick pro Schritt ist schneller."
+             data-applies-to="Schnellnavigation der Übersicht und der Entwurfs-Ansicht" data-finding="r1-rotate-f">
+      <p data-applies>Gilt für: Schnellnavigation der Übersicht und der Entwurfs-Ansicht</p>
+      <h3 data-question>Öffnet ein Klick auf den aktiven Varianten-Chip die nächste Unterseite derselben Variante?</h3>
+      <p data-context>Bei vielen Unterseiten zeigt der Chip heute „Nummer von n ▾“ mit einer Liste.</p>
+      <div data-options>
+        <label data-opt="yes" data-recommended>
+          <input type="radio" name="dm-r1-rotate" value="yes" checked>
+          <span data-opt-label>Ja, der Klick rotiert (letzte → erste)</span>
+          <span data-opt-consequence>Der Chip schaltet Unterseite für Unterseite weiter; ▾ öffnet weiterhin die Liste.</span>
+        </label>
+        <label data-opt="no">
+          <input type="radio" name="dm-r1-rotate" value="no">
+          <span data-opt-label>Nein, der Klick bleibt wie er ist</span>
+          <span data-opt-consequence>Nur ▾ öffnet die Liste, der Chip schaltet nichts weiter.</span>
+        </label>
+        <label data-opt="alt">
+          <input type="radio" name="dm-r1-rotate" value="alt">
+          <span data-opt-label>Anders …</span>
+          <span data-opt-consequence>Du sagst in einem Satz, was stattdessen gelten soll.</span>
+        </label>
+      </div>
+      <input type="text" name="dm-r1-rotate-alt" placeholder="Was stattdessen?" value="">
+      <textarea data-comment="r1-rotate-note" placeholder="Notiz (optional)"></textarea>
+      <input type="hidden" name="dm-r1-rotate-touched" value="1">
+      <input type="hidden" name="dm-r1-rotate-issue" value="">
+      <input type="hidden" name="dm-r1-rotate-epic" value="">
+      <div data-alevel="3" data-title="Klick auf den aktiven Chip">
+        <div data-slot="short">Sechs Unterseiten je Variante, ein Weg durch die Liste.<div data-viz="kpi" data-viz-spec='{"value":"6","unit":"Unterseiten","label":"je Variante (verse)"}'></div></div>
+        <div data-slot="long">
+          <div data-viz="kpi" data-viz-spec='{"value":"6","unit":"Unterseiten je Variante","label":"Hub, Übergang, News, Patches, Galerie, Sternkarte"}'></div>
+          <p>Wer alle Unterseiten einer Variante durchsehen will, öffnet heute jedes Mal die Liste. Mit Rotation ist es ein Klick pro Seite, die Liste bleibt für den Sprung.</p>
+          <div data-evidence hidden><ul><li>Seite verse: je Design dieselben 6 Unterseiten (Hub, Übergang, News, Patches, Galerie, Sternkarte)</li><li>Engine: <code>templates-design-overview.md:946-961</code> — gefaltete Seiten zeigen <code>idx / n ▾</code> mit Liste</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="r1-number" data-nav-label="Ziffern vor den Varianten" data-decision="r1-number" data-decision-mode="yesnoalt"
+             data-label="Ziffern vor den Varianten" data-rec="yes"
+             data-rec-why="Die Hotkeys 1–9 schalten die Varianten schon um; mit der Ziffer im Chip kann man sich im Gespräch darauf beziehen („Variante 2“)."
+             data-applies-to="Schnellnavigation, ☰-Menü, Karten-Kicker" data-finding="r1-number-f">
+      <p data-applies>Gilt für: Schnellnavigation, ☰-Menü, Karten-Kicker</p>
+      <h3 data-question>Bekommen die Varianten eine Nummer 1 · 2 · 3 vor dem Namen?</h3>
+      <p data-context>Die Quellen widersprechen sich: ein Dokument nennt den Kicker „Symbol · Nummer · Name“, ein anderes „Symbol Name“.</p>
+      <div data-options>
+        <label data-opt="yes" data-recommended>
+          <input type="radio" name="dm-r1-number" value="yes" checked>
+          <span data-opt-label>Ja, überall dieselbe Ziffer</span>
+          <span data-opt-consequence>Schnellnavigation, ☰-Menü und Karten-Kicker zeigen dieselbe Ziffer wie der Hotkey.</span>
+        </label>
+        <label data-opt="no">
+          <input type="radio" name="dm-r1-number" value="no">
+          <span data-opt-label>Nein, Namen allein</span>
+          <span data-opt-consequence>Die Hotkeys 1–9 bleiben unsichtbar, im Gespräch hilft nur der Name.</span>
+        </label>
+        <label data-opt="alt">
+          <input type="radio" name="dm-r1-number" value="alt">
+          <span data-opt-label>Anders …</span>
+          <span data-opt-consequence>Du sagst in einem Satz, was stattdessen gelten soll.</span>
+        </label>
+      </div>
+      <input type="text" name="dm-r1-number-alt" placeholder="Was stattdessen?" value="">
+      <textarea data-comment="r1-number-note" placeholder="Notiz (optional)"></textarea>
+      <input type="hidden" name="dm-r1-number-touched" value="1">
+      <input type="hidden" name="dm-r1-number-issue" value="">
+      <input type="hidden" name="dm-r1-number-epic" value="">
+      <div data-alevel="3" data-title="Ziffern vor den Varianten">
+        <div data-slot="short">Neun Hotkeys, keine Ziffer sichtbar.<div data-viz="kpi" data-viz-spec='{"value":"9","unit":"Hotkeys","label":"ohne sichtbare Ziffer"}'></div></div>
+        <div data-slot="long">
+          <div data-viz="kpi" data-viz-spec='{"value":"1–9","unit":"Hotkeys","label":"schalten Varianten um, im Chip steht keine Ziffer"}'></div>
+          <p>Die Ziffern existieren als Tastenkürzel, sind aber nirgends zu sehen. Eine sichtbare Ziffer macht sie auffindbar und gibt jeder Variante einen Namen für das Gespräch. Das Doku-Dilemma zum Kicker erledigt sich damit gleich mit.</p>
+          <div data-evidence hidden><ul><li>Engine: <code>templates-design-overview.md:876-890</code> — <code>quickSeg</code> (Symbol + Label, keine Nummer); <code>:2004</code> — Ziffern 1–9 schalten Entwürfe; <code>:930</code> — Seiten in der Gruppe mit römischen Ziffern</li><li>Doku-Konflikt: <code>templates-design-views.md:487</code> (Kicker „Symbol · N · Name“) gegen <code>templates-design-overview.md:58-60</code> („Symbol Name“)</li></ul></div>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <section id="r1-t2" data-topic data-nav-label="Varianten, die gleich aussehen">
+    <div data-alevel="2" data-title="Varianten, die gleich aussehen">
+      <div data-slot="short">Unterscheiden sich Varianten nur in Bewegung, zeigt die Übersicht dreimal dasselbe.<div data-viz="bar" data-viz-spec='{"value":2,"max":3,"unit":"gleich","label":"verse"}'></div></div>
+      <div data-slot="long">
+        <div data-viz="bar" data-viz-spec='{"value":2,"max":3,"unit":"von 3 Vorschauen","label":"in verse identisch (Hub, md5 2c997ca8)"}'></div>
+        <p>Das Problem entsteht, wenn zwei Varianten im ersten Screen übereinstimmen und sich erst in Bewegung oder Teilelement trennen. Hier prüfen wir den Befund, entscheiden die Anzeige und die Prüfung im Gate.</p>
+        <div data-evidence hidden><ul><li>verse (Hub Design 2 ≡ Design 3)</li><li>crew-leiste-kompakt (dasselbe Label dreimal)</li></ul></div>
+      </div>
+    </div>
+
+    <section id="r1-same" data-nav-label="Befund: dreimal dasselbe Bild" data-decision="r1-same" data-decision-mode="verify"
+             data-label="Befund: dreimal dasselbe Bild" data-rec="ok"
+             data-rec-why="In verse ist der Hub-Screen von Design 2 und 3 Byte für Byte identisch; die Designs unterscheiden sich nur im Übergang."
+             data-applies-to="Übersicht bei Varianten, die sich nur in Bewegung oder Teilelement unterscheiden" data-finding="r1-same-f">
+      <p data-applies>Gilt für: Übersicht bei Varianten, die sich nur in Bewegung oder Teilelement unterscheiden</p>
+      <h3 data-question>Stimmt der Befund: Unterscheiden sich Varianten nur in Bewegung oder einem Teilelement, zeigt die Übersicht dreimal fast dasselbe Bild?</h3>
+      <p data-context>Gemessen an verse und an der Crew-Leiste von madmaze.</p>
+      <div data-options>
+        <label data-opt="ok" data-recommended>
+          <input type="radio" name="dm-r1-same" value="ok" checked>
+          <span data-opt-label>Stimmt</span>
+          <span data-opt-consequence>Die beiden Folgefragen gelten wie formuliert.</span>
+        </label>
+        <label data-opt="partial">
+          <input type="radio" name="dm-r1-same" value="partial">
+          <span data-opt-label>Teilweise</span>
+          <span data-opt-consequence>Du sagst unten, wann es nicht stimmt.</span>
+        </label>
+        <label data-opt="wrong">
+          <input type="radio" name="dm-r1-same" value="wrong">
+          <span data-opt-label>Stimmt nicht</span>
+          <span data-opt-consequence>Die Folgefragen dieses Themenfelds werden gegenstandslos.</span>
+        </label>
+      </div>
+      <input type="text" name="dm-r1-same-fix" placeholder="Was stimmt nicht?" value="">
+      <textarea data-comment="r1-same-note" placeholder="Notiz (optional)"></textarea>
+      <input type="hidden" name="dm-r1-same-touched" value="1">
+      <input type="hidden" name="dm-r1-same-issue" value="">
+      <input type="hidden" name="dm-r1-same-epic" value="">
+      <div data-alevel="3" data-title="Befund: dreimal dasselbe Bild">
+        <div data-slot="short">In verse ist der Hub von Design 2 gleich Design 3.<div data-viz="bar" data-viz-spec='{"value":2,"max":3,"unit":"Vorschauen","label":"gleich"}'></div></div>
+        <div data-slot="long">
+          <div data-viz="bar" data-viz-spec='{"value":2,"max":3,"unit":"von 3 Vorschauen","label":"Hub-Screen identisch (md5 2c997ca8)"}'></div>
+          <p>Anflug, Holo-Deck und Kapitel zeigen dieselben sechs Unterseiten. Hub-Screens von Design 2 und 3 sind identisch, der Unterschied liegt in Übergang und Bewegung. In der Übersicht stehen drei Folien nebeneinander, die man kaum auseinanderhält.</p>
+          <div data-evidence hidden><ul><li>Star-Citizen-Companion-Web, <code>2026-10-28-verse-unterseiten-struktur</code>: Hub-Screen Design 2 und 3, md5 <code>2c997ca8</code></li><li>madmaze, <code>2026-10-22-crew-leiste-kompakt</code>: 3 Designs mit einem Screen „Phase 2 + 3 im Vergleich“ (dasselbe Label dreimal), echte Teilelement-Varianten</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="r1-demo" data-nav-label="Anzeige bei gleichem Bild" data-decision="r1-demo" data-decision-mode="single"
+             data-label="Anzeige bei gleichem Bild" data-rec="demo"
+             data-rec-why="Die Unterschiede liegen in Bewegung oder einem Teilelement; nur eine laufende Schleife am abweichenden Teil zeigt sie."
+             data-applies-to="Übersicht bei Varianten, die sich nur in Bewegung oder Teilelement unterscheiden" data-finding="r1-demo-f" data-finding-quant="false">
+      <p data-applies>Gilt für: Übersicht bei Varianten, die sich nur in Bewegung oder Teilelement unterscheiden</p>
+      <h3 data-question>Was zeigt die Übersicht bei so einer Variante?</h3>
+      <p data-context>Heute zeigt die Übersicht den ersten Screen jeder Variante.</p>
+      <div data-options>
+        <label data-opt="demo" data-recommended>
+          <input type="radio" name="dm-r1-demo" value="demo" checked>
+          <span data-opt-label>Unterschieds-Demo: der abweichende Teil als kleine Schleife</span>
+          <span data-opt-consequence>Die Animation läuft, das Element ist gezoomt; der Autor setzt <code>data-ov-demo</code>.</span>
+        </label>
+        <label data-opt="zoom">
+          <input type="radio" name="dm-r1-demo" value="zoom">
+          <span data-opt-label>Auf das abweichende Element zoomen, ohne Animation</span>
+          <span data-opt-consequence>Ein Standbild des Teils; die Bewegung bleibt unsichtbar.</span>
+        </label>
+        <label data-opt="text">
+          <input type="radio" name="dm-r1-demo" value="text">
+          <span data-opt-label>Gleiches Bild zeigen, den Unterschied als Satz dazu</span>
+          <span data-opt-consequence>Die Vorschau bleibt dreimal gleich, ein Satz nennt den Unterschied.</span>
+        </label>
+        <label data-opt="other">
+          <input type="radio" name="dm-r1-demo" value="other">
+          <span data-opt-label>Keine davon / anders …</span>
+          <span data-opt-consequence>Die Notiz sagt, was stattdessen gelten soll (Pflicht).</span>
+        </label>
+      </div>
+      <textarea data-comment="r1-demo-note" placeholder="Notiz (optional)"></textarea>
+      <input type="hidden" name="dm-r1-demo-touched" value="1">
+      <input type="hidden" name="dm-r1-demo-issue" value="">
+      <input type="hidden" name="dm-r1-demo-epic" value="">
+      <div data-alevel="3" data-title="Anzeige bei gleichem Bild">
+        <div data-slot="short">Drei Varianten, ein Bild, der Unterschied bleibt unsichtbar.<div data-viz="text" data-viz-spec='{"text":"Heute: erster Screen je Variante"}'></div></div>
+        <div data-slot="long">
+          <div data-viz="text" data-viz-spec='{"text":"**Heute:** der erste Screen jeder Variante. **Problem:** Unterscheidet sich eine Variante nur in der Bewegung, sieht man den Unterschied nicht. **Ausweg:** zeigen, was anders ist, nicht das Gleiche dreimal."}'></div>
+          <p>Der Autor kennt den Unterschied und markiert ihn mit einem Attribut, die Übersicht muss ihn nicht erraten. Eine Schleife zeigt Bewegung ehrlicher als jedes Standbild.</p>
+          <div data-evidence hidden><ul><li>verse: Design 2 und 3 unterscheiden sich im Übergang zwischen Hub und Unterseite, nicht im Hub-Screen</li><li>crew-leiste-kompakt: Mottos „Gleiche Karte, weniger Luft“ / „Name oben, Lage unten“ / „Eine Zeile, ganze Crew“ — Unterschiede im Teilelement</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="r1-gate" data-nav-label="Gate bei gleichen Screens" data-decision="r1-gate" data-decision-mode="yesnoalt"
+             data-label="Gate bei gleichen Screens" data-rec="yes"
+             data-rec-why="In verse blieb die Gleichheit bis zur nachträglichen Analyse unbemerkt; eine Warnung beim Bauen fängt sie in derselben Runde ab."
+             data-applies-to="Gate beim Bau einer Runde mit Varianten" data-finding="r1-gate-f" data-finding-quant="false">
+      <p data-applies>Gilt für: Gate beim Bau einer Runde mit Varianten</p>
+      <h3 data-question>Warnt das Gate, wenn die ersten Screens zweier Varianten (fast) gleich sind und keine Demo gesetzt ist?</h3>
+      <p data-context>Eine Warnung blockiert die Runde nicht.</p>
+      <div data-options>
+        <label data-opt="yes" data-recommended>
+          <input type="radio" name="dm-r1-gate" value="yes" checked>
+          <span data-opt-label>Ja, Warnung mit Hinweis auf die Demo</span>
+          <span data-opt-consequence>Das Gate nennt <code>data-ov-demo</code> als Ausweg; die Runde geht trotzdem raus.</span>
+        </label>
+        <label data-opt="no">
+          <input type="radio" name="dm-r1-gate" value="no">
+          <span data-opt-label>Nein, keine Prüfung</span>
+          <span data-opt-consequence>Gleiche Vorschauen fallen weiter nur durch Hinsehen auf.</span>
+        </label>
+        <label data-opt="alt">
+          <input type="radio" name="dm-r1-gate" value="alt">
+          <span data-opt-label>Anders …</span>
+          <span data-opt-consequence>Du sagst in einem Satz, was stattdessen gelten soll.</span>
+        </label>
+      </div>
+      <input type="text" name="dm-r1-gate-alt" placeholder="Was stattdessen?" value="">
+      <textarea data-comment="r1-gate-note" placeholder="Notiz (optional)"></textarea>
+      <input type="hidden" name="dm-r1-gate-touched" value="1">
+      <input type="hidden" name="dm-r1-gate-issue" value="">
+      <input type="hidden" name="dm-r1-gate-epic" value="">
+      <div data-alevel="3" data-title="Gate bei gleichen Screens">
+        <div data-slot="short">In verse fiel es erst nach der Runde auf.<div data-viz="text" data-viz-spec='{"text":"Erst bei der Analyse bemerkt"}'></div></div>
+        <div data-slot="long">
+          <div data-viz="text" data-viz-spec='{"text":"**Heute:** niemand prüft, ob zwei erste Screens gleich sind. **Fall verse:** die Gleichheit fiel erst bei der Analyse der letzten Konzepte auf. **Ausweg:** das Gate warnt, der Autor setzt die Demo oder legt die Varianten zusammen."}'></div>
+          <p>Das Gate kennt die Struktur der Seite, es kann die Vorschauen vergleichen. Eine Warnung statt eines Fehlers lässt dem Autor den Spielraum bei echten Zwillingen.</p>
+          <div data-evidence hidden><ul><li>verse: Hub-Screen Design 2 und 3 identisch, bemerkt bei der Analyse der letzten 5 Konzepte</li><li>Gate: <code>hooks/lib/concept-gate.js</code> — Warnungen erscheinen im Build-Bericht, sie blockieren nie</li></ul></div>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <section id="r1-t3" data-topic data-nav-label="Struktur &amp; Etappen">
+    <div data-alevel="2" data-title="Struktur &amp; Etappen">
+      <div data-slot="short">Richtung, Thema oder Detail bleibt unsichtbar; Schritt für Schritt hat keinen Hauptknopf.<div data-viz="kpi" data-viz-spec='{"value":"4 / 5","unit":"Konzepte","label":"mischen die Arten"}'></div></div>
+      <div data-slot="long">
+        <div data-viz="flow" data-viz-spec='{"steps":[{"label":"Richtungen","value":"Karussell"},{"label":"Themen nacheinander","value":"Stepper"},{"label":"Detail-Varianten","value":"A/B am Element"}],"text":"Drei Arten von Varianten, drei Darstellungen."}'></div>
+        <p>Vier von fünf Konzepten mischen Richtungen, Themen und Detail-Varianten in derselben Form. Dieses Themenfeld macht die Art sichtbar und gibt Konzepten mit vielen Schritten eine Etappen-Struktur.</p>
+        <div data-evidence hidden><ul><li>funk, ship-fitting-3d-ansicht, crew-chat-energie: Themen oder Schritte</li><li>verse, crew-leiste-kompakt: Detail-Varianten</li></ul></div>
+      </div>
+    </div>
+
+    <section id="r1-kinds" data-nav-label="Art der Varianten sichtbar" data-decision="r1-kinds" data-decision-mode="single"
+             data-label="Art der Varianten sichtbar" data-rec="three"
+             data-rec-why="Keines der fünf Konzepte war nach Labels und Titeln eine reine Richtungs-Runde; ohne sichtbare Art vergleicht der Nutzer Dinge, die nicht zusammenpassen."
+             data-applies-to="Kopf und Darstellung jeder Variantenrunde" data-finding="r1-kinds-f">
+      <p data-applies>Gilt für: Kopf und Darstellung jeder Variantenrunde</p>
+      <h3 data-question>Wie erfährt der Nutzer, welche Art Varianten er vor sich hat?</h3>
+      <p data-context>Heute sieht jede Runde gleich aus, egal ob drei Richtungen, drei Themen oder ein Detail zur Wahl stehen.</p>
+      <div data-options>
+        <label data-opt="three" data-recommended>
+          <input type="radio" name="dm-r1-kinds" value="three" checked>
+          <span data-opt-label>Drei feste Arten mit eigener Darstellung</span>
+          <span data-opt-consequence>Ein Satz im Header nennt die Art: „Richtungen“ (Karussell wie heute), „Themen nacheinander“ (Stepper statt Chips), „Eine Richtung, Detail-Varianten“ (ein Design, A/B-Umschalter am Element).</span>
+        </label>
+        <label data-opt="hint">
+          <input type="radio" name="dm-r1-kinds" value="hint">
+          <span data-opt-label>Nur einen Hinweis-Satz in den Header setzen</span>
+          <span data-opt-consequence>Die Art steht im Text, die Darstellung bleibt überall dieselbe.</span>
+        </label>
+        <label data-opt="other">
+          <input type="radio" name="dm-r1-kinds" value="other">
+          <span data-opt-label>Keine davon / anders …</span>
+          <span data-opt-consequence>Die Notiz sagt, was stattdessen gelten soll (Pflicht).</span>
+        </label>
+      </div>
+      <textarea data-comment="r1-kinds-note" placeholder="Notiz (optional)">ja aber das müssen wir gut devops concepten!</textarea>
+      <input type="hidden" name="dm-r1-kinds-touched" value="1">
+      <input type="hidden" name="dm-r1-kinds-issue" value="">
+      <input type="hidden" name="dm-r1-kinds-epic" value="">
+      <div data-alevel="3" data-title="Art der Varianten sichtbar">
+        <div data-slot="short">Keines der fünf Konzepte war eine reine Richtungs-Runde.<div data-viz="bars" data-viz-spec='{"items":[{"label":"Detail","value":2},{"label":"Themen","value":3},{"label":"Richtungen","value":0}],"unit":"Konzepte"}'></div></div>
+        <div data-slot="long">
+          <div data-viz="bars" data-viz-spec='{"items":[{"label":"Themen / Schritte nacheinander","value":3},{"label":"Detail-Varianten","value":2},{"label":"Richtungen überall anders","value":0}],"unit":" Konzepte","text":"Einordnung der fünf Konzepte nach Art."}'></div>
+          <p>Die Einordnung stammt von Claude aus Titeln und Labels, nicht aus einer inhaltlichen Prüfung. Sie zeigt trotzdem das Muster: Konzepte, die Themen nacheinander abarbeiten, stecken in Runden, die wie Richtungs-Vergleiche aussehen.</p>
+          <div data-evidence hidden><ul><li>Themen / Schritte nacheinander: madmaze <code>2026-10-22-crew-chat-energie</code> (7 nummerierte Punkte), deep-contact <code>2026-10-21-funk</code> (7 Schritte), SC-Companion-App <code>20261021-1530-ship-fitting-3d-ansicht</code> (A · 2D mit 3D-Knopf, A · Als dritte Karte, A · Blasen dezent, B · Eigene 3D-Vollansicht)</li><li>Detail-Varianten: verse (Übergang), crew-leiste-kompakt (Teilelement)</li><li>Einordnung nach Labels, Inhalt nicht geprüft</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="r1-reject" data-nav-label="Gate lehnt Unterseiten-Runden ab" data-decision="r1-reject" data-decision-mode="yesnoalt"
+             data-label="Gate lehnt Unterseiten-Runden ab" data-rec="yes"
+             data-rec-why="Eine alternatives-Runde, die sich nur auf einzelnen Unterseiten unterscheidet, ist keine Richtungswahl; das Gate schickt sie zurück zu Detail-Varianten."
+             data-applies-to="Gate für Runden mit data-design-set=&quot;alternatives&quot;" data-finding="r1-reject-f">
+      <p data-applies>Gilt für: Gate für Runden mit data-design-set="alternatives"</p>
+      <h3 data-question>Lehnt das Gate eine alternatives-Runde ab, deren Varianten sich nur auf einzelnen Unterseiten unterscheiden?</h3>
+      <p data-context>Dann sind es Detail-Varianten und sollen als Umschalter an einem Design erscheinen.</p>
+      <div data-options>
+        <label data-opt="yes" data-recommended>
+          <input type="radio" name="dm-r1-reject" value="yes" checked>
+          <span data-opt-label>Ja, ablehnen mit Umbau-Hinweis</span>
+          <span data-opt-consequence>Das Gate nennt den Umbau zu Detail-Varianten; die Runde wird nicht gebaut, bis er passiert.</span>
+        </label>
+        <label data-opt="no">
+          <input type="radio" name="dm-r1-reject" value="no">
+          <span data-opt-label>Nein, nur warnen</span>
+          <span data-opt-consequence>Die Runde geht durch, der Autor sieht eine Warnung und entscheidet allein.</span>
+        </label>
+        <label data-opt="alt">
+          <input type="radio" name="dm-r1-reject" value="alt">
+          <span data-opt-label>Anders …</span>
+          <span data-opt-consequence>Du sagst in einem Satz, was stattdessen gelten soll.</span>
+        </label>
+      </div>
+      <input type="text" name="dm-r1-reject-alt" placeholder="Was stattdessen?" value="">
+      <textarea data-comment="r1-reject-note" placeholder="Notiz (optional)">Ja weil dann sollte erstmal nur diese sub variante zur variante werden und speziell das refined werden und dann ggf. in nächster runde zoomed man sozusagne raus und es geht wieder um die hauptvarianten, falls der nutzer nicht in der nächsten runde weiter an diesem subteil als hauptvairatne arbeiten will</textarea>
+      <input type="hidden" name="dm-r1-reject-touched" value="1">
+      <input type="hidden" name="dm-r1-reject-issue" value="">
+      <input type="hidden" name="dm-r1-reject-epic" value="">
+      <div data-alevel="3" data-title="Gate lehnt Unterseiten-Runden ab">
+        <div data-slot="short">Mottos wiederholen sich über Runden.<div data-viz="bars" data-viz-spec='{"items":[{"label":"Frei drehen, alles wählbar","value":3},{"label":"3D nur auf Knopfdruck","value":2}],"unit":"×"}'></div></div>
+        <div data-slot="long">
+          <div data-viz="bars" data-viz-spec='{"items":[{"label":"Frei drehen, alles wählbar","value":3},{"label":"3D nur auf Knopfdruck","value":2}],"unit":"×","text":"Dieselben Mottos in mehreren Runden von ship-fitting."}'></div>
+          <p>Wenn drei Varianten dasselbe Motto tragen und sich nur auf einer Unterseite unterscheiden, ist es ein Detail. Das Gate kann die Runde sonst nicht von echten Richtungen trennen.</p>
+          <div data-evidence hidden><ul><li>ship-fitting-3d-ansicht (SC-Companion-App): Mottos „Frei drehen, alles wählbar“ 3×, „3D nur auf Knopfdruck“ 2× über 14 Runden</li><li>funk (deep-contact): dieselben 3 Mottos („Deckung finden.“ / „Das Wort ist der Schlüssel.“ / „Dranbleiben.“) in 7 Runden</li><li>Engine: <code>data-design-set="alternatives"|"topics"</code> existiert, die Übersicht stellt beide gleich dar</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="r1-steps" data-nav-label="Ablauf Schritt für Schritt" data-decision="r1-steps" data-decision-mode="single"
+             data-label="Ablauf Schritt für Schritt" data-rec="plan"
+             data-rec-why="In ship-fitting liefen 14 Runden, in denen Themen nacheinander konzeptiert wurden; eine Etappen-Leiste macht daraus einen Weg mit Ziel."
+             data-applies-to="Konzepte mit abhängigen Themen" data-finding="r1-steps-f">
+      <p data-applies>Gilt für: Konzepte mit abhängigen Themen</p>
+      <h3 data-question>Wie läuft schrittweises Konzeptieren (erst A, dann B, dann C)?</h3>
+      <p data-context>Heute ist der Hauptknopf „Nächste Runde“ oder „Jetzt umsetzen“, ein Weg über mehrere Etappen ist nicht vorgesehen.</p>
+      <div data-options>
+        <label data-opt="plan" data-recommended>
+          <input type="radio" name="dm-r1-steps" value="plan" checked>
+          <span data-opt-label>Claude erkennt Etappen und zeigt eine Etappen-Leiste</span>
+          <span data-opt-consequence>Abhängige Themen (z. B. Struktur → Design → Animation) werden Etappen; der Hauptknopf heißt „Weiter zu Etappe B“.</span>
+        </label>
+        <label data-opt="own">
+          <input type="radio" name="dm-r1-steps" value="own">
+          <span data-opt-label>Du legst die Etappen selbst fest</span>
+          <span data-opt-consequence>Du ordnest die Themen, Claude schlägt keine Reihenfolge vor.</span>
+        </label>
+        <label data-opt="none">
+          <input type="radio" name="dm-r1-steps" value="none">
+          <span data-opt-label>Ohne Etappen, Runden wie heute</span>
+          <span data-opt-consequence>Jede Runde wird einzeln entschieden, der Hauptknopf bleibt „Nächste Runde“.</span>
+        </label>
+        <label data-opt="other">
+          <input type="radio" name="dm-r1-steps" value="other">
+          <span data-opt-label>Keine davon / anders …</span>
+          <span data-opt-consequence>Die Notiz sagt, was stattdessen gelten soll (Pflicht).</span>
+        </label>
+      </div>
+      <textarea data-comment="r1-steps-note" placeholder="Notiz (optional)"></textarea>
+      <input type="hidden" name="dm-r1-steps-touched" value="1">
+      <input type="hidden" name="dm-r1-steps-issue" value="">
+      <input type="hidden" name="dm-r1-steps-epic" value="">
+      <div data-alevel="3" data-title="Ablauf Schritt für Schritt">
+        <div data-slot="short">Vier Themen liefen nacheinander durch die Runden.<div data-viz="kpi" data-viz-spec='{"value":"14","unit":"Runden","label":"ship-fitting-3d-ansicht"}'></div></div>
+        <div data-slot="long">
+          <div data-viz="flow" data-viz-spec='{"steps":[{"label":"A · 2D mit 3D-Knopf","value":"Thema 1"},{"label":"A · Als dritte Karte","value":"Thema 2"},{"label":"A · Blasen dezent","value":"Thema 3"},{"label":"B · Eigene 3D-Vollansicht","value":"Thema 4"}],"text":"Themen nacheinander in ship-fitting."}'></div>
+          <p>In ship-fitting steckten Themen nacheinander in Varianten-Runden und konkurrierten dort mit echten Alternativen. Mit Etappen steht jedes Thema auf einer eigenen Stufe, und die Reihenfolge ist sichtbar.</p>
+          <div data-evidence hidden><ul><li>SC-Companion-App <code>20261021-1530-ship-fitting-3d-ansicht</code>: 14 Design-Runden, Labels „A · 2D mit 3D-Knopf“, „A · Als dritte Karte“, „A · Blasen dezent“, „B · Eigene 3D-Vollansicht“</li><li>deep-contact <code>2026-10-21-funk</code>: 7 Design-Runden, Story in 7 nummerierten Schritten („1 · Die Basis sendet“ … „7 · Ein fremdes Boot hört mit“)</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="r1-actions" data-nav-label="Aktionen des Absende-Knopfs" data-decision="r1-actions" data-decision-mode="multi"
+             data-label="Aktionen des Absende-Knopfs" data-rec="next refine parallel"
+             data-rec-why="Die drei Wege decken Weitergehen, Nachbessern und Parallelarbeiten ab; „Alles am Ende“ bleibt als Auswahl, ist aber nicht der Regelfall."
+             data-applies-to="Absende-Knopf innerhalb einer Etappe" data-finding="r1-actions-f">
+      <p data-applies>Gilt für: Absende-Knopf innerhalb einer Etappe</p>
+      <h3 data-question>Welche Aktionen bietet der Absende-Knopf in einer Etappe?</h3>
+      <p data-context>„Nächste Runde“ und „Jetzt umsetzen“ gibt es weiter, hier geht es um die Etappen-Wege.</p>
+      <div data-options>
+        <label data-opt="next" data-recommended>
+          <input type="checkbox" name="dm-r1-actions.next" checked>
+          <span data-opt-label>Weiter zur nächsten Etappe</span>
+          <span data-opt-consequence>Die laufende Etappe gilt als entschieden, die nächste öffnet sich.</span>
+        </label>
+        <label data-opt="refine" data-recommended>
+          <input type="checkbox" name="dm-r1-actions.refine" checked>
+          <span data-opt-label>Diese Etappe verfeinern</span>
+          <span data-opt-consequence>Eine weitere Runde zur selben Etappe, ohne weiterzuspringen.</span>
+        </label>
+        <label data-opt="parallel" data-recommended>
+          <input type="checkbox" name="dm-r1-actions.parallel" checked>
+          <span data-opt-label>Etappe jetzt umsetzen und parallel weiterkonzeptieren</span>
+          <span data-opt-consequence>Die Umsetzung läuft im eigenen Worktree im Hintergrund.</span>
+        </label>
+        <label data-opt="end">
+          <input type="checkbox" name="dm-r1-actions.end">
+          <span data-opt-label>Alles erst am Ende umsetzen</span>
+          <span data-opt-consequence>Nichts entsteht, bevor die letzte Etappe entschieden ist.</span>
+        </label>
+      </div>
+      <textarea data-comment="r1-actions-note" placeholder="Notiz (optional)">Ja wobei ich mir noch unsicher bin über die darstellung, hier gern nochmal devops concepten. </textarea>
+      <input type="hidden" name="dm-r1-actions-touched" value="1">
+      <input type="hidden" name="dm-r1-actions-issue" value="">
+      <input type="hidden" name="dm-r1-actions-epic" value="">
+      <div data-alevel="3" data-title="Aktionen des Absende-Knopfs">
+        <div data-slot="short">Sieben nummerierte Schritte brauchen mehr als einen Knopf.<div data-viz="kpi" data-viz-spec='{"value":"7","unit":"Schritte","label":"funk"}'></div></div>
+        <div data-slot="long">
+          <div data-viz="kpi" data-viz-spec='{"value":"7","unit":"nummerierte Schritte","label":"funk: eine Geschichte, ein Knopf „Nächste Runde“"}'></div>
+          <p>Ein Konzept mit sieben Schritten braucht Wege zum Weitergehen, Nachbessern und Umsetzen, ohne dass die Konzeption stehen bleibt. Parallel heißt: ein eigener Worktree, damit die Konzeptseite offen bleibt.</p>
+          <div data-evidence hidden><ul><li>deep-contact <code>2026-10-21-funk</code>: 7 Design-Runden, 7 nummerierte Schritte</li><li>Heute: „Nächste Runde“ und „Jetzt umsetzen“ als Absende-Wege (<code>step5-process.md</code>)</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="r1-propose" data-nav-label="Etappen von Claude vorschlagen" data-decision="r1-propose" data-decision-mode="yesnoalt"
+             data-label="Etappen von Claude vorschlagen" data-rec="yes"
+             data-rec-why="Die Abhängigkeiten sieht Claude beim Planen der ersten Runde; so müssen Nutzer die Reihenfolge nicht erst anfordern."
+             data-applies-to="Runde 1 jedes Konzepts mit aufeinander aufbauenden Fragen" data-finding="r1-propose-f">
+      <p data-applies>Gilt für: Runde 1 jedes Konzepts mit aufeinander aufbauenden Fragen</p>
+      <h3 data-question>Schlägt Claude Etappen von sich aus vor, wenn Fragen aufeinander aufbauen?</h3>
+      <p data-context>Der Vorschlag steht in Runde 1; du kannst Etappen zusammenlegen oder streichen.</p>
+      <div data-options>
+        <label data-opt="yes" data-recommended>
+          <input type="radio" name="dm-r1-propose" value="yes" checked>
+          <span data-opt-label>Ja, Vorschlag in Runde 1</span>
+          <span data-opt-consequence>Claude zeigt die Etappen-Leiste von Anfang an; du kannst sie zusammenlegen.</span>
+        </label>
+        <label data-opt="no">
+          <input type="radio" name="dm-r1-propose" value="no">
+          <span data-opt-label>Nein, nur auf Wunsch</span>
+          <span data-opt-consequence>Etappen entstehen nur, wenn du sie verlangst.</span>
+        </label>
+        <label data-opt="alt">
+          <input type="radio" name="dm-r1-propose" value="alt">
+          <span data-opt-label>Anders …</span>
+          <span data-opt-consequence>Du sagst in einem Satz, was stattdessen gelten soll.</span>
+        </label>
+      </div>
+      <input type="text" name="dm-r1-propose-alt" placeholder="Was stattdessen?" value="">
+      <textarea data-comment="r1-propose-note" placeholder="Notiz (optional)">ja genau, wobei die nicht zwang sind und nur wenn sinnvoll inhaltich, ux oder visuell oder z. B. erst use cases festgelegt dann weiter usw. aber es darf auch eine ohne etappen geben</textarea>
+      <input type="hidden" name="dm-r1-propose-touched" value="1">
+      <input type="hidden" name="dm-r1-propose-issue" value="">
+      <input type="hidden" name="dm-r1-propose-epic" value="">
+      <div data-alevel="3" data-title="Etappen von Claude vorschlagen">
+        <div data-slot="short">Vier von fünf Konzepten bauten Fragen aufeinander auf.<div data-viz="bar" data-viz-spec='{"value":4,"max":5,"unit":"Konzepte","label":"aufeinander aufbauend"}'></div></div>
+        <div data-slot="long">
+          <div data-viz="bar" data-viz-spec='{"value":4,"max":5,"unit":"von 5 Konzepten","label":"mischen Richtungen, Themen und Detail-Varianten"}'></div>
+          <p>Schritt für Schritt hat in vier der fünf Konzepte schon stattgefunden, nur ohne sichtbare Struktur. Der Vorschlag macht daraus von Anfang an einen Plan, den du ändern kannst.</p>
+          <div data-evidence hidden><ul><li>verse, crew-leiste-kompakt, funk, ship-fitting-3d-ansicht: mischen Richtungen, Themen, Schritte oder Detail-Varianten (Einordnung nach Labels)</li><li>crew-chat-energie: reine Entscheidungsrunde mit 7 Themen, keine Varianten</li></ul></div>
+        </div>
+      </div>
+    </section>
+  </section>
+</section>

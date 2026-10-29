@@ -1,4 +1,4 @@
-# Concept templates, part 35 of 46: Shared systems — two-button submit JS
+# Concept templates, part 35 of 48: Shared systems — two-button submit JS
 
 ### JS
 
@@ -40,7 +40,7 @@ function wireSubmit(btnId, action) {
   btn.addEventListener('click', () => submitWithAction(action));
 }
 
-async function submitWithAction(action) {
+async function submitWithAction(action, extra) {
   // Belt-and-suspenders guard: if a submission is already in flight (panel
   // shows "submitted"), ignore further clicks. restorePanelToReady() resets
   // _submittedAt to 0, so this only blocks while we're actually waiting.
@@ -65,6 +65,8 @@ async function submitWithAction(action) {
   let data;
   try {
     data = collectDecisions(action);
+    // next-stage carries {stage, next} (§ Etappen); merged after the collector.
+    if (extra && typeof extra === 'object') Object.assign(data, extra);
   } catch (e) {
     _submitInFlight = false;
     console.error('collectDecisions failed', e);
@@ -189,7 +191,7 @@ async function restoreInFlightRound() {
     catch (e) { data = null; }
   }
   if (!data || data.submitted !== true) return;
-  if (data.action !== 'iterate' && data.action !== 'implement') return;
+  if (data.action !== 'iterate' && data.action !== 'implement' && data.action !== 'next-stage') return;
   if (data.iteration == null || String(data.iteration) !== String(live.dataset.iteration)) return;
   // The user may have submitted from this tab while the fetch was out.
   if (_submittedAt || _submitInFlight) return;

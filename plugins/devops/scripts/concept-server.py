@@ -286,7 +286,7 @@ _reload_at_submit = _reload_counter
 # Actions whose processing ends in a new round (or the final report) and so
 # in a /reload before /reset. finalize (discard = reset-only) and legacy
 # actions are exempt.
-RELOAD_REQUIRED_ACTIONS = ('iterate', 'implement')
+RELOAD_REQUIRED_ACTIONS = ('iterate', 'implement', 'next-stage')
 _lock = threading.Lock()
 
 

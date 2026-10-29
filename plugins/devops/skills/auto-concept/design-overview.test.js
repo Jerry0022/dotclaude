@@ -173,7 +173,7 @@ describe("variant overview — generated only for ≥2 designs", () => {
     const overlay = cards[0].querySelector(".design-ov-overlay");
     expect(overlay.querySelector(".design-ov-motto").textContent).toBe("Weniger ist Ruhe.");
     expect([...overlay.querySelectorAll(".design-ov-traits li")].map((li) => li.textContent)).toEqual(["Ein Ziel pro Tag", "Pflanze", "Keine Pushes"]);
-    expect(overlay.querySelector(".design-ov-kicker .design-ov-num"), "icon + name, no number").toBeNull();
+    expect(overlay.querySelector(".design-ov-kicker .design-ov-num").textContent, "icon · N · name").toBe("1 ·");
     expect(overlay.querySelector(".design-ov-kicker .design-ov-name").textContent).toBe("Design 2");
     expect(cards[0].style.getPropertyValue("--dz-color")).toBe("#5f8b6a");
     // No page chips, no notes row, no second navigation.
@@ -331,7 +331,7 @@ describe("carousel — turns, overlay, no scrolling", () => {
     expect(cur()).toBe("d2c");
   }, BOOT_TIMEOUT);
 
-  test("overlay anchor + tone are authored per design; bl / bluish by default", async () => {
+  test("overlay is always bottom-left (data-design-overlay ignored); tone is authored per design", async () => {
     const html = page(3)
       .replace('<section data-design="d2b"', '<section data-design="d2b" data-design-overlay="tr" data-design-overlay-tone="warm"')
       .replace('<section data-design="d2c"', '<section data-design="d2c" data-design-overlay="middle"');
@@ -340,11 +340,12 @@ describe("carousel — turns, overlay, no scrolling", () => {
     const o = (id) => document.querySelector(`.design-ov-slide[data-design-id="${id}"] .design-ov-overlay`);
     expect(o("d2").dataset.anchor).toBe("bl");
     expect(o("d2").dataset.tone).toBeUndefined();
-    expect(o("d2b").dataset.anchor).toBe("tr");
+    expect(o("d2b").dataset.anchor, "deprecated attribute ignored").toBe("bl");
     expect(o("d2b").dataset.tone).toBe("warm");
     expect(o("d2c").dataset.anchor, "an unknown anchor falls back").toBe("bl");
     const css = md.match(/```css\n([\s\S]*?)```/g).join("\n");
-    for (const a of ["tl", "tr", "bl", "br", "tc", "bc"]) expect(css).toContain(`.design-ov-overlay[data-anchor="${a}"]`);
+    expect(css).toContain('.design-ov-overlay[data-anchor="bl"]');
+    expect(css).not.toContain('.design-ov-overlay[data-anchor="tr"]');
     expect(css).toContain('.design-ov-overlay[data-tone="warm"]');
   }, BOOT_TIMEOUT);
 
@@ -720,20 +721,116 @@ describe("☰ overview row, the eye on the overview, draggable pins", () => {
   }, BOOT_TIMEOUT);
 });
 
-describe("B4 visuals — mirror backdrop and the chip's own favourite star", () => {
-  test("every overview preview carries a mirror copy behind the sharp design", async () => {
+describe("B4 visuals — card preview, variant numbers, active chip, demo and the chip's own favourite star", () => {
+  test("a preview is one clone (no mirror) inside the big card; the CARD carries the design background, never the stage", async () => {
     const { document } = await boot(page(3));
     const prev = document.querySelector(".design-ov-slide .design-ov-preview");
-    expect(prev.querySelector(".design-ov-mirror")).not.toBeNull();
+    expect(prev.querySelector(".design-ov-mirror")).toBeNull();
     expect(prev.querySelectorAll(".design-ov-scale").length).toBe(1);
-    // the mirror's ids are namespaced apart from the sharp clone's
+    const ov = document.querySelector("[data-design-overview]");
+    expect(ov.dataset.bleed, "no stage-covering bleed mode").toBeUndefined();
+    expect(ov.style.getPropertyValue("--dz-ov-bg")).toBe("");
+    expect(prev.closest(".design-ov-slide").style.getPropertyValue("--dz-ov-bg")).not.toBe("");
     const ids = [...prev.querySelectorAll("[id]")].map((n) => n.id);
     expect(new Set(ids).size).toBe(ids.length);
+  }, BOOT_TIMEOUT);
+  test("the centre stays a 16:10 card with its neighbours; full-app screens cover-scale inside it (user note, round 2)", () => {
+    // No rule may blow the centre slide up to the stage or hide the neighbours.
+    expect(md).not.toMatch(/data-bleed/);
+    expect(md).not.toMatch(/\.design-ov-slide\[data-pos="cur"\]\s*\{[^}]*100cqw/);
+    expect(md).toMatch(/\.design-ov-preview \{[^}]*border-radius: 22px;[^}]*var\(--dz-ov-bg-img, none\)/);
+    // fitPreviews: cover for a full-app screen (>= 700 of 1000px), contain otherwise.
+    expect(md).toMatch(/const full = content >= 700;\s*\n\s*p\.dataset\.fit = full \? 'cover' : 'contain';/);
+    expect(md).toMatch(/full \? Math\.max\(w \/ content, h \/ tall\) : Math\.min\(w \/ content, h \/ tall\)/);
+  });
+  test("every variant shows its hotkey digit in the quick nav and the ☰ rows", async () => {
+    const { document } = await boot(page(3));
+    const nums = [...document.querySelectorAll("#design-quick .design-quick-seg .design-quick-n")].map((n) => n.textContent);
+    expect(nums.length).toBeGreaterThan(0);
+    expect(nums[0]).toBe("1 ·");
+    const rows = [...document.querySelectorAll("#screen-nav .screen-nav-design-heading .screen-nav-n")].map((n) => n.textContent);
+    expect(rows.slice(0, 2)).toEqual(["1 ·", "2 ·"]);
+  }, BOOT_TIMEOUT);
+  test("data-ov-demo marks the preview and its screen; absent → none", async () => {
+    const html = page(3).replace('<section data-design="d2"', '<section data-design="d2" data-ov-demo="h1"');
+    const { document } = await boot(html);
+    const first = document.querySelector('.design-ov-slide[data-design-id="d2"] .design-ov-preview');
+    const second = document.querySelector('.design-ov-slide[data-design-id="d2b"] .design-ov-preview');
+    expect(first.dataset.demo).toBe("h1");
+    expect(second.dataset.demo).toBeUndefined();
   }, BOOT_TIMEOUT);
   test("the chip shows an empty star while no favourite is set", async () => {
     const { document } = await boot(page(3));
     const stars = [...document.querySelectorAll("#design-quick .design-quick-seg .design-quick-star")];
     expect(stars.length).toBe(3);
     expect(stars.every((s) => s.dataset.state === "off" && s.textContent === "☆")).toBe(true);
+  }, BOOT_TIMEOUT);
+});
+
+describe("note editor is never clipped by an overflow ancestor", () => {
+  test("a pin at the top edge of an overflow:hidden screen opens its editor fully inside the visible area", async () => {
+    const p = await boot(page(2));
+    const { window, document } = p;
+    const rect = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top });
+    const H = 120, W = 280, PX = 40, PY = 5;
+    const screen = document.getElementById("d2-s1");
+    const clip = screen.parentElement;
+    clip.style.overflow = "hidden";
+    const orig = window.Element.prototype.getBoundingClientRect;
+    window.Element.prototype.getBoundingClientRect = function () {
+      // The host box reaches above the clipping frame; only 0..400 is visible.
+      if (this === clip) return rect(0, 0, 300, 400);
+      if (this.classList.contains("upin-host")) return rect(0, -50, 300, 600);
+      if (this.classList.contains("upin")) return rect(PX, PY, 26, 26);
+      if (this.classList.contains("upin-editor")) {
+        const wrap = this.parentElement;
+        const w = parseFloat(this.style.width) || W;
+        const h = Math.min(H, parseFloat(this.style.maxHeight) || H);
+        const left = this.style.left ? PX + parseFloat(this.style.left) : wrap.dataset.flipX ? PX - 32 - w : PX + 32;
+        const top = this.style.top ? PY + parseFloat(this.style.top) : wrap.dataset.flipY ? PY - 30 - h : PY;
+        return rect(left, top, w, h);
+      }
+      return orig.call(this);
+    };
+    window.showDesign("d2");
+    screen.querySelector("h1").dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));
+    const r = document.querySelector("#d2-s1 .upin-editor").getBoundingClientRect();
+    window.Element.prototype.getBoundingClientRect = orig;
+    expect(r.top, "top edge inside the clipping frame").toBeGreaterThanOrEqual(8);
+    expect(r.bottom).toBeLessThanOrEqual(392);
+    expect(r.left).toBeGreaterThanOrEqual(8);
+    expect(r.right).toBeLessThanOrEqual(292);
+  }, BOOT_TIMEOUT);
+});
+
+describe("quick-nav star on a variant chip", () => {
+  const chip = (document, id) => document.querySelector(`#design-quick .design-quick-seg[data-design-id="${id}"]`);
+  const star = (document, id) => chip(document, id).querySelector(".design-quick-star");
+
+  test("a non-focused chip's star opens that variant and keeps the favourite; the focused one toggles it", async () => {
+    const { window, document } = await boot(page(3));
+    starOf(window, document, "d2b").click(); // favourite = d2b (overview)
+    window.showDesign("d2");
+    expect(activeDesign(document).dataset.design).toBe("d2");
+    expect(star(document, "d2b").dataset.state).toBe("on");
+    star(document, "d2b").click();
+    expect(activeDesign(document).dataset.design, "the star opens the variant").toBe("d2b");
+    expect(window.collectDecisions("iterate").favorite, "…and keeps the favourite").toBe("d2b");
+    star(document, "d2b").click();
+    expect(window.collectDecisions("iterate").favorite, "focused chip: toggles off").toBeNull();
+    star(document, "d2b").click();
+    expect(window.collectDecisions("iterate").favorite, "focused chip: toggles on").toBe("d2b");
+  }, BOOT_TIMEOUT);
+
+  test("pressing the star never turns the page of the active design", async () => {
+    const { window, document } = await boot(page(3));
+    window.showDesign("d2");
+    const before = [...document.querySelectorAll("#d2 section[data-screen]")].find((s) => !s.hidden)?.id;
+    const s = star(document, "d2");
+    expect(s, "the active chip carries a star").not.toBeNull();
+    s.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }));
+    const after = [...document.querySelectorAll("#d2 section[data-screen]")].find((x) => !x.hidden)?.id;
+    expect(activeDesign(document).dataset.design).toBe("d2");
+    expect(after).toBe(before);
   }, BOOT_TIMEOUT);
 });

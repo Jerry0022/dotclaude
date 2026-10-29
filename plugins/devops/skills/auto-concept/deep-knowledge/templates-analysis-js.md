@@ -1,4 +1,4 @@
-# Concept templates, part 45 of 46: Template: analysis — engine UI JS (palette, stages, stepper, choreography)
+# Concept templates, part 45 of 48: Template: analysis — engine UI JS (palette, stages, stepper, choreography)
 
 ## Engine UI — palette, stages, stepper, choreography (JS)
 
@@ -15,9 +15,19 @@ What the code does, in the order of the file:
    `renderViz(root, size)`; unknown type or bad spec renders `spec.text`.
 2. `setup(root)` — one instance per `[data-analysis]`: builds the stage list
    (briefing, topic intros, decisions, review, next round, list), the sticky
-   stepper (Full) / progress dots (Lite), the foot of every decision (ONE note
-   field, "Als Issue anlegen" link, Zurück / Weiter) and the mode widgets
-   (slider bar, sortable order, inline alt / fix / custom fields).
+   one-line stepper (Full; only the open Themenfeld shows its dots) /
+   progress dots (Lite), the same foot on every stage (decision: ONE note
+   field across the full width with its 📎 inside, then the bar — "Als Issue
+   anlegen" link left, Zurück / Weiter right; briefing: duration + "Los
+   geht's →" in that bar) and the mode widgets (slider bar, sortable order,
+   inline alt / fix / custom fields). The round's `.iteration-intro` moves
+   into the briefing.
+2b. `fitFull(inst)` — a visible Full wider than 900px and ≥ 520px tall is
+   fitted to the viewport (`.an-fit`, `--an-fit-h`): no page scroll, every
+   foot pinned to the round's bottom so the bar never moves, overflow
+   condensed (`.an-dense` → `.an-dense2` for the stage, `.an-afold` for the
+   analysis column), internal scroll (`.an-ovf` / `.an-aovf`) only as the
+   last resort. Re-run on every stage change, level change, resize.
 3. The analysis column: three levels, one long at a time, with the
    choreography (≈ 1 s the first two times per page — counter in
    `localStorage`, try/catch — then ≈ 0.3 s; `prefers-reduced-motion` → no
@@ -274,6 +284,7 @@ What the code does, in the order of the file:
   function openLevel(inst, n) {
     if (!inst.lv[n]) return;
     [1, 2, 3].forEach(k => { if (inst.lv[k]) setState(inst.lv[k], k === n ? 'long' : 'short'); });
+    fitSoon(inst, transMs() + 60);
   }
   function stepLevel(inst, dir) {
     const present = [1, 2, 3].filter(k => inst.lv[k]);
@@ -376,7 +387,7 @@ What the code does, in the order of the file:
   function setup(root) {
     if (root.__an) return root.__an;
     const lite = root.getAttribute('data-analysis') === 'lite';
-    const inst = { root, lite, stages: [], groups: [], idx: 0, lv: {}, timers: [], visited: new Set(), decs: [], pop: null, maxIdx: 0, touchTimer: 0 };
+    const inst = { root, lite, stages: [], groups: [], idx: 0, lv: {}, timers: [], visited: new Set(), decs: [], pop: null, maxIdx: 0, touchTimer: 0, fitTimer: 0 };
     root.__an = inst;
     instances.push(inst);
     root.classList.add('an-enh');
@@ -445,7 +456,7 @@ What the code does, in the order of the file:
     root.addEventListener('pointerdown', () => { if (!root.contains(document.activeElement)) { const st = inst.stages[inst.idx]; if (st && st.el.tabIndex === -1) st.el.focus({ preventScroll: true }); } });
     if (typeof ResizeObserver === 'function') {
       let w = 0;
-      new ResizeObserver(() => { const nw = root.offsetWidth; if (nw !== w) { w = nw; drawConn(inst); armTouch(inst); } }).observe(root);
+      new ResizeObserver(() => { const nw = root.offsetWidth; if (nw !== w) { w = nw; drawConn(inst); armTouch(inst); } fitSoon(inst, 0); }).observe(root);
     }
     go(inst, 0, { initial: true });
     return inst;
@@ -473,7 +484,7 @@ What the code does, in the order of the file:
     nav.setAttribute('aria-label', L('Fortschritt', 'Progress'));
     const bk = btn('an-k'); bk.dataset.k = 'brief';
     bk.innerHTML = '<span class="an-ic">✓</span>';
-    bk.appendChild(document.createTextNode(inst.brief ? (inst.brief.dataset.navLabel || 'Briefing') : 'Briefing'));
+    bk.appendChild(h('span', 'an-lbl', inst.brief ? (inst.brief.dataset.navLabel || 'Briefing') : 'Briefing'));
     bk.dataset.go = String(inst.stages.findIndex(s => s.kind === 'brief'));
     tip(bk, '', 'Pos1');
     if (inst.brief) nav.append(bk, h('i', 'an-sep'));
@@ -481,7 +492,7 @@ What the code does, in the order of the file:
       const grp = h('div', 'an-grp'); grp.style.setProperty('--c', g.color); grp.dataset.g = String(gi);
       const gl = btn('an-gl');
       gl.innerHTML = '<span class="an-ic">✓</span><i></i>';
-      gl.appendChild(document.createTextNode(g.label));
+      gl.appendChild(h('span', 'an-lbl', g.label));
       gl.dataset.go = String(inst.stages.indexOf(inst.stages.find(s => s.group === g && s.kind === 'topic')));
       tip(gl, '', '⇧+' + (gi + 1));
       const dots = h('span', 'an-dots');
@@ -489,9 +500,9 @@ What the code does, in the order of the file:
       grp.append(gl, dots);
       nav.append(grp, h('i', 'an-sep'));
     });
-    const rv = btn('an-k', L('Review', 'Review')); rv.dataset.k = 'review'; rv.dataset.go = String(inst.stages.findIndex(s => s.kind === 'review'));
+    const rv = btn('an-k'); rv.appendChild(h('span', 'an-lbl', L('Review', 'Review'))); rv.dataset.k = 'review'; rv.dataset.go = String(inst.stages.findIndex(s => s.kind === 'review'));
     tip(rv, '', 'Ende');
-    const nx = btn('an-k', L('Nächste Runde', 'Next round')); nx.dataset.k = 'next'; nx.dataset.go = String(inst.stages.findIndex(s => s.kind === 'next'));
+    const nx = btn('an-k'); nx.appendChild(h('span', 'an-lbl', L('Nächste Runde', 'Next round'))); nx.dataset.k = 'next'; nx.dataset.go = String(inst.stages.findIndex(s => s.kind === 'next'));
     nav.append(rv, h('i', 'an-sep'), nx);
     inst.root.insertBefore(nav, inst.root.firstChild);
     inst.stepEl = nav;
@@ -537,6 +548,10 @@ What the code does, in the order of the file:
     b.tabIndex = -1;
     const what = b.querySelector('[data-briefing-what]');
     b.setAttribute('data-an-kicker', L('Analyse', 'Analysis'));
+    // The round's own intro (Etappe heading + line) is a grid item of the
+    // root and landed BELOW the whole briefing: it opens the briefing instead.
+    const intro = root.querySelector(':scope > .iteration-intro');
+    if (intro) b.insertBefore(intro, b.firstChild);
     const chipsEls = [...b.querySelectorAll('[data-briefing-topic]')];
     if (chipsEls.length) {
       const wrap = h('div', 'an-chips');
@@ -557,18 +572,19 @@ What the code does, in the order of the file:
     }
     const dur = b.querySelector('[data-briefing-duration]');
     if (dur) dur.style.display = 'none';
-    const cta = h('div', 'an-cta');
-    const t = h('div', 'an-cta-t');
-    t.append(h('b', '', L("Los geht's", "Let's go")), document.createTextNode((dur ? dur.textContent.trim() : '') + (inst.decs.length ? (dur ? ' · ' : '') + inst.decs.length + ' ' + L('Entscheidungen', 'decisions') : '')));
-    const go1 = btn('an-btn', L("Los geht's", "Let's go") + ' →');
-    tip(go1, '', 'Enter');
-    go1.addEventListener('click', () => { go1.classList.add('an-pressed'); go(inst, inst.stages.findIndex(s => s.kind === 'brief') + 1); });
-    cta.append(t, go1);
-    b.appendChild(cta);
+    // The briefing's way on is the SAME bar every stage has (same spot, same
+    // width): duration + count and the list link left, "Los geht's →" right.
+    // It is a child of the root, not of the briefing: the briefing is the
+    // connector svg's positioning box, the bar is pinned to the round.
+    const foot = h('div', 'an-foot an-foot-brief');
     const q = h('div', 'an-quiet');
+    const meta = (dur ? dur.textContent.trim() : '') + (inst.decs.length ? (dur ? ' · ' : '') + inst.decs.length + ' ' + L('Entscheidungen', 'decisions') : '');
+    if (meta) q.appendChild(h('span', 'an-meta', meta));
     q.appendChild(listLink(inst));
-    b.appendChild(q);
-    void what; void root;
+    const go2 = goButtons(inst, L("Los geht's", "Let's go") + ' →', { noBack: true, glow: true });
+    foot.append(q, go2);
+    root.appendChild(foot);
+    void what;
   }
   function listLink(inst) {
     const l = btn('an-link', L('Alle als Liste', 'All as list'));

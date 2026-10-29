@@ -1,4 +1,4 @@
-# Concept templates, part 12 of 46: Template: design — layout CSS (continued 2)
+# Concept templates, part 12 of 48: Template: design — layout CSS (continued 2)
 
 ```css
 /* ── Screen navigation inside the ☰ panel ── */
@@ -32,7 +32,21 @@
 .screen-nav-design-heading:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
 .screen-nav-design-heading[data-active="true"] { color: var(--accent-color); }
 .screen-nav-design-heading .has-notes { color: var(--warning-color); font-size: 0.75rem; }
-.screen-nav-group .screen-nav-item { margin-left: 0.75rem; }
+/* Page rows inside a design group: no frame of their own, on a thin rail in
+   the design's colour (--nav-rail, set per group by decorateNav; accent
+   without the overview). The rail is a ::before per row that spans the 2px
+   group gap, so it reads as one line from the first page to the last. */
+.screen-nav-group .screen-nav-item {
+  position: relative; margin-left: 1.05rem; padding: 0.4rem 0.6rem;
+  border-color: transparent; border-radius: 7px; font-size: 0.9rem;
+}
+.screen-nav-group .screen-nav-item::before {
+  content: ""; position: absolute; left: -0.55rem; top: -1px; bottom: -1px; width: 2px;
+  background: color-mix(in srgb, var(--nav-rail, var(--accent-color, #58a6ff)) 45%, transparent);
+}
+.screen-nav-group .screen-nav-item[data-active="true"] {
+  border-color: transparent; box-shadow: inset 3px 0 0 var(--accent-color, #58a6ff);
+}
 
 /* ── Views group (§ Views (optional)) — second .screen-nav-group, only
    rendered when the iteration has ≥1 view. The heading is a plain label,
@@ -127,6 +141,10 @@ body[data-single-design="true"] .feedback-divider:has(+ .feedback-section [data-
   display: none;
 }
 body[data-single-design="true"] .screen-nav-group .screen-nav-item { margin-left: 0; }
+/* No design heading above them: the flat list keeps its framed rows, no rail. */
+body[data-single-design="true"] .screen-nav-group .screen-nav-item { padding: 0.6rem 0.85rem; border-color: var(--border-color); font-size: 0.95rem; }
+body[data-single-design="true"] .screen-nav-group .screen-nav-item::before { display: none; }
+body[data-single-design="true"] .screen-nav-group .screen-nav-item[data-active="true"] { border-color: var(--accent-color); box-shadow: none; }
 
 /* ── View mode dock swap (§ Views (optional)) — the dock never shows the
    design/screen rows and the view row at once. Default (no view active):

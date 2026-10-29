@@ -1,4 +1,4 @@
-# Concept templates, part 43 of 46: Template: analysis — Full + Lite contract, decision modes, collect
+# Concept templates, part 43 of 48: Template: analysis — Full + Lite contract, decision modes, collect
 
 ## Analysis presentation (Full + Lite) — engine fit
 
@@ -29,7 +29,7 @@ the gate never depend on it.
 ```html
 <section data-iteration="1" data-iteration-template="decision" data-analysis="full" data-active>
 
-  <!-- Briefing: Analyse -> Potential -> topics -> CTA. Required: what, why, potential. -->
+  <!-- Briefing: Analyse -> Potential -> topics; the bar below says "Los geht's". Required: what, why, potential. -->
   <section id="briefing" data-analysis-briefing data-nav-label="Briefing">
     <p data-briefing-what>1-2 sentences: what was analysed and found.</p>
     <p data-briefing-why>One sentence: why it matters now.</p>
@@ -104,7 +104,7 @@ Attribute reference:
 | `data-analysis="full\|lite"` | iteration section (Full) / any container or view (Lite) | variant marker; the gate and the engine key on it |
 | `data-analysis-briefing` | one `section` per Full | the briefing screen; REQUIRED children `data-briefing-what`, `data-briefing-why`, `data-briefing-potential` (non-empty) |
 | `data-briefing-topic="<topic id>"` + `data-share` | `a` in the briefing | connector target of the "Striche und Verbindungen"; share of the potential in % |
-| `data-briefing-duration` | briefing | the time the CTA names |
+| `data-briefing-duration` | briefing | the time the bar names beside "Los geht's" |
 | `data-topic` | `section[id][data-nav-label]` | a Themenfeld; ≤ 3 per Full |
 | `data-alevel="1\|2\|3"` + `data-title` | block | analysis level: 1 briefing/overall, 2 topic, 3 this decision. `data-title` equals the stepper / header name exactly. Lite has L1 + L3 only |
 | `data-slot="short\|long"` | child of a level | short = 1 sentence + KPI or mini graphic (formatted text only when there is no number); long = one palette display + 2-4 sentences, never scrolls |

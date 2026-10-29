@@ -1,4 +1,4 @@
-# Concept templates, part 16 of 46: Template: design — variant overview JS
+# Concept templates, part 16 of 48: Template: design — variant overview JS
 
 ## Variant overview JS — `wireDesignOverview()`
 
@@ -55,10 +55,11 @@ returns — the single-design page is untouched.
 - **Eye counter** (`#anno-eye-count`, § Annotation Layer JS): the automatic
   notes of the CURRENT page that are neither answered nor opened yet; the
   overview and question views own none and count 0.
-- **Overlay** on the current preview: kicker `icon name` (+ ☆/★) — the
-  same pairing as the quick nav, no number — motto, the three traits.
-  Semi-transparent at rest, opaque on hover / focus. Anchor from
-  `data-design-overlay` (`tl|tr|bl|br|tc|bc`, default `bl`), tint from
+- **Overlay** on the current preview: kicker `icon · N · name` (+ ☆/★) —
+  N is the variant's Digit1-9 hotkey, shown the same way (`N · name`) in
+  the quick nav chips and the ☰ variant rows — motto, the three traits.
+  Semi-transparent at rest, opaque on hover / focus. Always bottom-left;
+  `data-design-overlay` is deprecated and ignored. Tint from
   `data-design-overlay-tone="warm"`. The eye (`#anno-toggle`, top left)
   hides it with every other annotation; there is no separate
   overlay toggle. A NEW variant carries the "Neugedacht" chip; a variant
@@ -67,6 +68,25 @@ returns — the single-design page is untouched.
   `section[data-design]` (a few words, ≤ ~40 chars, e.g. "Größere
   Tageskacheln"; longer text is cut at a word boundary). No attribute → no
   line, no chip.
+- **Big cards, filled from inside.** The centred variant is always the big
+  16:10 card (≈ 78 % of the stage width), framed and rounded, its
+  neighbours peeking in at the edges — never a preview that covers the
+  whole stage (an earlier "bleed" turned every full-app round into a
+  fullscreen picture and lost the cards; user note, Kleingarten concept
+  round 2). Inside the card the clone is scaled by what it shows
+  (`fitPreviews()`, `data-fit` on the preview): a **full-app screen**
+  (content ≥ 700 of the 1000px virtual width) is **cover**-scaled — it
+  fills the card edge to edge, centred, capped at 2.5× — while a narrower
+  widget or phone mock is **contain**-scaled (whole, centred, up to 2.5×).
+  The card takes the design's own computed background (colour + image,
+  first non-transparent from the screen up), so the area the clone does not
+  reach reads as the app, not as a foreign panel.
+- **Demo.** `data-ov-demo="<selector>"` (optional, on the design section):
+  the slide zooms onto that element and loops `ov-demo-play` on it every few
+  seconds instead of the full still (see views.md attribute table).
+- **Chip click.** The ACTIVE variant's quick-nav chip turns to the next
+  page of that design (last → first; a single-page design: back to the
+  overview); the ▾ caret lists the pages; other chips switch the design.
 - **Preview fit** is measured through no ancestor transform (`fitPreviews()`
   divides by the wrap's ancestor scale — a side card's rects read at its
   `scale(.74)` made the fit too large and cropped the real content).
@@ -133,7 +153,6 @@ returns — the single-design page is untouched.
   };
   // Never the accent blue: the icons are drawn in it (one uniform tint), the
   // background must stay distinguishable (§ Variant overview — authoring).
-  const OV_ANCHORS = new Set(['tl', 'tr', 'bl', 'br', 'tc', 'bc']);
   const PALETTE = ['#5f8b6a', '#e8622c', '#8250df', '#d29922', '#db61a2', '#1f9e89', '#b0563a', '#6e7781', '#c2408f'];
   const ICONS = {
     leaf: ['M5 21c0-9 6-15 15-16-1 9-7 15-16 16z', 'M5 21l8-8'],
@@ -282,9 +301,9 @@ returns — the single-design page is untouched.
       traits,
       icon: d.dataset.designIcon || '',
       color: (d.dataset.designColor || '').trim() || PALETTE[idx % PALETTE.length],
-      // Overlay anchor + tint, authored per design (§ Variant overview —
-      // authoring); anything else falls back to bottom-left, bluish.
-      anchor: OV_ANCHORS.has(d.dataset.designOverlay) ? d.dataset.designOverlay : 'bl',
+      // The card is ALWAYS bottom-left; `data-design-overlay` is deprecated
+      // and ignored. Only the tint (`data-design-overlay-tone`) is authored.
+      anchor: 'bl',
       tone: d.dataset.designOverlayTone === 'warm' ? 'warm' : '',
       improved: improvedPhrase(d.dataset.designImproved)
     };
@@ -589,6 +608,35 @@ returns — the single-design page is untouched.
       if (slide.dataset.pos === 'cur' && !(e.target.closest && e.target.closest('button'))) onOpen();
     });
   }
+  // The design's own background: first non-transparent colour / image walking
+  // from the shown screen up through the design root and its ancestors.
+  function designBackground(d, screen) {
+    const out = { color: 'var(--bg-primary, #0d1117)', image: 'none' };
+    let gotColor = false, gotImage = false;
+    // A mock often paints its backdrop on a wrapper INSIDE the screen (hero,
+    // stage div), while the screen itself is transparent: the first
+    // descendant (two levels deep) covering most of the screen counts first.
+    const start = screen || d;
+    const sr = start.getBoundingClientRect();
+    const big = [...start.querySelectorAll(':scope > *, :scope > * > *')].find(n => {
+      const r = n.getBoundingClientRect();
+      return sr.width && sr.height && r.width * r.height >= 0.5 * sr.width * sr.height;
+    });
+    const chain = [];
+    for (let n = big; n && n !== start; n = n.parentElement) chain.unshift(n);
+    chain.reverse();
+    for (let n = start; n; n = n === d ? null : n.parentElement) chain.push(n);
+    for (const n of chain) {
+      if (gotColor && gotImage) break;
+      const cs = getComputedStyle(n);
+      // A fully transparent colour (transparent, rgba(… , 0), color(… / 0)) is no background.
+      const bc = cs.backgroundColor || '';
+      const clear = !bc || bc === 'transparent' || /[,/]\s*0(?:\.0+)?\s*\)$/.test(bc);
+      if (!gotColor && !clear) { out.color = bc; gotColor = true; }
+      if (!gotImage && cs.backgroundImage && cs.backgroundImage !== 'none') { out.image = cs.backgroundImage; gotImage = true; }
+    }
+    return out;
+  }
   function buildSlide(it, d, m) {
     const slide = el('article', 'design-ov-slide');
     slide.dataset.designId = m.id;
@@ -610,13 +658,21 @@ returns — the single-design page is untouched.
       shown = screens.find(s => s.id === delta.screens[0]) || shown;
     }
     const open = () => (shown && shown !== screens[0] ? window.showDesign(m.id, shown.id) : window.showDesign(m.id));
+    // `data-ov-demo="<selector>"` (optional, on the design): the slide shows
+    // a zoomed, looping demo of THAT element instead of the full still. The
+    // screen shown is the one holding the element (else the usual one).
+    const demoSel = String(d.dataset.ovDemo || '').trim();
+    let demoScreen = null;
+    if (demoSel) {
+      try { const t = d.querySelector(demoSel); demoScreen = t && t.closest('section[data-screen]'); } catch (_) { demoScreen = null; }
+      if (demoScreen) { preview.dataset.demo = demoSel; shown = demoScreen; }
+    }
     preview.appendChild(cloneScreen(shown, 'ov' + m.n + '-'));
-    // Mirror backdrop: a second, blurred and strongly darkened copy scaled to
-    // COVER the tile, behind the sharp one — wherever the fitted design does
-    // not reach the tile edge, no pixel stays empty (fitPreviews sets it).
-    const mirror = cloneScreen(shown, 'ovm' + m.n + '-');
-    mirror.className = 'design-ov-mirror';
-    preview.appendChild(mirror);
+    // The design's own background (colour + image) paints the card behind
+    // the scaled clone (.design-ov-preview reads the two variables).
+    const bg = designBackground(d, shown);
+    slide.style.setProperty('--dz-ov-bg', bg.color);
+    slide.style.setProperty('--dz-ov-bg-img', bg.image);
     ovPreviews.set(preview, { design: m.id, screen: shown, prefix: 'ov' + m.n + '-', open });
     // No "Open ↗" button: the centre preview itself is the control (click /
     // Enter / ↓) and answers a hover with a glow, never with scaling.
@@ -639,7 +695,10 @@ returns — the single-design page is untouched.
       ov.appendChild(chip);
     }
     const kick = el('div', 'design-ov-kicker');
-    kick.append(iconEl(m.icon, { color: m.color }), el('span', 'design-ov-name', m.label));
+    // `icon · N · name` — N is the Digit1-9 hotkey of this variant.
+    kick.append(iconEl(m.icon, { color: m.color }));
+    if (m.n <= 9) kick.append(el('span', 'design-ov-num', m.n + ' ·'));
+    kick.append(el('span', 'design-ov-name', m.label));
     const star = el('button', 'design-ov-star');
     star.type = 'button';
     star.dataset.designId = m.id;
@@ -873,6 +932,14 @@ returns — the single-design page is untouched.
     quick.style.maxWidth = Math.max(0, Math.floor(2 * half)) + 'px';
   }
   let quickFavOn = false;
+  // The variant the reader is looking at: the open design, or the centred
+  // overview slide.
+  function quickChipFocused(id) {
+    const it = visibleIteration();
+    if (mode() === 'design') { const d = activeDesignOf(it); return !!d && d.dataset.design === id; }
+    const cur = overviewOf(it)?.querySelector('.design-ov-slide[data-pos="cur"]');
+    return !!cur && cur.dataset.designId === id;
+  }
   function quickSeg(m, named, u, fav) {
     const seg = el('button', 'design-quick-seg');
     seg.type = 'button';
@@ -880,6 +947,8 @@ returns — the single-design page is untouched.
     seg.style.setProperty('--dz-color', m.color);
     if (!named) seg.dataset.iconOnly = 'true';
     seg.appendChild(iconEl(m.icon, { color: m.color }));
+    // `<icon> N · Name`: N = the Digit1-9 hotkey (hidden on icon-only chips).
+    if (m.n <= 9) seg.appendChild(el('span', 'design-quick-n', m.n + ' ·'));
     seg.appendChild(el('span', 'design-quick-name', m.label));
     // The current variant always shows its favourite state — ☆ empty or ★
     // full (CSS reveals the empty one on the active / centred chip only), so
@@ -892,18 +961,34 @@ returns — the single-design page is untouched.
       st.setAttribute('aria-pressed', String(on));
       st.setAttribute('aria-label', on ? L.favUnset : L.favSet);
       st.setAttribute('data-tip', on ? L.favUnset : L.favSet);
-      st.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); toggleFavorite(m.id); });
+      // Only the focused variant's star toggles. On any other chip the ★ just
+      // marks the favourite: a click opens that variant and keeps the star.
+      st.addEventListener('click', e => {
+        e.stopPropagation(); e.preventDefault();
+        if (quickChipFocused(m.id)) toggleFavorite(m.id); else showDesignAligned(m.id);
+      });
       seg.appendChild(st);
     }
     const key = m.n <= 9 ? String(m.n) : '';
     if (named && !quickNarrow()) keyTip(seg, key); else setTip(seg, m.label, key);
-    // The variant already on screen is one level up: back to the overview,
-    // that variant centred — a click on it never re-renders anything.
-    press(seg, () => {
+    // A click on the ACTIVE variant's chip turns to the design's next page
+    // (last → first); the ▾ caret lists them. A single-page design: back to
+    // the overview, that variant centred. Other chips switch the design.
+    // `press` fires on pointerdown, before the star's own click handler can
+    // stop it: a press that starts on the ☆/★ only toggles the favourite.
+    press(seg, e => {
+      if (e && e.target && e.target.closest && e.target.closest('.design-quick-star')) return;
       if (typeof closePanel === 'function') closePanel();
       const it = visibleIteration();
       const cur = mode() === 'design' ? activeDesignOf(it) : null;
-      if (cur && cur.dataset.design === m.id) { if (overviewOf(it)) window.showOverview(); return; }
+      if (cur && cur.dataset.design === m.id) {
+        const pages = [...cur.querySelectorAll('section[data-screen][id]')];
+        if (pages.length > 1) {
+          const at = pages.indexOf(activeScreenOf(cur));
+          window.showScreen(pages[(at + 1) % pages.length].id);
+        } else if (overviewOf(it)) window.showOverview();
+        return;
+      }
       showDesignAligned(m.id);
     });
     if (u) setDot(seg, u.design(m.id));
@@ -1279,8 +1364,16 @@ returns — the single-design page is untouched.
     document.querySelectorAll('#screen-nav .screen-nav-design-heading').forEach(h => {
       const m = metas.find(x => x.id === h.dataset.designId);
       if (!m) return;
+      if (m.color && h.parentElement) h.parentElement.style.setProperty('--nav-rail', m.color);
       const label = h.firstElementChild;
       if (label && !label.querySelector('.dz-icon')) label.insertBefore(iconEl(m.icon, { size: 's', color: m.color }), label.firstChild);
+      // `icon N · name`, same digit as the hotkey.
+      if (label && m.n <= 9 && !label.querySelector('.screen-nav-n')) {
+        const ic = label.querySelector('.dz-icon');
+        const num = el('span', 'screen-nav-n', m.n + ' ·');
+        num.setAttribute('aria-hidden', 'true');
+        label.insertBefore(num, ic ? ic.nextSibling : label.firstChild);
+      }
       if (!h.querySelector('.screen-nav-kbd') && m.n <= 9) {
         const k = el('kbd', 'app-kbd screen-nav-kbd', String(m.n));
         k.setAttribute('aria-hidden', 'true');
@@ -1441,56 +1534,65 @@ returns — the single-design page is untouched.
       const from = u.r > u.l ? Math.max(0, u.l - PAD) : 0;
       const tall = u.b > u.t ? u.b - u.t + 2 * PAD : 0;
       const fromY = u.b > u.t ? Math.max(0, u.t - PAD) : 0;
-      // Fill the tile: as large as the width allows (up to 2.5×); content
-      // that would then overflow the height is fitted by height — a phone
-      // mock fully, a long desktop page only down to 70 % of the width fit
-      // (its bottom may crop). Centred on both axes when it fits.
       const h = p.clientHeight;
-      // strict: the region's bottom edge is the info card — a long page may
-      // not crop past it into the card, so it is fitted by height in full.
-      const fitIn = (aw, ah, strict) => {
-        let s = Math.min(2.5, aw / content);
-        if (ah > 0 && tall && tall * s > ah) s = Math.max(ah / tall, content < 700 || strict ? 0 : s * 0.7);
-        return Math.max(0, s);
-      };
-      // The info card sits in one corner of the tile; a design blown up to
-      // the full tile ran underneath it. Reserve the card's band — beside it
-      // or above/below it, whichever leaves the larger design.
-      let region = { x: 0, y: 0, w, h };
-      const card = p.closest('.design-ov-slide')?.querySelector('.design-ov-overlay');
-      const pr = p.getBoundingClientRect();
-      const cr = card && !card.hidden ? card.getBoundingClientRect() : null;
-      if (cr && cr.width && cr.height && pr.width) {
-        const G = 16;
-        const o = { l: (cr.left - pr.left) / k, r: (cr.right - pr.left) / k, t: (cr.top - pr.top) / k, b: (cr.bottom - pr.top) / k };
-        const left = (o.l + o.r) / 2 < w / 2, bottom = (o.t + o.b) / 2 > h / 2;
-        const side = left ? { x: o.r + G, y: 0, w: w - o.r - G, h } : { x: 0, y: 0, w: o.l - G, h };
-        const band = bottom ? { x: 0, y: 0, w, h: o.t - G, strict: true } : { x: 0, y: o.b + G, w, h: h - o.b - G };
-        const cands = [side, band].filter(c => c.w > 0 && c.h > 0);
-        if (cands.length) region = cands.reduce((a, c) => (fitIn(c.w, c.h, c.strict) > fitIn(a.w, a.h, a.strict) ? c : a));
+      // Inside the CARD (never the whole stage): a full-app screen (content
+      // >= 700 of the 1000px canvas) COVERS the card — the larger of the
+      // width / height fit, capped at 2.5× — so the card's space is used; a
+      // page taller than the card keeps its top (the app header) and crops
+      // at the bottom. A narrower widget / phone mock is CONTAINED (whole,
+      // up to 2.5×). The card's own background (the design's) fills what
+      // the content does not reach. The info card sits bottom-left on top.
+      const full = content >= 700;
+      p.dataset.fit = full ? 'cover' : 'contain';
+      let scale = Math.min(2.5, tall ? (full ? Math.max(w / content, h / tall) : Math.min(w / content, h / tall)) : w / content);
+      let cx = from, cy = fromY, cw = content, ch = tall || h / Math.max(scale, 0.01);
+      let topAnchor = full && tall * scale > h + 0.5;
+      // `data-ov-demo`: zoom onto the differing element instead — fitted
+      // (contain, up to 4×) to its own box, centred.
+      const demo = p.dataset.demo && demoTarget(wrap, p.dataset.demo);
+      if (demo) {
+        const r = demo.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) {
+          const dl = (r.left - origin) / k, dt = (r.top - originTop) / k, dw = r.width / k, dh = r.height / k;
+          const DP = 32;
+          scale = Math.max(0.05, Math.min(4, w / (dw + 2 * DP), h / (dh + 2 * DP)));
+          cx = dl; cy = dt; cw = dw; ch = dh;
+          topAnchor = false;
+          p.dataset.fit = 'demo';
+        }
       }
-      let scale = fitIn(region.w, region.h, region.strict);
-      // A full-app screen (wide content) or an element that would fill less
-      // than a third of the tile is shown on the WHOLE tile: the info card
-      // then overlays it (semi-transparent at rest) instead of shrinking the
-      // picture into the leftover band.
-      if (tall && (content >= 700 || (content * scale) * (tall * scale) < (w * h) / 3)) {
-        region = { x: 0, y: 0, w, h };
-        scale = fitIn(w, h, false);
-      }
-      const y = region.h > 0 && tall ? region.y + Math.max(0, (region.h - tall * scale) / 2) - fromY * scale : 0;
       wrap.style.removeProperty('--dz-ov-scale');
       wrap.style.removeProperty('--dz-ov-x');
       wrap.style.removeProperty('--dz-ov-y');
       p.style.setProperty('--dz-ov-scale', String(scale));
-      const ms = tall ? Math.max(w / content, h / tall) : w / content;
-      p.style.setProperty('--dz-ov-mscale', String(ms));
-      p.style.setProperty('--dz-ov-mx', ((w - content * ms) / 2 - from * ms).toFixed(1) + 'px');
-      p.style.setProperty('--dz-ov-my', (tall ? (h - tall * ms) / 2 - fromY * ms : 0).toFixed(1) + 'px');
-      p.style.setProperty('--dz-ov-x', (region.x + (region.w - content * scale) / 2 - from * scale).toFixed(1) + 'px');
-      p.style.setProperty('--dz-ov-y', y.toFixed(1) + 'px');
+      p.style.setProperty('--dz-ov-x', ((w - cw * scale) / 2 - cx * scale).toFixed(1) + 'px');
+      p.style.setProperty('--dz-ov-y', (topAnchor ? -cy * scale : (h - ch * scale) / 2 - cy * scale).toFixed(1) + 'px');
     });
   }
+  // The element a `data-ov-demo` selector names, inside a preview clone.
+  // Ids are namespaced in a clone: author with a class / attribute selector.
+  function demoTarget(wrap, sel) {
+    try { return wrap.querySelector(sel); } catch (_) { return null; }
+  }
+  // Demo loop: every few seconds the centred demo's element gets
+  // `ov-demo-play` for a moment (authors drive the motion from
+  // `.ov-demo-play` in their mock CSS; plain CSS animations just run).
+  // Still under reduced motion, paused while the tab is hidden.
+  (function demoLoop() {
+    if (typeof setInterval !== 'function') return;
+    const still = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    setInterval(() => {
+      if (document.hidden || still()) return;
+      document.querySelectorAll('.design-ov-slide[data-pos="cur"] .design-ov-preview[data-demo]').forEach(p => {
+        const t = demoTarget(p.querySelector('.design-ov-scale') || p, p.dataset.demo);
+        if (!t) return;
+        t.classList.remove('ov-demo-play');
+        void t.offsetWidth;
+        t.classList.add('ov-demo-play');
+        setTimeout(() => t.classList.remove('ov-demo-play'), 2200);
+      });
+    }, 3600);
+  })();
   window.addEventListener('resize', () => requestAnimationFrame(fitPreviews));
   document.addEventListener('overview:changed', () => requestAnimationFrame(fitPreviews));
 
@@ -1787,17 +1889,47 @@ returns — the single-design page is untouched.
   // The editor sits inside the screen, whose frame clips it — a phone mock-up
   // is narrower than pin + editor — so it is placed by measuring: open on the
   // side with room, then clamp it inside the content box.
+  // What of the host is actually on screen: the host box cut by every
+  // overflow-clipping ancestor (framed mock-up, scroller, scaled preview) and
+  // the viewport. Measuring the host alone let a pin near the screen's top
+  // open an editor that a clipping ancestor cut off. A zero-size ancestor
+  // (no layout) is skipped.
+  function visibleBounds(host) {
+    const h = host.getBoundingClientRect();
+    let b = { left: h.left, top: h.top, right: h.right, bottom: h.bottom };
+    for (let p = host.parentElement; p && p !== document.documentElement; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (!/(auto|scroll|hidden|clip)/.test(cs.overflowX + ' ' + cs.overflowY)) continue;
+      const r = p.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      b = { left: Math.max(b.left, r.left), top: Math.max(b.top, r.top),
+        right: Math.min(b.right, r.right), bottom: Math.min(b.bottom, r.bottom) };
+    }
+    if (window.innerWidth && window.innerHeight) {
+      b = { left: Math.max(b.left, 0), top: Math.max(b.top, 0),
+        right: Math.min(b.right, window.innerWidth), bottom: Math.min(b.bottom, window.innerHeight) };
+    }
+    b.width = b.right - b.left;
+    b.height = b.bottom - b.top;
+    return b;
+  }
   function placeEditor(wrap) {
     const ed = wrap.querySelector('.upin-editor');
     const host = wrap.closest('.upin-host');
     if (!ed || ed.hidden || !host) return;
-    const b = host.getBoundingClientRect();
-    if (!b.width || !b.height) return;
     const gap = 8;
+    const b = visibleBounds(host);
+    if (!(b.width > 0) || !(b.height > 0)) return;
     delete wrap.dataset.flipX;
     delete wrap.dataset.flipY;
-    ['left', 'right', 'top', 'bottom', 'width'].forEach(p => { ed.style[p] = ''; });
+    ['left', 'right', 'top', 'bottom', 'width', 'maxHeight', 'overflowY'].forEach(p => { ed.style[p] = ''; });
     if (ed.getBoundingClientRect().width > b.width - 2 * gap) ed.style.width = Math.max(160, b.width - 2 * gap) + 'px';
+    // Taller than the visible area on any side: cap it and scroll inside (a
+    // fixed portal cannot work here — the pin sits in a transformed wrapper).
+    if (ed.getBoundingClientRect().height > b.height - 2 * gap) {
+      ed.style.maxHeight = Math.max(80, b.height - 2 * gap) + 'px';
+      ed.style.overflowY = 'auto';
+    }
     let r = ed.getBoundingClientRect();
     if (r.right > b.right - gap) { wrap.dataset.flipX = 'true'; r = ed.getBoundingClientRect(); }
     if (r.left < b.left + gap || r.right > b.right - gap) {
@@ -1842,6 +1974,43 @@ returns — the single-design page is untouched.
   // body[data-note-editing] (hide the others while one note is open) lives in
   // the annotation layer (templates-design-wiring.md) so single-design pages
   // get it too; own-pin editors open here and are picked up by its observer.
+  // A saved note's collapsed bubble reuses the annotation bubble markup/CSS
+  // (.anno-bubble > .anno-bubble-summary > .anno-bubble-question); clicking it
+  // opens the editor exactly like the pin does.
+  function noteBubble(text, label, open) {
+    const bub = el('div', 'anno-bubble upin-bubble');
+    bub.dataset.open = 'false';
+    const sum = el('button', 'anno-bubble-summary');
+    sum.type = 'button';
+    sum.setAttribute('aria-label', label);
+    sum.appendChild(el('span', 'anno-bubble-question', text));
+    sum.addEventListener('click', open);
+    bub.appendChild(sum);
+    return bub;
+  }
+  // Same side logic as the annotation bubbles: right first, then left, bottom,
+  // top — the side with the least area outside the frame wins, a remainder is
+  // shifted in. Pure measuring, no state besides data-anno-side.
+  function placeNoteBubble(wrap, b) {
+    const bub = wrap.querySelector('.upin-bubble');
+    if (!bub || !b) return;
+    const gap = 8;
+    bub.style.translate = '';
+    const out = r => Math.max(0, b.left + gap - r.left) + Math.max(0, r.right - (b.right - gap))
+      + Math.max(0, b.top + gap - r.top) + Math.max(0, r.bottom - (b.bottom - gap));
+    let best = null;
+    for (const side of ['right', 'left', 'bottom', 'top']) {
+      wrap.dataset.annoSide = side;
+      const o = out(bub.getBoundingClientRect());
+      if (!best || o < best.o - 0.5) best = { side, o };
+      if (!o) break;
+    }
+    wrap.dataset.annoSide = best.side;
+    const r = bub.getBoundingClientRect();
+    const dx = r.left < b.left + gap ? b.left + gap - r.left : (r.right > b.right - gap ? b.right - gap - r.right : 0);
+    const dy = r.top < b.top + gap ? b.top + gap - r.top : (r.bottom > b.bottom - gap ? b.bottom - gap - r.bottom : 0);
+    if (dx || dy) bub.style.translate = dx + 'px ' + dy + 'px';
+  }
   function pinNode(pin, k, live, isDraft) {
     const wrap = el('div', 'upin');
     wrap.dataset.upinId = pin.id;
@@ -1878,7 +2047,9 @@ returns — the single-design page is untouched.
       foot.appendChild(del);
     }
     ed.appendChild(foot);
+    wrap.dataset.annoSide = 'right';
     wrap.append(btn, ed);
+    if (!isDraft && pin.text) wrap.appendChild(noteBubble(pin.text, label, () => btn.click()));
     // The WHOLE pin is the drag handle (a press only becomes a drag after a
     // few px, so a click still opens the note). The spot is stored as percent
     // of the content box, like at placement.
@@ -1976,6 +2147,8 @@ returns — the single-design page is untouched.
       layer.appendChild(drafted.wrap);
     }
     box.appendChild(layer);
+    const hb = visibleBounds(box);
+    layer.querySelectorAll('.upin').forEach(w => placeNoteBubble(w, hb));
     if (typeof initCommentAttachments === 'function') initCommentAttachments();
     if (drafted) { placeEditor(drafted.wrap); drafted.ta.focus(); }
   }

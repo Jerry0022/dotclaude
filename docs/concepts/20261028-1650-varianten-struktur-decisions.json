@@ -1,0 +1,99 @@
+[
+ {
+  "iteration": 1,
+  "action": "implement",
+  "decisions": [
+   "Karte immer links unten",
+   "Bühne randlos im Variantenhintergrund",
+   "Klick auf aktiven Chip rotiert Unterseiten",
+   "Ziffern 1·2·3 vor Varianten",
+   "Befund dreimal dasselbe Bild bestätigt",
+   "data-ov-demo statt gleichem Bild",
+   "Gate warnt bei gleichen ersten Screens",
+   "Drei Varianten-Arten sichtbar — Darstellung noch konzeptieren",
+   "Gate sperrt Unterseiten-Runden; Untervariante wird Variante, später rauszoomen",
+   "Etappen-Plan",
+   "Aktionen: nächste Etappe, verfeinern, parallel umsetzen — Darstellung noch konzeptieren",
+   "Etappen vorschlagen nur wenn sinnvoll, nie Pflicht"
+  ],
+  "implemented": {
+   "branch": "claude/charming-gauss-41509d",
+   "commits": [
+    "ac450149"
+   ],
+   "tests": "161 targeted green, lint clean"
+  }
+ },
+ {
+  "iteration": 2,
+  "action": "iterate",
+  "favorite": "landkarte",
+  "decisions": [
+   "Favorit Landkarte",
+   "Struktur ins ☰-Menü (Historie, Inhaltsverzeichnis), nicht groß auf der Bühne",
+   "Etappen als vertikaler Stepper mit Namen, feste Breite + Zeichenlimit",
+   "Im Etappen-Konzept ersetzt Nächste Etappe den Jetzt-umsetzen-Knopf",
+   "Übersichts-Link vor die Varianten in der Schnellnavigation",
+   "Karten-Zelle gut, aber drei Integrationsorte ohne schwebendes Panel",
+   "Glyphe als Gegenvariante behalten",
+   "Richtungen noch schlecht dargestellt",
+   "Ohne Etappen: wie heute",
+   "Engine: Stern-Klick blättert nicht mehr; eigene Notiz-Blasen wie Auto-Blasen"
+  ]
+ },
+ {
+  "iteration": 3,
+  "action": "iterate",
+  "favorite": "schnellnav",
+  "decisions": [
+   "Favorit In der Schnellnavigation",
+   "FAB-Menü aus Glyphe (d3-s2) am besten, aber zu voll → verfeinern",
+   "Etappe = Buchstabe + Name, kein Untertitel",
+   "Titel \"3 Richtungen, eine gewählt\" super — Einbettung in den FAB-Header klären",
+   "Struktur-Indikator links neben dem Eye-Icon, rund wie das Eye",
+   "Engine: Stern auf nicht fokussierter Variante öffnet sie, Favorit bleibt",
+   "Engine: eigene Notiz-Editor wird abgeschnitten → fixen"
+  ]
+ },
+ {
+  "iteration": 4,
+  "action": "iterate",
+  "favorite": null,
+  "decisions": [
+   "Tabs-Form gewinnt (Pins: extrem gut)",
+   "Tabs oben = Etappen, horizontal scrollbar, bis zu 7, von Claude festgelegt; ohne Etappen keine Tabs",
+   "Aktuelle Etappe immer offen; darunter Varianten + Unterseiten wie heute, poliert",
+   "Kein Stern-Chip über dem Titel",
+   "Tooltip: Satz + \"Etappe B\" ohne \"von 4\"",
+   "Unten alles wie heute, \"Nächste Etappe\" zusätzlich",
+   "Learning: geänderte Elemente vollständig wie heute mocken"
+  ]
+ },
+ {
+  "iteration": 5,
+  "action": "iterate",
+  "favorite": null,
+  "decisions": [
+   "Tooltip: Satz + Etappe B · Runde 4 ok",
+   "Kopf: Konzeptname statt Runde 4; kein Titelsatz",
+   "Runde N hinter der Übersicht-Zeile (oder statt ihr ohne Varianten)",
+   "Fertige Etappe: 🕘 zum Aufklappen früherer Runden; Inhaltsverzeichnis normal; keine Zähler wie 5 Einträge/1 verworfen",
+   "Eingefrorene Runde exakt wie heute",
+   "Etappen-Pfeile nur bei Hover, ohne Rahmen, nie überlappend, nichts abgeschnitten",
+   "Etappen horizontal, vertikal oder kombiniert — Claude wählt was am wenigsten überfordert",
+   "Unten: in Etappen-Konzepten ersetzt Nächste Etappe das Umsetzen"
+  ]
+ },
+ {
+  "iteration": 6,
+  "action": "implement",
+  "decisions": [
+   "Umsetzen; danach Beispielkonzept Abrechnung Kleingarten in Subsession zum Durchklicken, dann shippen",
+   "🕘 aus dem Kopf raus (lebt im Etappen-Tab)",
+   "Fertige Etappe zeigt nur neueste Runde, 🕘 springt zu anderen",
+   "Layout-Regel ok; am Ende immer das Gesamteste",
+   "Emoji vor Konzeptname; Zeichenlimits für Claude vorgeben",
+   "Seitenzeilen an Farbleiste ohne Rahmen übernehmen"
+  ]
+ }
+]

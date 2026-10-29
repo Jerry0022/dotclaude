@@ -1,4 +1,4 @@
-# Concept templates, part 09 of 46: Template: design — views, variant overview
+# Concept templates, part 09 of 48: Template: design — views, variant overview
 
 ## Views (optional)
 
@@ -452,7 +452,8 @@ four attributes; the engine (templates-design-overview.md § Variant overview JS
 | `data-design-traits` | Exactly **three** traits, separated by `\|`. Only genuine differences to the OTHER designs of the round — never something every design has ("responsive", "dark mode"). |
 | `data-design-icon` | A built-in icon name (`leaf`, `rocket`, `gauge`, `grid`, `map`, `cube`, `chart`, `bolt`, `heart`, `compass`, `layers`, `sparkles`, `shield`, `book`, `user`, `home`, `sun`, `moon`, `flame`, `palette`, `game`, `list`) or one inline SVG, entity-escaped inside the attribute (`data-design-icon="&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;&lt;path d=&quot;…&quot;/&gt;&lt;/svg&gt;"` — a raw `<`/`>` in an attribute breaks the build's and the gate's tag scanners); stroke paths in `currentColor`, everything outside svg/g/path/circle/ellipse/line/polyline/polygon/rect and their geometry/stroke attributes is dropped. A short emoji works too. Claude picks it thematically per concept — the icon is how the user tells the designs apart in the quick nav. |
 | `data-design-color` | Optional. A hex colour for the design's slide ring, quick-nav highlight and icon background. Never the accent blue: the icons themselves are drawn in one uniform accent tint, and the background must stay distinguishable. Without it the engine assigns a palette colour by position. |
-| `data-design-overlay` | Optional. Where the overlay (kicker, motto, traits) sits on the preview: `tl`, `tr`, `bl`, `br`, `tc` or `bc`; default `bl`. Claude picks the corner that covers the least important part of THAT design's first screen (titles and key figures usually sit top → `bl`/`bc`). |
+| `data-design-overlay` | **Deprecated, ignored.** The overview card is always bottom-left; do not author it (an unknown value still draws a gate warning). |
+| `data-ov-demo` | Optional. A CSS selector INSIDE this design naming the element that differs from the other variants. The overview slide then shows a small, zoomed, looping demo of that element (the clone is fitted and centred on its box) instead of the full still. The engine toggles the class `ov-demo-play` on the element every few seconds (paused under reduced motion / hidden tab) — style `.ov-demo-play` (or rely on plain CSS animations / transitions) in the mock CSS to drive the motion. Use a class / attribute selector, not an `#id` (ids are namespaced in the clone). The element's screen is the one previewed. Absent → the still, filling the card (a full-app screen cover-scaled inside it). |
 | `data-design-overlay-tone` | Optional. `warm` switches the overlay from the semi-transparent bluish tint to a warm graphite — set it when the preview itself is bluish and the default tint would sink into it. No auto-detection. |
 | `data-design-improved` | Optional. A short phrase (max ~40 chars, e.g. "Wochenansicht per Tab") naming what got better since the last round. The overview card shows it as "Verbessert: …" under the top-3 points. Absent → nothing is shown. Pure meta lives here and in the card, never as text inside or under the design itself. |
 
@@ -486,8 +487,9 @@ icon, when the traits are not exactly three, when the round has no
   inert clone, a still image: click, `Enter` or `↓` opens the design, "Design öffnen ↗"
   shows on hover / focus only — its hotkey (`1`–`9`) hangs on THAT button, on
   a long hover or while `Alt` is held, never as a tooltip over the centre nav. On it sits the **overlay**: kicker
-  `icon · N · name` (+ ☆/★ on an alternatives round), the motto as heading,
-  the three traits — at `data-design-overlay`, tinted per
+  `icon · N · name` (+ ☆/★ on an alternatives round; N = the variant's
+  `1`–`9` hotkey, also shown before the name in the quick nav and the ☰ rows), the motto as heading,
+  the three traits — always bottom-left, tinted per
   `data-design-overlay-tone`. The eye hides / shows the overlay with every
   other annotation (Space no longer does: Space is the notes dock). A variant new or changed this round carries ONE
   chip inside this info box — "Neugedacht" or "Verbessert", never two.

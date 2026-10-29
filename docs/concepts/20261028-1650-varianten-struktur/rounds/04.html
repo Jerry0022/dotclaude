@@ -1,0 +1,725 @@
+<section data-iteration="4" data-iteration-template="design" data-design-set="alternatives" data-baked>
+  <script type="application/json" data-frozen-feedback>{"general":{"text":"devops learn warum die konzepte für die zu ändernden elemente häufiger nun lapidar sind und nciht so detailreich originalelemente auch mit zeigen, das bringt dann bei der umsetzung überraschungen weil elemente wie z. B. dark mode umschaltger oder sowas dann ggf. geändert werden zu heute obwohol der nutzer es nicht möchte. die in dem konztept angepackten elemente sollten alles von vorher wenn nicht explizit anders erwähnt auch zeigen!","attachments":[]},"designs":{},"screens":{},"views":{},"userPins":[{"id":"up-mvsep3ti49jt","design":"tabs","screen":"d3-s2","x":71.1,"y":24.2,"target":"button.mock-r4-st.mock-r4-st-now \"B · Struktur\"","text":"Das gefällt mir extrem gut!","attachments":[]},{"id":"up-mvserq1067y6","design":"tabs","screen":"d3-s4","x":84,"y":12.6,"target":"button.mock-r4-t-tab \"Historie 4\"","text":"Das hier oben sind für mich die etappen.  gern horizontal scrollbar bis zu 7 etappen automatisch von claude festgelegt, können auch weniger sein oder gar keine dann brauchen wir die tab auswhal nicht! Akt9uelle etappe istimmer offen.","attachments":[]},{"id":"up-mvserw23wucy","design":"tabs","screen":"d3-s4","x":81,"y":19.4,"target":"b \"A · Use Cases\"","text":"hier sollten dann die varianaten sein etc. wie hueute inkl. der einzelnnen subsietn wie heute! gern nochmal poilished styled!","attachments":[]}]}</script>
+  <header class="iteration-intro">
+    <h2>{{iteration.tab}} 4 · Das schlanke ☰-Menü</h2>
+    <p>Runde 3: Favorit war die Schnellnavigation, das ☰-Menü der Glyphe gefiel am besten, und eine Etappe ist nur noch Buchstabe plus Name. Die Karte wird ein runder Knopf links neben dem Auge. Jetzt die Frage: Wie wird das ☰-Menü schlank?</p>
+  </header>
+  <style>
+    /* Round 4 mocks: the concept page chrome in a window frame. Own namespace mock-r4-, so the frozen round-3 rules never touch it. */
+    .mock-r4-win { position: relative; width: 100%; max-width: 1080px; aspect-ratio: 16 / 10; margin: 0 auto; overflow: hidden;
+      background: radial-gradient(120% 90% at 50% 40%, #121a24 0%, #0a0e13 70%); border: 1px solid #2a313b; border-radius: 14px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .45); color: #c9d1d9; font: 13px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+      --mock-r4-v1: #fb923c; --mock-r4-v2: #a78bfa; --mock-r4-v3: #facc15; --mock-r4-pw: 300px; --mock-r4-hl: #2dd4bf; }
+    .mock-r4-win.mock-r4-w2 { --mock-r4-pw: 340px; --mock-r4-hl: #f472b6; }
+    .mock-r4-win.mock-r4-w3 { --mock-r4-hl: #a3e635; }
+    .mock-r4-win * { box-sizing: border-box; }
+    .mock-r4-win button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+    .mock-r4-win .mock-r4-c1 { --mock-r4-c: var(--mock-r4-v1); }
+    .mock-r4-win .mock-r4-c2 { --mock-r4-c: var(--mock-r4-v2); }
+    .mock-r4-win .mock-r4-c3 { --mock-r4-c: var(--mock-r4-v3); }
+
+    /* chrome: structure button + eye (same round pin shape), quick nav, FABs */
+    .mock-r4-win .mock-r4-sb, .mock-r4-eye { position: absolute; top: 14px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+      border: 2px solid rgba(88, 166, 255, .6); background: rgba(22, 27, 34, .72); color: #58a6ff; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); z-index: 9; }
+    .mock-r4-eye { left: 50px; font-size: 12px; opacity: .75; }
+    .mock-r4-eye.mock-r4-eye-home { left: 16px; }
+    .mock-r4-win .mock-r4-sb { left: 16px; }
+    .mock-r4-win .mock-r4-sb.mock-r4-sb-hover { transform: scale(1.08); border-color: #58a6ff; }
+    .mock-r4-win .mock-r4-sb.mock-r4-sb-on { border-color: var(--mock-r4-hl); background: rgba(22, 27, 34, .95); }
+    .mock-r4-sb-badge { position: absolute; right: -5px; bottom: -4px; min-width: 13px; height: 13px; padding: 0 2px; border-radius: 7px; font-size: 9px; line-height: 13px;
+      text-align: center; background: var(--mock-r4-hl); color: #0b0f14; font-weight: 700; }
+    .mock-r4-gly { display: inline-grid; grid-template-columns: repeat(4, 3px); grid-auto-rows: 3px; gap: 1px; }
+    .mock-r4-gly u { display: block; border-radius: 1px; background: rgba(88, 166, 255, .35); }
+    .mock-r4-gly u.mock-r4-u-done { background: rgba(126, 226, 168, .8); }
+    .mock-r4-gly u.mock-r4-u-off { background: none; }
+    .mock-r4-gly u.mock-r4-u-lit { background: var(--mock-r4-hl); box-shadow: 0 0 4px var(--mock-r4-hl); }
+    .mock-r4-gly u.mock-r4-u-col { background: rgba(88, 166, 255, .8); }
+    .mock-r4-gly.mock-r4-gly-big { grid-template-columns: repeat(4, 7px); grid-auto-rows: 7px; gap: 2px; }
+
+    /* the app tooltip, shown open on the closed-menu screen */
+    .mock-r4-tip { position: absolute; top: 50px; left: 10px; z-index: 10; max-width: 250px; padding: 6px 10px; border-radius: 6px; background: #161b22; color: #e6edf3;
+      border: 1px solid #30363d; box-shadow: 0 6px 20px rgba(0, 0, 0, .28); font-size: 12px; line-height: 1.45; }
+    .mock-r4-tip::before { content: ""; position: absolute; top: -5px; left: 16px; width: 8px; height: 8px; background: #161b22; border-left: 1px solid #30363d;
+      border-top: 1px solid #30363d; transform: rotate(45deg); }
+    .mock-r4-tip small { display: block; color: #8b949e; font-size: 11px; }
+    .mock-r4-tip-rail { display: flex; gap: 4px; margin-top: 4px; }
+    .mock-r4-tip-rail span { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 700; color: #8b949e; border: 1px solid #3a4350; }
+    .mock-r4-tip-rail span.mock-r4-done { background: #7ee2a8; border-color: #7ee2a8; color: #0b0f14; }
+    .mock-r4-tip-rail span.mock-r4-now { background: var(--mock-r4-hl); border-color: var(--mock-r4-hl); color: #0b0f14; }
+    .mock-r4-tip-tabs { display: flex; gap: 6px; margin-top: 4px; font-size: 11px; color: #8b949e; }
+    .mock-r4-tip-tabs b { color: var(--mock-r4-hl); font-weight: 600; border-bottom: 2px solid var(--mock-r4-hl); }
+
+    .mock-r4-qnav { position: absolute; top: 11px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px;
+      border-radius: 18px; background: rgba(22, 27, 34, .94); border: 1px solid #30363d; z-index: 7; white-space: nowrap; }
+    .mock-r4-win .mock-r4-ovl { display: flex; align-items: center; height: 26px; padding: 0 7px; border-radius: 999px; color: #8b949e; font-size: 14px; }
+    .mock-r4-sep { width: 1px; height: 18px; background: #30363d; }
+    .mock-r4-chip { display: flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 999px; color: #8b949e; font-size: 12px; }
+    .mock-r4-chip.mock-r4-on { background: rgba(88, 166, 255, .14); color: #e6edf3; box-shadow: inset 0 0 0 1px rgba(88, 166, 255, .45); }
+    .mock-r4-sw { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 2px; background: var(--mock-r4-c, #484f58); }
+    .mock-r4-num { color: #58a6ff; font-weight: 700; }
+    .mock-r4-star { color: #e3b341; }
+    .mock-r4-win .mock-r4-fab { position: absolute; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; z-index: 11;
+      background: #58a6ff; color: #0b0f14; font-size: 16px; box-shadow: 0 6px 16px rgba(0, 0, 0, .4); text-align: center; }
+    .mock-r4-win .mock-r4-fab-menu { top: 9px; right: 14px; }
+    .mock-r4-win .mock-r4-fab-chat { bottom: 14px; right: 14px; }
+
+    /* stage, carousel, overview card */
+    .mock-r4-stage { position: absolute; top: 60px; right: 0; bottom: 20px; left: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .mock-r4-stage.mock-r4-dim { right: var(--mock-r4-pw); opacity: .45; }
+    .mock-r4-car { display: flex; align-items: center; justify-content: center; gap: 2.5%; width: 100%; height: 100%; }
+    .mock-r4-slide { flex: none; }
+    .mock-r4-slide.mock-r4-mid { width: 56%; }
+    .mock-r4-slide.mock-r4-side { width: 25%; opacity: .4; filter: saturate(.5); }
+    .mock-r4-shot { position: relative; aspect-ratio: 16 / 10; border-radius: 14px; overflow: hidden; box-shadow: inset 0 0 0 3px var(--mock-r4-c), 0 18px 40px rgba(0, 0, 0, .5); }
+    .mock-r4-app { position: relative; width: 100%; height: 100%; padding: 6%; display: flex; flex-direction: column; gap: 6%; }
+    .mock-r4-app-1 { background: linear-gradient(160deg, #3a2414, #140c07 70%); }
+    .mock-r4-app-2 { background: radial-gradient(80% 70% at 60% 35%, #3b2a63 0%, #141026 70%); }
+    .mock-r4-app-3 { background: linear-gradient(180deg, #2e2a10, #110f05 75%); }
+    .mock-r4-a-bar { display: block; height: 8%; width: 45%; border-radius: 6px; background: rgba(255, 255, 255, .16); }
+    .mock-r4-a-hero { display: block; flex: 1; border-radius: 10px; background: rgba(255, 255, 255, .08); }
+    .mock-r4-a-cards { display: flex; gap: 5%; height: 22%; }
+    .mock-r4-a-cards i { flex: 1; border-radius: 8px; background: rgba(255, 255, 255, .1); }
+    .mock-r4-ovcard { position: absolute; left: 16px; bottom: 16px; width: 250px; padding: 12px 14px; border-radius: 12px; z-index: 4;
+      background: rgba(13, 17, 23, .88); border: 1px solid #30363d; border-left: 4px solid var(--mock-r4-c); }
+    .mock-r4-kicker { font-size: 11px; color: #8b949e; }
+    .mock-r4-motto { margin: 3px 0 6px; font-size: 15px; font-weight: 650; color: #e6edf3; }
+    .mock-r4-traits { margin: 0; padding-left: 16px; font-size: 11.5px; color: #a8b3bf; }
+
+    /* ☰ panel shell, shared by all three takes */
+    .mock-r4-panel { position: absolute; top: 0; right: 0; bottom: 0; width: var(--mock-r4-pw); z-index: 6; display: flex; flex-direction: column; gap: 10px;
+      padding: 16px 16px 66px; background: #161b22; border-left: 1px solid #30363d; overflow: hidden; }
+    .mock-r4-title { font-size: 14.5px; font-weight: 650; color: #e6edf3; white-space: nowrap; }
+    .mock-r4-h { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: #6e7681; margin-bottom: 3px; }
+    .mock-r4-win .mock-r4-row { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 8px; border-radius: 7px; color: #a8b3bf; font-size: 12px; }
+    .mock-r4-win .mock-r4-row.mock-r4-row-on { background: rgba(88, 166, 255, .12); color: #e6edf3; }
+    .mock-r4-pages { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 0 2px 22px; }
+    .mock-r4-pages span { padding: 1px 7px; border-radius: 5px; font-size: 10.5px; color: #8b949e; background: rgba(255, 255, 255, .04); border-top: 2px solid var(--mock-r4-c, #484f58); }
+    .mock-r4-pages span.mock-r4-pg-on { color: #e6edf3; background: rgba(255, 255, 255, .09); }
+    .mock-r4-hist { display: flex; gap: 5px; }
+    .mock-r4-hist span { padding: 2px 8px; border-radius: 999px; font-size: 11px; color: #8b949e; border: 1px solid #30363d; }
+    .mock-r4-hist span.mock-r4-h-now { color: #e6edf3; border-color: rgba(88, 166, 255, .6); }
+    .mock-r4-submit { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
+    .mock-r4-win .mock-r4-btn { padding: 9px 12px; border-radius: 10px; font-size: 12.5px; border: 1px solid #3a4350; color: #c9d1d9; }
+    .mock-r4-win .mock-r4-btn.mock-r4-btn-main { background: #58a6ff; color: #0b0f14; border-color: #58a6ff; font-weight: 650; }
+    .mock-r4-btn small { display: block; font-size: 10.5px; font-weight: 400; opacity: .75; }
+
+    /* vertical stepper: letter + name only, fixed 220 px, names max. 24 characters */
+    .mock-r4-step { width: 220px; display: flex; flex-direction: column; gap: 2px; }
+    .mock-r4-win .mock-r4-st { position: relative; display: flex; align-items: center; gap: 8px; width: 220px; height: 26px; padding: 0 6px; border-radius: 8px; }
+    .mock-r4-st::before { content: ""; position: absolute; left: 13px; top: 19px; height: 14px; width: 2px; background: #30363d; }
+    .mock-r4-st.mock-r4-st-last::before { display: none; }
+    .mock-r4-st i { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid #3a4350; background: #0d1117; position: relative; z-index: 1;
+      font-style: normal; font-size: 9px; line-height: 12px; text-align: center; color: #0b0f14; }
+    .mock-r4-st b { font-size: 12.5px; font-weight: 600; color: #8b949e; white-space: nowrap; }
+    .mock-r4-st.mock-r4-st-done i { background: #7ee2a8; border-color: #7ee2a8; }
+    .mock-r4-st.mock-r4-st-done b { color: #a8b3bf; }
+    .mock-r4-st.mock-r4-st-done::before { background: #7ee2a8; }
+    .mock-r4-st.mock-r4-st-now { background: rgba(255, 255, 255, .05); }
+    .mock-r4-st.mock-r4-st-now i { border-color: var(--mock-r4-hl); background: var(--mock-r4-hl); box-shadow: 0 0 8px var(--mock-r4-hl); }
+    .mock-r4-st.mock-r4-st-now b { color: #e6edf3; }
+    .mock-r4-st.mock-r4-st-next { box-shadow: inset 0 0 0 1.5px var(--mock-r4-hl); animation: mock-r4-pulse 1.8s ease-in-out infinite; }
+    .mock-r4-st.mock-r4-st-next i { border-color: var(--mock-r4-hl); }
+    .mock-r4-st.mock-r4-st-next b { color: #e6edf3; }
+    .mock-r4-st u { margin-left: auto; font-size: 11px; text-decoration: none; color: var(--mock-r4-hl); }
+    @keyframes mock-r4-pulse { 0%, 100% { box-shadow: inset 0 0 0 1.5px var(--mock-r4-hl); } 50% { box-shadow: inset 0 0 0 1.5px transparent; } }
+    @media (prefers-reduced-motion: reduce) { .mock-r4-win .mock-r4-st.mock-r4-st-next { animation: none; } }
+
+    /* d1 · Akkordeon */
+    .mock-r4-a-head { padding: 2px 52px 10px 0; border-bottom: 1px solid #262d36; }
+    .mock-r4-a-meta { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 11px; color: #8b949e; white-space: nowrap; }
+    .mock-r4-a-meta i { font-style: normal; color: #484f58; }
+    .mock-r4-a-grp { border-radius: 9px; }
+    .mock-r4-a-grp.mock-r4-a-open { background: #0d1117; border: 1px solid #262d36; padding-bottom: 8px; }
+    .mock-r4-win .mock-r4-a-gh { display: flex; align-items: center; gap: 7px; width: 100%; height: 30px; padding: 0 10px; font-size: 12.5px; }
+    .mock-r4-a-gh i { font-style: normal; width: 10px; color: #6e7681; }
+    .mock-r4-a-gh b { font-weight: 600; color: #c9d1d9; }
+    .mock-r4-a-gh em { margin-left: auto; font-style: normal; font-size: 11px; color: #8b949e; white-space: nowrap; }
+    .mock-r4-a-open .mock-r4-a-gh b { color: var(--mock-r4-hl); }
+    .mock-r4-a-body { padding: 0 10px; }
+    .mock-r4-a-dots { display: flex; gap: 3px; margin-left: auto; }
+    .mock-r4-a-dots s { width: 16px; height: 16px; border-radius: 50%; font-size: 9.5px; line-height: 14px; text-align: center; text-decoration: none; color: #8b949e; border: 1px solid #30363d; }
+    .mock-r4-a-dots s.mock-r4-h-now { color: #0b0f14; background: #58a6ff; border-color: #58a6ff; }
+
+    /* d2 · Zwei Spalten */
+    .mock-r4-panel.mock-r4-pn-2 { display: grid; grid-template-columns: 40px 1fr; grid-template-rows: auto 1fr auto; column-gap: 14px; row-gap: 12px; }
+    .mock-r4-z-head { grid-column: 1 / -1; display: grid; grid-template-columns: 40px 1fr; column-gap: 14px; align-items: center; padding: 3px 52px 10px 0; border-bottom: 1px solid #262d36; }
+    .mock-r4-z-rc { justify-self: center; padding: 2px 6px; border-radius: 6px; font-size: 11px; font-weight: 700; color: #58a6ff; border: 1px solid rgba(88, 166, 255, .5); }
+    .mock-r4-z-rail { display: flex; flex-direction: column; align-items: center; gap: 12px; padding-top: 2px; position: relative; }
+    .mock-r4-z-rail::before { content: ""; position: absolute; top: 14px; height: 132px; width: 2px; background: #30363d; }
+    .mock-r4-win .mock-r4-z-l { position: relative; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; text-align: center; font-size: 12px; font-weight: 700;
+      color: #8b949e; background: #0d1117; border: 2px solid #3a4350; }
+    .mock-r4-win .mock-r4-z-l.mock-r4-done { background: #7ee2a8; border-color: #7ee2a8; color: #0b0f14; }
+    .mock-r4-win .mock-r4-z-l.mock-r4-now { background: var(--mock-r4-hl); border-color: var(--mock-r4-hl); color: #0b0f14; box-shadow: 0 0 10px var(--mock-r4-hl); }
+    .mock-r4-win .mock-r4-z-l.mock-r4-next { border-color: var(--mock-r4-hl); color: #e6edf3; animation: mock-r4-ring 1.8s ease-in-out infinite; }
+    @keyframes mock-r4-ring { 0%, 100% { box-shadow: 0 0 0 0 rgba(244, 114, 182, .6); } 50% { box-shadow: 0 0 0 5px rgba(244, 114, 182, 0); } }
+    @media (prefers-reduced-motion: reduce) { .mock-r4-win .mock-r4-z-l.mock-r4-next { animation: none; } }
+    .mock-r4-z-tools { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
+    .mock-r4-win .mock-r4-z-tool { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; text-align: center; color: #8b949e; border: 1px solid #30363d; font-size: 13px; }
+    .mock-r4-win .mock-r4-z-tool.mock-r4-z-on { color: #e6edf3; border-color: var(--mock-r4-hl); background: rgba(244, 114, 182, .12); }
+    .mock-r4-z-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .mock-r4-z-ct { font-size: 13.5px; font-weight: 650; color: #e6edf3; }
+    .mock-r4-z-ct small { margin-left: 6px; font-size: 11px; font-weight: 400; color: #8b949e; }
+    .mock-r4-z-grp { margin-top: 4px; font-size: 10.5px; font-weight: 700; color: var(--mock-r4-hl); }
+    .mock-r4-z-prev { padding: 10px; border-radius: 9px; border: 1px dashed var(--mock-r4-hl); font-size: 11.5px; color: #a8b3bf; }
+    .mock-r4-z-prev b { color: #e6edf3; }
+    .mock-r4-pn-2 .mock-r4-submit { grid-column: 2; }
+    .mock-r4-panel.mock-r4-pn-2.mock-r4-z-flat { grid-template-columns: 1fr; }
+    .mock-r4-z-flat .mock-r4-z-head { grid-template-columns: auto 1fr; column-gap: 10px; }
+    .mock-r4-z-flat .mock-r4-submit { grid-column: 1; }
+
+    /* d3 · Tabs */
+    .mock-r4-t-head { padding: 0 52px 0 0; }
+    .mock-r4-t-fav { display: inline-flex; align-items: center; gap: 5px; margin-bottom: 3px; padding: 1px 8px; border-radius: 999px; font-size: 11px; color: #e6edf3;
+      background: rgba(227, 179, 65, .12); border: 1px solid rgba(227, 179, 65, .4); }
+    .mock-r4-t-tabs { display: flex; gap: 2px; border-bottom: 1px solid #30363d; }
+    .mock-r4-win .mock-r4-t-tab { display: flex; align-items: center; gap: 5px; padding: 6px 10px 7px; font-size: 12.5px; color: #8b949e; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .mock-r4-win .mock-r4-t-tab.mock-r4-t-on { color: #e6edf3; border-bottom-color: var(--mock-r4-hl); font-weight: 600; }
+    .mock-r4-t-tab s { min-width: 16px; padding: 0 4px; border-radius: 8px; font-size: 10px; line-height: 15px; text-align: center; text-decoration: none; background: #30363d; color: #c9d1d9; }
+    .mock-r4-t-nest { position: relative; display: flex; flex-direction: column; gap: 1px; margin: 1px 0 3px 22px; padding-left: 8px; border-left: 2px solid var(--mock-r4-hl); width: 198px; }
+    .mock-r4-t-nest .mock-r4-row { padding: 3px 7px; }
+    .mock-r4-t-chosen { margin: 0 0 3px 30px; font-size: 11px; color: #a8b3bf; }
+    .mock-r4-win .mock-r4-t-r { display: grid; grid-template-columns: 22px 22px 1fr; align-items: center; gap: 6px; width: 100%; padding: 5px 8px; border-radius: 7px; font-size: 12px; color: #a8b3bf; }
+    .mock-r4-win .mock-r4-t-r.mock-r4-row-on { background: rgba(88, 166, 255, .12); color: #e6edf3; }
+    .mock-r4-t-r b { color: #58a6ff; }
+    .mock-r4-t-r em { font-style: normal; font-size: 10.5px; font-weight: 700; text-align: center; border-radius: 4px; color: #0b0f14; background: #7ee2a8; }
+    .mock-r4-t-r em.mock-r4-t-cur { background: var(--mock-r4-hl); }
+
+  </style>
+
+  <section data-design="akkordeon" data-nav-label="Akkordeon" data-design-active="true"
+           data-design-motto="Menü-Gruppen klappen auf"
+           data-design-traits="Vier Gruppen, nur die aktuelle ist offen|Kopf: Titelzeile plus kleine Meta-Zeile mit Runde, Etappe, Favorit|Zugeklappte Gruppen zeigen ihren Stand in einer Zeile"
+           data-design-icon="&lt;svg viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot;&gt;&lt;rect x=&quot;3&quot; y=&quot;3&quot; width=&quot;18&quot; height=&quot;4&quot; rx=&quot;1&quot;/&gt;&lt;rect x=&quot;3&quot; y=&quot;10&quot; width=&quot;18&quot; height=&quot;7&quot; rx=&quot;1&quot;/&gt;&lt;rect x=&quot;3&quot; y=&quot;20&quot; width=&quot;18&quot; height=&quot;1.5&quot; rx=&quot;.75&quot;/&gt;&lt;/svg&gt;" data-ov-demo=".mock-r4-panel" data-design-color="#2dd4bf">
+
+  <section id="d1-s1" data-nav-label="Menü zu" data-screen data-screen-active="true">
+    <div class="mock-r4-win mock-r4-w1">
+      <button type="button" class="mock-r4-sb mock-r4-sb-hover" data-screen-link="d1-s2" data-tip="3 Richtungen, eine gewählt&#10;Etappe B von 4 · Runde 4" aria-label="Struktur"><span class="mock-r4-gly" aria-hidden="true"><u class="mock-r4-u-done"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-lit"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u></span></button><span class="mock-r4-eye" aria-hidden="true">◉</span><div class="mock-r4-tip">3 Richtungen, eine gewählt<small>Etappe B von 4 · Runde 4</small></div><div class="mock-r4-qnav"><button type="button" class="mock-r4-ovl" data-tip="Übersicht" aria-label="Übersicht">⊞</button><i class="mock-r4-sep"></i><span class="mock-r4-chip mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</span><span class="mock-r4-chip mock-r4-c2 mock-r4-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></span><span class="mock-r4-chip mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</span></div>
+      <div class="mock-r4-stage"><div class="mock-r4-car"><div class="mock-r4-slide mock-r4-side mock-r4-c1"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-1"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-mid mock-r4-c2"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-2"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-side mock-r4-c3"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-3"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div><div class="mock-r4-ovcard mock-r4-c2"><div class="mock-r4-kicker">◆ · 2 · Holo-Deck <span class="mock-r4-star">★</span></div><div class="mock-r4-motto">Der Hub bleibt im Raum.</div><ul class="mock-r4-traits"><li>Hub als drehbarer Raum</li><li>Unterseiten als Hologramme</li><li>Zurück per Schwenk</li></ul></div><button type="button" class="mock-r4-fab mock-r4-fab-menu" data-screen-link="d1-s2" aria-label="Menü">☰</button><span class="mock-r4-fab mock-r4-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r4-d1-s1-a1" data-anno-side="right" data-anno-target=".mock-r4-sb">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d1-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d1-s1-a1" data-anno-bubble="r4-d1-s1-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d1-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s1-a1">
+            <span class="anno-bubble-question">Runder Knopf links neben dem Auge, gleiche Größe und Art, mit dem Mini-Raster als Zeichen: findest du ihn, ohne ihn mit dem Auge zu verwechseln?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d1-s1-a1" data-annotation="r4-d1-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d1-s1-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r4-d1-s1-a2" data-anno-side="right" data-anno-target=".mock-r4-tip">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d1-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d1-s1-a2" data-anno-bubble="r4-d1-s1-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d1-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s1-a2">
+            <span class="anno-bubble-question">Tooltip in zwei Zeilen, genau wie der Menükopf: der Satz oben, Etappe und Runde klein darunter. Oder nur der Satz?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d1-s1-a2" data-annotation="r4-d1-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}">ja genau, aber etappe B ohne "von 4"!</textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d1-s1-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d1-s2" data-nav-label="Menü offen · Struktur" data-screen hidden>
+    <div class="mock-r4-win mock-r4-w1">
+      <button type="button" class="mock-r4-sb mock-r4-sb-on" data-screen-link="d1-s1" data-tip="3 Richtungen, eine gewählt&#10;Etappe B von 4 · Runde 4" aria-label="Struktur"><span class="mock-r4-gly" aria-hidden="true"><u class="mock-r4-u-done"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-lit"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u></span></button><span class="mock-r4-eye" aria-hidden="true">◉</span><div class="mock-r4-qnav"><button type="button" class="mock-r4-ovl" data-tip="Übersicht" aria-label="Übersicht">⊞</button><i class="mock-r4-sep"></i><span class="mock-r4-chip mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</span><span class="mock-r4-chip mock-r4-c2 mock-r4-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></span><span class="mock-r4-chip mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</span></div>
+      <div class="mock-r4-stage mock-r4-dim"><div class="mock-r4-car"><div class="mock-r4-slide mock-r4-side mock-r4-c1"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-1"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-mid mock-r4-c2"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-2"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-side mock-r4-c3"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-3"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r4-panel mock-r4-pn-1"><div class="mock-r4-a-head"><div class="mock-r4-title">3 Richtungen, eine gewählt</div><div class="mock-r4-a-meta"><span>Runde 4</span><i>·</i><span>Etappe B von 4</span><i>·</i><span><span class="mock-r4-star">★</span> Holo-Deck</span></div></div><div class="mock-r4-a-grp mock-r4-a-open"><button type="button" class="mock-r4-a-gh"><i>▾</i><b>Etappen</b><em>B · Struktur</em></button><div class="mock-r4-a-body"><div class="mock-r4-step"><button type="button" class="mock-r4-st mock-r4-st-done"><i>✓</i><b>A · Use Cases</b></button><button type="button" class="mock-r4-st mock-r4-st-now"><i></i><b>B · Struktur</b></button><button type="button" class="mock-r4-st" data-screen-link="d1-s4"><i></i><b>C · Visuelles Design</b></button><button type="button" class="mock-r4-st mock-r4-st-last"><i></i><b>D · Animation</b></button></div></div></div><div class="mock-r4-a-grp"><button type="button" class="mock-r4-a-gh"><i>▸</i><b>Varianten</b><em>3 · <span class="mock-r4-star">★</span> Holo-Deck</em></button></div><div class="mock-r4-a-grp"><button type="button" class="mock-r4-a-gh" data-screen-link="d1-s3"><i>▸</i><b>Historie</b><em>Runde 4</em></button></div><div class="mock-r4-a-grp"><button type="button" class="mock-r4-a-gh" data-screen-link="d1-s3"><i>▸</i><b>Inhalt</b><em>4 Seiten</em></button></div></div>
+      <button type="button" class="mock-r4-fab mock-r4-fab-menu" data-screen-link="d1-s1" aria-label="Menü">✕</button><span class="mock-r4-fab mock-r4-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r4-d1-s2-a1" data-anno-side="left" data-anno-target=".mock-r4-a-head">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d1-s2-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s2-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d1-s2-a1" data-anno-bubble="r4-d1-s2-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d1-s2-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s2-a1">
+            <span class="anno-bubble-question">Kopf: der Titel in einer Zeile mit dem ✕, darunter klein Runde · Etappe · Favorit. Passt der Titel so zu den anderen Kopf-Elementen?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d1-s2-a1" data-annotation="r4-d1-s2-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d1-s2-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r4-d1-s2-a2" data-anno-side="left" data-anno-target=".mock-r4-a-grp:not(.mock-r4-a-open) em">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d1-s2-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s2-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d1-s2-a2" data-anno-bubble="r4-d1-s2-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d1-s2-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s2-a2">
+            <span class="anno-bubble-question">Zugeklappte Gruppen zeigen rechts ihren Stand (★ Holo-Deck, Runde 4, 4 Seiten): reicht dir das, um sie meist zu lassen?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d1-s2-a2" data-annotation="r4-d1-s2-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d1-s2-a2"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r4-d1-s2-a3" data-anno-side="left" data-anno-target=".mock-r4-step">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d1-s2-a3" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s2-a3" aria-label="{{anno.pin_label}}">3</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d1-s2-a3" data-anno-bubble="r4-d1-s2-a3" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d1-s2-a3" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s2-a3">
+            <span class="anno-bubble-question">Nur die aktuelle Gruppe ist offen, hier Etappen: Buchstabe und Name, sonst nichts. Soll beim Öffnen immer Etappen aufgehen, oder die zuletzt offene Gruppe?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d1-s2-a3" data-annotation="r4-d1-s2-a3" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d1-s2-a3"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d1-s3" data-nav-label="Menü offen · Historie & Inhalt" data-screen hidden>
+    <div class="mock-r4-win mock-r4-w1">
+      <button type="button" class="mock-r4-sb mock-r4-sb-on" data-screen-link="d1-s2" data-tip="3 Richtungen, eine gewählt&#10;Etappe B von 4 · Runde 4" aria-label="Struktur"><span class="mock-r4-gly" aria-hidden="true"><u class="mock-r4-u-done"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-lit"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u></span></button><span class="mock-r4-eye" aria-hidden="true">◉</span><div class="mock-r4-qnav"><button type="button" class="mock-r4-ovl" data-tip="Übersicht" aria-label="Übersicht">⊞</button><i class="mock-r4-sep"></i><span class="mock-r4-chip mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</span><span class="mock-r4-chip mock-r4-c2 mock-r4-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></span><span class="mock-r4-chip mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</span></div>
+      <div class="mock-r4-stage mock-r4-dim"><div class="mock-r4-car"><div class="mock-r4-slide mock-r4-side mock-r4-c1"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-1"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-mid mock-r4-c2"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-2"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-side mock-r4-c3"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-3"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r4-panel mock-r4-pn-1"><div class="mock-r4-a-head"><div class="mock-r4-title">3 Richtungen, eine gewählt</div><div class="mock-r4-a-meta"><span>Runde 4</span><i>·</i><span>Etappe B von 4</span><i>·</i><span><span class="mock-r4-star">★</span> Holo-Deck</span></div></div><div class="mock-r4-a-grp"><button type="button" class="mock-r4-a-gh" data-screen-link="d1-s2"><i>▸</i><b>Etappen</b><em>B · Struktur</em></button></div><div class="mock-r4-a-grp"><button type="button" class="mock-r4-a-gh"><i>▸</i><b>Varianten</b><em>3 · <span class="mock-r4-star">★</span> Holo-Deck</em></button></div><div class="mock-r4-a-grp"><button type="button" class="mock-r4-a-gh"><i>▸</i><b>Historie</b><span class="mock-r4-a-dots"><s class="">1</s><s class="">2</s><s class="">3</s><s class="mock-r4-h-now">4</s></span></button></div><div class="mock-r4-a-grp mock-r4-a-open"><button type="button" class="mock-r4-a-gh"><i>▾</i><b>Inhalt</b><em>Holo-Deck</em></button><div class="mock-r4-a-body"><button type="button" class="mock-r4-row">⊞ Übersicht</button><button type="button" class="mock-r4-row mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</button><button type="button" class="mock-r4-row mock-r4-c2 mock-r4-row-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></button><div class="mock-r4-pages mock-r4-c2"><span class="">Start</span><span class="mock-r4-pg-on">Hub</span><span class="">Detail</span><span class="">Profil</span></div><button type="button" class="mock-r4-row mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</button></div></div></div>
+      <button type="button" class="mock-r4-fab mock-r4-fab-menu" data-screen-link="d1-s1" aria-label="Menü">✕</button><span class="mock-r4-fab mock-r4-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r4-d1-s3-a1" data-anno-side="left" data-anno-target=".mock-r4-a-dots">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d1-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s3-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d1-s3-a1" data-anno-bubble="r4-d1-s3-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d1-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s3-a1">
+            <span class="anno-bubble-question">Historie bleibt zugeklappt, die Rundenpunkte 1–4 sind trotzdem direkt klickbar. Reicht das, oder brauchst du die Historie als offene Liste?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d1-s3-a1" data-annotation="r4-d1-s3-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d1-s3-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r4-d1-s3-a2" data-anno-side="left" data-anno-target=".mock-r4-pages">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d1-s3-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s3-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d1-s3-a2" data-anno-bubble="r4-d1-s3-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d1-s3-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s3-a2">
+            <span class="anno-bubble-question">Inhalt offen: Seiten nur unter der gewählten Richtung, die beiden anderen bleiben eine Zeile. So schlank genug?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d1-s3-a2" data-annotation="r4-d1-s3-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d1-s3-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d1-s4" data-nav-label="Etappe wechseln" data-screen hidden>
+    <div class="mock-r4-win mock-r4-w1">
+      <button type="button" class="mock-r4-sb mock-r4-sb-on" data-screen-link="d1-s1" data-tip="3 Richtungen, eine gewählt&#10;Etappe B von 4 · Runde 4" aria-label="Struktur"><span class="mock-r4-gly" aria-hidden="true"><u class="mock-r4-u-done"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-lit"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u></span></button><span class="mock-r4-eye" aria-hidden="true">◉</span><div class="mock-r4-qnav"><button type="button" class="mock-r4-ovl" data-tip="Übersicht" aria-label="Übersicht">⊞</button><i class="mock-r4-sep"></i><span class="mock-r4-chip mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</span><span class="mock-r4-chip mock-r4-c2 mock-r4-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></span><span class="mock-r4-chip mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</span></div>
+      <div class="mock-r4-stage mock-r4-dim"><div class="mock-r4-car"><div class="mock-r4-slide mock-r4-side mock-r4-c1"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-1"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-mid mock-r4-c2"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-2"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-side mock-r4-c3"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-3"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r4-panel mock-r4-pn-1"><div class="mock-r4-a-head"><div class="mock-r4-title">3 Richtungen, eine gewählt</div><div class="mock-r4-a-meta"><span>Runde 4</span><i>·</i><span>Etappe B von 4</span><i>·</i><span><span class="mock-r4-star">★</span> Holo-Deck</span></div></div><div class="mock-r4-a-grp mock-r4-a-open"><button type="button" class="mock-r4-a-gh"><i>▾</i><b>Etappen</b><em>B → C</em></button><div class="mock-r4-a-body"><div class="mock-r4-step"><button type="button" class="mock-r4-st mock-r4-st-done"><i>✓</i><b>A · Use Cases</b></button><button type="button" class="mock-r4-st mock-r4-st-now"><i></i><b>B · Struktur</b></button><button type="button" class="mock-r4-st mock-r4-st-next"><i></i><b>C · Visuelles Design</b><u>›</u></button><button type="button" class="mock-r4-st mock-r4-st-last"><i></i><b>D · Animation</b></button></div></div></div><div class="mock-r4-a-grp"><button type="button" class="mock-r4-a-gh"><i>▸</i><b>Varianten</b><em><span class="mock-r4-star">★</span> Holo-Deck geht mit</em></button></div><div class="mock-r4-submit"><button type="button" class="mock-r4-btn" data-screen-link="d1-s1">👉 Zur nächsten Runde<small>noch eine Runde in B · Struktur</small></button><button type="button" class="mock-r4-btn mock-r4-btn-main mock-r4-next" data-screen-link="d1-s1">Nächste Etappe ›<small>weiter mit C · Visuelles Design</small></button></div></div>
+      <button type="button" class="mock-r4-fab mock-r4-fab-menu" data-screen-link="d1-s1" aria-label="Menü">✕</button><span class="mock-r4-fab mock-r4-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r4-d1-s4-a1" data-anno-side="left" data-anno-target=".mock-r4-st-next">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d1-s4-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s4-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d1-s4-a1" data-anno-bubble="r4-d1-s4-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d1-s4-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s4-a1">
+            <span class="anno-bubble-question">C ist als nächste Etappe markiert, die Gruppe Etappen öffnet sich dafür von selbst. Gewünscht, oder soll das Menü still bleiben?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d1-s4-a1" data-annotation="r4-d1-s4-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d1-s4-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r4-d1-s4-a2" data-anno-side="left" data-anno-target=".mock-r4-next">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d1-s4-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s4-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d1-s4-a2" data-anno-bubble="r4-d1-s4-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d1-s4-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s4-a2">
+            <span class="anno-bubble-question">In dieser Ansicht fallen Historie und Inhalt weg, unten steht nur Absenden mit „Nächste Etappe ›“. Fehlt dir hier etwas?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d1-s4-a2" data-annotation="r4-d1-s4-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d1-s4-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d1-s5" data-nav-label="Ohne Etappen" data-screen hidden>
+    <div class="mock-r4-win mock-r4-w1">
+      <span class="mock-r4-eye mock-r4-eye-home" aria-hidden="true">◉</span><div class="mock-r4-qnav"><button type="button" class="mock-r4-ovl" data-tip="Übersicht" aria-label="Übersicht">⊞</button><i class="mock-r4-sep"></i><span class="mock-r4-chip mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</span><span class="mock-r4-chip mock-r4-c2 mock-r4-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></span><span class="mock-r4-chip mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</span></div>
+      <div class="mock-r4-stage mock-r4-dim"><div class="mock-r4-car"><div class="mock-r4-slide mock-r4-side mock-r4-c1"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-1"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-mid mock-r4-c2"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-2"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-side mock-r4-c3"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-3"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r4-panel mock-r4-pn-1"><div class="mock-r4-a-head"><div class="mock-r4-title">3 Richtungen, eine gewählt</div><div class="mock-r4-a-meta"><span>Runde 4</span><i>·</i><span><span class="mock-r4-star">★</span> Holo-Deck</span></div></div><div class="mock-r4-a-grp"><button type="button" class="mock-r4-a-gh"><i>▸</i><b>Varianten</b><em>3 · <span class="mock-r4-star">★</span> Holo-Deck</em></button></div><div class="mock-r4-a-grp"><button type="button" class="mock-r4-a-gh"><i>▸</i><b>Historie</b><span class="mock-r4-a-dots"><s class="">1</s><s class="">2</s><s class="">3</s><s class="mock-r4-h-now">4</s></span></button></div><div class="mock-r4-a-grp mock-r4-a-open"><button type="button" class="mock-r4-a-gh"><i>▾</i><b>Inhalt</b><em>Holo-Deck</em></button><div class="mock-r4-a-body"><button type="button" class="mock-r4-row">⊞ Übersicht</button><button type="button" class="mock-r4-row mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</button><button type="button" class="mock-r4-row mock-r4-c2 mock-r4-row-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></button><div class="mock-r4-pages mock-r4-c2"><span class="">Start</span><span class="mock-r4-pg-on">Hub</span><span class="">Detail</span><span class="">Profil</span></div><button type="button" class="mock-r4-row mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</button></div></div><div class="mock-r4-submit"><button type="button" class="mock-r4-btn mock-r4-btn-main" data-screen-link="d1-s1">👉 Zur nächsten Runde</button><button type="button" class="mock-r4-btn">Jetzt umsetzen</button></div></div>
+      <button type="button" class="mock-r4-fab mock-r4-fab-menu" data-screen-link="d1-s1" aria-label="Menü">✕</button><span class="mock-r4-fab mock-r4-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r4-d1-s5-a1" data-anno-side="left" data-anno-target=".mock-r4-a-grp">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d1-s5-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s5-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d1-s5-a1" data-anno-bubble="r4-d1-s5-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d1-s5-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d1-s5-a1">
+            <span class="anno-bubble-question">Ohne Etappen: kein Knopf neben dem Auge, keine Etappen-Gruppe, Absenden wie heute. Sollen die Gruppen hier bleiben, oder exakt das heutige Menü?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d1-s5-a1" data-annotation="r4-d1-s5-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d1-s5-a1"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  </section>
+
+  <section data-design="zwei-spalten" data-nav-label="Zwei Spalten" hidden
+           data-design-motto="Etappen-Leiste neben dem Inhalt"
+           data-design-traits="Schmale Leiste links mit den Buchstaben A–D|Rechts nur Richtungen und Seiten der gewählten Etappe|Titel über beide Spalten, Rundenchip über der Leiste"
+           data-design-icon="&lt;svg viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot;&gt;&lt;rect x=&quot;3&quot; y=&quot;3&quot; width=&quot;18&quot; height=&quot;18&quot; rx=&quot;2&quot;/&gt;&lt;line x1=&quot;9&quot; y1=&quot;3&quot; x2=&quot;9&quot; y2=&quot;21&quot;/&gt;&lt;circle cx=&quot;6&quot; cy=&quot;8&quot; r=&quot;1&quot;/&gt;&lt;circle cx=&quot;6&quot; cy=&quot;12&quot; r=&quot;1&quot;/&gt;&lt;circle cx=&quot;6&quot; cy=&quot;16&quot; r=&quot;1&quot;/&gt;&lt;/svg&gt;" data-ov-demo=".mock-r4-panel" data-design-color="#f472b6">
+
+  <section id="d2-s1" data-nav-label="Menü zu" data-screen data-screen-active="true">
+    <div class="mock-r4-win mock-r4-w2">
+      <button type="button" class="mock-r4-sb mock-r4-sb-hover" data-screen-link="d2-s2" data-tip="3 Richtungen, eine gewählt&#10;Etappe B · Struktur" aria-label="Struktur"><span class="mock-r4-gly" aria-hidden="true"><u class="mock-r4-u-done"></u><u class="mock-r4-u-col"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-lit"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-col"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u></span><b class="mock-r4-sb-badge">B</b></button><span class="mock-r4-eye" aria-hidden="true">◉</span><div class="mock-r4-tip">3 Richtungen, eine gewählt<span class="mock-r4-tip-rail"><span class="mock-r4-done">✓</span><span class="mock-r4-now">B</span><span>C</span><span>D</span></span></div><div class="mock-r4-qnav"><button type="button" class="mock-r4-ovl" data-tip="Übersicht" aria-label="Übersicht">⊞</button><i class="mock-r4-sep"></i><span class="mock-r4-chip mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</span><span class="mock-r4-chip mock-r4-c2 mock-r4-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></span><span class="mock-r4-chip mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</span></div>
+      <div class="mock-r4-stage"><div class="mock-r4-car"><div class="mock-r4-slide mock-r4-side mock-r4-c1"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-1"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-mid mock-r4-c2"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-2"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-side mock-r4-c3"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-3"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div><div class="mock-r4-ovcard mock-r4-c2"><div class="mock-r4-kicker">◆ · 2 · Holo-Deck <span class="mock-r4-star">★</span></div><div class="mock-r4-motto">Der Hub bleibt im Raum.</div><ul class="mock-r4-traits"><li>Hub als drehbarer Raum</li><li>Unterseiten als Hologramme</li><li>Zurück per Schwenk</li></ul></div><button type="button" class="mock-r4-fab mock-r4-fab-menu" data-screen-link="d2-s2" aria-label="Menü">☰</button><span class="mock-r4-fab mock-r4-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r4-d2-s1-a1" data-anno-side="right" data-anno-target=".mock-r4-sb-badge">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d2-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d2-s1-a1" data-anno-bubble="r4-d2-s1-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d2-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s1-a1">
+            <span class="anno-bubble-question">Am Knopf hängt klein der Buchstabe der aktuellen Etappe (B), im Raster leuchtet die ganze Spalte. Hilfreich, oder reicht das Raster allein?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d2-s1-a1" data-annotation="r4-d2-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d2-s1-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r4-d2-s1-a2" data-anno-side="right" data-anno-target=".mock-r4-tip-rail">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d2-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d2-s1-a2" data-anno-bubble="r4-d2-s1-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d2-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s1-a2">
+            <span class="anno-bubble-question">Der Tooltip zeigt unter dem Satz die Leiste A–D in klein, so wie sie im Menü links steht. Wiedererkennung, oder zu viel im Tooltip?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d2-s1-a2" data-annotation="r4-d2-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d2-s1-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d2-s2" data-nav-label="Menü offen · Struktur" data-screen hidden>
+    <div class="mock-r4-win mock-r4-w2">
+      <button type="button" class="mock-r4-sb mock-r4-sb-on" data-screen-link="d2-s1" data-tip="3 Richtungen, eine gewählt&#10;Etappe B · Struktur" aria-label="Struktur"><span class="mock-r4-gly" aria-hidden="true"><u class="mock-r4-u-done"></u><u class="mock-r4-u-col"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-lit"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-col"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u></span><b class="mock-r4-sb-badge">B</b></button><span class="mock-r4-eye" aria-hidden="true">◉</span><div class="mock-r4-qnav"><button type="button" class="mock-r4-ovl" data-tip="Übersicht" aria-label="Übersicht">⊞</button><i class="mock-r4-sep"></i><span class="mock-r4-chip mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</span><span class="mock-r4-chip mock-r4-c2 mock-r4-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></span><span class="mock-r4-chip mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</span></div>
+      <div class="mock-r4-stage mock-r4-dim"><div class="mock-r4-car"><div class="mock-r4-slide mock-r4-side mock-r4-c1"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-1"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-mid mock-r4-c2"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-2"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-side mock-r4-c3"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-3"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r4-panel mock-r4-pn-2"><div class="mock-r4-z-head"><span class="mock-r4-z-rc">R4</span><span class="mock-r4-title">3 Richtungen, eine gewählt</span></div><div class="mock-r4-z-rail"><button type="button" class="mock-r4-z-l mock-r4-done" data-tip="A · Use Cases" aria-label="A · Use Cases">✓</button><button type="button" class="mock-r4-z-l mock-r4-now" data-tip="B · Struktur" aria-label="B · Struktur">B</button><button type="button" class="mock-r4-z-l" data-screen-link="d2-s4" data-tip="C · Visuelles Design" aria-label="C · Visuelles Design">C</button><button type="button" class="mock-r4-z-l" data-tip="D · Animation" aria-label="D · Animation">D</button><div class="mock-r4-z-tools"><button type="button" class="mock-r4-z-tool" data-tip="Historie" aria-label="Historie">⟲</button><button type="button" class="mock-r4-z-tool" data-tip="Inhalt" aria-label="Inhalt">≡</button></div></div><div class="mock-r4-z-main"><div class="mock-r4-z-ct">B · Struktur<small>3 Richtungen</small></div><button type="button" class="mock-r4-row mock-r4-c1" data-screen-link="d2-s3"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</button><button type="button" class="mock-r4-row mock-r4-c2 mock-r4-row-on" data-screen-link="d2-s3"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></button><div class="mock-r4-pages mock-r4-c2"><span class="">Start</span><span class="mock-r4-pg-on">Hub</span><span class="">Detail</span><span class="">Profil</span></div><button type="button" class="mock-r4-row mock-r4-c3" data-screen-link="d2-s3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</button></div></div>
+      <button type="button" class="mock-r4-fab mock-r4-fab-menu" data-screen-link="d2-s1" aria-label="Menü">✕</button><span class="mock-r4-fab mock-r4-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r4-d2-s2-a1" data-anno-side="left" data-anno-target=".mock-r4-z-head">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d2-s2-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s2-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d2-s2-a1" data-anno-bubble="r4-d2-s2-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d2-s2-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s2-a1">
+            <span class="anno-bubble-question">Der Titel spannt über beide Spalten, der Rundenchip R4 sitzt genau über der Leiste, das ✕ rechts; der Favorit steht nur als ★ an seiner Zeile. Passt das zusammen?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d2-s2-a1" data-annotation="r4-d2-s2-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d2-s2-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r4-d2-s2-a2" data-anno-side="left" data-anno-target=".mock-r4-z-rail">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d2-s2-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s2-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d2-s2-a2" data-anno-bubble="r4-d2-s2-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d2-s2-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s2-a2">
+            <span class="anno-bubble-question">Links nur die Buchstaben A–D, der Name steht rechts als Spaltentitel und beim Überfahren eines Buchstabens. Reicht dir das statt der Namensliste?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d2-s2-a2" data-annotation="r4-d2-s2-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d2-s2-a2"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r4-d2-s2-a3" data-anno-side="left" data-anno-target=".mock-r4-pages">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d2-s2-a3" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s2-a3" aria-label="{{anno.pin_label}}">3</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d2-s2-a3" data-anno-bubble="r4-d2-s2-a3" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d2-s2-a3" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s2-a3">
+            <span class="anno-bubble-question">Rechts nur, was zur gewählten Etappe gehört: die Richtungen, unter der aktiven ihre Seiten. Fehlt rechts etwas?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d2-s2-a3" data-annotation="r4-d2-s2-a3" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d2-s2-a3"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d2-s3" data-nav-label="Menü offen · Historie & Inhalt" data-screen hidden>
+    <div class="mock-r4-win mock-r4-w2">
+      <button type="button" class="mock-r4-sb mock-r4-sb-on" data-screen-link="d2-s2" data-tip="3 Richtungen, eine gewählt&#10;Etappe B · Struktur" aria-label="Struktur"><span class="mock-r4-gly" aria-hidden="true"><u class="mock-r4-u-done"></u><u class="mock-r4-u-col"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-lit"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-col"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u></span><b class="mock-r4-sb-badge">B</b></button><span class="mock-r4-eye" aria-hidden="true">◉</span><div class="mock-r4-qnav"><button type="button" class="mock-r4-ovl" data-tip="Übersicht" aria-label="Übersicht">⊞</button><i class="mock-r4-sep"></i><span class="mock-r4-chip mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</span><span class="mock-r4-chip mock-r4-c2 mock-r4-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></span><span class="mock-r4-chip mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</span></div>
+      <div class="mock-r4-stage mock-r4-dim"><div class="mock-r4-car"><div class="mock-r4-slide mock-r4-side mock-r4-c1"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-1"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-mid mock-r4-c2"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-2"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-side mock-r4-c3"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-3"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r4-panel mock-r4-pn-2"><div class="mock-r4-z-head"><span class="mock-r4-z-rc">R4</span><span class="mock-r4-title">3 Richtungen, eine gewählt</span></div><div class="mock-r4-z-rail"><button type="button" class="mock-r4-z-l mock-r4-done" data-tip="A · Use Cases" aria-label="A · Use Cases">✓</button><button type="button" class="mock-r4-z-l mock-r4-now" data-tip="B · Struktur" aria-label="B · Struktur">B</button><button type="button" class="mock-r4-z-l" data-tip="C · Visuelles Design" aria-label="C · Visuelles Design">C</button><button type="button" class="mock-r4-z-l" data-tip="D · Animation" aria-label="D · Animation">D</button><div class="mock-r4-z-tools"><button type="button" class="mock-r4-z-tool mock-r4-z-on" data-tip="Historie" aria-label="Historie">⟲</button><button type="button" class="mock-r4-z-tool" data-tip="Inhalt" aria-label="Inhalt">≡</button></div></div><div class="mock-r4-z-main"><div class="mock-r4-z-ct">Historie<small>nach Etappe</small></div><div class="mock-r4-z-grp">B · Struktur</div><div class="mock-r4-hist"><span class="mock-r4-h-now">Runde 4</span><span>Runde 3</span><span>Runde 2</span></div><div class="mock-r4-z-grp">A · Use Cases</div><div class="mock-r4-hist"><span>Runde 1</span></div><div class="mock-r4-z-ct">Inhalt<small>Holo-Deck</small></div><button type="button" class="mock-r4-row">⊞ Übersicht</button><div class="mock-r4-pages mock-r4-c2"><span class="">Start</span><span class="mock-r4-pg-on">Hub</span><span class="">Detail</span><span class="">Profil</span></div></div></div>
+      <button type="button" class="mock-r4-fab mock-r4-fab-menu" data-screen-link="d2-s1" aria-label="Menü">✕</button><span class="mock-r4-fab mock-r4-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r4-d2-s3-a1" data-anno-side="left" data-anno-target=".mock-r4-z-tools">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d2-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s3-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d2-s3-a1" data-anno-bubble="r4-d2-s3-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d2-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s3-a1">
+            <span class="anno-bubble-question">Historie und Inhalt sind zwei Symbole unten in der Leiste, sie tauschen nur die rechte Spalte. Findest du sie dort?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d2-s3-a1" data-annotation="r4-d2-s3-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d2-s3-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r4-d2-s3-a2" data-anno-side="left" data-anno-target=".mock-r4-z-grp">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d2-s3-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s3-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d2-s3-a2" data-anno-bubble="r4-d2-s3-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d2-s3-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s3-a2">
+            <span class="anno-bubble-question">Die Runden stehen nach Etappe gruppiert (B: Runde 2–4, A: Runde 1). Hilft das, oder lieber eine einfache Zahlenreihe?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d2-s3-a2" data-annotation="r4-d2-s3-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d2-s3-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d2-s4" data-nav-label="Etappe wechseln" data-screen hidden>
+    <div class="mock-r4-win mock-r4-w2">
+      <button type="button" class="mock-r4-sb mock-r4-sb-on" data-screen-link="d2-s1" data-tip="3 Richtungen, eine gewählt&#10;Etappe B · Struktur" aria-label="Struktur"><span class="mock-r4-gly" aria-hidden="true"><u class="mock-r4-u-done"></u><u class="mock-r4-u-col"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-lit"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-col"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u></span><b class="mock-r4-sb-badge">B</b></button><span class="mock-r4-eye" aria-hidden="true">◉</span><div class="mock-r4-qnav"><button type="button" class="mock-r4-ovl" data-tip="Übersicht" aria-label="Übersicht">⊞</button><i class="mock-r4-sep"></i><span class="mock-r4-chip mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</span><span class="mock-r4-chip mock-r4-c2 mock-r4-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></span><span class="mock-r4-chip mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</span></div>
+      <div class="mock-r4-stage mock-r4-dim"><div class="mock-r4-car"><div class="mock-r4-slide mock-r4-side mock-r4-c1"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-1"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-mid mock-r4-c2"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-2"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-side mock-r4-c3"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-3"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r4-panel mock-r4-pn-2"><div class="mock-r4-z-head"><span class="mock-r4-z-rc">R4</span><span class="mock-r4-title">3 Richtungen, eine gewählt</span></div><div class="mock-r4-z-rail"><button type="button" class="mock-r4-z-l mock-r4-done" data-tip="A · Use Cases" aria-label="A · Use Cases">✓</button><button type="button" class="mock-r4-z-l mock-r4-done" data-tip="B · Struktur" aria-label="B · Struktur">✓</button><button type="button" class="mock-r4-z-l mock-r4-next" data-tip="C · Visuelles Design" aria-label="C · Visuelles Design">C</button><button type="button" class="mock-r4-z-l" data-tip="D · Animation" aria-label="D · Animation">D</button><div class="mock-r4-z-tools"><button type="button" class="mock-r4-z-tool" data-tip="Historie" aria-label="Historie">⟲</button><button type="button" class="mock-r4-z-tool" data-tip="Inhalt" aria-label="Inhalt">≡</button></div></div><div class="mock-r4-z-main"><div class="mock-r4-z-ct">C · Visuelles Design<small>als Nächstes</small></div><div class="mock-r4-z-prev">Übernimmt aus B: <b><span class="mock-r4-star">★</span> 2 · Holo-Deck</b> mit allen 4 Seiten. Runde 5 beginnt mit neuen Varianten.</div></div><div class="mock-r4-submit"><button type="button" class="mock-r4-btn" data-screen-link="d2-s1">👉 Zur nächsten Runde<small>noch eine Runde in B · Struktur</small></button><button type="button" class="mock-r4-btn mock-r4-btn-main mock-r4-next" data-screen-link="d2-s1">Nächste Etappe ›<small>weiter mit C · Visuelles Design</small></button></div></div>
+      <button type="button" class="mock-r4-fab mock-r4-fab-menu" data-screen-link="d2-s1" aria-label="Menü">✕</button><span class="mock-r4-fab mock-r4-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r4-d2-s4-a1" data-anno-side="left" data-anno-target=".mock-r4-z-l.mock-r4-next">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d2-s4-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s4-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d2-s4-a1" data-anno-bubble="r4-d2-s4-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d2-s4-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s4-a1">
+            <span class="anno-bubble-question">In der Leiste ist B abgehakt, um C läuft ein Ring. Deutlich genug, dass C die nächste Etappe ist?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d2-s4-a1" data-annotation="r4-d2-s4-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d2-s4-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r4-d2-s4-a2" data-anno-side="left" data-anno-target=".mock-r4-z-prev">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d2-s4-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s4-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d2-s4-a2" data-anno-bubble="r4-d2-s4-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d2-s4-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s4-a2">
+            <span class="anno-bubble-question">Rechts eine Vorschau auf C: was aus B mitgeht. Willst du das vor „Nächste Etappe ›“ sehen, oder ist es überflüssig?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d2-s4-a2" data-annotation="r4-d2-s4-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d2-s4-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d2-s5" data-nav-label="Ohne Etappen" data-screen hidden>
+    <div class="mock-r4-win mock-r4-w2">
+      <span class="mock-r4-eye mock-r4-eye-home" aria-hidden="true">◉</span><div class="mock-r4-qnav"><button type="button" class="mock-r4-ovl" data-tip="Übersicht" aria-label="Übersicht">⊞</button><i class="mock-r4-sep"></i><span class="mock-r4-chip mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</span><span class="mock-r4-chip mock-r4-c2 mock-r4-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></span><span class="mock-r4-chip mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</span></div>
+      <div class="mock-r4-stage mock-r4-dim"><div class="mock-r4-car"><div class="mock-r4-slide mock-r4-side mock-r4-c1"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-1"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-mid mock-r4-c2"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-2"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-side mock-r4-c3"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-3"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r4-panel mock-r4-pn-2 mock-r4-z-flat"><div class="mock-r4-z-head"><span class="mock-r4-z-rc">R4</span><span class="mock-r4-title">3 Richtungen, eine gewählt</span></div><div class="mock-r4-z-main"><div class="mock-r4-z-ct">Inhalt<small>3 Richtungen</small></div><button type="button" class="mock-r4-row mock-r4-c1" data-screen-link="d2-s1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</button><button type="button" class="mock-r4-row mock-r4-c2 mock-r4-row-on" data-screen-link="d2-s1"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></button><div class="mock-r4-pages mock-r4-c2"><span class="">Start</span><span class="mock-r4-pg-on">Hub</span><span class="">Detail</span><span class="">Profil</span></div><button type="button" class="mock-r4-row mock-r4-c3" data-screen-link="d2-s1"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</button><div class="mock-r4-z-ct">Historie</div><div class="mock-r4-hist"><span>Runde 1</span><span>Runde 2</span><span>Runde 3</span><span class="mock-r4-h-now">Runde 4</span></div></div><div class="mock-r4-submit"><button type="button" class="mock-r4-btn mock-r4-btn-main" data-screen-link="d2-s1">👉 Zur nächsten Runde</button><button type="button" class="mock-r4-btn">Jetzt umsetzen</button></div></div>
+      <button type="button" class="mock-r4-fab mock-r4-fab-menu" data-screen-link="d2-s1" aria-label="Menü">✕</button><span class="mock-r4-fab mock-r4-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r4-d2-s5-a1" data-anno-side="left" data-anno-target=".mock-r4-z-main">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d2-s5-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s5-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d2-s5-a1" data-anno-bubble="r4-d2-s5-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d2-s5-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d2-s5-a1">
+            <span class="anno-bubble-question">Ohne Etappen fällt die Leiste weg, übrig bleibt eine Spalte wie heute, nur mit dem Titel oben. Gut so?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d2-s5-a1" data-annotation="r4-d2-s5-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d2-s5-a1"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  </section>
+
+  <section data-design="tabs" data-nav-label="Tabs" hidden
+           data-design-motto="Menü mit drei Tabs"
+           data-design-traits="Tabs Struktur · Historie · Inhalt unter dem Titel|Richtungen hängen nur unter der aktuellen Etappe|Favorit als Chip über dem Titel, Rundenzahl am Tab Historie"
+           data-design-icon="&lt;svg viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot;&gt;&lt;path d=&quot;M3 9V5a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v4&quot;/&gt;&lt;path d=&quot;M10 9V6h5v3&quot;/&gt;&lt;rect x=&quot;3&quot; y=&quot;9&quot; width=&quot;18&quot; height=&quot;12&quot; rx=&quot;1&quot;/&gt;&lt;/svg&gt;" data-ov-demo=".mock-r4-panel" data-design-color="#a3e635">
+
+  <section id="d3-s1" data-nav-label="Menü zu" data-screen data-screen-active="true">
+    <div class="mock-r4-win mock-r4-w3">
+      <button type="button" class="mock-r4-sb mock-r4-sb-hover" data-screen-link="d3-s2" data-tip="3 Richtungen, eine gewählt" aria-label="Struktur"><span class="mock-r4-gly" aria-hidden="true"><u class="mock-r4-u-done"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-lit"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u></span></button><span class="mock-r4-eye" aria-hidden="true">◉</span><div class="mock-r4-tip">3 Richtungen, eine gewählt<span class="mock-r4-tip-tabs"><b>Struktur</b><span>Historie</span><span>Inhalt</span></span></div><div class="mock-r4-qnav"><button type="button" class="mock-r4-ovl" data-tip="Übersicht" aria-label="Übersicht">⊞</button><i class="mock-r4-sep"></i><span class="mock-r4-chip mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</span><span class="mock-r4-chip mock-r4-c2 mock-r4-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></span><span class="mock-r4-chip mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</span></div>
+      <div class="mock-r4-stage"><div class="mock-r4-car"><div class="mock-r4-slide mock-r4-side mock-r4-c1"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-1"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-mid mock-r4-c2"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-2"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-side mock-r4-c3"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-3"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div><div class="mock-r4-ovcard mock-r4-c2"><div class="mock-r4-kicker">◆ · 2 · Holo-Deck <span class="mock-r4-star">★</span></div><div class="mock-r4-motto">Der Hub bleibt im Raum.</div><ul class="mock-r4-traits"><li>Hub als drehbarer Raum</li><li>Unterseiten als Hologramme</li><li>Zurück per Schwenk</li></ul></div><button type="button" class="mock-r4-fab mock-r4-fab-menu" data-screen-link="d3-s3" aria-label="Menü">☰</button><span class="mock-r4-fab mock-r4-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r4-d3-s1-a1" data-anno-side="right" data-anno-target=".mock-r4-sb">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d3-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d3-s1-a1" data-anno-bubble="r4-d3-s1-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d3-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s1-a1">
+            <span class="anno-bubble-question">Der runde Knopf öffnet das Menü direkt auf dem Tab Struktur, der ☰-Knopf rechts auf dem zuletzt offenen Tab. Ist dieser Unterschied klar?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d3-s1-a1" data-annotation="r4-d3-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d3-s1-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r4-d3-s1-a2" data-anno-side="right" data-anno-target=".mock-r4-tip-tabs">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d3-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d3-s1-a2" data-anno-bubble="r4-d3-s1-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d3-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s1-a2">
+            <span class="anno-bubble-question">Im Tooltip steht unter dem Satz, auf welchem Tab das Menü aufgeht. Nützlich, oder genügt der Satz allein?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d3-s1-a2" data-annotation="r4-d3-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d3-s1-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d3-s2" data-nav-label="Menü offen · Struktur" data-screen hidden>
+    <div class="mock-r4-win mock-r4-w3">
+      <button type="button" class="mock-r4-sb mock-r4-sb-on" data-screen-link="d3-s1" data-tip="3 Richtungen, eine gewählt" aria-label="Struktur"><span class="mock-r4-gly" aria-hidden="true"><u class="mock-r4-u-done"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-lit"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u></span></button><span class="mock-r4-eye" aria-hidden="true">◉</span><div class="mock-r4-qnav"><button type="button" class="mock-r4-ovl" data-tip="Übersicht" aria-label="Übersicht">⊞</button><i class="mock-r4-sep"></i><span class="mock-r4-chip mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</span><span class="mock-r4-chip mock-r4-c2 mock-r4-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></span><span class="mock-r4-chip mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</span></div>
+      <div class="mock-r4-stage mock-r4-dim"><div class="mock-r4-car"><div class="mock-r4-slide mock-r4-side mock-r4-c1"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-1"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-mid mock-r4-c2"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-2"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-side mock-r4-c3"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-3"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r4-panel mock-r4-pn-3"><div class="mock-r4-t-head"><span class="mock-r4-t-fav"><span class="mock-r4-star">★</span> 2 · Holo-Deck</span><div class="mock-r4-title">3 Richtungen, eine gewählt</div></div><div class="mock-r4-t-tabs"><button type="button" class="mock-r4-t-tab mock-r4-t-on">Struktur</button><button type="button" class="mock-r4-t-tab" data-screen-link="d3-s3">Historie <s>4</s></button><button type="button" class="mock-r4-t-tab" data-screen-link="d3-s3">Inhalt</button></div><div class="mock-r4-step"><button type="button" class="mock-r4-st mock-r4-st-done"><i>✓</i><b>A · Use Cases</b></button><button type="button" class="mock-r4-st mock-r4-st-now"><i></i><b>B · Struktur</b></button><div class="mock-r4-t-nest"><button type="button" class="mock-r4-row mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</button><button type="button" class="mock-r4-row mock-r4-c2 mock-r4-row-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></button><button type="button" class="mock-r4-row mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</button></div><button type="button" class="mock-r4-st" data-screen-link="d3-s4"><i></i><b>C · Visuelles Design</b></button><button type="button" class="mock-r4-st mock-r4-st-last"><i></i><b>D · Animation</b></button></div></div>
+      <button type="button" class="mock-r4-fab mock-r4-fab-menu" data-screen-link="d3-s1" aria-label="Menü">✕</button><span class="mock-r4-fab mock-r4-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r4-d3-s2-a1" data-anno-side="left" data-anno-target=".mock-r4-t-head">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d3-s2-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s2-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d3-s2-a1" data-anno-bubble="r4-d3-s2-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d3-s2-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s2-a1">
+            <span class="anno-bubble-question">Favorit als kleiner Chip über dem Titel, das ✕ in derselben Zeile; die Rundenzahl wandert als Zähler an den Tab Historie. Passt der Titel so zum Rest?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d3-s2-a1" data-annotation="r4-d3-s2-a1" data-attachable placeholder="{{anno.answer_placeholder}}">nicht darüber, dort haben wir eh wenig platz weegen den letzten runden etc. kein keliner chip dafür für den stern dort</textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d3-s2-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r4-d3-s2-a2" data-anno-side="left" data-anno-target=".mock-r4-t-nest">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d3-s2-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s2-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d3-s2-a2" data-anno-bubble="r4-d3-s2-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d3-s2-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s2-a2">
+            <span class="anno-bubble-question">Die Richtungen hängen nur unter der aktuellen Etappe B, die anderen Etappen bleiben eine Zeile. Verständlich, oder lieber eine eigene Varianten-Liste?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d3-s2-a2" data-annotation="r4-d3-s2-a2" data-attachable placeholder="{{anno.answer_placeholder}}">Ja sehr gut!</textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d3-s2-a2"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r4-d3-s2-a3" data-anno-side="left" data-anno-target=".mock-r4-t-tabs">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d3-s2-a3" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s2-a3" aria-label="{{anno.pin_label}}">3</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d3-s2-a3" data-anno-bubble="r4-d3-s2-a3" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d3-s2-a3" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s2-a3">
+            <span class="anno-bubble-question">Drei Tabs: Struktur · Historie · Inhalt. Richtige Aufteilung und Reihenfolge?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d3-s2-a3" data-annotation="r4-d3-s2-a3" data-attachable placeholder="{{anno.answer_placeholder}}">gute Idee, das könnten dann die dynamischen bis zu 7 etappen sein, gern dann horizontal durchscrollbar</textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d3-s2-a3"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d3-s3" data-nav-label="Menü offen · Historie & Inhalt" data-screen hidden>
+    <div class="mock-r4-win mock-r4-w3">
+      <button type="button" class="mock-r4-sb mock-r4-sb-on" data-screen-link="d3-s2" data-tip="3 Richtungen, eine gewählt" aria-label="Struktur"><span class="mock-r4-gly" aria-hidden="true"><u class="mock-r4-u-done"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-lit"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u></span></button><span class="mock-r4-eye" aria-hidden="true">◉</span><div class="mock-r4-qnav"><button type="button" class="mock-r4-ovl" data-tip="Übersicht" aria-label="Übersicht">⊞</button><i class="mock-r4-sep"></i><span class="mock-r4-chip mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</span><span class="mock-r4-chip mock-r4-c2 mock-r4-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></span><span class="mock-r4-chip mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</span></div>
+      <div class="mock-r4-stage mock-r4-dim"><div class="mock-r4-car"><div class="mock-r4-slide mock-r4-side mock-r4-c1"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-1"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-mid mock-r4-c2"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-2"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-side mock-r4-c3"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-3"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r4-panel mock-r4-pn-3"><div class="mock-r4-t-head"><span class="mock-r4-t-fav"><span class="mock-r4-star">★</span> 2 · Holo-Deck</span><div class="mock-r4-title">3 Richtungen, eine gewählt</div></div><div class="mock-r4-t-tabs"><button type="button" class="mock-r4-t-tab" data-screen-link="d3-s2">Struktur</button><button type="button" class="mock-r4-t-tab mock-r4-t-on">Historie <s>4</s></button><button type="button" class="mock-r4-t-tab" data-screen-link="d3-s2">Inhalt</button></div><div><button type="button" class="mock-r4-t-r mock-r4-row-on"><b>4</b><em class="mock-r4-t-cur">B</em>Runde 4 · jetzt</button><button type="button" class="mock-r4-t-r"><b>3</b><em class="mock-r4-t-cur">B</em>Runde 3</button><button type="button" class="mock-r4-t-r"><b>2</b><em class="mock-r4-t-cur">B</em>Runde 2</button><button type="button" class="mock-r4-t-r"><b>1</b><em class="">A</em>Runde 1</button></div><div><div class="mock-r4-h">Inhalt · nächster Tab</div><button type="button" class="mock-r4-row">⊞ Übersicht</button><div class="mock-r4-pages mock-r4-c2"><span class="">Start</span><span class="mock-r4-pg-on">Hub</span><span class="">Detail</span><span class="">Profil</span></div></div></div>
+      <button type="button" class="mock-r4-fab mock-r4-fab-menu" data-screen-link="d3-s1" aria-label="Menü">✕</button><span class="mock-r4-fab mock-r4-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r4-d3-s3-a1" data-anno-side="left" data-anno-target=".mock-r4-t-r em">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d3-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s3-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d3-s3-a1" data-anno-bubble="r4-d3-s3-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d3-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s3-a1">
+            <span class="anno-bubble-question">Jede Runde trägt ihren Etappen-Buchstaben als Marke. Reicht der Buchstabe, oder soll hier der Name der Etappe stehen?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d3-s3-a1" data-annotation="r4-d3-s3-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d3-s3-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r4-d3-s3-a2" data-anno-side="left" data-anno-target=".mock-r4-t-tab:last-child">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d3-s3-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s3-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d3-s3-a2" data-anno-bubble="r4-d3-s3-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d3-s3-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s3-a2">
+            <span class="anno-bubble-question">Inhalt (Übersicht und Seiten) ist ein eigener Tab. Brauchst du ihn so oft, dass er bleiben soll, oder gehört er in den Tab Struktur?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d3-s3-a2" data-annotation="r4-d3-s3-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d3-s3-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d3-s4" data-nav-label="Etappe wechseln" data-screen hidden>
+    <div class="mock-r4-win mock-r4-w3">
+      <button type="button" class="mock-r4-sb mock-r4-sb-on" data-screen-link="d3-s1" data-tip="3 Richtungen, eine gewählt" aria-label="Struktur"><span class="mock-r4-gly" aria-hidden="true"><u class="mock-r4-u-done"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-lit"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u><u class=""></u><u class="mock-r4-u-off"></u><u class="mock-r4-u-off"></u></span></button><span class="mock-r4-eye" aria-hidden="true">◉</span><div class="mock-r4-qnav"><button type="button" class="mock-r4-ovl" data-tip="Übersicht" aria-label="Übersicht">⊞</button><i class="mock-r4-sep"></i><span class="mock-r4-chip mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</span><span class="mock-r4-chip mock-r4-c2 mock-r4-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></span><span class="mock-r4-chip mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</span></div>
+      <div class="mock-r4-stage mock-r4-dim"><div class="mock-r4-car"><div class="mock-r4-slide mock-r4-side mock-r4-c1"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-1"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-mid mock-r4-c2"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-2"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-side mock-r4-c3"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-3"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r4-panel mock-r4-pn-3"><div class="mock-r4-t-head"><span class="mock-r4-t-fav"><span class="mock-r4-star">★</span> 2 · Holo-Deck</span><div class="mock-r4-title">3 Richtungen, eine gewählt</div></div><div class="mock-r4-t-tabs"><button type="button" class="mock-r4-t-tab mock-r4-t-on">Struktur</button><button type="button" class="mock-r4-t-tab" data-screen-link="d3-s3">Historie <s>4</s></button><button type="button" class="mock-r4-t-tab" data-screen-link="d3-s3">Inhalt</button></div><div class="mock-r4-step"><button type="button" class="mock-r4-st mock-r4-st-done"><i>✓</i><b>A · Use Cases</b></button><button type="button" class="mock-r4-st mock-r4-st-done"><i>✓</i><b>B · Struktur</b></button><div class="mock-r4-t-chosen"><span class="mock-r4-star">★</span> 2 · Holo-Deck gewählt</div><button type="button" class="mock-r4-st mock-r4-st-next"><i></i><b>C · Visuelles Design</b><u>›</u></button><button type="button" class="mock-r4-st mock-r4-st-last"><i></i><b>D · Animation</b></button></div><div class="mock-r4-submit"><button type="button" class="mock-r4-btn" data-screen-link="d3-s1">👉 Zur nächsten Runde<small>noch eine Runde in B · Struktur</small></button><button type="button" class="mock-r4-btn mock-r4-btn-main mock-r4-next" data-screen-link="d3-s1">Nächste Etappe ›<small>weiter mit C · Visuelles Design</small></button></div></div>
+      <button type="button" class="mock-r4-fab mock-r4-fab-menu" data-screen-link="d3-s1" aria-label="Menü">✕</button><span class="mock-r4-fab mock-r4-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r4-d3-s4-a1" data-anno-side="left" data-anno-target=".mock-r4-t-chosen">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d3-s4-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s4-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d3-s4-a1" data-anno-bubble="r4-d3-s4-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d3-s4-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s4-a1">
+            <span class="anno-bubble-question">Beim Wechsel klappen die Richtungen unter B zu einer Zeile „★ Holo-Deck gewählt“ zusammen, C wird markiert. So nachvollziehbar?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d3-s4-a1" data-annotation="r4-d3-s4-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d3-s4-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r4-d3-s4-a2" data-anno-side="left" data-anno-target=".mock-r4-next">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d3-s4-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s4-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d3-s4-a2" data-anno-bubble="r4-d3-s4-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d3-s4-a2" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s4-a2">
+            <span class="anno-bubble-question">„Nächste Etappe ›“ steht nur im Tab Struktur. Soll es auch in Historie und Inhalt unten stehen bleiben?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d3-s4-a2" data-annotation="r4-d3-s4-a2" data-attachable placeholder="{{anno.answer_placeholder}}">ne hier unten soll alles bleiben wie es ist! Nächste etappe gern eher mit </textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d3-s4-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d3-s5" data-nav-label="Ohne Etappen" data-screen hidden>
+    <div class="mock-r4-win mock-r4-w3">
+      <span class="mock-r4-eye mock-r4-eye-home" aria-hidden="true">◉</span><div class="mock-r4-qnav"><button type="button" class="mock-r4-ovl" data-tip="Übersicht" aria-label="Übersicht">⊞</button><i class="mock-r4-sep"></i><span class="mock-r4-chip mock-r4-c1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</span><span class="mock-r4-chip mock-r4-c2 mock-r4-on"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></span><span class="mock-r4-chip mock-r4-c3"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</span></div>
+      <div class="mock-r4-stage mock-r4-dim"><div class="mock-r4-car"><div class="mock-r4-slide mock-r4-side mock-r4-c1"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-1"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-mid mock-r4-c2"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-2"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r4-slide mock-r4-side mock-r4-c3"><div class="mock-r4-shot"><div class="mock-r4-app mock-r4-app-3"><i class="mock-r4-a-bar"></i><i class="mock-r4-a-hero"></i><span class="mock-r4-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r4-panel mock-r4-pn-3"><div class="mock-r4-t-head"><span class="mock-r4-t-fav"><span class="mock-r4-star">★</span> 2 · Holo-Deck</span><div class="mock-r4-title">3 Richtungen, eine gewählt</div></div><div class="mock-r4-t-tabs"><button type="button" class="mock-r4-t-tab mock-r4-t-on">Inhalt</button><button type="button" class="mock-r4-t-tab" data-screen-link="d3-s3">Historie <s>4</s></button></div><div><button type="button" class="mock-r4-row">⊞ Übersicht</button><button type="button" class="mock-r4-row mock-r4-c1" data-screen-link="d3-s1"><i class="mock-r4-sw"></i><b class="mock-r4-num">1</b> · Anflug</button><button type="button" class="mock-r4-row mock-r4-c2 mock-r4-row-on" data-screen-link="d3-s1"><i class="mock-r4-sw"></i><b class="mock-r4-num">2</b> · Holo-Deck <span class="mock-r4-star">★</span></button><div class="mock-r4-pages mock-r4-c2"><span class="">Start</span><span class="mock-r4-pg-on">Hub</span><span class="">Detail</span><span class="">Profil</span></div><button type="button" class="mock-r4-row mock-r4-c3" data-screen-link="d3-s1"><i class="mock-r4-sw"></i><b class="mock-r4-num">3</b> · Kapitel</button></div><div class="mock-r4-submit"><button type="button" class="mock-r4-btn mock-r4-btn-main" data-screen-link="d3-s1">👉 Zur nächsten Runde</button><button type="button" class="mock-r4-btn">Jetzt umsetzen</button></div></div>
+      <button type="button" class="mock-r4-fab mock-r4-fab-menu" data-screen-link="d3-s1" aria-label="Menü">✕</button><span class="mock-r4-fab mock-r4-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r4-d3-s5-a1" data-anno-side="left" data-anno-target=".mock-r4-t-tabs">
+        <button class="anno-pin" type="button" data-anno-pin="r4-d3-s5-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s5-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r4-d3-s5-a1" data-anno-bubble="r4-d3-s5-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r4-d3-s5-a1" aria-expanded="false" aria-controls="anno-bubble-r4-d3-s5-a1">
+            <span class="anno-bubble-question">Ohne Etappen entfällt der Tab Struktur, Inhalt kommt nach vorn, kein Knopf neben dem Auge. Oder ganz ohne Tabs, wie heute?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r4-d3-s5-a1" data-annotation="r4-d3-s5-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r4-d3-s5-a1"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  </section>
+</section>

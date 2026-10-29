@@ -232,3 +232,106 @@ describe("palette and stage CSS", () => {
     expect(ca.instances).toHaveLength(1);
   });
 });
+
+// Full round fitted to the viewport (user notes, Kleingarten concept round 1):
+// no page scroll, a one-line stepper that only expands the active topic, the
+// bar at one spot on every stage, the note full width above it with the 📎
+// inside, lists as overviews.
+const FULL = `<section data-iteration="1" data-iteration-template="decision" data-analysis="full" id="iter-1">
+  <div class="iteration-intro"><h2>Etappe A · Rules</h2><p>Why this round.</p></div>
+  <section id="briefing" data-analysis-briefing data-nav-label="Briefing">
+    <p data-briefing-what>What was found.</p><p data-briefing-why>Why now.</p>
+    <div data-briefing-potential data-viz="kpi" data-viz-spec='{"value":"1"}'>1</div>
+    <a data-briefing-topic="t1" data-share="60">One</a><a data-briefing-topic="t2" data-share="40">Two</a>
+    <p data-briefing-duration>≈ 3 min</p>
+    <div data-alevel="1" data-title="Briefing"><div data-slot="short"><p>s</p></div><div data-slot="long"><p>l</p></div></div>
+  </section>
+  <section id="t1" data-topic data-nav-label="One">
+    <div data-alevel="2" data-title="One"><div data-slot="short"><p>s</p></div><div data-slot="long"><p>l</p></div></div>
+    ${decision("a1", "single", "x", opt("a1", "x", "Ex", true) + opt("a1", "y", "Why"))}
+    ${decision("a2", "single", "x", opt("a2", "x", "Ex", true) + opt("a2", "y", "Why"))}
+  </section>
+  <section id="t2" data-topic data-nav-label="Two">
+    <div data-alevel="2" data-title="Two"><div data-slot="short"><p>s</p></div><div data-slot="long"><p>l</p></div></div>
+    ${decision("b1", "single", "x", opt("b1", "x", "Ex", true) + opt("b1", "y", "Why"))}
+  </section>
+</section>`;
+
+describe("fitted Full round", () => {
+  const visibleFoot = (inst) => {
+    const st = inst.stages[inst.idx];
+    return st.kind === "brief" ? inst.root.querySelector(":scope > .an-foot-brief") : st.el.querySelector(".an-foot");
+  };
+  test("a wide, tall viewport fits the round: .an-fit + --an-fit-h, no fit below 900px", () => {
+    const { w, ca } = page(FULL);
+    const inst = ca.instances[0];
+    expect(inst.root.classList.contains("an-fit")).toBe(true);
+    expect(inst.root.style.getPropertyValue("--an-fit-h")).toMatch(/^\d+px$/);
+    Object.defineProperty(w, "innerWidth", { value: 800, configurable: true });
+    ca.go(inst, 1);
+    expect(inst.root.classList.contains("an-fit")).toBe(false);
+    expect(inst.root.style.getPropertyValue("--an-fit-h")).toBe("");
+  });
+  test("every stage ends in the same bar; the fitted CSS pins it to the round's bottom", () => {
+    const { ca } = page(FULL);
+    const inst = ca.instances[0];
+    inst.stages.forEach((s, i) => {
+      ca.go(inst, i);
+      const foot = visibleFoot(inst);
+      expect(foot, s.kind).toBeTruthy();
+      expect(foot.querySelector(".an-go"), s.kind).toBeTruthy();
+    });
+    expect(CSS).toMatch(/\.an-fit \.an-foot, \.an-fit > \.an-foot-brief \{\s*position: absolute; left: 0; right: 0; bottom: 0;/);
+    expect(CSS).toMatch(/\.an-enh\.an-fit \{[^}]*height: var\(--an-fit-h\)/);
+    // A stage without a next button keeps an invisible one of the same width.
+    ca.go(inst, inst.stages.findIndex((s) => s.kind === "next"));
+    expect(visibleFoot(inst).querySelector(".an-go-ph")).toBeTruthy();
+    expect(CSS).toMatch(/\.an-go \.an-btn, \.an-go-ph \{ min-width: 10\.5rem; \}/);
+  });
+  test("the briefing: intro moved in, its way on is the shared bar (no CTA box)", () => {
+    const { doc, ca } = page(FULL);
+    const inst = ca.instances[0];
+    expect(inst.brief.querySelector(":scope > .iteration-intro")).toBeTruthy();
+    expect(inst.root.querySelector(":scope > .iteration-intro")).toBeNull();
+    expect(doc.querySelector(".an-cta")).toBeNull();
+    const foot = inst.root.querySelector(":scope > .an-foot-brief");
+    expect(foot.querySelector(".an-back")).toBeNull();
+    const next = foot.querySelector(".an-btn");
+    expect(next.textContent).toMatch(/Let's go/);
+    expect(foot.querySelector(".an-meta").textContent).toContain("3 decisions");
+    next.click();
+    expect(inst.stages[inst.idx].kind).toBe("topic");
+  });
+  test("the note spans the foot above the bar and keeps its 📎 inside", () => {
+    const html = FULL.replace('<textarea data-comment="a1-note"></textarea>',
+      '<textarea data-comment="a1-note" data-attachable></textarea><div class="attach-bar" data-attach-for="a1-note"><button class="attach-btn">📎</button></div>');
+    const { doc } = page(html);
+    const foot = doc.querySelector("#a1 .an-foot");
+    const nw = foot.firstElementChild;
+    expect(nw.classList.contains("an-notew")).toBe(true);
+    expect(nw.querySelector("textarea.an-note")).toBeTruthy();
+    expect(nw.querySelector("textarea").nextElementSibling.matches('.attach-bar[data-attach-for="a1-note"]')).toBe(true);
+    expect(foot.querySelector(".an-quiet textarea")).toBeNull();
+    expect(CSS).toMatch(/\.an-notew \{ position: relative; flex: 1 1 100%;/);
+    expect(CSS).toMatch(/\.an-notew \.attach-bar \{ position: absolute;/);
+  });
+  test("one-line stepper: only the active topic shows its dots; labels ellipsise", () => {
+    const { ca } = page(FULL);
+    const inst = ca.instances[0];
+    expect(CSS).toMatch(/\.an-step \{[^}]*flex-wrap: nowrap;/);
+    expect(CSS).toContain(".an-grp:not(.an-on) .an-dots { display: none; }");
+    expect([...inst.stepEl.querySelectorAll(".an-gl .an-lbl")].map((l) => l.textContent)).toEqual(["One", "Two"]);
+    ca.go(inst, inst.stages.findIndex((s) => s.kind === "dec"));
+    expect(inst.stepEl.querySelector('.an-grp[data-g="0"]').classList.contains("an-on")).toBe(true);
+    expect(inst.stepEl.querySelector('.an-grp[data-g="1"]').classList.contains("an-on")).toBe(false);
+  });
+  test("lists are overviews: topic decisions and review groups lay out as grids", () => {
+    expect(CSS).toMatch(/\.an-rows \{ display: grid; grid-template-columns: repeat\(auto-fill/);
+    expect(CSS).toMatch(/\.an-rg \{ display: grid; grid-template-columns: repeat\(auto-fill/);
+    const { ca } = page(FULL);
+    const inst = ca.instances[0];
+    ca.go(inst, inst.stages.findIndex((s) => s.kind === "review"));
+    const rv = inst.stages[inst.idx].el.querySelector(".an-rv");
+    expect(rv.querySelector(":scope > .an-rv-side .an-imp")).toBeTruthy();
+  });
+});

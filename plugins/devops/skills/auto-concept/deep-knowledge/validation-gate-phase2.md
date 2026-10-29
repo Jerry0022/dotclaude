@@ -124,7 +124,7 @@ half only warns, so a page written before the overview still builds.
 | V4 | `bakeFrozenFeedback` (concept-build.js) writes `favorite` (only for a `data-design-set="alternatives"` round) / `userPins` into `data-frozen-feedback` | A frozen round shows its favourite and pins read-only. |
 | V5 | no hotkey of `wireDesignOverview()` fires while focus is in `textarea`, `input`, `select`, `[contenteditable]`, `#feedback-dock`, `.anno-bubble` or `.upin-editor` | ui-defaults R4b — never a bare key firing in a text field (`Space` and `←` / `→` on the overview included). Pinned by `design-overview.test.js`. |
 | V6 | every `section[data-iteration]` with ≥2 designs carries `data-design-set="alternatives"` or `"topics"` (**warning**) | Only `alternatives` shows the favourite (☆/★, `F`, header ★, dimming); unmarked means no star. Enforced as a warning by `findDesignAuthoringWarnings` (`overview-set`). |
-| V7 | `data-design-overlay`, when present, is one of `tl`, `tr`, `bl`, `br`, `tc`, `bc` (**warning**) | Anything else silently falls back to `bl`. `findDesignAuthoringWarnings` (`overview-overlay`). |
+| V7 | no design sets `data-design-overlay` (**warning**) | The overview card is always bottom-left; the attribute is ignored. `findDesignAuthoringWarnings` (`overview-overlay`). See `validation-gate.md` § Design-round differentiation (V7 / V8 / P34). |
 
 **Failure for P22–P31:** if `data-view` is present anywhere on the page but
 any of these is missing (scoped to the view kind that requires it — P27 only

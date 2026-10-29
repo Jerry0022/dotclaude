@@ -1,4 +1,4 @@
-# Concept templates, part 17 of 46: Template: design — variant overview CSS (≥2 designs)
+# Concept templates, part 17 of 48: Template: design — variant overview CSS (≥2 designs)
 
 ## Variant overview CSS (≥2 designs)
 
@@ -70,6 +70,9 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 }
 .design-ov-slide[data-pos="cur"] { --dz-s: 1; transform: translate(-50%, -50%); opacity: 1; filter: none; cursor: default; z-index: 1; }
 .design-ov-slide[data-pos="prev"]:hover, .design-ov-slide[data-pos="next"]:hover { opacity: 0.85; --dz-s: 0.8; }
+/* The centre is always the big 16:10 CARD, never the whole stage: a full-app
+   screen fills the card from inside (fitPreviews() cover-scales it, the card
+   takes the design's own background), the neighbours keep peeking in. */
 /* No ‹ › buttons: the side card itself is the control. On hover one tall,
    thin chevron fades in — no circle, just the glyph and its glow — in the
    tile's visible strip, pointing at the variant icon (.design-ov-side). */
@@ -85,14 +88,19 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-ov-slide[data-pos="prev"]:hover::after { opacity: 1; transform: translate(0, -50%); }
 .design-ov-slide[data-pos="next"]:hover::after { opacity: 1; transform: translate(0, -50%) scaleX(-1); }
 .design-ov-slide[data-pos="far"] { visibility: hidden; opacity: 0; }
+/* The card: framed, rounded, painted with the design's own background
+   (colour + image from buildSlide(), first non-transparent from the screen
+   up) so whatever the scaled clone does not reach reads as the app itself. */
 .design-ov-preview {
   position: absolute; inset: 0; display: block; overflow: hidden; border-radius: 22px;
-  background: var(--bg-secondary, var(--panel-bg, #0d1117));
+  background-color: var(--dz-ov-bg, var(--bg-secondary, var(--panel-bg, #0d1117)));
+  background-image: var(--dz-ov-bg-img, none); background-size: cover; background-position: center;
   box-shadow: var(--dz-ov-shadow), 0 0 0 2px var(--dz-color);
   transition: box-shadow 0.25s ease;
 }
 .design-ov-slide[data-pos="cur"] .design-ov-preview { cursor: pointer; }
-/* Hover / focus on the centre tile: a glow, never a scale. */
+/* Hover / focus on the centre card: a glow in the variant colour, never a
+   scale (the slide keeps --dz-ov-glow free above and below for it). */
 .design-ov-slide[data-pos="cur"] .design-ov-preview:hover,
 .design-ov-slide[data-pos="cur"] .design-ov-preview:focus-visible {
   box-shadow: var(--dz-ov-shadow), 0 0 0 2px var(--dz-color),
@@ -107,7 +115,7 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 }
 .design-ov-slide:is([data-pos="prev"], [data-pos="next"]) .design-ov-scale,
 .design-ov-slide:is([data-pos="prev"], [data-pos="next"]) .design-ov-qcard > * { visibility: hidden; }
-.design-ov-preview:focus-visible { outline: 3px solid var(--accent-color); outline-offset: 4px; }
+.design-ov-preview:focus-visible { outline: 3px solid var(--accent-color); outline-offset: -3px; }
 /* The scaled clone: laid out at a fixed 1000px virtual width, scaled to the box by
    fitPreviews() (--dz-ov-scale). pointer-events none + inert keep
    the mock's own controls out of reach — the preview is one still image. */
@@ -117,16 +125,10 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
   pointer-events: none; padding: 1.5rem; box-sizing: border-box;
 }
 .design-ov-scale > * { width: 100%; }
-/* Mirror backdrop (the darkened, blurred cover copy behind the sharp design). */
-.design-ov-mirror {
-  position: absolute; top: 0; left: 0; width: 1000px; z-index: 0; padding: 1.5rem; box-sizing: border-box;
-  transform: translate(var(--dz-ov-mx, 0px), var(--dz-ov-my, 0px)) scale(var(--dz-ov-mscale, 1)); transform-origin: 0 0;
-  filter: blur(14px) brightness(0.32) saturate(0.8); pointer-events: none;
-}
-.design-ov-mirror > * { width: 100%; }
-.design-ov-scale { z-index: 1; }
-.design-ov-slide:is([data-pos="prev"], [data-pos="next"]) .design-ov-mirror { visibility: hidden; }
-/* ── Overlay: kicker, motto, three traits — authored anchor and tint ── */
+/* Demo (`data-ov-demo`): the engine zooms the clone onto the named element
+   and toggles `.ov-demo-play` on it every few seconds — authors style
+   `.ov-demo-play` in their mock CSS to drive the motion. Nothing here. */
+/* ── Overlay: kicker, motto, three traits — always bottom-left, authored tint ── */
 .design-ov-overlay {
   position: absolute; z-index: 2; box-sizing: border-box; max-width: 40%;
   padding: 1.1rem 1.4rem 1.25rem; border-radius: 16px; color: var(--dz-ov-ink); line-height: 1.4;
@@ -137,18 +139,14 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 /* At rest the box lets the design show through; hover / focus make it whole. */
 .design-ov-slide[data-pos="cur"] .design-ov-overlay:not(:hover):not(:focus-within) { opacity: 0.5; }
 .design-ov-overlay[data-tone="warm"] { background: var(--dz-ov-warm); border-color: var(--dz-ov-warm-line); }
-.design-ov-overlay[data-anchor="tl"] { top: 1.4rem; left: 1.4rem; }
-.design-ov-overlay[data-anchor="tr"] { top: 1.4rem; right: 1.4rem; }
 .design-ov-overlay[data-anchor="bl"] { bottom: 1.4rem; left: 1.4rem; }
-.design-ov-overlay[data-anchor="br"] { bottom: 1.4rem; right: 1.4rem; }
-.design-ov-overlay[data-anchor="tc"] { top: 1.4rem; left: 50%; transform: translateX(-50%); }
-.design-ov-overlay[data-anchor="bc"] { bottom: 1.4rem; left: 50%; transform: translateX(-50%); }
 .design-ov-slide:not([data-pos="cur"]) .design-ov-overlay,
 .design-ov[data-overlay="off"] .design-ov-overlay { opacity: 0; visibility: hidden; }
 .design-ov-kicker {
   display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;
   font-size: 0.85rem; font-weight: 600; opacity: 0.92;
 }
+.design-ov-num { font-variant-numeric: tabular-nums; opacity: 0.8; margin-right: -0.15rem; }
 .design-ov-motto { margin: 0 0 0.6rem; font-size: clamp(1.1rem, 1.5vw, 1.65rem); line-height: 1.15; font-weight: 800; letter-spacing: -0.01em; }
 .design-ov-traits { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.35rem; font-size: clamp(0.85rem, 0.95vw, 1rem); }
 .design-ov-traits li { display: flex; gap: 0.6rem; align-items: baseline; }
@@ -260,7 +258,8 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 }
 .design-quick-seg:hover { color: var(--text, #e6edf3); background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
 .design-quick-seg[data-icon-only="true"] { padding: 0.2rem; }
-.design-quick-seg[data-icon-only="true"] .design-quick-name { display: none; }
+.design-quick-seg[data-icon-only="true"] :is(.design-quick-name, .design-quick-n) { display: none; }
+.design-quick-n { font-size: 0.72rem; opacity: 0.7; font-variant-numeric: tabular-nums; margin-right: -0.15rem; }
 .design-quick-seg[data-icon-only="true"] .dz-new-dot { position: absolute; top: 1px; right: 1px; margin: 0; }
 .design-quick-star { color: var(--warning-color, #d29922); cursor: pointer; line-height: 1; }
 /* The empty ☆ shows on the active / centred chip only; ★ always. */
@@ -404,7 +403,7 @@ body.panel-open .design-quick, body.panel-open .design-header { opacity: 0; poin
 }
 @media (max-width: 900px) {
   /* Icons only — the tooltip still names each design. */
-  .design-quick-seg .design-quick-name { display: none; }
+  .design-quick-seg :is(.design-quick-name, .design-quick-n) { display: none; }
   .design-quick-seg { padding: 0.2rem; }
 }
 
@@ -480,6 +479,7 @@ body.dz-intro-first .panel-fab, body.dz-intro-first .feedback-fab { animation: d
 .screen-nav-overview-item:hover .screen-nav-kbd { opacity: 1; transition-delay: 1.5s; }
 .screen-nav-design-heading > span:first-child { display: inline-flex; align-items: center; min-width: 0; }
 .screen-nav-design-heading .dz-icon { margin-right: 0.5rem; }
+.screen-nav-n { margin-right: 0.35rem; opacity: 0.7; font-variant-numeric: tabular-nums; }
 .screen-nav-kbd { opacity: 0; transition: opacity 0.14s ease 0s; margin-left: auto; }
 .screen-nav-design-heading:hover .screen-nav-kbd { opacity: 1; transition-delay: 1.5s; }
 .screen-nav-design-heading:focus-visible .screen-nav-kbd { opacity: 1; transition-delay: 0s; }

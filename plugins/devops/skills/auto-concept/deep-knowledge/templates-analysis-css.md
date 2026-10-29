@@ -1,4 +1,4 @@
-# Concept templates, part 44 of 46: Template: analysis — styling CSS (Full + Lite)
+# Concept templates, part 44 of 48: Template: analysis — styling CSS (Full + Lite)
 
 ## Styling (Full + Lite)
 
@@ -63,11 +63,84 @@ section[data-view].an-lite { max-width: none; margin: 0; border: 0; border-radiu
 .an-intro, .an-start, .an-fin, .an-review, .an-list, .an-next { display: flex; flex-direction: column; }
 .an-intro { min-height: 560px; }
 .an-lite .an-start, .an-lite .an-fin { min-height: 470px; }
+.an-enh > .an-foot-brief { grid-column: 1 / -1; grid-row: 3; }
+.an-enh:not([data-an-stage="brief"]) > .an-foot-brief { display: none; }
+
+/* ---------- fitted Full: one viewport, no page scroll, the bar never moves ----------
+   fitFull() sets .an-fit + --an-fit-h (viewport minus everything above and
+   below the round) on a visible Full wider than 900px and at least 520px
+   tall. The stepper takes its line, the stage row the rest; every stage's
+   foot is pinned to the bottom of the round (absolute against the root),
+   the bar at the very bottom, the note row right above it. Content that
+   does not fit condenses (stage: .an-dense, then .an-dense2; analysis
+   column: .an-afold); only as a last resort the stage or the column
+   scrolls inside itself (.an-ovf / .an-aovf) — never the page. */
+.an-enh.an-fit {
+  --an-bar-h: 64px; --an-note-h: 50px;
+  position: relative; height: var(--an-fit-h); min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr); align-content: stretch;
+  padding-bottom: var(--an-bar-h);
+}
+.an-enh.an-fit[data-an-stage="dec"] { padding-bottom: calc(var(--an-bar-h) + var(--an-note-h)); }
+.an-fit > .an-stage, .an-fit [data-topic] > .an-stage { min-height: 0; height: 100%; overflow: hidden; padding: 18px 0 2px; }
+.an-fit > .an-ana { min-height: 0; max-height: 100%; overflow: hidden; padding-top: 18px; }
+.an-fit .an-foot, .an-fit > .an-foot-brief {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; margin: 0;
+  padding: 8px var(--an-bar-pr, 0px) 12px 0; flex-wrap: nowrap; align-items: flex-end;
+  background: linear-gradient(180deg, transparent, var(--an-bg) 14px);
+}
+.an-fit .an-foot > .an-quiet { flex: 1 1 auto; flex-wrap: nowrap; align-self: center; overflow: hidden; }
+.an-fit .an-foot:has(> .an-notew) { flex-wrap: wrap; }
+.an-fit .an-notew .an-note { max-height: 120px; }
+.an-fit.an-ovf > .an-stage:not(.an-off), .an-fit.an-ovf [data-topic] > .an-stage:not(.an-off) { overflow-y: auto; }
+.an-fit.an-aovf > .an-ana { overflow-y: auto; }
+.an-fit.an-fitting, .an-fit.an-fitting * { transition: none !important; }
+/* Column fold: the levels that are not open show their head only. */
+.an-fit.an-afold .an-lv-h { padding: 8px 12px; }
+.an-fit.an-afold .an-lv[data-state="short"] .an-w-s { grid-template-rows: 0fr; opacity: 0; }
+/* Dense 1: layout first — more option / card columns, no tall minimums,
+   tighter spacing; the type keeps its size. */
+.an-fit.an-dense [data-briefing-potential] { margin-top: 22px; padding: 10px 18px; }
+.an-fit.an-dense .an-chips { margin-top: 30px; }
+.an-fit.an-dense [data-context] { margin-top: 6px; }
+.an-fit.an-dense .an-zone { margin-top: 16px; gap: 10px; }
+.an-fit.an-dense [data-options] { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px 10px; }
+.an-fit.an-dense [data-opt] { min-height: 0; padding: 14px 14px 12px; gap: 6px; border-radius: 14px; }
+.an-fit.an-dense .an-rows { margin-top: 14px; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.an-fit.an-dense .an-rw { min-height: 0; padding: 11px 13px; }
+.an-fit.an-dense .an-tr { padding: 7px 14px; }
+.an-fit.an-dense .an-rv { gap: 10px; margin-top: 12px; }
+.an-fit.an-dense .an-unt { padding: 8px 14px; }
+.an-fit.an-dense .an-unt .an-btn2 { height: 34px; }
+/* Dense 2: then the type — smaller headings and card text. */
+.an-fit.an-dense2 [data-question] { font-size: 24px; }
+.an-fit.an-dense2 [data-briefing-what] { font-size: 24px; }
+.an-fit.an-dense2 [data-briefing-potential] .an-kpi-v { font-size: 30px; }
+.an-fit.an-dense2 [data-context] { font-size: 13px; }
+.an-fit.an-dense2 [data-opt-label] { font-size: 15px; }
+.an-fit.an-dense2 [data-opt-consequence] { font-size: 12px; }
+.an-fit.an-dense2 .an-h { font-size: 23px; }
+.an-fit.an-dense2 .an-rw { font-size: 14px; }
+.an-fit.an-dense2 .an-rg > .an-tr :is(b, small) { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.an-fit.an-dense2 [data-briefing-why] { margin-top: 6px; }
+.an-fit.an-dense2 [data-briefing-potential] { margin-top: 16px; }
+.an-fit.an-dense2 .an-chips { margin-top: 22px; }
+.an-fit.an-dense2 [data-briefing-topic] { padding: 10px 13px; font-size: 15px; }
 [data-analysis] .an-epic { flex: 0 1 160px; height: 30px; padding: 0 9px; border: 1px solid var(--an-bd2); border-radius: 8px; background: var(--an-s1); font-size: 12.5px; }
 [data-analysis] .an-epic[hidden] { display: none; }
 
 /* ---------- stepper (Full) / progress dots (Lite) ---------- */
-.an-step { position: sticky; top: var(--an-sticky-top, 0px); z-index: 5; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 60px; padding: 8px 74px 8px 4px; border-bottom: 1px solid var(--an-bd); background: color-mix(in srgb, var(--an-bg) 88%, transparent); backdrop-filter: blur(6px); }
+/* ONE line, always: only the active Themenfeld shows its decision dots; the
+   others fold to their label (✓ when done) and shrink with an ellipsis (the
+   app tooltip names them in full). The right gutter clears the ☰ FAB
+   (--an-step-pr, measured by fitFull(); 74px before the first measure). */
+.an-step { position: sticky; top: var(--an-sticky-top, 0px); z-index: 5; display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; min-width: 0; min-height: 60px; padding: 8px var(--an-step-pr, 74px) 8px 4px; overflow: hidden; border-bottom: 1px solid var(--an-bd); background: color-mix(in srgb, var(--an-bg) 88%, transparent); backdrop-filter: blur(6px); }
+.an-step > * { flex: 0 1 auto; min-width: 0; }
+.an-step > .an-sep, .an-step > .an-grp.an-on { flex-shrink: 0; }
+.an-grp:not(.an-on) .an-dots { display: none; }
+.an-grp:not(.an-on) { padding-right: 6px; }
+.an-k, .an-gl, .an-grp { min-width: 0; max-width: 100%; }
+.an-lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .an-k { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 15px; border-radius: 999px; font-size: 13.5px; font-weight: 600; color: var(--an-mu); white-space: nowrap; }
 .an-k:hover, .an-gl:hover { background: var(--an-s2); color: var(--an-tx); }
 .an-k.an-on { color: var(--an-tx); background: var(--an-ac-soft); box-shadow: inset 0 0 0 1.5px var(--an-ac); }
@@ -96,6 +169,10 @@ section[data-view].an-lite { max-width: none; margin: 0; border: 0; border-radiu
 .an-lhead { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--an-bd); }
 .an-lhead .an-lt { font-size: 13px; font-weight: 700; color: var(--an-tx2); }
 .an-lhead .an-lpr { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--an-mu); }
+/* A narrow stepper: the other Themenfelder fold to their colour dot (the
+   tooltip names them) before any label is cut. */
+.an-step { container-type: inline-size; }
+@container (max-width: 820px) { .an-grp:not(.an-on) .an-lbl { display: none; } .an-grp:not(.an-on) { padding: 0 2px; } .an-k { padding: 0 10px; gap: 6px; } .an-sep { width: 8px; } }
 
 /* ---------- decision hierarchy ---------- */
 [data-analysis] [data-applies] { font-size: 12.5px; color: var(--an-mu2); margin-bottom: 8px; }
@@ -148,11 +225,28 @@ section[data-view].an-lite { max-width: none; margin: 0; border: 0; border-radiu
 .an-oi .an-ob { display: inline-flex; gap: 4px; }
 .an-oi .an-ob button { width: 32px; height: 32px; border-radius: 9px; box-shadow: inset 0 0 0 1px var(--an-bd2); text-align: center; color: var(--an-mu); }
 .an-oi .an-ob button:hover { color: var(--an-tx); background: var(--an-s3); }
-/* foot: ONE note field, quiet links, Zurück / Weiter */
-.an-foot { margin-top: auto; padding-top: 24px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+/* foot: the ONE note field (full width, its 📎 inside), then the bar —
+   quiet links left, Zurück / Weiter right. Every stage builds the same foot,
+   so on a fitted Full (.an-fit, below) the bar sits at the same spot on
+   every stage. */
+.an-foot { margin-top: auto; padding-top: 24px; display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; }
 .an-quiet { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1 1 320px; min-width: 0; }
-.an-note { flex: 1 1 220px; min-width: 160px; max-width: 420px; height: 38px; min-height: 38px; max-height: 120px; resize: none; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--an-bd2); background: var(--an-s1); color: var(--an-tx); font: inherit; font-size: 13px; line-height: 1.4; }
+.an-notew { position: relative; flex: 1 1 100%; order: -1; min-width: 0; }
+.an-note { display: block; width: 100%; height: 40px; min-height: 40px; max-height: 120px; resize: none; padding: 9px 2.9rem 9px 12px; border-radius: 10px; border: 1px solid var(--an-bd2); background: var(--an-s1); color: var(--an-tx); font: inherit; font-size: 13px; line-height: 1.4; }
 .an-note::placeholder { color: var(--an-mu2); }
+.an-note:focus { outline: none; border-color: var(--an-ac); box-shadow: 0 0 0 3px var(--an-ac-soft); }
+/* The 📎 lives INSIDE the note (attachments: one bar per field, mounted
+   right after its textarea); thumbnails line up left of it. */
+.an-notew .attach-bar { position: absolute; top: 5px; right: 6px; margin: 0; gap: 4px; flex-wrap: nowrap; align-items: center; }
+.an-notew .attach-btn { height: 30px; min-width: 30px; padding: 0 6px; border: 0; border-radius: 8px; background: none; opacity: .75; }
+.an-notew .attach-btn:hover, .an-notew .attach-btn:focus-visible { opacity: 1; background: var(--an-s2); }
+.an-notew .attach-thumbs { order: -1; width: auto; flex-wrap: nowrap; gap: 4px; }
+.an-notew :is(.attach-thumb, .attach-chip) { width: auto; min-width: 30px; height: 30px; border-radius: 6px; }
+.an-notew .attach-thumb { width: 30px; }
+.an-notew .attach-chip { max-width: 120px; padding: 0 6px; }
+.an-notew .attach-chip :is(.attach-chip-icon, .attach-chip-size) { display: none; }
+.an-notew:has(:is(.attach-thumb, .attach-chip)) .an-note { padding-right: 12rem; }
+.an-meta { font-size: 12.5px; color: var(--an-mu); white-space: nowrap; }
 .an-link { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; border-radius: 7px; font-size: 12.5px; color: var(--an-mu2); white-space: nowrap; }
 .an-link:hover { color: var(--an-tx2); background: var(--an-s1); }
 .an-link[aria-pressed="true"] { color: var(--an-li); }
@@ -164,6 +258,12 @@ section[data-view].an-lite { max-width: none; margin: 0; border: 0; border-radiu
 .an-back { height: 44px; padding: 0 12px; display: inline-flex; align-items: center; font-size: 13.5px; color: var(--an-mu); border-radius: 10px; }
 .an-back:hover { color: var(--an-tx); background: var(--an-s1); }
 .an-back[disabled] { opacity: .4; pointer-events: none; }
+/* Constant widths: "Weiter" / "Starten" / "Los geht's" and an absent next
+   button (.an-go-ph) take the same room, so Zurück never moves either. */
+.an-go .an-btn, .an-go-ph { min-width: 10.5rem; }
+.an-go-ph { visibility: hidden; height: 48px; }
+.an-go .an-btn.an-glow { animation: an-glow 2.4s ease-in-out 1.2s infinite; }
+.an-go .an-btn.an-pressed { animation: none; }
 
 /* ---------- briefing ---------- */
 .an-brief { position: relative; display: flex; flex-direction: column; min-width: 0; }
@@ -179,22 +279,24 @@ section[data-view].an-lite { max-width: none; margin: 0; border: 0; border-radiu
 .an-conn { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
 .an-conn path { fill: none; stroke-linecap: round; stroke-dasharray: var(--len, 400); stroke-dashoffset: 0; animation: an-draw calc(var(--an-dur) * 2.4) cubic-bezier(.22,.8,.24,1) both; }
 .an-brief > *:not(.an-conn) { position: relative; z-index: 1; }
-.an-cta { margin-top: 28px; display: flex; align-items: center; gap: 18px; padding: 16px 18px; border-radius: 18px; background: linear-gradient(120deg, var(--an-ac-soft), var(--an-li-soft)); border: 1px solid color-mix(in srgb, var(--an-li) 45%, transparent); }
-.an-cta-t { flex: 1; font-size: 13.5px; color: var(--an-tx2); }
-.an-cta-t b { display: block; font-size: 17px; font-weight: 720; color: var(--an-tx); }
-.an-cta .an-btn { height: 56px; padding: 0 30px; font-size: 17px; border-radius: 15px; animation: an-glow 2.4s ease-in-out 1.2s infinite; }
-.an-cta .an-btn.an-pressed { animation: none; }
-.an-brief .an-quiet { margin-top: 14px; }
+/* The round's authored intro (Etappe heading + one line) opens the briefing
+   instead of trailing below the whole grid. */
+.an-brief > .iteration-intro { margin: 6px 0 2px; }
+.an-brief > .iteration-intro :where(h2) { margin: 0; font-size: 15px; font-weight: 700; color: var(--an-tx2); }
+.an-brief > .iteration-intro :where(p) { margin: 2px 0 0; font-size: 13px; color: var(--an-mu); max-width: 760px; }
 
 /* ---------- topic intro, list, review, next round, done ---------- */
 .an-h { font-size: 28px; font-weight: 740; letter-spacing: -.02em; line-height: 1.2; }
 .an-sub { font-size: 13.5px; color: var(--an-mu); margin-top: 6px; }
-.an-rows { display: flex; flex-direction: column; margin-top: 22px; border-radius: 16px; border: 1px solid var(--an-bd2); overflow: hidden; background: var(--an-s1); }
-.an-rw { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 14px; align-items: center; width: 100%; padding: 13px 18px; font-size: 15px; font-weight: 550; }
-.an-rw:hover { background: var(--an-s2); }
-.an-rw + .an-rw { border-top: 1px solid var(--an-bd); }
-.an-rw small { display: block; font-size: 12.5px; color: var(--an-mu); font-weight: 400; }
-.an-rw em { font-style: normal; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 999px; font-size: 12.5px; font-weight: 650; background: var(--an-ac-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--an-ac) 40%, transparent); white-space: nowrap; }
+/* Topic intro: the decisions as an OVERVIEW of cards, not a long list. */
+.an-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-top: 20px; }
+.an-rw { display: grid; grid-template-columns: 12px minmax(0, 1fr); grid-template-rows: auto 1fr auto; gap: 6px 10px; align-items: start; width: 100%; min-height: 118px; padding: 14px 15px 13px; border-radius: 14px; background: var(--an-s1); border: 1px solid var(--an-bd2); border-top: 3px solid var(--c, var(--an-li)); font-size: 15px; font-weight: 600; line-height: 1.3; text-align: left; transition: background .15s, transform .15s; }
+.an-rw:hover { background: var(--an-s2); transform: translateY(-2px); }
+.an-rw:focus-visible { outline: 2px solid var(--an-ac); outline-offset: 2px; }
+.an-rw > .an-st { margin-top: 4px; }
+.an-rw small { display: block; margin-top: 4px; font-size: 12px; color: var(--an-mu); font-weight: 400; }
+.an-rw em { grid-column: 1 / -1; justify-self: start; align-self: end; font-style: normal; display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 26px; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 650; background: var(--an-ac-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--an-ac) 40%, transparent); }
+.an-rw em::before { content: "★"; color: var(--an-gold); }
 .an-st { width: 10px; height: 10px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--an-mu2); }
 .an-st.an-s-ok { background: var(--an-ok); box-shadow: none; }
 .an-st.an-s-dev { background: var(--an-warn); box-shadow: none; }
@@ -206,8 +308,22 @@ section[data-view].an-lite { max-width: none; margin: 0; border: 0; border-radiu
 .an-lr { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 4px 10px; align-items: center; width: 100%; padding: 7px 10px; border-radius: 9px; font-size: 13px; color: var(--an-tx2); }
 .an-lr:hover { background: var(--an-s2); }
 .an-lr em { grid-column: 2; font-style: normal; font-size: 12px; color: var(--an-mu); }
-.an-rv { display: flex; flex-direction: column; gap: 16px; margin-top: 20px; }
-.an-rg { border-radius: 14px; border: 1px solid var(--an-bd); overflow: hidden; }
+/* Review: an overview, not a long list — every group is a grid of
+   decision cells (label, then its tags); impact and the submit hint sit in
+   a side column beside the groups. */
+.an-rv { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 300px); gap: 14px; align-items: start; margin-top: 18px; }
+.an-rv > .an-sub { grid-column: 1 / -1; }
+.an-rv-main, .an-rv-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.an-rv-main { grid-column: 1; }
+.an-rv-side { grid-column: 2; }
+.an-rv:not(:has(> .an-rv-main)) > .an-rv-side { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; }
+@media (max-width: 900px) { .an-rv { grid-template-columns: minmax(0, 1fr); } .an-rv-side { grid-column: 1; } }
+.an-rg { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); border-radius: 14px; border: 1px solid var(--an-bd); overflow: hidden; }
+.an-rg > .an-rg-h, .an-rg > .an-unt { grid-column: 1 / -1; }
+.an-rg > .an-tr { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 9px 14px; }
+.an-rg > .an-tr > :first-child { flex: 1 1 100%; min-width: 0; }
+.an-rg > .an-tr > :not(:first-child) { min-width: 0; max-width: 100%; }
+.an-rg > .an-tr > :not(:first-child):is(:empty, :has(> :only-child:empty)) { display: none; }
 .an-rg-h { display: flex; align-items: center; gap: 10px; padding: 9px 16px; background: var(--an-s1); font-size: 12px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; color: var(--an-mu); }
 .an-rg-h span { margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; }
 .an-tr { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: center; padding: 10px 16px; font-size: 13.5px; color: var(--an-tx2); border-top: 1px solid var(--an-bd); width: 100%; }

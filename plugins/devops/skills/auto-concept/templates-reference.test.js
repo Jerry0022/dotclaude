@@ -47,7 +47,10 @@ const htmlSource = htmlBlocks.map((b) => b.code).join("\n");
 // toggled a panel state that did not exist, so every past-iteration tab showed
 // an empty panel. The frozen block now exists; keep this map empty unless a new
 // exemption can state a reason that survives being checked.
-const OPTIONAL_IDS = {};
+// Ids a build step injects instead of the reference markup, with the reason.
+const OPTIONAL_IDS = {
+  "concept-stages": "concept-build.js injects it only when page.json declares stages (templates-stages.md)",
+};
 
 describe("concept templates reference — embedded code integrity", () => {
   test("every JS block parses", () => {

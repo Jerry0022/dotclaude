@@ -1,4 +1,4 @@
-# Concept templates, part 46 of 46: Template: analysis — engine UI JS (continued 2)
+# Concept templates, part 46 of 48: Template: analysis — engine UI JS (continued 2)
 
 ```javascript
   }
@@ -96,11 +96,14 @@
     const back = btn('an-back', L('Zurück', 'Back'));
     tip(back, '', '⇧+Enter');
     back.addEventListener('click', () => step(inst, -1));
-    const next = btn('an-btn', nextLabel || L('Weiter', 'Next'));
+    const next = btn('an-btn' + (opts.glow ? ' an-glow' : ''), nextLabel || L('Weiter', 'Next'));
     tip(next, '', 'Enter');
-    next.addEventListener('click', () => step(inst, 1));
+    next.addEventListener('click', () => { next.classList.add('an-pressed'); step(inst, 1); });
     if (!opts.noBack) go2.appendChild(back);
     if (!opts.noNext) go2.appendChild(next);
+    // No next button: an invisible one of the same width keeps Zurück where
+    // it is on every other stage.
+    else if (!opts.noBack && !opts.noPh) { const ph = h('span', 'an-go-ph'); ph.setAttribute('aria-hidden', 'true'); go2.appendChild(ph); }
     return go2;
   }
 
@@ -151,15 +154,25 @@
         if (!f.placeholder) f.placeholder = L('kurz eintippen', 'type briefly');
       }
     }
-    // Foot: ONE note field, discreet issue link, Zurück / Weiter.
+    // Foot: ONE note field across the full width (its 📎 inside it), then
+    // the bar: discreet issue link left, Zurück / Weiter right.
     const foot = h('div', 'an-foot'), quiet = h('div', 'an-quiet');
     const note = d.querySelector('[data-comment="' + cssEsc(id + '-note') + '"]');
+    let notew = null;
     if (note) {
       note.classList.add('an-note'); note.rows = 1;
       note.setAttribute('aria-label', L('Notiz zu dieser Frage', 'Note on this question'));
       tip(note, '', 'N');
       note.addEventListener('input', () => { note.style.height = 'auto'; note.style.height = Math.min(note.scrollHeight, 120) + 'px'; });
-      if (note.parentNode !== quiet) quiet.appendChild(note.closest('.field-row') || note);
+      // A bar wired before this move sits where the note was; it follows the
+      // note and stays its adjacent sibling (`textarea[hidden] + .attach-bar`).
+      // A bar wired later is mounted right after the textarea anyway.
+      const key = note.getAttribute('data-comment');
+      const bar = [...d.querySelectorAll('.attach-slot, .attach-bar')]
+        .find(b => (b.getAttribute('data-attach-slot') || b.getAttribute('data-attach-for')) === key) || null;
+      notew = h('div', 'an-notew');
+      notew.appendChild(note.closest('.field-row') || note);
+      if (bar && !bar.contains(note)) note.after(bar);
     }
     const iss = btn('an-link', L('Als Issue anlegen (ggf. mit Epic)', 'Create an issue (with epic if needed)'));
     iss.setAttribute('aria-pressed', 'false');
@@ -170,6 +183,7 @@
     iss.addEventListener('click', () => toggleIssue(inst, d));
     epic.addEventListener('input', () => setHidden(d, '-epic', epic.value.trim()));
     quiet.append(iss, epic, listLink(inst));
+    if (notew) foot.appendChild(notew);
     foot.append(quiet, goButtons(inst));
     d.appendChild(foot);
     st.iss = iss; st.epic = epic;
@@ -307,6 +321,71 @@
     if (typeof updateSectionNavState === 'function') updateSectionNavState();
   }
 
+  /* ================= 5b. fitted Full: one viewport, no page scroll ================= */
+  // A visible Full wider than 900px and >= 520px tall takes exactly the
+  // viewport below what precedes it (page header): .an-fit + --an-fit-h.
+  // Then the open stage and the analysis column are checked for overflow and
+  // condensed step by step — the stage .an-dense, .an-dense2, the column
+  // .an-afold (short summaries fold to their head); only what still does not
+  // fit scrolls inside its own box (.an-ovf / .an-aovf), never the page. The right gutters of the stepper
+  // and the bar clear the ☰ and 💬 FABs where they overlap the round.
+  const FIT_MIN_W = 900, FIT_MIN_H = 520;
+  function fabGutter(root, id, fallback) {
+    const fab = document.getElementById(id);
+    if (!fab || !fab.getClientRects().length) return fallback;
+    const fr = fab.getBoundingClientRect(), rr = root.getBoundingClientRect();
+    if (!fr.width || !rr.width) return fallback;
+    return Math.max(0, Math.ceil(rr.right - fr.left + 12));
+  }
+  function fitFull(inst) {
+    const root = inst.root;
+    if (inst.lite) return;
+    const vw = window.innerWidth || 0, vh = window.innerHeight || 0;
+    const on = vw > FIT_MIN_W && vh >= FIT_MIN_H && !root.closest('[hidden]') && root.getClientRects().length > 0;
+    // Measured without transitions: a fold that is still animating would
+    // read as overflow and condense one step too far.
+    const before = root.className + '|' + root.style.getPropertyValue('--an-fit-h');
+    root.classList.add('an-fitting');
+    root.classList.remove('an-dense', 'an-dense2', 'an-ovf', 'an-afold', 'an-aovf');
+    root.classList.toggle('an-fit', on);
+    try { fitMeasure(inst, on); } finally { void root.offsetHeight; root.classList.remove('an-fitting'); }
+    // A changed fit moved the briefing's chips: redraw its connectors.
+    if (root.className + '|' + root.style.getPropertyValue('--an-fit-h') !== before) drawConn(inst);
+  }
+  function fitMeasure(inst, on) {
+    const root = inst.root;
+    const vh = window.innerHeight || 0;
+    if (!on) { root.style.removeProperty('--an-fit-h'); return; }
+    root.style.setProperty('--an-step-pr', fabGutter(root, 'panel-toggle', 74) + 'px');
+    root.style.setProperty('--an-bar-pr', fabGutter(root, 'feedback-toggle', 0) + 'px');
+    const top = root.getBoundingClientRect().top + (window.scrollY || window.pageYOffset || 0);
+    const host = root.closest('.concept-content');
+    const below = host ? (parseFloat(getComputedStyle(host).paddingBottom) || 0) : 0;
+    let fit = Math.max(FIT_MIN_H - 120, Math.floor(vh - top - below));
+    root.style.setProperty('--an-fit-h', fit + 'px');
+    const doc = document.documentElement;
+    const extra = doc.scrollHeight - vh;
+    if (extra > 0 && extra < fit / 2) { fit -= extra; root.style.setProperty('--an-fit-h', fit + 'px'); }
+    const st = inst.stages[inst.idx];
+    const over = el => !!el && el.getClientRects().length > 0 && el.scrollHeight > el.clientHeight + 1;
+    // The stage condenses on its own overflow, the analysis column on its
+    // own: a long finding must not shrink the question beside it.
+    ['an-dense', 'an-dense2', 'an-ovf'].forEach(c => { if (over(st && st.el)) root.classList.add(c); });
+    // The column is measured by layout, not scrollHeight: a level that is
+    // still rising in (translateY) would count its transform as overflow.
+    const anaOver = () => {
+      const a = inst.ana;
+      if (!a || !a.getClientRects().length) return false;
+      a.scrollTop = 0;
+      return inst.lvs.getBoundingClientRect().bottom - a.getBoundingClientRect().top > a.clientHeight + 1;
+    };
+    ['an-afold', 'an-aovf'].forEach(c => { if (anaOver()) root.classList.add(c); });
+  }
+  function fitSoon(inst, ms) {
+    clearTimeout(inst.fitTimer);
+    inst.fitTimer = setTimeout(() => fitFull(inst), ms || 0);
+  }
+
   /* ================= 6. navigation, touched timer, replay ================= */
   const TOUCH_MS = 3000;
   const canTouch = inst => !inst.root.closest('[hidden], [data-baked]') && !document.hidden && inst.root.getClientRects().length > 0;
@@ -344,6 +423,8 @@
     refreshStepper(inst);
     if (typeof updateSectionNavState === 'function') updateSectionNavState();
     armTouch(inst);
+    fitFull(inst);
+    fitSoon(inst, (opt.initial ? 0 : transMs()) + 60);
     requestAnimationFrame(() => drawConn(inst));
     if (!opt.initial) {
       if (!opt.noFocus) st.el.focus({ preventScroll: true });
@@ -394,6 +475,8 @@
     first.appendChild(h('b', '', x.d.dataset.label || decId(x.d)));
     const ap = x.d.dataset.appliesTo;
     if (ap) first.appendChild(h('small', '', L('Gilt für ', 'Applies to ') + ap));
+    // A condensed review cuts label / scope to one line: the tooltip has both.
+    tip(b, (x.d.dataset.label || decId(x.d)) + (ap ? ' · ' + L('Gilt für ', 'Applies to ') + ap : ''));
     b.appendChild(first);
     cells.forEach(c => { const w = h('div'); w.appendChild(c); b.appendChild(w); });
     return b;
@@ -426,10 +509,11 @@
     const dev = ents.filter(x => x.e.deviates), iss = ents.filter(x => x.e.issue), un = ents.filter(x => x.e.untouched);
     el.appendChild(h('div', 'an-pop-k', L('Review', 'Review')));
     el.appendChild(h('div', 'an-h', ents.length - un.length + ' / ' + ents.length + ' ' + L('angesehen', 'looked at')));
-    const rv = h('div', 'an-rv');
-    if (dev.length) rv.appendChild(rgroup(L('Weicht von der Empfehlung ab', 'Differs from the recommendation'), 'dev', dev.map(x => reviewRow(inst, x, [tag(valueText(x.d, x.e), 'an-y'), tag(recText(x.d), 'an-r')]))));
+    // Overview: the groups in the main column, impact + submit hint beside them.
+    const rv = h('div', 'an-rv'), main = h('div', 'an-rv-main'), side = h('div', 'an-rv-side');
+    if (dev.length) main.appendChild(rgroup(L('Weicht von der Empfehlung ab', 'Differs from the recommendation'), 'dev', dev.map(x => reviewRow(inst, x, [tag(valueText(x.d, x.e), 'an-y'), tag(recText(x.d), 'an-r')]))));
     else rv.appendChild(h('div', 'an-sub', L('Alles wie empfohlen.', 'Everything as recommended.')));
-    if (iss.length) rv.appendChild(rgroup('Issues', 'iss', iss.map(x => reviewRow(inst, x, [tag(x.e.epic ? 'Epic: ' + x.e.epic : L('als Issue', 'as issue'), 'an-i'), h('span')]))));
+    if (iss.length) main.appendChild(rgroup('Issues', 'iss', iss.map(x => reviewRow(inst, x, [tag(x.e.epic ? 'Epic: ' + x.e.epic : L('als Issue', 'as issue'), 'an-i'), h('span')]))));
     if (un.length) {
       const bar = h('div', 'an-unt');
       bar.appendChild(h('span', '', L('Nie geöffnet oder kürzer als 3 s offen — die Vorauswahl gilt.', 'Never opened or open under 3 s — the preselection stands.')));
@@ -437,15 +521,17 @@
       tip(jump, '', 'U');
       jump.addEventListener('click', () => firstUntouched(inst));
       bar.appendChild(jump);
-      rv.appendChild(rgroup(L('Unberührt', 'Untouched'), 'un', un.map(x => reviewRow(inst, x, [tag(valueText(x.d, x.e), 'an-u'), h('span')])), bar));
+      main.appendChild(rgroup(L('Unberührt', 'Untouched'), 'un', un.map(x => reviewRow(inst, x, [tag(valueText(x.d, x.e), 'an-u'), h('span')])), bar));
     }
     const imp = impactSpec(inst, ents), box = h('div', 'an-imp');
     box.appendChild(h('h4', '', imp.title));
     const viz = h('div'); viz.setAttribute('data-viz', 'bars'); viz.setAttribute('data-viz-spec', JSON.stringify(imp.spec));
     box.appendChild(viz);
     renderViz(box, 'long');
-    rv.appendChild(box);
-    rv.appendChild(h('div', 'an-send', L('Absenden geht über das Panel oder das Menü unten rechts. Der 💬 Chat bleibt jederzeit offen.', 'Submit from the panel or the menu at the bottom right. The 💬 chat stays open.')));
+    side.appendChild(box);
+    side.appendChild(h('div', 'an-send', L('Absenden geht über das Panel oder das Menü unten rechts. Der 💬 Chat bleibt jederzeit offen.', 'Submit from the panel or the menu at the bottom right. The 💬 chat stays open.')));
+    if (main.childNodes.length) rv.appendChild(main);
+    rv.appendChild(side);
     el.appendChild(rv);
     const foot = h('div', 'an-foot');
     foot.appendChild(h('div', 'an-quiet')).appendChild(listLink(inst));
@@ -516,7 +602,7 @@
     const again = btn('an-btn2', L('Nochmal ansehen', 'Look again'));
     again.addEventListener('click', () => go(inst, inst.stages.indexOf(inst.decs[0])));
     foot.appendChild(h('div', 'an-quiet')).appendChild(again);
-    const go2 = goButtons(inst, '', { noNext: true });
+    const go2 = goButtons(inst, '', { noNext: true, noPh: true });
     doneSubmitButtons().forEach(b => go2.appendChild(b));
     foot.appendChild(go2);
     el.appendChild(foot);
@@ -639,7 +725,7 @@
     e.preventDefault(); e.stopPropagation();
     go(inst, idx);
   }, true);
-  window.addEventListener('resize', () => instances.forEach(drawConn), { passive: true });
+  window.addEventListener('resize', () => instances.forEach(i => { drawConn(i); fitSoon(i, 60); }), { passive: true });
 
   /* ================= 9. boot ================= */
   function init(scope) {
