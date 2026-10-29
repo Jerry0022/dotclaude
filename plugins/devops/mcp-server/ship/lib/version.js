@@ -245,7 +245,8 @@ export function updateVersionFiles(oldVersion, newVersion, cwd = process.cwd(), 
  */
 function readDeclaredVersion({ path: relPath, key, pattern }, cwd) {
   const absPath = resolve(cwd, relPath);
-  if (relative(resolve(cwd), absPath).startsWith("..") || isAbsolute(relative(resolve(cwd), absPath))) {
+  const rel = relative(resolve(cwd), absPath);
+  if (rel === ".." || /^\.\.[\\/]/.test(rel) || isAbsolute(rel)) {
     return { error: "path outside the project" };
   }
   let content;

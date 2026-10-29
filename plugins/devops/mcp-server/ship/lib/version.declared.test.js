@@ -61,6 +61,11 @@ describe("declared version files (#941)", () => {
     expect(v.mismatches.map((m) => m.found)).toEqual(["(not found)", "(pattern not found)", "(path outside the project)"]);
   });
 
+  test("a project file whose name starts with '..' is inside the project", () => {
+    write("..gen/version.json", JSON.stringify({ version: "0.86.0" }));
+    expect(verifyVersionFiles("0.86.0", dir, [{ path: "..gen/version.json", key: "version" }]).consistent).toBe(true);
+  });
+
   test("the capture group is replaced at its own offset, not at an earlier identical text", () => {
     write("build.txt", "0.86.0 built as v0.86.0\n");
     updateVersionFiles("0.86.0", "0.86.1", dir, [{ path: "build.txt", pattern: "0\\.86\\.0 built as v(\\d+\\.\\d+\\.\\d+)" }]);
