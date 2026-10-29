@@ -61,6 +61,12 @@ describe("declared version files (#941)", () => {
     expect(v.mismatches.map((m) => m.found)).toEqual(["(not found)", "(pattern not found)", "(path outside the project)"]);
   });
 
+  test("the capture group is replaced at its own offset, not at an earlier identical text", () => {
+    write("build.txt", "0.86.0 built as v0.86.0\n");
+    updateVersionFiles("0.86.0", "0.86.1", dir, [{ path: "build.txt", pattern: "0\\.86\\.0 built as v(\\d+\\.\\d+\\.\\d+)" }]);
+    expect(read("build.txt")).toBe("0.86.0 built as v0.86.1\n");
+  });
+
   test("without declared files the behaviour is unchanged", () => {
     updateVersionFiles("0.86.0", "0.86.1", dir);
     expect(read(TS)).toContain("'0.86.0'");

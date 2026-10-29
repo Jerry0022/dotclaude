@@ -265,10 +265,12 @@ function readDeclaredVersion({ path: relPath, key, pattern }, cwd) {
   }
   if (pattern) {
     let re;
-    try { re = new RegExp(pattern); } catch { return { error: "invalid pattern" }; }
+    // `d` gives the capture group's own offset — searching for its text inside
+    // the match could hit an earlier, identical substring.
+    try { re = new RegExp(pattern, "d"); } catch { return { error: "invalid pattern" }; }
     const m = re.exec(content);
     if (!m || m[1] === undefined) return { error: "pattern not found" };
-    const start = m.index + m[0].indexOf(m[1]);
+    const start = m.indices[1][0];
     return {
       found: m[1],
       write: (v) => writeFileSync(absPath, content.slice(0, start) + v + content.slice(start + m[1].length)),
