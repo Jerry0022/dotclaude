@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.330.7] — 2026-10-29
+
+### Changed
+- On the variant overview of a design round, the feedback dock now offers the note of the variant in the centre (and follows the carousel), so a remark on a variant no longer requires opening it first (#960).
+
 ## [0.330.6] — 2026-10-29
 
 ### Fixed
