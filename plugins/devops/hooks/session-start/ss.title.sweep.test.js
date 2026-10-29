@@ -70,6 +70,22 @@ describe("findStaleTitles", () => {
     expect(find().map((s) => s.sessionId)).toEqual(["dead"]);
   });
 
+  test("#964: a live session idle for an hour with only a dev server open is handed on; real open work keeps it", () => {
+    const launch = (id, cmd) => [
+      { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id, name: "Bash", input: { command: cmd, run_in_background: true } }] } },
+      { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: [{ type: "text", text: "Command running in background with ID: " + id + ". Output is being written to: C:\t\\" + id + ".output. You will be notified when it completes." }] }] } },
+    ].map((l) => JSON.stringify(l)).join("\n") + "\n";
+    for (const [id, cmd] of [["srv", "ng serve"], ["tst", "npm test"]]) {
+      session("C--r-app", id, "⏳ ➜ 🤖 Team ┃ Work", 90);
+      fs.writeFileSync(path.join(gov, id + ".json"), JSON.stringify({ claudePid: process.pid }));
+      const jsonl = path.join(root, "C--r-app", id + ".jsonl");
+      fs.writeFileSync(jsonl, launch("bg" + id, cmd));
+      const at = new Date(NOW - 90 * MIN);
+      fs.utimesSync(jsonl, at, at);
+    }
+    expect(find().map((s) => s.sessionId)).toEqual(["srv"]);
+  });
+
   test("a session under several slugs: newest sidecar wins, newest transcript decides idleness", () => {
     session("C--r-app", "moved", "⏳ ➜ 🤖 Solo ┃ Old name", 600);
     session("C--r-app--claude-worktrees-x", "moved", "⏳ ➜ 🤖 Solo ┃ New name", 20);

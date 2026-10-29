@@ -52,7 +52,7 @@ const BASH_BG_TEXT =
  * was launched and its notification arrived (so it is closed); `result` is the
  * text the notification carries; `bash` keeps a backgrounded command open.
  */
-function notificationTranscript(dir, title, { result = "Agent finished.", bash = false } = {}) {
+function notificationTranscript(dir, title, { result = "Agent finished.", bash = false, bashCmd = "npm test" } = {}) {
   const p = path.join(dir, "transcript.jsonl");
   const use = (id, name, input) => ({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id, name, input }] } });
   const res = (id, text) => ({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: [{ type: "text", text }] }] } });
@@ -62,7 +62,7 @@ function notificationTranscript(dir, title, { result = "Agent finished.", bash =
     res("toolu_1", AGENT_LAUNCH_TEXT),
   ];
   if (bash) {
-    lines.push(use("toolu_2", "Bash", { command: "npm test", description: "Run the suite", run_in_background: true }));
+    lines.push(use("toolu_2", "Bash", { command: bashCmd, description: "Run the suite", run_in_background: true }));
     lines.push(res("toolu_2", BASH_BG_TEXT));
   }
   const note = "<task-notification>\n<task-id>" + AGENT_ID + "</task-id>\n<status>completed</status>\n" +
@@ -219,6 +219,16 @@ describe("stop.flow.guard — F5 interrupted title", () => {
       const out = await stop(dir, { transcript_path: notificationTranscript(dir, "⏳ ➜ 🚀 Shipping ┃ Login-Fix", { bash: true }) });
       expect(out).not.toContain("set_session_title");
       expect(out).not.toContain("Interrupted");
+    } finally {
+      cleanup(dir);
+    }
+  });
+  test("#964: only a dev server open in the background → the ⏳ title drops like an idle end", async () => {
+    const dir = project();
+    try {
+      const out = await stop(dir, { transcript_path: notificationTranscript(dir, "⏳ ➜ 🤖 Team ┃ Refactor", { bash: true, bashCmd: "ng serve --port 4200" }) });
+      expect(out).toMatch(/"decision":"block"/);
+      expect(JSON.parse(out).reason).toContain("title:" + JSON.stringify("👉 ➜ ⚡ Interrupted ┃ Refactor"));
     } finally {
       cleanup(dir);
     }
