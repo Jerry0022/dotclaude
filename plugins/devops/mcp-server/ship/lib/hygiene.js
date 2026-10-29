@@ -390,6 +390,9 @@ export function fetchMergedHeads(cwd, defaultBranch) {
   const list = all.filter((pr) => pr && pr.state === "MERGED");
   const bySha = new Set();
   const byName = new Map();
+  // every head name of any state/base: a remote branch with none has no PR at all
+  // (null on a truncated list - it may hide one)
+  const anyNames = all.length >= PR_LIST_LIMIT ? null : new Set(all.map((pr) => pr && pr.headRefName).filter(Boolean));
   for (const pr of list) {
     if (!pr || pr.baseRefName !== defaultBranch || !pr.headRefOid) continue;
     bySha.add(pr.headRefOid);
@@ -398,7 +401,7 @@ export function fetchMergedHeads(cwd, defaultBranch) {
       byName.get(pr.headRefName).push(pr.headRefOid);
     }
   }
-  return { bySha, byName };
+  return { bySha, byName, anyNames };
 }
 
 /**
@@ -922,7 +925,7 @@ export function classifyUnits(scan, io) {
   const merged = fetchMerged(io.cwd, scan.defaultBranch);
   // injected merged heads (tests) mean no network: open PRs stay unknown too
   const fetchOpen = io.fetchOpen || (io.fetchMerged ? () => null : fetchOpenHeads);
-  const open = scan.units.length ? fetchOpen(io.cwd) : null;
+  const open = fetchOpen(io.cwd);
   const ctx = {
     cwd: io.cwd, baseRef, merged, viaMerged: reachableFromMerged(io.cwd, merged, baseRef),
     projectsDir: io.projectsDir, mainPath: scan.main || null, paths: scan.paths, current: scan.current, now: io.now ?? Date.now(),
@@ -1000,10 +1003,11 @@ export function planAutoClean(scan, settings, io) {
   const keepNewest = settings.autoCleanKeepNewest ?? 0;
   const maxBytes = (settings.autoCleanMaxGB ?? 0) * GB;
   const expiryDays = settings.backupExpiryDays ?? BACKUP_EXPIRY_DAYS;
-  if (scan.units.length === 0 && !hasBackupRefs(io.cwd)) {
-    return { gateOpen: false, reason: "no leftovers", remove: [], keep: [], atRisk: [], remoteExpire: [], offline: false, keptBytes: null };
+  if (scan.units.length === 0 && !hasBackupRefs(io.cwd) && !hasRemoteBranches(io.cwd, scan.defaultBranch)) {
+    return { gateOpen: false, reason: "no leftovers", remove: [], keep: [], atRisk: [], remoteExpire: [], remoteMerged: [], remoteStale: [], offline: false, keptBytes: null };
   }
-  const { ctx, removable, keep: kept, atRisk, merged } = classifyUnits(scan, io);
+  const { ctx, removable, keep: kept, atRisk, merged, open } = classifyUnits(scan, io);
+  const remote = remoteBranchPlan(ctx, open, scan.defaultBranch, settings.remoteStaleDays ?? REMOTE_STALE_DAYS, io.now ?? Date.now());
   const keep = kept.filter((k) => k.ageDays > minAge);
   const remoteExpire = merged === null ? [] : expiredBackupRefs(ctx, removable, expiryDays, io.now ?? Date.now());
 
@@ -1054,12 +1058,14 @@ export function planAutoClean(scan, settings, io) {
       : `${(keptBytes / GB).toFixed(1)} of at most ${settings.autoCleanMaxGB} GB`);
   }
   return {
-    gateOpen: remove.length > 0 || remoteExpire.length > 0,
-    reason: remove.length > 0 || remoteExpire.length > 0 ? null : `nothing to remove: ${rules.join(", ")}`,
+    gateOpen: remove.length > 0 || remoteExpire.length > 0 || remote.merged.length > 0,
+    reason: remove.length > 0 || remoteExpire.length > 0 || remote.merged.length > 0 ? null : `nothing to remove: ${rules.join(", ")}`,
     remove,
     keep,
     atRisk,
     remoteExpire,
+    remoteMerged: remote.merged,
+    remoteStale: remote.stale,
     offline: merged === null,
     keptBytes,
   };
@@ -1109,6 +1115,59 @@ function archiveTip(u, cwd, date, push) {
   if (gitOut(["rev-parse", "--verify", "-q", `refs/tags/${tag}`], cwd) === null && !gitOk(["tag", tag, u.head], cwd)) return { why: "archive-tag-failed" };
   if (push && isPushed(u, cwd) && !gitOk(["push", "origin", `refs/tags/${tag}`], cwd, NETWORK_TIMEOUT)) return { why: "archive-push-failed" };
   return { tag };
+}
+
+/** Remote-only branches without any PR are listed once their last commit is older than this many days (#954). */
+export const REMOTE_STALE_DAYS = 14;
+
+/** Is `name` (an origin branch) a default branch, protected name or safety-copy ref? */
+function isSpecialRemote(name, defaultBranch) {
+  if (name === "HEAD" || name === defaultBranch || NEVER_DELETE.has(name)) return true;
+  const ref = `refs/remotes/origin/${name}`;
+  return BACKUP_PATTERNS.some((p) => ref === p || ref.startsWith(`${p}/`));
+}
+
+/** Any origin branch besides HEAD, the default branch and the safety-copy namespaces. */
+function hasRemoteBranches(cwd, defaultBranch) {
+  const out = gitOut(["for-each-ref", "--format=%(refname)", "refs/remotes/origin"], cwd) || "";
+  return out.split("\n").some((r) => r && !isSpecialRemote(r.slice("refs/remotes/origin/".length), defaultBranch));
+}
+
+/**
+ * Remote branches on origin, read-only (#954):
+ * - `merged`: the tip IS the head of a merged PR of that branch name into the
+ *   default branch, no open PR, not checked out in any worktree - deleted
+ *   (lease-guarded) by the auto-clean;
+ * - `stale`: no local branch, no PR of any state, last commit older than
+ *   `days` - only LISTED, the owner decides.
+ * Nothing at all when gh is unavailable (merged === null) or the open-PR
+ * lookup failed: both facts are needed to call a branch safe or abandoned.
+ * @returns {{merged:{name:string, sha:string}[], stale:{name:string, sha:string, ageDays:number}[]}}
+ */
+export function remoteBranchPlan(ctx, open, defaultBranch, days, now = Date.now()) {
+  const res = { merged: [], stale: [] };
+  if (!ctx.merged || !open) return res;
+  const wt = listWorktrees(ctx.cwd);
+  if (!wt) return res;
+  const checkedOut = new Set(wt.map((w) => w.branch).filter(Boolean));
+  const local = new Set((gitOut(["for-each-ref", "--format=%(refname:short)", "refs/heads"], ctx.cwd) || "").split("\n").filter(Boolean));
+  const out = gitOut(["for-each-ref", "--format=%(refname)%09%(objectname)%09%(committerdate:unix)", "refs/remotes/origin"], ctx.cwd) || "";
+  for (const line of out.split("\n")) {
+    const [ref, sha, ts] = line.trim().split("\t");
+    if (!ref || !sha) continue;
+    const name = ref.slice("refs/remotes/origin/".length);
+    if (isSpecialRemote(name, defaultBranch)) continue;
+    if (open.names.has(name) || open.shas.has(sha)) continue;
+    if ((ctx.merged.byName.get(name) || []).includes(sha)) {
+      if (!checkedOut.has(name)) res.merged.push({ name, sha });
+      continue;
+    }
+    const ageDays = (now - Number(ts) * 1000) / DAY_MS;
+    if (!local.has(name) && ctx.merged.anyNames && !ctx.merged.anyNames.has(name) && Number.isFinite(ageDays) && ageDays > days) {
+      res.stale.push({ name, sha, ageDays: Math.floor(ageDays) });
+    }
+  }
+  return res;
 }
 
 /** `branch -D` after re-checking the subject; returns a skip reason or null. */
@@ -1243,7 +1302,12 @@ export function executeAutoClean(plan, scan, {
     else branchGone(u.branch, u.head);
   }
   if (remotes) {
-    for (const r of plan.remoteExpire || []) {
+    const doomed = [
+      ...(plan.remoteExpire || []).map((r) => ({ ...r, trigger: "backup-expiry" })),
+      ...(plan.remoteMerged || []).map((r) => ({ ...r, trigger: "merged-pr" })),
+    ];
+    for (const r of doomed) {
+      if (removed.some((x) => x.kind === "remote" && x.name === r.name)) continue; // went with its local twin
       const tip = gitOut(["rev-parse", "--verify", "-q", `refs/remotes/origin/${r.name}`], cwd);
       if (tip !== r.sha) {
         skipped.push({ kind: "remote", name: r.name, reason: tip === null ? "gone" : "remote-moved" });
@@ -1251,7 +1315,7 @@ export function executeAutoClean(plan, scan, {
       }
       // the lease makes the delete fail if someone pushed to the ref meanwhile
       const ok = gitOk(["push", "origin", "--delete", r.name, `--force-with-lease=${r.name}:${r.sha}`], cwd, NETWORK_TIMEOUT);
-      if (ok) removed.push({ kind: "remote", name: r.name, sha: r.sha, trigger: "backup-expiry" });
+      if (ok) removed.push({ kind: "remote", name: r.name, sha: r.sha, trigger: r.trigger });
       else skipped.push({ kind: "remote", name: r.name, reason: "remote-delete-failed" });
     }
   }
@@ -1450,7 +1514,18 @@ export function cardLines(result, lang = "de") {
         reply: `Branch ${x.branch}: review the residual — merge, re-implement or delete (only after my confirmation).`,
       };
   });
-  if (stale.length || decisions.length) out.openItems = [...stale, ...decisions];
+  const rs = result.remoteStale || [];
+  const names = rs.slice(0, 3).map((x) => x.name).join(", ") + (rs.length > 3 ? ` +${rs.length - 3}` : "");
+  const remoteItems = rs.length ? [de
+    ? {
+      text: `${plural(rs.length, "Remote-Branch", "Remote-Branches")} ohne PR und ohne lokale Kopie, letzter Commit älter als ${REMOTE_STALE_DAYS} Tage: ${names} — prüfen und löschen?`,
+      reply: `Remote-Branches ohne PR prüfen: ${rs.map((x) => x.name).join(", ")}.`,
+    }
+    : {
+      text: `${plural(rs.length, "remote branch", "remote branches")} with no PR and no local copy, last commit older than ${REMOTE_STALE_DAYS} days: ${names} — review and delete?`,
+      reply: `Review the remote branches without a PR: ${rs.map((x) => x.name).join(", ")}.`,
+    }] : [];
+  if (stale.length || decisions.length || remoteItems.length) out.openItems = [...stale, ...decisions, ...remoteItems];
   const risk = result.atRisk || [];
   if (risk.length) {
     const shown = risk.slice(0, 3).map((x) => {
@@ -1534,6 +1609,7 @@ export function runHygiene(p) {
       result.atRisk = persisted;
       result.atRiskSource = { from: "last-hygiene-run", at: repo.atRisk.at };
     }
+    if (repo.remoteStale && Array.isArray(repo.remoteStale.items) && repo.remoteStale.items.length) result.remoteStale = repo.remoteStale.items;
     if (scan.units.length > 0) {
       if (workerLockHeld(cwd, now)) {
         result.autoClean.reason = "deferred — worker already running";
@@ -1559,6 +1635,8 @@ export function runHygiene(p) {
     result.autoClean.kept = plan.keep.length;
     result.autoClean.offline = plan.offline;
     result.atRisk = plan.atRisk;
+    result.remoteStale = plan.remoteStale;
+    repo.remoteStale = { at: new Date(now).toISOString(), items: plan.remoteStale.slice(0, AT_RISK_KEEP) };
     repo.atRisk = { at: new Date(now).toISOString(), items: plan.atRisk.slice(0, AT_RISK_KEEP) };
     dirty = true;
     if (!plan.gateOpen) {

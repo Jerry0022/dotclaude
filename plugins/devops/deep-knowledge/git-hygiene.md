@@ -244,6 +244,16 @@ commit's subject and date. A parked entry older than 30 days gets the nudge
 "behalten, integrieren oder verwerfen" in the orphan report. Stashes are
 listed per repo in the same report.
 
+**Remote branches (#954).** The auto-clean also reads origin: a remote branch
+whose tip equals the head of a MERGED PR of that name into the default branch
+(claude.ai web sessions merge without `--delete-branch`) is deleted with
+`push --delete --force-with-lease=<name>:<sha>` (log trigger `merged-pr`) —
+never the default branch, never with an open PR, never one checked out in a
+worktree, nothing when gh is offline or the open-PR lookup failed, nothing on
+trigger `promote`. Remote-only branches without any PR (no local copy, last
+commit older than `cleanup.remoteStaleDays`, default 14) are only LISTED as a
+card item; the owner decides.
+
 **Landed proof by PR chain, expiry, temp worktrees.** A branch whose tip is an
 ancestor of a merged PR's head counts as landed when that head still holds all
 its changes (an integration branch collecting sub-agent branches); commits on

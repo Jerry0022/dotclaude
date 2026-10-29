@@ -64,6 +64,10 @@ const SCHEMA = Object.freeze({
       type: 'integer', default: 10, min: 0, max: 100000,
       doc: 'Kept landed session worktrees above this many GB lose their checkout, oldest first; the branch stays (0 = off).',
     }),
+    remoteStaleDays: Object.freeze({
+      type: 'integer', default: 14, min: 1, max: 3650,
+      doc: 'Remote-only branches without any PR whose last commit is older than this many days are listed on the ship card (never deleted).',
+    }),
     nudge: Object.freeze({
       type: 'boolean', default: true,
       doc: 'After a successful ship or promote, suggest the cleanup page when too much piles up.',

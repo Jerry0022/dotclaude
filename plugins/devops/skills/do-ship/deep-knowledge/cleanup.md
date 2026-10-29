@@ -227,6 +227,12 @@ shows a decision item per branch (merge / re-implement / delete after
 confirmation) and says whether the residual is outdated (main changed that
 code since) or new work. Never for live sessions, locks or dirty worktrees.
 
+**Remote branches (#954).** Origin branches whose tip is the head of a merged
+PR (and that have no open PR) are deleted lease-guarded (`merged-pr` in the
+log); offline gh deletes nothing. Remote-only branches without any PR and
+quiet for `cleanup.remoteStaleDays` (14) days are listed on the card as an open
+item — never deleted without the user's answer.
+
 **Off the critical path.** After a ship the call returns in seconds: it scans,
 decides the nudge and the stale-PR lines, and hands the removal (plus size
 measurement) to a detached, low-priority worker (`ship/hygiene-worker.js`).
