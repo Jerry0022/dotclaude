@@ -81,12 +81,13 @@ function collector(max) {
  * Run a command without blocking the event loop.
  * @param {string} cmd
  * @param {string[]} args
- * @param {{ cwd?: string, env?: object, input?: string, timeoutMs?: number, maxOutput?: number }} [opts]
+ * @param {{ cwd?: string, env?: object, input?: string, timeoutMs?: number, maxOutput?: number,
+ *   onStderr?: (chunk: Buffer) => void }} [opts] onStderr sees every stderr chunk as it arrives
  * @returns {Promise<{ code: number|null, signal: string|null, stdout: string, stderr: string,
  *   timedOut: boolean, truncated: boolean, durationMs: number, error: string|null }>}
  */
 export function runChild(cmd, args, opts = {}) {
-  const { cwd, env, input, timeoutMs = 10 * 60_000, maxOutput = DEFAULT_MAX_OUTPUT } = opts;
+  const { cwd, env, input, timeoutMs = 10 * 60_000, maxOutput = DEFAULT_MAX_OUTPUT, onStderr } = opts;
   const started = Date.now();
   return new Promise((resolve) => {
     let child;
@@ -110,7 +111,10 @@ export function runChild(cmd, args, opts = {}) {
     const timer = setTimeout(() => { timedOut = true; killing = killTree(child); }, timeoutMs);
     timer.unref();
     child.stdout.on("data", (b) => out.push(b));
-    child.stderr.on("data", (b) => err.push(b));
+    child.stderr.on("data", (b) => {
+      err.push(b);
+      if (onStderr) { try { onStderr(b); } catch { /* a listener never breaks the run */ } }
+    });
     child.stdin.on("error", () => { /* child closed stdin early */ });
     const finish = (code, signal) => {
       if (settled) return;

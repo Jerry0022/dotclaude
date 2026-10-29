@@ -49,6 +49,9 @@ jobs + the aggregate `suite`) or a local full run recorded for that tree.
   build is not enough: the merge needs `findFullGreen(cwd, { treeHash })` for HEAD's tree
   (lib/test-results.js); without a record, run the full suite locally first.
 
+An explicit `build.testCmd` always runs as given: it disables the related-tests scope and forces the
+full suite locally. Leave `testCmd` unset to take the auto-detected test script.
+
 Details and result fields: [build-reuse.md](build-reuse.md) § Test scope.
 
 ### Step time limit
@@ -57,7 +60,9 @@ Details and result fields: [build-reuse.md](build-reuse.md) § Test scope.
 (default **300 s**, 30–1800). A stopped step fails with `failure: "timeout"`
 and the result carries `timeoutHit: { step, limitSec, note }` — a harness stop,
 not a red test. Re-run with a higher `stepTimeoutSec`, or run the full suite
-separately and pass a narrower `testCmd`; name the limit on the card.
+separately and pass a narrower `testCmd`; name the limit on the card. The limit
+clock does not run while the test step waits on the machine-wide suite lock
+(extended by the measured wait, max 35 min); `ship_run` reports progress every 30 s.
 
 ## Deploy-Parity Build (Step 2.5)
 

@@ -35,6 +35,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { writeLastResult } from "./lib/cli-last-result.js";
 import { recordTiming } from "./lib/ship-timings.js";
+import { PROGRESS_PREFIX } from "./lib/progress.js";
 
 import { schema as preflightSchema, handler as preflightHandler } from "./tools/preflight.js";
 import { schema as buildSchema, handler as buildHandler } from "./tools/build.js";
@@ -89,9 +90,15 @@ if (!parsed.success) {
     parsed.error.issues.map((i) => `  - ${i.path.join(".") || "(root)"}: ${i.message}`).join("\n"));
 }
 
+// Progress for the server's MCP heartbeat: one stderr line per message (ship/server.js reads them).
+const progress = process.env.DOTCLAUDE_SHIP_VIA_SERVER === "1" && (tool === "ship_build" || tool === "ship_run")
+  ? (msg) => process.stderr.write(`${PROGRESS_PREFIX}${msg}
+`)
+  : undefined;
+
 const startedAt = Date.now();
 try {
-  const result = await handler(parsed.data);
+  const result = await handler(parsed.data, progress ? { progress } : undefined);
   recordTiming({ cwd: parsed.data.cwd || process.cwd(), tool, startedAt, durationMs: Date.now() - startedAt, result });
   recordStep(tool, parsed.data, result);
   if (process.env.DOTCLAUDE_SHIP_VIA_SERVER !== "1") writeLastResult(tool, parsed.data, result);
