@@ -215,7 +215,18 @@ kept — and, since the at-risk definition was widened, reported.
 `landed` (ancestor of the default branch, head of a merged PR, a trial
 `merge-tree` that changes nothing, or every touched file's patch reverse-applies
 to the base), `partial` (some files' changes are in the base, others are not —
-a squash merge plus later edits) or `unlanded`. `partial` is never removable.
+a squash merge plus later edits) or `unlanded`.
+
+**Partial branches by content (#953).** A `partial` branch is removable when at
+least 95 % of the lines it added (blank lines ignored) are present in the base's
+versions of those files (`residualOf`) — no open PR, no live session, a clean
+worktree. Its tip is first tagged `archive/<YYYY-MM-DD>/<branch>` (pushed when
+the branch was pushed; a failed tag or tag push keeps the branch), then the
+branch goes. Below 95 % it is NEVER deleted automatically: the residual is
+classified by content — `outdated` (the base changed or dropped the file since
+the fork point) or `new` (unique work the base never touched) — and the card
+lists it as a decision item: merge, re-implement, or delete after confirmation.
+Age alone never decides.
 
 **At risk** = not landed (`unlanded` or `partial`) AND no open PR AND no live
 session AND not parked; plus any worktree (session or agent) with real

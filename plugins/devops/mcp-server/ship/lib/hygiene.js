@@ -495,6 +495,93 @@ export function landingState(sha, branch, ctx) {
   return done({ state: "unlanded", via: null, ...f });
 }
 
+/**
+ * A `partial` branch (a squash merge plus later edits) is removable when at
+ * least this share of the lines it added is present in the base's versions of
+ * those files (#953) - it is tagged `archive/<date>/<branch>` first.
+ */
+export const RESIDUAL_REMOVABLE = 0.95;
+
+/**
+ * What of a branch's own change is still missing from the base, by content:
+ * the share of its added lines (blank lines ignored) that exist in the base's
+ * version of the same file, and for the missing rest whether it is OUTDATED
+ * (the base changed or dropped that file since the fork point - the branch
+ * edits code main has moved on from) or NEW (the base never touched the file -
+ * unique work to merge or re-implement). null when it cannot be told (git
+ * error, too many files, huge diff): callers then keep the branch.
+ * Memoized per `ctx`.
+ * @returns {{ratio:number, added:number, present:number, kind:"none"|"outdated"|"new", newFiles:string[], outdatedFiles:string[]}|null}
+ */
+export function residualOf(sha, ctx) {
+  const cache = ctx.residuals || (ctx.residuals = new Map());
+  if (cache.has(sha)) return cache.get(sha);
+  const res = computeResidual(sha, ctx);
+  cache.set(sha, res);
+  return res;
+}
+
+function computeResidual(sha, ctx) {
+  const lit = "--literal-pathspecs";
+  const mb = gitOut(["merge-base", sha, ctx.baseRef], ctx.cwd);
+  if (!mb) return null;
+  const names = gitOut(["diff", "--no-renames", "--name-only", "-z", mb, sha], ctx.cwd);
+  if (names === null) return null;
+  const files = names.split("\0").filter(Boolean);
+  if (files.length === 0 || files.length > TREE_CHECK_MAX_FILES) return null;
+  let added = 0;
+  let present = 0;
+  const newFiles = [];
+  const outdatedFiles = [];
+  for (const f of files) {
+    const patch = gitOut([lit, "diff", "--no-renames", "-U0", "--no-color", mb, sha, "--", f], ctx.cwd);
+    if (patch === null) return null;
+    let lines;
+    let inBase;
+    if (/^Binary files /m.test(patch)) {
+      const a = gitOut(["rev-parse", "-q", "--verify", `${sha}:${f}`], ctx.cwd);
+      const b = gitOut(["rev-parse", "-q", "--verify", `${ctx.baseRef}:${f}`], ctx.cwd);
+      lines = a ? ["<binary>"] : [];
+      inBase = (l) => Boolean(a) && a === b && l === "<binary>";
+    } else {
+      lines = patch.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).map((l) => l.slice(1).trim()).filter(Boolean);
+      const text = lines.length ? gitOut(["show", `${ctx.baseRef}:${f}`], ctx.cwd) : null;
+      const set = text === null ? null : new Set(text.split("\n").map((l) => l.trim()));
+      inBase = (l) => Boolean(set) && set.has(l);
+    }
+    const hit = lines.filter(inBase).length;
+    added += lines.length;
+    present += hit;
+    if (hit < lines.length) {
+      // did the base change (or drop) this file since the fork point?
+      (gitOk([lit, "diff", "--quiet", mb, ctx.baseRef, "--", f], ctx.cwd) ? newFiles : outdatedFiles).push(f);
+    }
+  }
+  const kind = newFiles.length ? "new" : (outdatedFiles.length ? "outdated" : "none");
+  // nothing comparable (pure deletions): not provably in the base - unique work
+  if (added === 0) return { ratio: 0, added, present, kind: "new", newFiles: files, outdatedFiles };
+  return { ratio: present / added, added, present, kind, newFiles, outdatedFiles };
+}
+
+/**
+ * Landed, or partial with >= RESIDUAL_REMOVABLE of its added lines in the
+ * base, no open PR (a lookup that failed = unknown = keep) and a branch to tag.
+ */
+function landedEnough(unit, ctx) {
+  const l = landingState(unit.head, unit.branch, ctx);
+  if (l.state === "landed") return true;
+  if (l.state !== "partial" || !unit.branch || unit.detached || !ctx.open) return false;
+  if (ctx.open.names.has(unit.branch) || ctx.open.shas.has(unit.head)) return false;
+  const r = residualOf(unit.head, ctx);
+  return Boolean(r) && r.ratio >= RESIDUAL_REMOVABLE;
+}
+
+/** The residual verdict an at-risk item carries onto the card (decision item, #953). */
+function residualFields(sha, ctx) {
+  const r = residualOf(sha, ctx);
+  return r ? { residual: { ratio: Math.round(r.ratio * 1000) / 1000, kind: r.kind, files: [...r.newFiles, ...r.outdatedFiles].slice(0, 5) } } : {};
+}
+
 /** An ignored porcelain path that is regenerable build output. */
 export function isRegenerable(entry) {
   const p = String(entry).replace(/\\/g, "/");
@@ -696,7 +783,7 @@ function keepReason(unit, ctx) {
   if (unit.kind === "worktree" && unit.temp && !unit.session) {
     const held = tempHeldReason(unit, ctx.now);
     if (held) return held;
-    if (!unit.detached && landingState(unit.head, unit.branch, ctx).state !== "landed") return "not-landed";
+    if (!unit.detached && !landedEnough(unit, ctx)) return "not-landed";
     return worktreeContentReason(unit.path, ctx.mainPath) || null;
   }
   if (unit.kind === "worktree") {
@@ -708,7 +795,7 @@ function keepReason(unit, ctx) {
     const why = worktreeContentReason(unit.path, ctx.mainPath);
     if (why) return why;
   }
-  return landingState(unit.head, unit.branch, ctx).state === "landed" ? null : "not-landed";
+  return landedEnough(unit, ctx) ? null : "not-landed";
 }
 
 /** A non-session linked worktree whose work landed and that holds nothing: no lock, live session, nested checkout or changes. */
@@ -839,6 +926,7 @@ export function classifyUnits(scan, io) {
   const ctx = {
     cwd: io.cwd, baseRef, merged, viaMerged: reachableFromMerged(io.cwd, merged, baseRef),
     projectsDir: io.projectsDir, mainPath: scan.main || null, paths: scan.paths, current: scan.current, now: io.now ?? Date.now(),
+    open,
   };
   const removable = [];
   const keep = [];
@@ -858,7 +946,8 @@ export function classifyUnits(scan, io) {
       landedOutside.push(u);
       continue;
     }
-    if (!reason) removable.push(u);
+    // a partial one that is removable at all is the >= 95 % case: tagged before it goes (#953)
+    if (!reason) removable.push(landingState(u.head, u.branch, ctx).state === "partial" ? { ...u, archive: true } : u);
     else keep.push({ ...u, reason });
 
     const live = u.kind === "worktree"
@@ -867,7 +956,7 @@ export function classifyUnits(scan, io) {
     const dirty = u.kind === "worktree" ? uncommittedCount(u.path) : 0;
     const openPr = Boolean(open && ((u.branch && open.names.has(u.branch)) || open.shas.has(u.head)));
     const landing = landingState(u.head, u.branch, ctx);
-    const unlanded = landing.state !== "landed" && merged !== null && !openPr;
+    const unlanded = landing.state !== "landed" && merged !== null && !openPr && !(!reason && landing.state === "partial");
     const subject = unlanded ? gitOut(["log", "-1", "--format=%s", u.head], io.cwd) || "" : "";
     // parked by name, or the same work is kept on a parked ref (local or origin/ —
     // salvage copies live remote-only) whose history contains this tip
@@ -881,6 +970,7 @@ export function classifyUnits(scan, io) {
         commits: ownCommits(u.head, ctx),
         state: landing.state, filesIn: landing.filesIn, filesTotal: landing.filesTotal,
         pushed: isPushed(u, io.cwd), dirty,
+        ...(landing.state === "partial" ? residualFields(u.head, ctx) : {}),
       });
     }
   }
@@ -1005,6 +1095,22 @@ export function expiredBackupRefs(ctx, removable, days, now = Date.now()) {
   return res;
 }
 
+/**
+ * Tag the tip of a branch that goes although a residual of it is not in the
+ * base (#953): `archive/<YYYY-MM-DD>/<branch>`, pushed when `push` and the
+ * branch was pushed. Returns the tag, or a skip reason `{why}` - the branch
+ * then stays, nothing is lost.
+ * @returns {{tag:string}|{why:string}}
+ */
+function archiveTip(u, cwd, date, push) {
+  let tag = `archive/${date}/${u.branch}`;
+  const have = gitOut(["rev-parse", "--verify", "-q", `refs/tags/${tag}`], cwd);
+  if (have !== null && have !== u.head) tag += `-${u.head.slice(0, 7)}`;
+  if (gitOut(["rev-parse", "--verify", "-q", `refs/tags/${tag}`], cwd) === null && !gitOk(["tag", tag, u.head], cwd)) return { why: "archive-tag-failed" };
+  if (push && isPushed(u, cwd) && !gitOk(["push", "origin", `refs/tags/${tag}`], cwd, NETWORK_TIMEOUT)) return { why: "archive-push-failed" };
+  return { tag };
+}
+
 /** `branch -D` after re-checking the subject; returns a skip reason or null. */
 function deleteBranch(name, sha, cwd, defaultBranch) {
   if (NEVER_DELETE.has(name) || name === defaultBranch) return "protected";
@@ -1083,8 +1189,10 @@ export function executeAutoClean(plan, scan, {
   const deadline = now() + budgetMs;
   // a crashed git's leftover ref lock makes every branch -D / push --delete below fail
   clearStaleLocks(cwd);
+  const date = new Date(now()).toISOString().slice(0, 10);
+  const archived = new Map();
   const branchGone = (name, sha) => {
-    removed.push({ kind: "branch", name, sha });
+    removed.push({ kind: "branch", name, sha, ...(archived.has(name) && { archived: archived.get(name) }) });
     if (!remotes) return;
     const why = deleteRemoteTwin(name, sha, cwd);
     if (why === null) removed.push({ kind: "remote", name, sha });
@@ -1095,6 +1203,14 @@ export function executeAutoClean(plan, scan, {
     if (left <= 0) {
       skipped.push({ kind: "worktree", path: u.path, branch: u.branch, reason: "time-budget" });
       continue;
+    }
+    if (u.archive && u.branch && !u.keepBranch) {
+      const a = archiveTip(u, cwd, date, remotes);
+      if (a.why) {
+        skipped.push({ kind: "worktree", path: u.path, branch: u.branch, reason: a.why });
+        continue;
+      }
+      archived.set(u.branch, a.tag);
     }
     const why = removeWorktree(u, cwd, scan.current, removeTimeout, projectsDir, scan.main || null);
     if (why && typeof why === "object") {
@@ -1114,6 +1230,14 @@ export function executeAutoClean(plan, scan, {
     }
   }
   for (const u of plan.remove.filter((x) => x.kind === "branch")) {
+    if (u.archive) {
+      const a = archiveTip(u, cwd, date, remotes);
+      if (a.why) {
+        skipped.push({ kind: "branch", name: u.branch, reason: a.why });
+        continue;
+      }
+      archived.set(u.branch, a.tag);
+    }
     const why = deleteBranch(u.branch, u.head, cwd, scan.defaultBranch);
     if (why) skipped.push({ kind: "branch", name: u.branch, reason: why });
     else branchGone(u.branch, u.head);
@@ -1275,6 +1399,8 @@ export function cardLines(result, lang = "de") {
     let text = parts.length
       ? `${parts.join(" · ")} ${de ? "entfernt" : "removed"}`
       : (de ? "nichts entfernt" : "nothing removed");
+    const arch = ac.removed.filter((x) => x.archived).length;
+    if (arch) text += de ? ` · ${arch} als archive/-Tag gesichert` : ` · ${arch} kept as archive/ tag`;
     if (ac.freedBytes >= 0.1 * GB) text += ` · ${(ac.freedBytes / GB).toFixed(1)} GB ${de ? "frei" : "freed"}`;
     if (ac.skipped.length) text += de ? ` · ${ac.skipped.length} übersprungen` : ` · ${ac.skipped.length} skipped`;
     const damaged = [...new Set([...ac.skipped.filter((x) => x.orphan).map((x) => x.orphan), ...(result.damaged || [])])];
@@ -1310,7 +1436,21 @@ export function cardLines(result, lang = "de") {
         : `PR #${x.number} untouched for ${x.days} days, no worktree${x.title ? ` (${x.title})` : ""} — close it?`,
       reply: `Close PR #${x.number} — superseded by main.`,
     }));
-  if (stale.length) out.openItems = stale;
+  // a partial branch below the removal bar is never auto-deleted: the owner decides by content (#953)
+  const decisions = (result.atRisk || []).filter((x) => x.state === "partial" && x.residual && x.branch).slice(0, 5).map((x) => {
+    const pct = Math.round(x.residual.ratio * 100);
+    const outdated = x.residual.kind === "outdated";
+    return de
+      ? {
+        text: `Branch ${x.branch}: ${pct} % in main, der Rest ${outdated ? "betrifft Code, den main seither geändert oder entfernt hat (veraltet)" : "ist eigenständige neue Arbeit"} — mergen, neu implementieren oder nach Bestätigung löschen?`,
+        reply: `Branch ${x.branch}: Rest prüfen — mergen, neu implementieren oder löschen (nur nach meiner Bestätigung).`,
+      }
+      : {
+        text: `Branch ${x.branch}: ${pct}% in main, the rest ${outdated ? "touches code main has since changed or removed (outdated)" : "is unique new work"} — merge, re-implement or delete after confirmation?`,
+        reply: `Branch ${x.branch}: review the residual — merge, re-implement or delete (only after my confirmation).`,
+      };
+  });
+  if (stale.length || decisions.length) out.openItems = [...stale, ...decisions];
   const risk = result.atRisk || [];
   if (risk.length) {
     const shown = risk.slice(0, 3).map((x) => {
