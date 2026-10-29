@@ -109,6 +109,33 @@
     if (next) next.focus();
     else closeDock();
   }, true);
+  // Ctrl/Cmd + Enter inside a NOTE (an auto note's bubble or the user's own
+  // pin editor) closes that note; when auto notes of the same screen are
+  // still unhandled (neither answered nor opened — the eye counter's rule)
+  // the next one opens, otherwise nothing else happens. An own note is saved
+  // through its own Enter handler (re-dispatched plain), the next note opens
+  // in a macrotask once that has closed the editor.
+  const unhandledAutoNote = from => {
+    const cur = from.closest('[data-anno]');
+    const scope = (cur && cur.closest('section[data-screen]'))
+      || document.querySelector('section[data-iteration]:not([hidden]) section[data-screen][data-screen-active="true"]')
+      || document.querySelector('section[data-iteration]:not([hidden])') || document;
+    return [...scope.querySelectorAll('[data-anno]')].find(a => {
+      const p = a.querySelector('[data-anno-pin]');
+      return a !== cur && a.dataset.annoSeen !== 'true' && !(p && p.dataset.answered === 'true');
+    });
+  };
+  document.addEventListener('keydown', e => {
+    if (e.defaultPrevented || e.repeat || e.altKey || e.shiftKey || e.isComposing) return;
+    if (!(e.ctrlKey || e.metaKey) || e.key !== 'Enter') return;
+    const from = e.target && e.target.closest ? e.target.closest('[data-anno-bubble], .upin-editor') : null;
+    if (!from) return;
+    e.preventDefault();
+    const next = unhandledAutoNote(from);
+    if (from.matches('[data-anno-bubble]')) window.closeAnnoBubbles?.();
+    else from.querySelector('textarea')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    if (next) setTimeout(() => next.querySelector('[data-anno-pin]')?.click(), 0);
+  }, true);
   // ── "Wusstest du schon?" — one static fact per dock open (rules below).
   // Every tip is about USING this page (never about the reviewed content or
   // the plugin's internals), understandable on a first visit, one line.

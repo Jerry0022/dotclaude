@@ -390,6 +390,10 @@ What the code does, in the order of the file:
     const inst = { root, lite, stages: [], groups: [], idx: 0, lv: {}, timers: [], visited: new Set(), decs: [], pop: null, maxIdx: 0, touchTimer: 0, fitTimer: 0 };
     root.__an = inst;
     instances.push(inst);
+    // A lite round is a question view of the page: it counts as answered once EVERY decision is
+    // (touched / issue) - NOT on a click, key or scroll, or paging through it would answer it (the
+    // design overview's viewAnswered() asks this hook first).
+    if (lite) root.__anAnswered = () => inst.decs.length > 0 && inst.decs.every(st => stateOf(inst, st.el) !== 'open' && stateOf(inst, st.el) !== 'un');
     root.classList.add('an-enh');
     if (lite) root.classList.add('an-lite');
     const nodes = [...root.querySelectorAll('[data-analysis-briefing], [data-topic], [data-decision][data-decision-mode]')]
@@ -425,6 +429,10 @@ What the code does, in the order of the file:
       const done = h('section', 'an-stage an-fin');
       root.appendChild(done);
       inst.stages.push({ kind: 'done', el: done });
+      // "All as list" is an aux stage here too: the header's list icon opens it, Zurück returns.
+      const lst = h('section', 'an-stage an-list');
+      root.appendChild(lst);
+      inst.stages.push({ kind: 'list', el: lst, aux: true });
     } else {
       ['review', 'next', 'list'].forEach(k => {
         const el = h('section', 'an-stage an-' + k);
@@ -475,6 +483,7 @@ What the code does, in the order of the file:
       const dots = h('span', 'an-dots');
       inst.decs.forEach(st => { const b = btn('an-dot'); b.dataset.go = String(inst.stages.indexOf(st)); b.dataset.dec = decId(st.el); dots.appendChild(b); });
       pr.appendChild(dots);
+      pr.appendChild(listIcon(inst));
       head.appendChild(pr);
       inst.root.insertBefore(head, inst.root.firstChild);
       inst.stepEl = head;
@@ -503,7 +512,7 @@ What the code does, in the order of the file:
     const rv = btn('an-k'); rv.appendChild(h('span', 'an-lbl', L('Review', 'Review'))); rv.dataset.k = 'review'; rv.dataset.go = String(inst.stages.findIndex(s => s.kind === 'review'));
     tip(rv, '', 'Ende');
     const nx = btn('an-k'); nx.appendChild(h('span', 'an-lbl', L('Nächste Runde', 'Next round'))); nx.dataset.k = 'next'; nx.dataset.go = String(inst.stages.findIndex(s => s.kind === 'next'));
-    nav.append(rv, h('i', 'an-sep'), nx);
+    nav.append(rv, h('i', 'an-sep'), nx, listIcon(inst));
     inst.root.insertBefore(nav, inst.root.firstChild);
     inst.stepEl = nav;
   }
@@ -580,15 +589,18 @@ What the code does, in the order of the file:
     const q = h('div', 'an-quiet');
     const meta = (dur ? dur.textContent.trim() : '') + (inst.decs.length ? (dur ? ' · ' : '') + inst.decs.length + ' ' + L('Entscheidungen', 'decisions') : '');
     if (meta) q.appendChild(h('span', 'an-meta', meta));
-    q.appendChild(listLink(inst));
     const go2 = goButtons(inst, L("Los geht's", "Let's go") + ' →', { noBack: true, glow: true });
     foot.append(q, go2);
     root.appendChild(foot);
     void what;
   }
-  function listLink(inst) {
-    const l = btn('an-link', L('Alle als Liste', 'All as list'));
-    tip(l, '', 'L');
+  /** "All as list": ONE discreet list icon in the header row (stepper / lite head), no text link in the bars. */
+  function listIcon(inst) {
+    const l = btn('an-listbtn');
+    l.dataset.k = 'list';
+    l.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M5.5 3.5h8M5.5 8h8M5.5 12.5h8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="2.4" cy="3.5" r="1.1" fill="currentColor"/><circle cx="2.4" cy="8" r="1.1" fill="currentColor"/><circle cx="2.4" cy="12.5" r="1.1" fill="currentColor"/></svg>';
+    l.setAttribute('aria-label', L('Alle als Liste', 'All as list'));
+    tip(l, L('Alle als Liste', 'All as list'), 'L');
     l.addEventListener('click', () => go(inst, inst.stages.findIndex(s => s.kind === 'list')));
     return l;
 ```

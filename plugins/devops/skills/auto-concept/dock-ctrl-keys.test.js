@@ -75,3 +75,60 @@ describe("notes dock Ctrl keys", () => {
     expect(clicks).toBe(0);
   }, T);
 });
+
+// Ctrl+Enter inside a note (auto bubble or own pin editor) closes it and opens
+// the next auto note that is neither answered nor opened; none left → only closes.
+const ANNO = (id) => [
+  `<div class="anno" data-anno="${id}" data-anno-side="right" style="--anno-x:50%;--anno-y:50%">`,
+  `<button class="anno-pin" type="button" data-anno-pin="${id}" aria-expanded="false">1</button>`,
+  `<div class="anno-bubble" data-anno-bubble="${id}" data-open="false">`,
+  `<textarea data-annotation="${id}"></textarea></div></div>`,
+].join("");
+
+describe("notes Ctrl+Enter inside a note", () => {
+  const base = build({ rounds: 1, entries: 3, mode: "design", mapping: true, locale: "en" });
+  const html = base.replace(
+    /(<section id="d1-s1" data-screen[^>]*>)/,
+    `$1<div class="anno-layer" data-anno-layer>${ANNO("n1")}${ANNO("n2")}${ANNO("n3")}</div>`,
+  );
+  const T = 180_000;
+  const tick = (w) => new Promise((r) => w.setTimeout(r, 20));
+  const open = (d, id) => d.querySelector(`[data-anno-bubble="${id}"]`).dataset.open;
+
+  test("closes the note and opens the next unhandled auto note; the last one only closes", async () => {
+    const { window } = await boot(html);
+    const d = window.document;
+    expect(d.querySelectorAll("[data-anno]").length).toBe(3);
+    d.querySelector('[data-anno-pin="n1"]').click();
+    expect(open(d, "n1")).toBe("true");
+    const ev = key(window, d.querySelector('[data-annotation="n1"]'), { key: "Enter", code: "Enter", ctrlKey: true });
+    expect(ev.defaultPrevented).toBe(true);
+    await tick(window);
+    expect(open(d, "n1")).toBe("false");
+    expect(open(d, "n2")).toBe("true");
+    // n2 answered → skipped; n3 is next.
+    d.querySelector('[data-annotation="n2"]').value = "done";
+    d.querySelector('[data-annotation="n2"]').dispatchEvent(new window.Event("input", { bubbles: true }));
+    key(window, d.querySelector('[data-annotation="n2"]'), { key: "Enter", code: "Enter", metaKey: true });
+    await tick(window);
+    expect(open(d, "n3")).toBe("true");
+    key(window, d.querySelector('[data-annotation="n3"]'), { key: "Enter", code: "Enter", ctrlKey: true });
+    await tick(window);
+    expect([open(d, "n1"), open(d, "n2"), open(d, "n3")]).toEqual(["false", "false", "false"]);
+  }, T);
+
+  test("from the user's own note it closes that note and opens the next unhandled auto note", async () => {
+    const { window } = await boot(html);
+    const d = window.document;
+    d.querySelector("section[data-screen]").insertAdjacentHTML("beforeend",
+      '<div class="upin"><div class="upin-editor"><textarea id="own"></textarea></div></div>');
+    d.querySelector('[data-anno-pin="n1"]').click();
+    const own = d.getElementById("own");
+    own.value = "mine";
+    const ev = key(window, own, { key: "Enter", code: "Enter", ctrlKey: true });
+    expect(ev.defaultPrevented).toBe(true);
+    await tick(window);
+    // n1 was opened (seen) before, so the first unhandled one is n2.
+    expect(open(d, "n2")).toBe("true");
+  }, T);
+});

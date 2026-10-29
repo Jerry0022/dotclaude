@@ -76,12 +76,12 @@ section[data-view].an-lite { max-width: none; margin: 0; border: 0; border-radiu
    column: .an-afold); only as a last resort the stage or the column
    scrolls inside itself (.an-ovf / .an-aovf) — never the page. */
 .an-enh.an-fit {
-  --an-bar-h: 64px; --an-note-h: 50px;
+  --an-bar-h: 64px;
   position: relative; height: var(--an-fit-h); min-height: 0;
   grid-template-rows: auto minmax(0, 1fr); align-content: stretch;
   padding-bottom: var(--an-bar-h);
 }
-.an-enh.an-fit[data-an-stage="dec"] { padding-bottom: calc(var(--an-bar-h) + var(--an-note-h)); }
+.an-enh.an-fit[data-an-stage="dec"] { padding-bottom: var(--an-bar-h); }
 .an-fit > .an-stage, .an-fit [data-topic] > .an-stage { min-height: 0; height: 100%; overflow: hidden; padding: 18px 0 2px; }
 .an-fit > .an-ana { min-height: 0; max-height: 100%; overflow: hidden; padding-top: 18px; }
 .an-fit .an-foot, .an-fit > .an-foot-brief {
@@ -90,7 +90,6 @@ section[data-view].an-lite { max-width: none; margin: 0; border: 0; border-radiu
   background: linear-gradient(180deg, transparent, var(--an-bg) 14px);
 }
 .an-fit .an-foot > .an-quiet { flex: 1 1 auto; flex-wrap: nowrap; align-self: center; overflow: hidden; }
-.an-fit .an-foot:has(> .an-notew) { flex-wrap: wrap; }
 .an-fit .an-notew .an-note { max-height: 120px; }
 .an-fit.an-ovf > .an-stage:not(.an-off), .an-fit.an-ovf [data-topic] > .an-stage:not(.an-off) { overflow-y: auto; }
 .an-fit.an-aovf > .an-ana { overflow-y: auto; }
@@ -231,13 +230,13 @@ section[data-view].an-lite { max-width: none; margin: 0; border: 0; border-radiu
    every stage. */
 .an-foot { margin-top: auto; padding-top: 24px; display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; }
 .an-quiet { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1 1 320px; min-width: 0; }
-.an-notew { position: relative; flex: 1 1 100%; order: -1; min-width: 0; }
-.an-note { display: block; width: 100%; height: 40px; min-height: 40px; max-height: 120px; resize: none; padding: 9px 2.9rem 9px 12px; border-radius: 10px; border: 1px solid var(--an-bd2); background: var(--an-s1); color: var(--an-tx); font: inherit; font-size: 13px; line-height: 1.4; }
+.an-notew { position: relative; flex: none; width: 100%; min-width: 0; margin-top: 16px; }
+.an-note { display: block; width: 100%; height: 84px; min-height: 84px; max-height: 168px; resize: none; padding: 10px 2.9rem 10px 12px; border-radius: 10px; border: 1px solid var(--an-bd2); background: var(--an-s1); color: var(--an-tx); font: inherit; font-size: 13.5px; line-height: 1.45; }
 .an-note::placeholder { color: var(--an-mu2); }
 .an-note:focus { outline: none; border-color: var(--an-ac); box-shadow: 0 0 0 3px var(--an-ac-soft); }
 /* The 📎 lives INSIDE the note (attachments: one bar per field, mounted
    right after its textarea); thumbnails line up left of it. */
-.an-notew .attach-bar { position: absolute; top: 5px; right: 6px; margin: 0; gap: 4px; flex-wrap: nowrap; align-items: center; }
+.an-notew .attach-bar { position: absolute; bottom: 6px; right: 6px; margin: 0; gap: 4px; flex-wrap: nowrap; align-items: center; }
 .an-notew .attach-btn { height: 30px; min-width: 30px; padding: 0 6px; border: 0; border-radius: 8px; background: none; opacity: .75; }
 .an-notew .attach-btn:hover, .an-notew .attach-btn:focus-visible { opacity: 1; background: var(--an-s2); }
 .an-notew .attach-thumbs { order: -1; width: auto; flex-wrap: nowrap; gap: 4px; }
@@ -255,6 +254,20 @@ section[data-view].an-lite { max-width: none; margin: 0; border: 0; border-radiu
 .an-btn:hover { filter: brightness(1.08); }
 .an-btn2 { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 18px; border-radius: 12px; background: var(--an-s2); color: var(--an-tx2); font-size: 14px; font-weight: 550; box-shadow: inset 0 0 0 1px var(--an-bd2); white-space: nowrap; }
 .an-btn2:hover { color: var(--an-tx); background: var(--an-s3); }
+/* Fertig: the ☰ menu's actions as FAB-style pills, bottom right (icon disc + label). */
+.an-fabs { display: flex; align-items: center; gap: 10px; }
+.an-fab { display: inline-flex; align-items: center; gap: 10px; height: 48px; padding: 0 20px 0 8px; border-radius: 999px; background: var(--an-s2); color: var(--an-tx); font-size: 14px; font-weight: 620; white-space: nowrap; box-shadow: inset 0 0 0 1px var(--an-bd2), 0 8px 22px rgba(0,0,0,.35); transition: transform .12s, filter .12s; }
+.an-fab:hover { transform: translateY(-1px); filter: brightness(1.12); }
+.an-fab-i { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,.12); font-size: 15px; line-height: 1; flex: none; }
+.an-fab-main { background: linear-gradient(180deg, #3d8ffd, #1f6feb); color: #fff; box-shadow: 0 8px 22px rgba(31,111,235,.3), inset 0 1px 0 rgba(255,255,255,.22); }
+.an-fab-warn { color: var(--an-warn); box-shadow: inset 0 0 0 1.5px var(--an-warn), 0 8px 22px rgba(0,0,0,.35); }
+.an-fab-warn .an-fab-i { background: rgba(210,153,34,.18); }
+.an-fab-warn[data-armed="true"] { background: var(--an-warn); color: #1a1200; }
+@media (prefers-reduced-motion: reduce) { .an-fab { transition: none; } .an-fab:hover { transform: none; } }
+/* "All as list": one discreet icon at the end of the header row. */
+.an-listbtn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; color: var(--an-mu2); flex: none; }
+.an-listbtn:hover, .an-listbtn:focus-visible { color: var(--an-tx); background: var(--an-s2); }
+.an-step > .an-listbtn { margin-left: auto; }
 .an-back { height: 44px; padding: 0 12px; display: inline-flex; align-items: center; font-size: 13.5px; color: var(--an-mu); border-radius: 10px; }
 .an-back:hover { color: var(--an-tx); background: var(--an-s1); }
 .an-back[disabled] { visibility: hidden; pointer-events: none; }
