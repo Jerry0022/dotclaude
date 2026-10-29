@@ -82,8 +82,14 @@ vi.mock("node:fs", async (importOriginal) => {
 // #752: repo key is test-controlled; the store is a temp file (DEVOPS_CI_QUOTA_FILE).
 vi.mock("../lib/ci-quota.js", async (importOriginal) => {
   const orig = await importOriginal();
-  return { ...orig, quotaKey: vi.fn(() => null), clearRecord: vi.fn(orig.clearRecord), setDecision: vi.fn(orig.setDecision) };
+  return { ...orig, quotaKey: vi.fn(() => null), repoKey: vi.fn(() => null), clearRecord: vi.fn(orig.clearRecord), setDecision: vi.fn(orig.setDecision) };
 });
+
+// #949: no real gh from the release tests.
+vi.mock("../lib/ci-workflow-guard.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  restoreWorkflows: vi.fn(() => ({ repo: "o/r", enabled: 0, errors: [] })),
+}));
 
 vi.mock("../lib/ci-account-limits.js", () => ({
   classifyFailedChecks: vi.fn(() => ({ limited: false, kinds: [], checks: [] })),
@@ -124,6 +130,7 @@ import * as gitLib from "../lib/git.js";
 import * as ghLib from "../lib/github.js";
 import * as limitsLib from "../lib/ci-account-limits.js";
 import * as quotaLib from "../lib/ci-quota.js";
+import * as guardLib from "../lib/ci-workflow-guard.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1400,6 +1407,75 @@ describe("ship_release — automatic version-file rebase", () => {
     expect(res.commitSkipped).toBe("clean tree");
     expect(res.success).toBe(true);
     expect(execFileSync.mock.calls.some((c) => c[1] && c[1][0] === "commit")).toBe(false);
+  });
+});
+
+describe("ship_release — #949 re-enable paused workflows before the PR push", () => {
+  let dir;
+  const UNTIL = "2026-11-01T00:00:00.000Z";
+  const pushOrder = () => gitLib.gitArgs.mock.invocationCallOrder[gitLib.gitArgs.mock.calls.findIndex((c) => Array.isArray(c[0]) && c[0][0] === "push" && c[0].includes("-u"))];
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "rel-guard-"));
+    process.env.DEVOPS_CI_QUOTA_FILE = join(dir, "q.json");
+    quotaLib.quotaKey.mockReturnValue("o");
+    quotaLib.repoKey.mockReturnValue("o/r");
+    guardLib.restoreWorkflows.mockClear().mockReturnValue({ repo: "o/r", enabled: 2, errors: [] });
+    ghLib.watchPRChecks.mockReturnValue({ status: "passed", checks: [], failed: [], pending: [] });
+  });
+  afterEach(() => {
+    delete process.env.DEVOPS_CI_QUOTA_FILE;
+    quotaLib.quotaKey.mockReturnValue(null);
+    quotaLib.repoKey.mockReturnValue(null);
+    rmSync(dir, { recursive: true, force: true });
+  });
+  const pause = () => quotaLib.recordDisabled("o/r", { ids: [{ id: 1, name: "t", path: "p" }], until: UNTIL, state: "disabled" });
+
+  test("no record: nothing is enabled", async () => {
+    await handler(params());
+    expect(guardLib.restoreWorkflows).not.toHaveBeenCalled();
+  });
+
+  test("record still covered by a live skip-checks decision: left disabled", async () => {
+    pause();
+    quotaLib.recordBlock("o", { resetAt: UNTIL });
+    quotaLib.setDecision("o", "skip-checks");
+    // the block is still real: the probe sees the billing failure again
+    ghLib.watchPRChecks.mockReturnValue({ status: "failed", checks: [], failed: [{ name: "build", link: "https://github.com/o/r/actions/runs/1/job/7" }], pending: [], error: "1 check(s) failed: build" });
+    limitsLib.classifyFailedChecks.mockReturnValue({ limited: true, kinds: ["actions-minutes"], checks: [{ name: "build", kind: "actions-minutes" }] });
+    try {
+      await handler(params());
+    } finally {
+      limitsLib.classifyFailedChecks.mockReturnValue({ limited: false, kinds: [], checks: [] });
+    }
+    expect(guardLib.restoreWorkflows).not.toHaveBeenCalled();
+  });
+
+  test("quota gone: enabled before the PR push, card line in warnings, CI awaited normally", async () => {
+    pause();
+    const res = await handler(params());
+    expect(guardLib.restoreWorkflows).toHaveBeenCalledWith("o/r", expect.anything());
+    expect(res.workflowsReenabled).toEqual({ repo: "o/r", count: 2 });
+    expect(res.warnings).toContain("2 Workflows in o/r wieder aktiviert");
+    expect(pushOrder()).toBeGreaterThan(guardLib.restoreWorkflows.mock.invocationCallOrder[0]);
+    expect(ghLib.watchPRChecks).toHaveBeenCalled();
+  });
+
+  test("quotaDecision revoke re-enables although the decision was still stored", async () => {
+    pause();
+    quotaLib.recordBlock("o", { resetAt: UNTIL });
+    quotaLib.setDecision("o", "skip-checks");
+    const res = await handler(params({ quotaDecision: "revoke" }));
+    expect(res.workflowsReenabled.count).toBe(2);
+  });
+
+  test("a failed enable is a warning, the ship goes on and the record stays for the retry", async () => {
+    pause();
+    guardLib.restoreWorkflows.mockReturnValue({ repo: "o/r", enabled: 0, errors: ["enable t: HTTP 502"] });
+    const res = await handler(params());
+    expect(res.workflowsReenableFailed).toEqual(["enable t: HTTP 502"]);
+    expect(res.warnings.some((w) => /nicht wieder aktiviert.*502/.test(w))).toBe(true);
+    expect(res.pushed).toBe(true);
+    expect(quotaLib.readDisabled("o/r")).not.toBeNull();
   });
 });
 

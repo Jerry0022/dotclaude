@@ -19,7 +19,8 @@ import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js
 import { detectComponents } from "../lib/components.js";
 import { claudeIgnoreCheck, touchesIgnorePolicy } from "../lib/claude-ignore.js";
 import { scanWorkflows } from "../lib/workflow-hygiene.js";
-import { quotaKey, readRecord, describeRecord } from "../lib/ci-quota.js";
+import { quotaKey, repoKey, readRecord, describeRecord } from "../lib/ci-quota.js";
+import { pauseWorkflows, sweepOverdue, pausedLine, resumedLine } from "../lib/ci-workflow-guard.js";
 import { createPR, findExistingPR } from "../lib/github.js";
 import { createRequire } from "node:module";
 
@@ -572,6 +573,44 @@ export async function handler(params) {
     }
   }
 
+  // #949: workflows this plugin paused during an earlier skip-checks period come
+  // back as soon as the period ended / the block cleared / the decision was
+  // revoked — for EVERY repo in the record, before this ship pushes anything.
+  // A stored skip-checks decision on a live minutes block pauses this repo's
+  // pull_request/push workflows before the first push (the doomed runs are
+  // the "Run failed" mails). Best effort: never fails the preflight.
+  let workflowGuard = null;
+  if (!noRemote) {
+    try {
+      const sweep = sweepOverdue({ cwd });
+      workflowGuard = {};
+      if (sweep.restored.length) {
+        workflowGuard.resumed = sweep.restored;
+        for (const r of sweep.restored) warnings.push(resumedLine(r.repo, r.enabled));
+      }
+      if (sweep.failed.length) {
+        workflowGuard.reenableFailed = sweep.failed;
+        for (const f of sweep.failed) warnings.push(`Workflows in ${f.repo} konnten nicht wieder aktiviert werden (${f.errors[0]}) - wird beim nächsten Ship erneut versucht`);
+      }
+      const rec = ciQuota ? readRecord(quotaKey(cwd)) : null;
+      const repo = repoKey(cwd);
+      if (rec?.decision?.value === "skip-checks" && repo) {
+        const p = pauseWorkflows(repo, { until: rec.resetAt, cwd });
+        if (p.disabled) {
+          workflowGuard.paused = { repo, count: p.total, until: rec.resetAt };
+          warnings.push(pausedLine(repo, p.total, rec.resetAt));
+        }
+        if (p.errors.length) {
+          workflowGuard.pauseErrors = p.errors;
+          warnings.push(`Workflows in ${repo}: ${p.errors[0]} - Ship läuft trotzdem weiter`);
+        }
+      }
+      if (!Object.keys(workflowGuard).length) workflowGuard = null;
+    } catch (e) {
+      warnings.push(`CI-workflow guard: ${String(e.message || e).split("\n")[0]}`);
+    }
+  }
+
   // Early requirement gate (explicit `validation` only - the card fallback and
   // acceptGaps stay with ship_release, the final authority).
   let validationGaps;
@@ -622,6 +661,7 @@ export async function handler(params) {
     components,
     workflowHygiene,
     ciQuota,
+    workflowGuard,
     ...(validationGaps && { validationGaps }),
     ...(uncommittedWork && { uncommittedWork }),
     ...early,

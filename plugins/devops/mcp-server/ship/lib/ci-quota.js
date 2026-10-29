@@ -73,6 +73,8 @@ function load(file) {
   try { data = JSON.parse(readFileSync(storePath(file), "utf8")); } catch { data = null; }
   if (!data || typeof data.repos !== "object" || !data.repos) data = { version: 1, repos: {} };
   if (typeof data.decisions !== "object" || !data.decisions) data.decisions = {};
+  // Stores from before #949 have no `disabledWorkflows` — read them as empty.
+  if (typeof data.disabledWorkflows !== "object" || !data.disabledWorkflows || Array.isArray(data.disabledWorkflows)) data.disabledWorkflows = {};
   // Pre-TTL stores kept the decision inside the block record — move it out.
   for (const [key, rec] of Object.entries(data.repos)) {
     if (rec && rec.decision) {
@@ -217,6 +219,69 @@ export function clearRecord(key, { file } = {}) {
   const data = load(file);
   if (!data.repos[key]) return false;
   delete data.repos[key];
+  save(data, file);
+  return true;
+}
+
+/**
+ * Workflows this plugin disabled while a skip-checks decision was active (#949).
+ * `disabledWorkflows[owner/repo] = { ids: [{id, name, path}], disabledAt, until,
+ * state }` with state "pending-disable" (write-ahead, `gh workflow disable` not
+ * confirmed yet), "disabled" or "pending-enable" (re-enable failed or is
+ * running; retried by the next sweep). Keyed by repo (lower-case), not account:
+ * the workflows belong to a repo. The record is the only thing that may later
+ * re-enable a workflow, so a workflow the user disabled by hand is never in it.
+ */
+export const WORKFLOW_STATES = ["pending-disable", "disabled", "pending-enable"];
+
+/** All records, `{ "owner/repo": record }`. */
+export function listDisabled({ file } = {}) {
+  return load(file).disabledWorkflows;
+}
+
+/** The record for one repo, or null. */
+export function readDisabled(repo, { file } = {}) {
+  return (repo && load(file).disabledWorkflows[repo]) || null;
+}
+
+/**
+ * Create or extend the record BEFORE the workflows are disabled (write-ahead): a
+ * crash between `gh workflow disable` and a later write still leaves every id
+ * recorded. New ids are merged into an existing record; enabling an id that
+ * never got disabled is a no-op, so over-recording is harmless.
+ */
+export function recordDisabled(repo, { ids, until, state = "pending-disable", now = Date.now(), file } = {}) {
+  if (!repo) return null;
+  if (!WORKFLOW_STATES.includes(state)) throw new Error(`state must be one of ${WORKFLOW_STATES.join(", ")}`);
+  const data = load(file);
+  const prev = data.disabledWorkflows[repo];
+  const merged = [...(prev?.ids || [])];
+  for (const w of ids || []) if (!merged.some(m => m.id === w.id)) merged.push({ id: w.id, name: w.name, path: w.path });
+  data.disabledWorkflows[repo] = {
+    ids: merged,
+    disabledAt: prev?.disabledAt || new Date(now).toISOString(),
+    until: until || prev?.until || nextMonthResetUtc(now),
+    state,
+  };
+  save(data, file);
+  return { repo, ...data.disabledWorkflows[repo] };
+}
+
+/** Flip the state of an existing record (re-read from disk: another session may have rewritten the file). */
+export function setDisabledState(repo, state, { file } = {}) {
+  if (!WORKFLOW_STATES.includes(state)) throw new Error(`state must be one of ${WORKFLOW_STATES.join(", ")}`);
+  const data = load(file);
+  if (!data.disabledWorkflows[repo]) return null;
+  data.disabledWorkflows[repo].state = state;
+  save(data, file);
+  return { repo, ...data.disabledWorkflows[repo] };
+}
+
+/** Drop the record — only after every recorded workflow is verifiably active again. */
+export function dropDisabled(repo, { file } = {}) {
+  const data = load(file);
+  if (!data.disabledWorkflows[repo]) return false;
+  delete data.disabledWorkflows[repo];
   save(data, file);
   return true;
 }

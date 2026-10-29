@@ -10,7 +10,8 @@ import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch, m
 import { acquireLandingLock } from "../lib/landing-lock.js";
 import { channelFields } from "../lib/channel-state.js";
 import { classifyFailedChecks } from "../lib/ci-account-limits.js";
-import { quotaKey as accountQuotaKey, readRecord, recordBlock, setDecision, revokeDecision, clearRecord, describeRecord, DECISIONS, MINUTES_KIND } from "../lib/ci-quota.js";
+import { restoreWorkflows, stillCovered, resumedLine } from "../lib/ci-workflow-guard.js";
+import { quotaKey as accountQuotaKey, repoKey as originRepoKey, readDisabled, readRecord, recordBlock, setDecision, revokeDecision, clearRecord, describeRecord, DECISIONS, MINUTES_KIND } from "../lib/ci-quota.js";
 import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
 import { remoteTagExists, parseLsRemoteTagOutput } from "../lib/remote-tags.js";
 import { pruneMergedSubBranches } from "../lib/sub-branches.js";
@@ -175,6 +176,29 @@ export async function localFullGreen(cwd) {
     if (!treeHash) return null;
     return mod.findFullGreen(cwd, { treeHash, now: Date.now() }) || null;
   } catch { return null; }
+}
+
+/**
+ * Re-enable this repo's recorded paused workflows (#949) when they are no longer
+ * covered. Adds result.workflowsReenabled / a warning; never throws.
+ */
+function reenableRecordedWorkflows(cwd, result, { revoking = false } = {}) {
+  try {
+    const repo = originRepoKey(cwd);
+    const rec = repo ? readDisabled(repo) : null;
+    if (!rec || (!revoking && stillCovered(repo, rec))) return;
+    const r = restoreWorkflows(repo, { cwd });
+    if (r.enabled) {
+      result.workflowsReenabled = { repo, count: r.enabled };
+      (result.warnings ||= []).push(resumedLine(repo, r.enabled));
+    }
+    if (r.errors.length) {
+      result.workflowsReenableFailed = r.errors;
+      (result.warnings ||= []).push(`Workflows in ${repo} konnten nicht wieder aktiviert werden (${r.errors[0]}) - wird beim nächsten Ship erneut versucht`);
+    }
+  } catch (e) {
+    (result.warnings ||= []).push(`CI-workflow guard: ${String(e.message || e).split("\n")[0]}`);
+  }
 }
 
 export async function handler(params) {
@@ -501,6 +525,11 @@ export async function handler(params) {
     const leaseArg = remoteBranchSha
       ? `--force-with-lease=${branch}:${remoteBranchSha}`
       : `--force-with-lease`;
+    // #949: workflows paused during a skip-checks period come back BEFORE the PR
+    // push when the period ended, the block cleared or the decision is revoked
+    // now, so this ship's CI runs normally and gates the merge. A failed enable
+    // keeps the record as pending-enable (retried by the next ship / sweep).
+    reenableRecordedWorkflows(cwd, result, { revoking: params.quotaDecision === "revoke" });
     gitArgs(["push", "-u", "origin", branch, leaseArg], { cwd, timeout: 60_000 });
     result.pushed = true;
 
@@ -619,7 +648,10 @@ export async function handler(params) {
         // A check ran for real again (not a minutes block) — the block is over.
         // This PR's checks ran over main incl. every ship merged without CI —
         // that is the catch-up; nothing is left to re-run by hand.
-        if (quotaStore(() => clearRecord(quotaKey), false)) quotaNote = { quotaCleared: true };
+        if (quotaStore(() => clearRecord(quotaKey), false)) {
+          quotaNote = { quotaCleared: true };
+          reenableRecordedWorkflows(cwd, result, {}); // best effort; the next ship's sweep retries
+        }
       }
       result.checks = {
         status: quotaNote?.status || checkResult.status,
