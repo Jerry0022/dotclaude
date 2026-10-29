@@ -14,13 +14,14 @@ pushing anything — the content box never moves.
 ```css
 #design-header, #design-quick { display: none; }
 .design-header [hidden], .design-quick [hidden], .design-ov [hidden] { display: none !important; }
-/* On the overview no screen and no design is "current": the dock keeps its
-   general row only (the per-design notes live on the design pages). */
+/* On the overview no screen is "current": the dock drops the screen row. The
+   design row shows the centred variant's note (#960, syncDockDesign); on the
+   questions tile there is no variant, and the dock keeps its general row only. */
 body[data-overview-active="true"] .feedback-section:has(#screen-textareas),
 body[data-overview-active="true"] .feedback-divider:has(+ .feedback-section #screen-textareas),
-body[data-overview-active="true"] .feedback-section:has(#design-textareas),
-body[data-overview-active="true"] .feedback-divider:has(+ .feedback-section #design-textareas) { display: none; }
-body[data-overview-active="true"] .feedback-divider:has(+ .feedback-section #design-general-feedback) { display: none; }
+body[data-overview-active="true"]:not([data-ov-dock-design="true"]) .feedback-section:has(#design-textareas),
+body[data-overview-active="true"]:not([data-ov-dock-design="true"]) .feedback-divider:has(+ .feedback-section #design-textareas) { display: none; }
+body[data-overview-active="true"]:not([data-ov-dock-design="true"]) .feedback-divider:has(+ .feedback-section #design-general-feedback) { display: none; }
 html[data-template="design"] body[data-overview="true"] #design-header,
 html[data-template="design"] body[data-overview="true"] #design-quick { display: flex; }
 html[data-template="design"] body[data-overview="true"] .screen-indicator,

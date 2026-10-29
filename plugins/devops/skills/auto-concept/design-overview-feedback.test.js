@@ -193,3 +193,39 @@ describe("overview feedback — questions, notes", () => {
     expect(md).toContain("const anchor = journey && journey.parentNode ? journey : split;");
   });
 });
+
+describe("overview feedback — the centred variant's note in the dock (#960)", () => {
+  const visible = (document) => [...document.querySelectorAll("#design-textareas textarea[data-design-comment]")]
+    .filter((ta) => !ta.hidden).map((ta) => ta.dataset.designComment);
+  test("the dock follows the carousel; questions tile hides the row; text is the design page's own", async () => {
+    const { window, document, errors } = await boot(page(3));
+    expect(errors).toEqual([]);
+    expect(document.body.dataset.overviewActive).toBe("true");
+    const slides = [...live(document).querySelectorAll("[data-design-overview] .design-ov-slide")];
+    const label = () => document.getElementById("dock-design-label").textContent;
+    const designSlides = slides.filter((s) => s.dataset.designId);
+    for (const s of designSlides) {
+      window.designOverviewGo(slides.indexOf(s));
+      const id = s.dataset.designId;
+      expect(document.body.dataset.ovDockDesign).toBe("true");
+      expect(visible(document)).toEqual([id]);
+      expect(label()).toBe(live(document).querySelector(`section[data-design="${id}"]`).dataset.navLabel || id);
+    }
+    const q = slides.findIndex((s) => s.dataset.questions === "true");
+    if (q >= 0) {
+      window.designOverviewGo(q);
+      expect(document.body.dataset.ovDockDesign).toBe("false");
+    }
+    // A note typed on the overview is the same textarea the design page shows.
+    const first = designSlides[0].dataset.designId;
+    window.designOverviewGo(slides.indexOf(designSlides[0]));
+    const ta = document.querySelector(`#design-textareas textarea[data-design-comment="${first}"]`);
+    ta.value = "Overview-Notiz";
+    window.showDesign(first);
+    expect(visible(document)).toEqual([first]);
+    expect(document.querySelector(`#design-textareas textarea[data-design-comment="${first}"]`).value).toBe("Overview-Notiz");
+    // CSS: the design row hides on the overview only without a centred design.
+    expect(css).toMatch(/body\[data-overview-active="true"\]:not\(\[data-ov-dock-design="true"\]\) \.feedback-section:has\(#design-textareas\)/);
+    expect(css).not.toMatch(/body\[data-overview-active="true"\] \.feedback-section:has\(#design-textareas\)/);
+  }, BOOT_TIMEOUT);
+});

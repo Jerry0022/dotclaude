@@ -761,6 +761,23 @@ returns — the single-design page is untouched.
     });
     ov.dataset.index = String(ovIndex);
     markQuickFocus(it || visibleIteration());
+    syncDockDesign(it || visibleIteration());
+  }
+  // The dock offers the centred variant's own note (#960): the overview is
+  // where variants are compared, so the remark belongs here too. Same
+  // textarea as on the design page (one `data-design-comment` per design),
+  // only its `hidden` state and the label follow the carousel; the questions
+  // tile has no design, so the row hides (CSS keys on data-ov-dock-design).
+  function syncDockDesign(it) {
+    const cur = mode() === 'overview'
+      ? overviewOf(it)?.querySelector('.design-ov-slide[data-pos="cur"]') : null;
+    const id = cur && cur.dataset.questions !== 'true' ? cur.dataset.designId || '' : '';
+    document.body.dataset.ovDockDesign = String(!!id);
+    if (!id) return;
+    document.querySelectorAll('[data-design-comment]').forEach(ta => { ta.hidden = ta.dataset.designComment !== id; });
+    const label = document.getElementById('dock-design-label');
+    const sec = it && it.querySelector(`section[data-design="${CSS.escape(id)}"]`);
+    if (label) label.textContent = (sec && sec.dataset.navLabel) || id;
   }
   // On the overview the quick nav names the tile in the centre: that
   // variant's segment (or "Fragen" on the questions tile) is highlighted —
