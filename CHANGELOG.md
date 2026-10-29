@@ -3,6 +3,11 @@
 ## [0.330.1] — 2026-10-29
 
 ### Fixed
+- `ship_run` returns a dedicated `uncommitted-work` decision point (with the file list) when uncommitted tracked edits are the only preflight blocker, and do-ship commits them as the ship's work commit instead of aborting (#940).
+
+## [0.330.1] — 2026-10-29
+
+### Fixed
 - ship: the suite-lock wait no longer eats the build step limit (extension capped at 35 min)
 - ship: build steps run async, and ship_run/ship_build send MCP progress every 30 s so long builds are not aborted after 1800 s of silence
 
