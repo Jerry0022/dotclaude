@@ -421,3 +421,31 @@ export function detectParentBranch(branch, opts) {
 
   return null;
 }
+
+/**
+ * Concept pages stranded on parked autosave refs (#952): `docs/concepts/*`
+ * paths that exist on a `refs/heads/parked/autosave/*` ref but on neither HEAD
+ * nor the default branch. Bounded to the newest `maxRefs` refs. Fail-open: any
+ * failure yields []. Returns [{ ref, path }] (ref without `refs/heads/`).
+ */
+export function parkedConceptPaths(defaultBranch, opts = {}, maxRefs = 50) {
+  const out = gitTry(["for-each-ref", "--sort=-committerdate", `--count=${maxRefs}`, "--format=%(refname)", "refs/heads/parked/autosave"], opts);
+  if (!out) return [];
+  const lsTree = (ref) => {
+    const r = gitTry(["ls-tree", "-r", "--name-only", ref, "--", "docs/concepts"], opts);
+    return r ? r.split("\n").map((l) => l.trim()).filter(Boolean) : [];
+  };
+  const known = new Set(lsTree("HEAD"));
+  if (defaultBranch) {
+    for (const ref of [`refs/heads/${defaultBranch}`, `refs/remotes/origin/${defaultBranch}`]) {
+      for (const f of lsTree(ref)) known.add(f);
+    }
+  }
+  const stranded = [];
+  for (const ref of out.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, maxRefs)) {
+    for (const path of lsTree(ref)) {
+      if (!known.has(path)) stranded.push({ ref: ref.replace(/^refs\/heads\//, ""), path });
+    }
+  }
+  return stranded;
+}

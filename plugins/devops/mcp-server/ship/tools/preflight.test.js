@@ -27,6 +27,7 @@ vi.mock("../lib/git.js", () => ({
   branchExists: vi.fn(() => "remote"),
   fileOverlap: vi.fn(() => ({ mergeBase: "abc", branchFiles: [], baseFiles: [], overlap: [] })),
   getConfig: vi.fn(() => "diff3"),
+  parkedConceptPaths: vi.fn(() => []),
 }));
 
 vi.mock("../lib/version.js", () => ({
@@ -71,7 +72,7 @@ import * as quotaLib from "../lib/ci-quota.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isWorktree, fileOverlap, dirtyState, gitTry, branchExists } from "../lib/git.js";
+import { isWorktree, fileOverlap, dirtyState, gitTry, branchExists, parkedConceptPaths } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { scanConflictMarkers } from "../lib/conflict-markers.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
@@ -454,5 +455,27 @@ describe("ship_preflight - earlyPush (M5)", () => {
     const fileOnly = await handler({ cwd: CWD, earlyPush: true });
     expect(fileOnly.earlyPr).toBeUndefined();
     expect(gitArgs).not.toHaveBeenCalled();
+  });
+});
+
+describe("ship_preflight - concept pages landed (#952)", () => {
+  const warn = (r) => r.warnings.find((w) => w.startsWith("Concept pages not landed"));
+  beforeEach(() => { parkedConceptPaths.mockReturnValue([]); });
+  test("clean -> no warning", async () => {
+    expect(warn(await handler({ cwd: CWD }))).toBeUndefined();
+  });
+  test("untracked concept file -> warning, not an error of its own", async () => {
+    dirtyState.mockReturnValue({ dirty: true, modified: [], untracked: ["docs/concepts/2026-10-29-x.html"], lines: [] });
+    const r = await handler({ cwd: CWD });
+    expect(warn(r)).toMatch(/2026-10-29-x\.html/);
+    expect(r.errors.some((e) => /concept/i.test(e))).toBe(false);
+  });
+  test("parked-only file -> warning naming the ref", async () => {
+    parkedConceptPaths.mockReturnValue([{ ref: "parked/autosave/s1", path: "docs/concepts/a.html" }]);
+    expect(warn(await handler({ cwd: CWD }))).toMatch(/parked\/autosave\/s1/);
+  });
+  test("gitignored concept (absent from status, nothing parked) -> none", async () => {
+    dirtyState.mockReturnValue({ dirty: false, modified: [], untracked: [], lines: [] });
+    expect(warn(await handler({ cwd: CWD }))).toBeUndefined();
   });
 });

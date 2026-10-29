@@ -67,7 +67,7 @@ renders the card only after all of them are gone.
 NOT match. The **source folder** `docs/concepts/{date}-{slug}/` (round
 fragments, `page.json`, `head.html`, briefs — `step2-build.md`) shares the
 page's fate in every row below. `discard` → `rm -rf -- "docs/concepts/{date}-{slug}/"`.
-`keep` keeps it and stages it with the page (moved alongside it under `moveTo`).
+`keep` keeps it, stages it with the page (moved alongside it under `moveTo`) and **commits** it with the page (#952): `git add -- <html> <decisions.json> <source-folder>/` then `git commit -m "docs(concept): keep {date}-{slug}" -- <same paths>` — mandatory, also when no ship ran; never leave a kept page untracked.
 `gitignore` → also append `docs/concepts/{date}-{slug}/` (or `<moveTo>/{date}-{slug}/`)
 and `git rm -r --cached` it. Check the path before `rm -rf`: it must be
 exactly `docs/concepts/{date}-{slug}/` with both segments non-empty. After a ship (part C step 0 already staged and committed the git

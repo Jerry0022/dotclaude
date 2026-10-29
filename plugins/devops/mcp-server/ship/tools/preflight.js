@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { gitArgs, gitTry, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktree, detectParentBranch, detectDefaultBranch, branchExists, fileOverlap, getConfig, NETWORK_TIMEOUT } from "../lib/git.js";
+import { gitArgs, gitTry, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktree, detectParentBranch, detectDefaultBranch, branchExists, fileOverlap, getConfig, parkedConceptPaths, NETWORK_TIMEOUT } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { readVersion, verifyVersionFiles } from "../lib/version.js";
 import { versionFilesSchema } from "./version-bump.js";
@@ -521,6 +521,24 @@ export async function handler(params) {
 
   // Doc-sync (plugin source repo only — no-op elsewhere). Non-blocking.
   checks.push(...docSyncChecks(cwd, branchFilesForInfra));
+
+  // Concept pages that did not land (#952). Warning only. Untracked/modified
+  // docs/concepts files come from `git status`, which omits gitignored paths,
+  // so a concept disposed with `gitignore` is never flagged.
+  {
+    const open = [...(state.untracked || []), ...(state.modified || [])].filter((p) => /^docs\/concepts\//.test(p));
+    let parked = [];
+    try { parked = parkedConceptPaths(defaultBranch, opts) || []; } catch { parked = []; }
+    const parts = [];
+    if (open.length) parts.push(`${open.length} concept file(s) under docs/concepts/ are uncommitted (${open.slice(0, 3).join(", ")}${open.length > 3 ? ", ..." : ""}) - commit them on this branch or ship will leave them behind`);
+    if (parked.length) {
+      const byRef = new Map();
+      for (const { ref } of parked) byRef.set(ref, (byRef.get(ref) || 0) + 1);
+      const refs = [...byRef].slice(0, 3).map(([r, n]) => `${r} (${n})`).join(", ");
+      parts.push(`${parked.length} concept file(s) exist only on parked ref(s) ${refs} - neither HEAD nor ${defaultBranch} has them; restore with \`git checkout <ref> -- docs/concepts\` and commit`);
+    }
+    checks.push(parts.length ? { name: "concept-pages-landed", ok: true, warning: `Concept pages not landed: ${parts.join("; ")}.` } : { name: "concept-pages-landed", ok: true });
+  }
 
   // Collect warnings from checks (non-blocking issues resolved autonomously)
   const warnings = checks.filter(c => c.warning).map(c => c.warning);
