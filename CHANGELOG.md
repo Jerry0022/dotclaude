@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.330.5] — 2026-10-29
+
+### Fixed
+- Opening a page from a completion-card link now shows one short line ("✓ Seite im Browser geöffnet — kostet keine Tokens.") instead of the hook path, the URL and a justification paragraph (#958).
+
 ## [0.330.4] — 2026-10-29
 
 ### Fixed

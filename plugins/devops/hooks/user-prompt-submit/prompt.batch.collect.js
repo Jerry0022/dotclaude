@@ -6,7 +6,7 @@
  * @plugin devops
  * @description Collect mode for `/do-batch`: while active, blocks the user
  *   prompt (JSON `decision: "block"` — the harness erases it, so it never
- *   reaches the model; see `blockPrompt` for why not exit 2) and
+ *   reaches the model; see lib/block-prompt.js for why not exit 2) and
  *   appends it to `.claude/batch.md`. A prompt starting with the configured
  *   execute marker instead fires the merge: the whole note list is injected as
  *   context and Claude merges the collected intent into ONE plan, which it
@@ -66,6 +66,8 @@ const fs   = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const B = require('../lib/batch-state');
+// JSON block verdict, not exit 2 — the reasoning lives in lib/block-prompt.js.
+const { blockPrompt } = require('../lib/block-prompt');
 const { unbatchTitle, readCurrentTitle } = require('../lib/session-title');
 
 /** Absolute path to the state module, so injected guidance can quote a command
@@ -129,26 +131,6 @@ const EXCERPT_CHARS = 200;
 
 /** Length of the prompt echo under the ack's headline. */
 const ECHO_CHARS = 70;
-
-/**
- * Block the prompt with `message` as the only text in the panel.
- *
- * JSON `decision: "block"` instead of exit 2: on exit 2 the harness prefixes
- * the message with `[<hook command>]:` — the full plugin path — and appends
- * the plugin attribution and an `Original prompt:` block, which buried the one
- * line that matters. With JSON the panel is its fixed header plus `reason`;
- * `suppressOriginalPrompt` drops the prompt block (the ack echoes its start).
- * Written synchronously: the verdict now lives on stdout, and a JSON line cut
- * off by the exit would read as plain context and let the prompt through.
- */
-function blockPrompt(message) {
-  fs.writeSync(1, `${JSON.stringify({
-    decision: 'block',
-    reason: message,
-    hookSpecificOutput: { hookEventName: 'UserPromptSubmit', suppressOriginalPrompt: true },
-  })}\n`);
-  process.exit(0);
-}
 
 /**
  * The start of the prompt, quoted — the hook cannot summarize a note, but the

@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.flow.open-url
- * @version 0.2.0
+ * @version 0.3.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Opens a local page in the default browser when the prompt is
  *   the card widget's open prompt ("Im Standardbrowser öffnen: <url>" /
- *   "Open in default browser: <url>"), then blocks the prompt (exit 2 — the
- *   harness erases it), so reopening a concept page or dev server never
- *   reaches Claude and spends no tokens.
+ *   "Open in default browser: <url>"), then blocks the prompt (JSON block
+ *   verdict via lib/block-prompt — the harness erases it), so reopening a
+ *   concept page or dev server never reaches Claude and spends no tokens.
+ *   The panel shows one short line (#958), not the hook path and a paragraph.
  *
  *   Why: the Desktop Code tab drops every http link a widget tries to open,
  *   localhost included, so the card turns such a link into a button that
@@ -30,19 +31,17 @@ const fs = require('fs');
 const path = require('path');
 const { parseHookInput } = require('../lib/hook-input');
 const { parseOpenUrlPrompt, openInDefaultBrowser, probeUrl } = require('../lib/open-url');
+const { blockPrompt } = require('../lib/block-prompt');
 
 /**
- * Text for the harness's "a hook blocked your input" panel. The first line
- * carries the all-clear — the block IS the mechanism, nothing failed. The
- * second says so in plain words (#542): the red "blocked" headline is
- * intended, and the input never reached Claude, so it cost no tokens.
- * @param {string} url
+ * The one line in the harness's "a hook blocked your input" panel (#958):
+ * what happened and that it cost nothing — no tag, no URL, no justification.
  * @param {'de'|'en'} lang
  */
-function renderAck(url, lang) {
+function renderAck(lang) {
   return lang === 'en'
-    ? `[open-url] ✓ Opened in your default browser: ${url}\nThe red "blocked" notice is intended: the plugin opened the page itself without sending your input to Claude, so it costs no tokens.`
-    : `[open-url] ✓ Seite im Standardbrowser geöffnet: ${url}\nDie rote Meldung „blockiert“ ist gewollt: Das Plugin hat die Seite direkt geöffnet, ohne deine Eingabe an Claude zu schicken — das spart Tokens.`;
+    ? '✓ Opened in your browser — no tokens spent.'
+    : '✓ Seite im Browser geöffnet — kostet keine Tokens.';
 }
 
 /**
@@ -80,7 +79,7 @@ function renderDeadContext(url, concept) {
 /**
  * @param {object} hook parsed UserPromptSubmit payload
  * @param {{ open?: (url: string) => Promise<boolean>, probe?: (url: string) => Promise<boolean>, cwd?: string }} [deps]
- * @returns {Promise<{ exitCode: 0|2, stderr: string, context?: string }>}
+ * @returns {Promise<{ exitCode: 0, stderr: string, context?: string, block?: string }>}
  */
 async function handle(hook, deps = {}) {
   const open = deps.open || openInDefaultBrowser;
@@ -97,7 +96,7 @@ async function handle(hook, deps = {}) {
   let opened = false;
   try { opened = await open(parsed.url); } catch { opened = false; }
   if (!opened) return { exitCode: 0, stderr: '' };
-  return { exitCode: 2, stderr: renderAck(parsed.url, parsed.lang) };
+  return { exitCode: 0, stderr: '', block: renderAck(parsed.lang) };
 }
 
 if (require.main === module) {
@@ -108,7 +107,8 @@ if (require.main === module) {
     const hook = parseHookInput(inputData);
     if (!hook) process.exit(0);
     handle(hook)
-      .then(({ exitCode, stderr, context }) => {
+      .then(({ exitCode, stderr, context, block }) => {
+        if (block) blockPrompt(block);
         if (context) {
           process.stdout.write(JSON.stringify({
             hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context },
