@@ -26,6 +26,7 @@ import { join } from "node:path";
 import { gitTry, NETWORK_TIMEOUT } from "../lib/git.js";
 import { rebaseVersionFiles } from "../lib/version-rebase.js";
 import { readVersion, bumpVersion } from "../lib/version.js";
+import { versionFilesSchema } from "./version-bump.js";
 import { recordTiming, summarizeShip, shipDurationTest } from "../lib/ship-timings.js";
 import { probeCiQuota } from "../lib/ci-quota-probe.js";
 
@@ -61,6 +62,7 @@ export const schema = z.object({
   skipChecks: z.boolean().default(false).describe("Hot-fix bypass of the CI gate (the full-suite invariant still holds)."),
   checksTimeoutSec: z.number().int().min(30).max(3600).optional(),
   outOfBandGlobs: z.array(z.string()).nullable().default(null),
+  versionFiles: versionFilesSchema,
   base: z.string().optional().describe("Base override; omit to auto-detect."),
   earlyPush: z.boolean().default(true).describe("Preflight pushes + opens a draft PR so CI runs during the build."),
   build: z.object({
@@ -234,6 +236,7 @@ export async function handler(params, injected = {}) {
       for (let round = 0; ; round++) {
         const r = await call("ship_preflight", {
           earlyPush: params.earlyPush, validation: params.validation, outOfBandGlobs: params.outOfBandGlobs,
+          ...(params.versionFiles ? { versionFiles: params.versionFiles } : {}),
           ...(params.base ? { base: params.base } : {}),
         });
         out.preflight = r;
@@ -323,7 +326,7 @@ export async function handler(params, injected = {}) {
         if (next !== null) { writeFileSync(file, next); out.changelog = { version: vNext, inserted: true }; }
         else out.changelog = { version: vNext, inserted: false, reason: "heading exists" };
       }
-      const v = await call("ship_version_bump", { bump: params.bump });
+      const v = await call("ship_version_bump", { bump: params.bump, ...(params.versionFiles ? { versionFiles: params.versionFiles } : {}) });
       out.bump = v;
       bumpResult = v;
       if (!v.success && !v.skipped) {

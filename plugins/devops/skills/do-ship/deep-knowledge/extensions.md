@@ -21,5 +21,12 @@ Capture, if present in the merged `reference.md`, for use later in this run:
 - `deploy:` — a deploy handler (e.g. `supabase`) that can actually APPLY those
   artifacts post-merge. Used by Step 4d. When absent, Step 4d raises the deploy
   gate instead of deploying.
+- `versionFiles:` — extra files that carry the version (#941), each as
+  `{ path, key }` (JSON, dotted key, e.g. `expo.version`) or `{ path, pattern }`
+  (a regex whose first capture group is the version, e.g.
+  `APP_VERSION = '([^']+)'`). Pass the list to `ship_run` as `versionFiles`: the
+  bump writes them and `version-consistent` checks them. A prose "Version files"
+  list without that shape → turn each entry into one of the two forms; a file
+  you cannot express that way is named in the card's `open`, never dropped.
 - `deployParity:` — overrides for the deploy-parity build (Step 2.5):
   `disable`, `buildCmd`, `installCmd`, `dir`, `timeoutSec`, `passEnv`.

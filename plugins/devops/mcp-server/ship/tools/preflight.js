@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { gitArgs, gitTry, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktree, detectParentBranch, detectDefaultBranch, branchExists, fileOverlap, getConfig, NETWORK_TIMEOUT } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { readVersion, verifyVersionFiles } from "../lib/version.js";
+import { versionFilesSchema } from "./version-bump.js";
 import { writeSentinel } from "../lib/sentinel.js";
 import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
 import { detectOutOfBandDeploys, DEFAULT_OUT_OF_BAND_GLOBS, globToRegExp } from "../lib/infra-deploy.js";
@@ -39,6 +40,7 @@ export const schema = z.object({
     })).optional(),
   ).describe("Optional early requirement gate: the same items ship_release checks. Open own gaps are returned as validationGaps (+ a warning) so they are closed BEFORE the build; preflight stays ready. ship_release remains the final authority."),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
+  versionFiles: versionFilesSchema,
 });
 
 /**
@@ -467,7 +469,7 @@ export async function handler(params) {
     let versionOk = true;
     let versionMismatches = [];
     if (versionInfo.version) {
-      const result = verifyVersionFiles(versionInfo.version, cwd);
+      const result = verifyVersionFiles(versionInfo.version, cwd, params.versionFiles || []);
       versionOk = result.consistent;
       versionMismatches = result.mismatches;
       if (!versionOk) {
