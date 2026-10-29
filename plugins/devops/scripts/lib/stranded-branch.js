@@ -92,7 +92,7 @@ function leftBehindBranches(cwd, current, opts = {}) {
     const m = /^checkout: moving from (\S+) to \S+$/.exec(line.trim());
     if (!m || seen.has(m[1]) || /^[0-9a-f]{7,40}$/.test(m[1])) continue;
     seen.add(m[1]);
-    if (examined++ >= MAX_LEFT_BEHIND) break;
+    if (examined++ >= MAX_LEFT_BEHIND || (opts.deadline && Date.now() > opts.deadline - GH_TIMEOUT)) break;
     const s = strandedBranch(cwd, m[1], opts);
     if (s) out.push(s);
   }

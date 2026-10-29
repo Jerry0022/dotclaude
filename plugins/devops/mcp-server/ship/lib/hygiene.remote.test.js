@@ -97,6 +97,30 @@ describe("remote branches of merged PRs", () => {
     expect(tips["pr-more"]).toBeTruthy();
   });
 
+  test("a merged branch that is the base of an open stacked PR stays", () => {
+    const { dir, bare, tips } = setup([{ name: "pr-parent", ageDays: 5 }]);
+    run(dir, {
+      fetchMerged: mergedOf(tips, ["pr-parent"]),
+      fetchOpen: () => ({ names: new Set(["child"]), shas: new Set(), bases: new Set(["pr-parent"]) }),
+    });
+    expect(remoteHeads(bare)).toContain("pr-parent");
+  });
+
+  test("the remote twin of a removed local branch is deleted with a lease", () => {
+    const { dir, bare, tips } = setup([{ name: "twin", ageDays: 40 }]);
+    git(dir, "branch", "-q", "twin", tips.twin);
+    // stale tracking ref: origin moved on after our fetch
+    const other = mk("hy-rem-other2-");
+    git(other, "clone", "-q", bare, ".");
+    git(other, "config", "user.email", "t@example.com");
+    git(other, "config", "user.name", "t");
+    git(other, "checkout", "-q", "twin");
+    commit(other, "late.txt", "late\n", when(0));
+    git(other, "push", "-q", "origin", "twin");
+    run(dir, { fetchMerged: mergedOf(tips, ["twin"]) });
+    expect(remoteHeads(bare)).toContain("twin");
+  });
+
   test("trigger promote never deletes", () => {
     const { dir, bare, tips } = setup([{ name: "pr-done", ageDays: 5 }]);
     run(dir, { trigger: "promote", fetchMerged: mergedOf(tips, ["pr-done"]) });

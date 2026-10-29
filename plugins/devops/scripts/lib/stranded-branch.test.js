@@ -112,7 +112,7 @@ describe("strandedWarning (session-archive guard)", () => {
     const { dir } = setup();
     git(dir, "checkout", "-q", "fix/x");
     git(dir, "checkout", "-q", "-b", "other", "main");
-    expect(strandedWarning(dir, { prs: noPr })).toContain("fix/x");
+    expect(strandedWarning(dir, { prs: noPr, budgetMs: 600000 })).toContain("fix/x");
   });
 
   test("a branch with an open PR gives no warning", () => {

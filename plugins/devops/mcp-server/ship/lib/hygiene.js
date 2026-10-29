@@ -524,6 +524,11 @@ export function residualOf(sha, ctx) {
   return res;
 }
 
+/** Not trivial: at least 4 chars and a letter or digit (`}`, `});`, `else {`, `return;` say nothing about content). */
+function isMeaningfulLine(l) {
+  return l.length >= 4 && /[\p{L}\p{N}]/u.test(l) && !/^(?:else\s*\{?|return;?|break;?|continue;?)$/.test(l);
+}
+
 function computeResidual(sha, ctx) {
   const lit = "--literal-pathspecs";
   const mb = gitOut(["merge-base", sha, ctx.baseRef], ctx.cwd);
@@ -534,6 +539,7 @@ function computeResidual(sha, ctx) {
   if (files.length === 0 || files.length > TREE_CHECK_MAX_FILES) return null;
   let added = 0;
   let present = 0;
+  let vetoed = false;
   const newFiles = [];
   const outdatedFiles = [];
   for (const f of files) {
@@ -541,29 +547,39 @@ function computeResidual(sha, ctx) {
     if (patch === null) return null;
     let lines;
     let inBase;
+    let veto = false;
     if (/^Binary files /m.test(patch)) {
       const a = gitOut(["rev-parse", "-q", "--verify", `${sha}:${f}`], ctx.cwd);
       const b = gitOut(["rev-parse", "-q", "--verify", `${ctx.baseRef}:${f}`], ctx.cwd);
       lines = a ? ["<binary>"] : [];
       inBase = (l) => Boolean(a) && a === b && l === "<binary>";
+      veto = !a && Boolean(b); // the branch deleted a binary main still has
     } else {
-      lines = patch.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).map((l) => l.slice(1).trim()).filter(Boolean);
-      const text = lines.length ? gitOut(["show", `${ctx.baseRef}:${f}`], ctx.cwd) : null;
+      // only what follows the first hunk header is content ("+++ b/x" above it is not)
+      const body = patch.split("\n");
+      const first = body.findIndex((l) => l.startsWith("@@"));
+      const hunk = first < 0 ? [] : body.slice(first);
+      lines = hunk.filter((l) => l.startsWith("+")).map((l) => l.slice(1).trim()).filter(isMeaningfulLine);
+      const removed = hunk.filter((l) => l.startsWith("-")).map((l) => l.slice(1).trim()).filter(isMeaningfulLine);
+      const text = lines.length || removed.length ? gitOut(["show", `${ctx.baseRef}:${f}`], ctx.cwd) : null;
       const set = text === null ? null : new Set(text.split("\n").map((l) => l.trim()));
       inBase = (l) => Boolean(set) && set.has(l);
+      // a line (or whole file) the branch removed that main still has is unique work
+      veto = removed.some(inBase);
     }
     const hit = lines.filter(inBase).length;
     added += lines.length;
     present += hit;
-    if (hit < lines.length) {
+    if (veto) vetoed = true;
+    if (hit < lines.length || veto) {
       // did the base change (or drop) this file since the fork point?
       (gitOk([lit, "diff", "--quiet", mb, ctx.baseRef, "--", f], ctx.cwd) ? newFiles : outdatedFiles).push(f);
     }
   }
   const kind = newFiles.length ? "new" : (outdatedFiles.length ? "outdated" : "none");
-  // nothing comparable (pure deletions): not provably in the base - unique work
-  if (added === 0) return { ratio: 0, added, present, kind: "new", newFiles: files, outdatedFiles };
-  return { ratio: present / added, added, present, kind, newFiles, outdatedFiles };
+  // nothing comparable (no meaningful added line): not provably in the base - unique work
+  if (added === 0) return { ratio: 0, added, present, vetoed, kind: "new", newFiles: files, outdatedFiles };
+  return { ratio: present / added, added, present, vetoed, kind, newFiles, outdatedFiles };
 }
 
 /**
@@ -576,7 +592,7 @@ function landedEnough(unit, ctx) {
   if (l.state !== "partial" || !unit.branch || unit.detached || !ctx.open) return false;
   if (ctx.open.names.has(unit.branch) || ctx.open.shas.has(unit.head)) return false;
   const r = residualOf(unit.head, ctx);
-  return Boolean(r) && r.ratio >= RESIDUAL_REMOVABLE;
+  return Boolean(r) && !r.vetoed && r.added > 0 && r.ratio >= RESIDUAL_REMOVABLE;
 }
 
 /** The residual verdict an at-risk item carries onto the card (decision item, #953). */
@@ -871,6 +887,8 @@ export function openHeadsFromList(all) {
   return {
     names: new Set(list.map((p) => p.headRefName).filter(Boolean)),
     shas: new Set(list.map((p) => p.headRefOid).filter(Boolean)),
+    // a branch an open (stacked) PR targets: deleting it would close that PR
+    bases: new Set(list.map((p) => p.baseRefName).filter(Boolean)),
   };
 }
 
@@ -1113,6 +1131,8 @@ function archiveTip(u, cwd, date, push) {
   const have = gitOut(["rev-parse", "--verify", "-q", `refs/tags/${tag}`], cwd);
   if (have !== null && have !== u.head) tag += `-${u.head.slice(0, 7)}`;
   if (gitOut(["rev-parse", "--verify", "-q", `refs/tags/${tag}`], cwd) === null && !gitOk(["tag", tag, u.head], cwd)) return { why: "archive-tag-failed" };
+  // the tag must really hold the tip before anything is deleted
+  if (gitOut(["rev-parse", "--verify", "-q", `refs/tags/${tag}^{commit}`], cwd) !== u.head) return { why: "archive-tag-failed" };
   if (push && isPushed(u, cwd) && !gitOk(["push", "origin", `refs/tags/${tag}`], cwd, NETWORK_TIMEOUT)) return { why: "archive-push-failed" };
   return { tag };
 }
@@ -1157,7 +1177,7 @@ export function remoteBranchPlan(ctx, open, defaultBranch, days, now = Date.now(
     if (!ref || !sha) continue;
     const name = ref.slice("refs/remotes/origin/".length);
     if (isSpecialRemote(name, defaultBranch)) continue;
-    if (open.names.has(name) || open.shas.has(sha)) continue;
+    if (open.names.has(name) || open.shas.has(sha) || (open.bases && open.bases.has(name))) continue;
     if ((ctx.merged.byName.get(name) || []).includes(sha)) {
       if (!checkedOut.has(name)) res.merged.push({ name, sha });
       continue;
@@ -1193,7 +1213,8 @@ function deleteRemoteTwin(name, sha, cwd) {
   const remote = gitOut(["rev-parse", "--verify", "-q", `refs/remotes/origin/${name}`], cwd);
   if (remote === null) return "none";
   if (remote !== sha) return "remote-moved";
-  return gitOk(["push", "origin", "--delete", name], cwd, NETWORK_TIMEOUT) ? null : "remote-delete-failed";
+  // the lease fails the delete when someone pushed to the ref since our (possibly stale) read
+  return gitOk(["push", "origin", "--delete", name, `--force-with-lease=${name}:${sha}`], cwd, NETWORK_TIMEOUT) ? null : "remote-delete-failed";
 }
 
 /**

@@ -160,16 +160,20 @@ function autosaveRunning(sessionId) {
  * @param {{prs?:Function}} [opts]  injectable gh lookup for tests
  * @returns {string|null}
  */
+const STRANDED_BUDGET_MS = 10_000;
+
 function strandedWarning(cwd, opts = {}) {
   try {
     if (!cwd || !fs.statSync(cwd).isDirectory()) return null;
     const branch = gitRun(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']).trim();
     const found = [];
+    // archive_session must not stall: the whole check shares one ~10 s budget
+    const deadline = Date.now() + (opts.budgetMs || STRANDED_BUDGET_MS);
     if (branch && branch !== 'HEAD') {
       const own = strandedBranch(cwd, branch, opts);
       if (own) found.push(own);
     }
-    found.push(...leftBehindBranches(cwd, branch, opts));
+    if (Date.now() < deadline - 3000) found.push(...leftBehindBranches(cwd, branch, { ...opts, deadline }));
     if (!found.length) return null;
     const list = found.map((s) => `${s.branch} (${s.commits} commit${s.commits === 1 ? '' : 's'})`).join(', ');
     return `[devops] Archiving this session leaves pushed work without a PR: ${list} - content not in the default branch, no open PR ` +
