@@ -5,7 +5,7 @@ import path from "node:path";
 import { spawnSync, execFileSync } from "node:child_process";
 import sync from "./output-style-sync.js";
 
-const { syncQuietStyle, sha256, frontmatterName, TEMPLATE_REL, MANIFEST_REL } = sync;
+const { syncQuietStyle, customizedTarget, isTempClone, sha256, frontmatterName, TEMPLATE_REL, MANIFEST_REL } = sync;
 
 const REPO_PLUGIN = path.resolve(__dirname, "..", "..");
 const HOOK = path.join(REPO_PLUGIN, "hooks", "session-start", "ss.plugin.update.js");
@@ -250,4 +250,36 @@ describe("ss.plugin.update → Quiet style sync (end to end)", () => {
     expect(fs.readFileSync(target, "utf8")).toBe(NEW);
     expect(r.stdout).toContain("Quiet output style");
   }, 180000);
+});
+
+describe("customizedTarget — one verdict over all sources (#937)", () => {
+  const T = "/h/.claude/output-styles/quiet.md";
+
+  test("a stale source's 'customized' is overruled by a source that knows the copy", () => {
+    expect(customizedTarget([{ status: "customized", target: T }, { status: "current", target: T }])).toBeNull();
+    expect(customizedTarget([{ status: "customized", target: T }, { status: "updated", target: T }])).toBeNull();
+    expect(customizedTarget([{ status: "created", target: T }, { status: "customized", target: T }])).toBeNull();
+  });
+
+  test("every source calls it customized → one warning target", () => {
+    expect(customizedTarget([{ status: "customized", target: T }, { status: "customized", target: T }])).toBe(T);
+  });
+
+  test("no customized source → no warning", () => {
+    expect(customizedTarget([])).toBeNull();
+    expect(customizedTarget([{ status: "not-installed", target: T }, { status: "error", target: T }])).toBeNull();
+  });
+});
+
+describe("isTempClone — leftover git clones are no marketplace (#937)", () => {
+  test("matches temp_git_<ts>_<rand>..clone", () => {
+    expect(isTempClone("temp_git_1761000000000_ab12cd..clone")).toBe(true);
+    expect(isTempClone("temp_git_x.clone")).toBe(true);
+  });
+
+  test("real marketplaces pass", () => {
+    expect(isTempClone("dotclaude")).toBe(false);
+    expect(isTempClone("claude-plugins-official")).toBe(false);
+    expect(isTempClone("temp_git_unfinished")).toBe(false);
+  });
 });
