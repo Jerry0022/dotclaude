@@ -132,6 +132,16 @@ because the session feels like it is ending.
      Then hide the same paths from git **locally** (§ Ship-safe local
      exclude below) — they stay on disk for the bridge, but untracked they
      would fail the ship's clean-tree check (#931).
+   **Mandatory commit (#952).** For `keep` (with or without `moveTo`) the
+   staged paths are committed to the session branch right here, also when no
+   ship ran in this concept — otherwise the page strands untracked and the
+   next ship refuses or leaves it behind. Exact commands, from the repo root:
+   `git add -- "<html>" "<decisions.json>" "<source-folder>/"` (the `moveTo`
+   copies for `keep` + `moveTo`), then
+   `git commit -m "docs(concept): keep {date}-{slug}" -- <the same paths>`.
+   The ship pipeline then carries that commit. `ship_preflight` warns about
+   `docs/concepts/*` files that are still uncommitted or only exist on a
+   `parked/autosave/*` ref.
    Nothing to commit → no commit. Step 6a then skips the git half of its
    table for this close-out and only moves or deletes the files on disk
    (for `keep` + `moveTo`: delete the originals, the copies are already in

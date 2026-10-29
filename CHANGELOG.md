@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.330.9] — 2026-10-29
+
+### Fixed
+- Finished concept pages are committed to the session branch at close-out, and ship preflight warns about concept files that exist only uncommitted or on a parked autosave ref (#952).
+
 ## [0.330.8] — 2026-10-29
 
 ### Fixed
