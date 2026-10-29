@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.330.4] — 2026-10-29
+
+### Fixed
+- Concept analyses no longer show a dead, dimmed "Zurück" link on their first stage; the back control appears from the second stage on (#962).
+
 ## [0.330.3] — 2026-10-29
 
 ### Fixed
