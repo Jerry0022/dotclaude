@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.330.3] — 2026-10-29
+
+### Fixed
+- Version files a project's do-ship extension declares (`versionFiles:` — a JSON key or a regex pattern, e.g. `APP_VERSION` in `version.ts`) are now bumped with the built-in files and checked by `version-consistent`; a missing or unmatched one fails the check instead of being skipped (#941).
+
 ## [0.330.2] — 2026-10-29
 
 ### Fixed
