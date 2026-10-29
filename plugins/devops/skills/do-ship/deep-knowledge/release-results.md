@@ -109,6 +109,29 @@ on exactly this tree (`fullSuiteLocal`), else `reason: "full-suite-required"`.
 A stored `wait` decision keeps the old full wait. `checks.waitedMs` reports
 how long the CI watch took (M0 telemetry).
 
+### Paused workflows while `skip-checks` is stored (#949)
+
+`skip-checks` only skips the wait: GitHub would still start every
+`pull_request` / `push` workflow, each fails at once and mails "Run failed".
+So the plugin pauses them itself — no question, no card button:
+
+- **Pause** (`ship_preflight`, before any push): private repo + stored
+  `skip-checks` + live minutes block → `gh workflow disable` for the repo's
+  `active` workflows triggered by `pull_request` / `push` (`ci-workflow-guard.js`).
+  Never touched: hand-disabled, tag-only, `workflow_dispatch`/schedule-only,
+  dynamic (Dependabot, CodeQL), any public repo. The ids are recorded
+  write-ahead in `~/.claude/devops-ci-quota.json` (`disabledWorkflows`,
+  state `pending-disable` → `disabled`). Result: `workflowGuard.paused`.
+  Card line (`tests` area, German): `N Workflows in <repo> bis <reset> deaktiviert (Minutenlimit)`.
+- **Re-enable**: the first ship after the reset / `quotaCleared` / `quotaDecision: "revoke"`
+  enables exactly the recorded ids before its PR push (`workflowsReenabled`) and
+  waits for CI normally. Card line: `N Workflows in <repo> wieder aktiviert`.
+- **Never forever**: `ship_preflight` of any repo sweeps every overdue record on
+  the machine; the SessionStart hook `ss.ci.workflows.sweep` does the same
+  without a ship. A failed enable keeps state `pending-enable`, shows as a
+  warning (`workflowGuard.reenableFailed` / `workflowsReenableFailed`) and is
+  retried by the next ship or session.
+
 ## bump "none" — no ring tag
 
 A ship whose `ship_version_bump` ran with `bump: "none"` keeps the version, and

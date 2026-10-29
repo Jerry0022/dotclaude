@@ -58,6 +58,14 @@ vi.mock("../lib/conflict-markers.js", async (importOriginal) => ({
 vi.mock("../lib/ci-quota.js", async (importOriginal) => ({
   ...(await importOriginal()),
   quotaKey: vi.fn(() => null),
+  repoKey: vi.fn(() => null),
+}));
+
+// #949: never reach the real gh or the real quota file from these tests.
+vi.mock("../lib/ci-workflow-guard.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  sweepOverdue: vi.fn(() => ({ restored: [], failed: [] })),
+  pauseWorkflows: vi.fn(() => ({ disabled: 0, total: 0, errors: [] })),
 }));
 
 vi.mock("../lib/github.js", () => ({
@@ -69,6 +77,7 @@ import { handler } from "./preflight.js";
 import { gitArgs } from "../lib/git.js";
 import { createPR, findExistingPR } from "../lib/github.js";
 import * as quotaLib from "../lib/ci-quota.js";
+import * as guardLib from "../lib/ci-workflow-guard.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -386,6 +395,63 @@ describe("ship_preflight — #752 recorded CI-quota block", () => {
     expect(result.ciQuota.decision).toBe("skip-checks");
     expect(checkByName(result, "ci-quota").ok).toBe(true);
     expect(result.warnings.some((w) => /quota exhausted/.test(w) && /skip-checks/.test(w))).toBe(true);
+    expect(result.ready).toBe(true);
+  });
+});
+
+describe("ship_preflight — #949 pause doomed workflows", () => {
+  let dir;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "pf-guard-"));
+    process.env.DEVOPS_CI_QUOTA_FILE = join(dir, "q.json");
+    quotaLib.quotaKey.mockReturnValue("o");
+    quotaLib.repoKey.mockReturnValue("o/r");
+  });
+  afterEach(() => {
+    delete process.env.DEVOPS_CI_QUOTA_FILE;
+    quotaLib.quotaKey.mockReturnValue(null);
+    quotaLib.repoKey.mockReturnValue(null);
+    guardLib.pauseWorkflows.mockReset().mockReturnValue({ disabled: 0, total: 0, errors: [] });
+    guardLib.sweepOverdue.mockReset().mockReturnValue({ restored: [], failed: [] });
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("stored skip-checks on a live block pauses the repo and says so on the card", async () => {
+    quotaLib.recordBlock("o");
+    quotaLib.setDecision("o", "skip-checks");
+    guardLib.pauseWorkflows.mockReturnValue({ disabled: 2, total: 2, errors: [] });
+    const result = await handler({ cwd: CWD });
+    expect(guardLib.pauseWorkflows).toHaveBeenCalledWith("o/r", expect.objectContaining({ until: expect.any(String) }));
+    expect(result.workflowGuard.paused).toMatchObject({ repo: "o/r", count: 2 });
+    expect(result.warnings.some((w) => /^2 Workflows in o\/r bis .+ deaktiviert \(Minutenlimit\)$/.test(w))).toBe(true);
+    expect(result.ready).toBe(true);
+  });
+
+  test("no block, no decision or a wait decision: nothing is paused", async () => {
+    await handler({ cwd: CWD });
+    quotaLib.recordBlock("o");
+    await handler({ cwd: CWD });
+    quotaLib.setDecision("o", "wait");
+    await handler({ cwd: CWD });
+    expect(guardLib.pauseWorkflows).not.toHaveBeenCalled();
+  });
+
+  test("sweep results become warnings; failures never fail the preflight", async () => {
+    guardLib.sweepOverdue.mockReturnValue({
+      restored: [{ repo: "o/old", enabled: 3 }],
+      failed: [{ repo: "o/bad", enabled: 0, errors: ["enable x: HTTP 502"] }],
+    });
+    const result = await handler({ cwd: CWD });
+    expect(result.warnings).toContain("3 Workflows in o/old wieder aktiviert");
+    expect(result.warnings.some((w) => /o\/bad.*nicht wieder aktiviert.*502/.test(w))).toBe(true);
+    expect(result.workflowGuard.reenableFailed).toHaveLength(1);
+    expect(result.ready).toBe(true);
+  });
+
+  test("a throwing guard is a warning, not an error", async () => {
+    guardLib.sweepOverdue.mockImplementation(() => { throw new Error("EACCES"); });
+    const result = await handler({ cwd: CWD });
+    expect(result.warnings.some((w) => /CI-workflow guard: EACCES/.test(w))).toBe(true);
     expect(result.ready).toBe(true);
   });
 });

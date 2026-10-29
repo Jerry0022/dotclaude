@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   repoKey, quotaKey, nextMonthResetUtc, readRecord, recordBlock, setDecision,
   revokeDecision, clearRecord, storePath, describeRecord,
+  listDisabled, readDisabled, recordDisabled, setDisabledState, dropDisabled,
 } from "./ci-quota.js";
 
 let dir, file;
@@ -119,5 +120,34 @@ describe("the user's answer holds for the whole quota period, per account", () =
     expect(rec.decision.expiresAt).toBe("2026-11-01T00:00:00.000Z");
     recordBlock("o", { now: Date.parse("2026-10-29T10:00:00Z"), file });
     expect(Object.keys(JSON.parse(readFileSync(file, "utf8")).repos)).toEqual(["o"]);
+  });
+});
+
+describe("disabledWorkflows records (#949)", () => {
+  const ids = [{ id: 1, name: "Test", path: ".github/workflows/test.yml" }];
+  test("old stores read as empty and keep their other data", () => {
+    writeFileSync(file, JSON.stringify({ version: 1, repos: { o: { detectedAt: "x", resetAt: "2026-11-01T00:00:00.000Z" } } }));
+    expect(listDisabled({ file })).toEqual({});
+    expect(readRecord("o", { now: NOW, file })).not.toBeNull();
+  });
+  test("lifecycle: write-ahead, merge, state flip, drop", () => {
+    expect(recordDisabled("o/r", { ids, until: "2026-11-01T00:00:00.000Z", now: NOW, file }).state).toBe("pending-disable");
+    expect(readDisabled("o/r", { file }).ids).toEqual(ids);
+    recordDisabled("o/r", { ids: [...ids, { id: 2, name: "B", path: "b" }], now: NOW + 1, file });
+    expect(readDisabled("o/r", { file }).ids.map(i => i.id)).toEqual([1, 2]);
+    expect(readDisabled("o/r", { file }).disabledAt).toBe(new Date(NOW).toISOString());
+    expect(setDisabledState("o/r", "disabled", { file }).state).toBe("disabled");
+    expect(() => setDisabledState("o/r", "bogus", { file })).toThrow();
+    expect(dropDisabled("o/r", { file })).toBe(true);
+    expect(readDisabled("o/r", { file })).toBeNull();
+    expect(dropDisabled("o/r", { file })).toBe(false);
+  });
+  test("block, decision and probe writes keep the records (another session rewrites the file)", () => {
+    recordDisabled("o/r", { ids, now: NOW, file });
+    recordBlock("o", { now: NOW, file });
+    setDecision("o", "skip-checks", { now: NOW, file });
+    clearRecord("o", { file });
+    revokeDecision("o", { file });
+    expect(readDisabled("o/r", { file }).ids).toEqual(ids);
   });
 });
