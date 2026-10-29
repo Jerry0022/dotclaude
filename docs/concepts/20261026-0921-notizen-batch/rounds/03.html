@@ -1,0 +1,282 @@
+<section data-iteration="3" data-iteration-template="design" data-baked>
+  <script type="application/json" data-frozen-feedback>{"general":{"text":"","attachments":[]},"designs":{},"screens":{},"views":{}}</script>
+  <style>
+    .d1-r3-stage { position: relative; width: 100%; max-width: 1100px; height: 100%; min-height: 520px; margin: 0 auto; padding: 2.5rem 2rem; box-sizing: border-box; background: #0d1117; color: #c9d1d9; font: 14px/1.5 system-ui, sans-serif; overflow: hidden; }
+    .d1-r3-page { position: absolute; inset: 2.5rem 2rem; border: 1px solid #30363d; border-radius: 10px; background: #161b22; }
+    .d1-r3-hero { margin: 2rem; height: 7rem; border-radius: 8px; background: linear-gradient(135deg, #1f2a3a, #22303f); }
+    .d1-r3-bar { margin: 1rem 2rem; height: 0.7rem; width: 55%; border-radius: 4px; background: #21262d; }
+    .d1-r3-bar.d1-r3-short { width: 35%; }
+    .d1-r3-footer { position: absolute; left: 2rem; right: 2rem; bottom: 2rem; height: 3rem; border-radius: 6px; background: #1c2128; border: 1px dashed #3d444d; display: flex; align-items: center; padding: 0 1rem; justify-content: flex-end; color: #6e7681; font-size: 12px; }
+
+    /* Runde 3: Ursprung = Sprechblasen-Pin der eigenen Notizen in Blau, kein Zahlenkreis, "Verbessert" als gruener Text, Glow, animiertes Oeffnen */
+    .d1-r3-row { position: absolute; display: flex; align-items: center; }
+    .d1-r3-row.d1-r3-up { align-items: flex-end; }
+    .d1-r3-origin { flex: none; display: flex; align-items: center; }
+    .d1-r3-row.d1-r3-up > .d1-r3-origin { margin-bottom: 12px; }
+    .d1-r3-pin { position: relative; flex: none; width: 28px; height: 28px; border-radius: 50% 50% 50% 4px; background: linear-gradient(160deg, #d6e9ff, #58a6ff); box-shadow: 0 0 0 4px rgba(88,166,255,.22), 0 0 24px rgba(88,166,255,.65), 0 6px 14px rgba(0,0,0,.4); }
+    .d1-r3-pin::after { content: ""; position: absolute; inset: 0; margin: auto; width: 8px; height: 8px; border-radius: 50%; background: #fff; opacity: .92; }
+    .d1-r3-pin.d1-r3-pulse::before { content: ""; position: absolute; inset: 0; border-radius: 50% 50% 50% 4px; border: 2px solid #58a6ff; box-sizing: border-box; opacity: 0; animation: d1-r3-pulse-once 600ms ease-out 250ms 1 both; }
+    @keyframes d1-r3-pulse-once { from { transform: scale(1); opacity: .8; } to { transform: scale(2.4); opacity: 0; } }
+    .d1-r3-line { flex: none; width: 80px; height: 2px; background: #58a6ff; box-shadow: 0 0 6px rgba(88,166,255,.5); }
+    .d1-r3-stack { position: relative; min-width: 0; max-width: 340px; }
+    .d1-r3-tag { position: absolute; bottom: 100%; left: 0; margin-bottom: 6px; white-space: nowrap; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #6e7681; }
+
+    .d1-r3-pill { position: relative; display: flex; align-items: center; gap: 0.45rem; padding: 0.45rem 0.7rem 0.45rem 0.85rem; border-radius: 10px; background: #1f2630; border: 1px solid #3a4f6a; box-shadow: 0 0 0 1px rgba(88,166,255,.12), 0 0 16px rgba(88,166,255,.22), 0 6px 18px rgba(0,0,0,.4); overflow: hidden; }
+    .d1-r3-pill[data-screen-link] { cursor: pointer; }
+    .d1-r3-pill[data-screen-link]:hover { border-color: #58a6ff; box-shadow: 0 0 0 1px rgba(88,166,255,.25), 0 0 22px rgba(88,166,255,.35), 0 6px 18px rgba(0,0,0,.4); }
+    .d1-r3-stripe { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #58a6ff; }
+    .d1-r3-q { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e6edf3; }
+    .d1-r3-good { flex: none; color: #56d364; font-weight: 600; }
+    .d1-r3-sep { flex: none; color: #56d364; opacity: .7; }
+    .d1-r3-q.d1-r3-good-text { color: #56d364; font-weight: 400; }
+    .d1-r3-caret { flex: none; width: 14px; height: 14px; color: #8b949e; }
+
+    .d1-r3-open { position: relative; width: 340px; padding: 0.8rem 0.9rem 0.8rem 1.05rem; border-radius: 10px; background: #1f2630; border: 1px solid #58a6ff; box-shadow: 0 0 0 1px rgba(88,166,255,.3), 0 0 32px rgba(88,166,255,.42), 0 10px 28px rgba(0,0,0,.45); overflow: hidden; transform-origin: 0% 100%; animation: d1-r3-grow 220ms ease-out 1 both; }
+    @keyframes d1-r3-grow { from { opacity: 0; transform: scale(.82); } to { opacity: 1; transform: scale(1); } }
+    .d1-r3-up .d1-r3-line { transform-origin: 0% 50%; animation: d1-r3-draw 160ms ease-out 1 both; }
+    @keyframes d1-r3-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    .d1-r3-head { display: flex; align-items: flex-start; gap: 0.55rem; margin-bottom: 0.6rem; }
+    .d1-r3-head .d1-r3-q { white-space: normal; overflow: visible; flex: 1; }
+    .d1-r3-close { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; color: #8b949e; cursor: pointer; }
+    .d1-r3-close:hover { background: #262d37; color: #e6edf3; }
+    .d1-r3-close .d1-r3-caret { transform: rotate(180deg); }
+    .d1-r3-chip { display: inline-block; margin: 0 0 0.7rem; padding: 0.25rem 0.7rem; border-radius: 999px; background: rgba(63,185,80,.14); color: #56d364; font-size: 12px; }
+    .d1-r3-chip strong { font-weight: 600; }
+    .d1-r3-field { height: 3.2rem; border-radius: 8px; border: 1px solid #3a4452; background: #0d1117; padding: 0.45rem 0.6rem; box-sizing: border-box; color: #6e7681; font-size: 12px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .d1-r3-pin.d1-r3-pulse::before, .d1-r3-open, .d1-r3-up .d1-r3-line { animation: none; }
+    }
+  </style>
+
+  <header class="iteration-intro">
+    <h2>{{iteration.tab}} 3 · Notiz-Blase</h2>
+    <p>Neu in dieser Runde: „Verbessert“ steht als grüner Text, der Zahlenkreis ist weg, und der Ursprung ist der Sprechblasen-Pin der eigenen Notizen in Blau – die Blase öffnet animiert und leuchtet leicht. Klick die unterste Blase, um sie offen zu sehen. Unter „Stand und Umsetzung“ kannst du direkt umsetzen lassen.</p>
+  </header>
+
+  <section data-design="pille" data-nav-label="Pille"
+           data-design-active="true"
+           data-design-improved="Grüner Text, Pin wie eigene Notiz, Glow">
+    <section id="d1-s1" data-nav-label="Eingeklappt" data-screen data-screen-active="true">
+      <div class="d1-r3-stage">
+        <div class="d1-r3-page">
+          <div class="d1-r3-hero"></div><div class="d1-r3-bar"></div><div class="d1-r3-bar d1-r3-short"></div>
+          <div class="d1-r3-footer">Footer der Seite</div>
+        </div>
+
+        <div class="d1-r3-row d1-r3-row-a" style="left:16%;top:7rem">
+          <span class="d1-r3-origin"><span class="d1-r3-pin"></span><span class="d1-r3-line"></span></span>
+          <div class="d1-r3-stack">
+            <span class="d1-r3-tag">Neue Frage</span>
+            <div class="d1-r3-pill">
+              <span class="d1-r3-stripe"></span>
+              <span class="d1-r3-q">Soll der Kopfbereich eine feste Höhe bekommen, auch auf dem Handy?</span>
+              <svg class="d1-r3-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="d1-r3-row d1-r3-row-c" style="left:16%;top:11.85rem">
+          <span class="d1-r3-origin"><span class="d1-r3-pin"></span><span class="d1-r3-line"></span></span>
+          <div class="d1-r3-stack">
+            <span class="d1-r3-tag">Nur Verbesserung</span>
+            <div class="d1-r3-pill">
+              <span class="d1-r3-stripe"></span>
+              <span class="d1-r3-good">Verbessert</span><span class="d1-r3-sep">·</span>
+              <span class="d1-r3-q d1-r3-good-text">Zeilen haben mehr Abstand</span>
+              <svg class="d1-r3-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="d1-r3-row d1-r3-row-b" style="left:16%;bottom:5rem">
+          <span class="d1-r3-origin"><span class="d1-r3-pin"></span><span class="d1-r3-line"></span></span>
+          <div class="d1-r3-stack">
+            <span class="d1-r3-tag">Verbessert und Frage · Klick öffnet</span>
+            <div class="d1-r3-pill" data-screen-link="d1-s2" role="button" tabindex="0" aria-label="Blase öffnen">
+              <span class="d1-r3-stripe"></span>
+              <span class="d1-r3-good">Verbessert</span><span class="d1-r3-sep">·</span>
+              <span class="d1-r3-q">Der Footer hat keinen Hintergrund mehr – passt das?</span>
+              <svg class="d1-r3-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="anno-layer" data-anno-layer>
+        <div class="anno" data-anno="r3-d1-s1-a1" data-anno-side="right" data-anno-target=".d1-r3-row-c .d1-r3-good-text">
+          <button class="anno-pin" type="button" data-anno-pin="r3-d1-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+          <div class="anno-bubble" id="anno-bubble-r3-d1-s1-a1" data-anno-bubble="r3-d1-s1-a1" data-open="false">
+            <p class="anno-bubble-improved"><strong>{{design.change_improved}}</strong> Verbessert-Info jetzt grün als Text</p>
+            <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d1-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s1-a1">
+              <span class="anno-bubble-question">Grüner Text statt Punkt – so eindeutig genug?</span>
+              <span class="anno-chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="anno-bubble-body">
+              <textarea class="anno-answer" data-comment="anno-r3-d1-s1-a1" data-annotation="r3-d1-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}">verbessert benötigen wir nicht! Gern aber einfach den text irgendwie mit effekten hinterlegen statt nur grün zu machen den font text. ist ja nur eine andeutung, man kann es ja aufmachen!</textarea>
+              <div class="attach-slot" data-attach-slot="anno-r3-d1-s1-a1"></div>
+            </div>
+          </div>
+        </div>
+        <div class="anno" data-anno="r3-d1-s1-a2" data-anno-side="top" data-anno-target=".d1-r3-row-a .d1-r3-stripe">
+          <button class="anno-pin" type="button" data-anno-pin="r3-d1-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+          <div class="anno-bubble" id="anno-bubble-r3-d1-s1-a2" data-anno-bubble="r3-d1-s1-a2" data-open="false">
+            <p class="anno-bubble-improved"><strong>{{design.change_improved}}</strong> Zahlenkreis entfernt</p>
+            <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d1-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s1-a2">
+              <span class="anno-bubble-question">Fehlt dir die Nummer beim Zuordnen?</span>
+              <span class="anno-chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="anno-bubble-body">
+              <textarea class="anno-answer" data-comment="anno-r3-d1-s1-a2" data-annotation="r3-d1-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}">nope</textarea>
+              <div class="attach-slot" data-attach-slot="anno-r3-d1-s1-a2"></div>
+            </div>
+          </div>
+        </div>
+        <div class="anno" data-anno="r3-d1-s1-a3" data-anno-side="top" data-anno-target=".d1-r3-row-b .d1-r3-good">
+          <button class="anno-pin" type="button" data-anno-pin="r3-d1-s1-a3" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s1-a3" aria-label="{{anno.pin_label}}">3</button>
+          <div class="anno-bubble" id="anno-bubble-r3-d1-s1-a3" data-anno-bubble="r3-d1-s1-a3" data-open="false">
+            <p class="anno-bubble-improved"><strong>{{design.change_improved}}</strong> Mit Frage: grünes Wort vorn, Rest normal</p>
+            <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d1-s1-a3" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s1-a3">
+              <span class="anno-bubble-question">Eine Zeile: „Verbessert“ grün, Frage normal – passt das so?</span>
+              <span class="anno-chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="anno-bubble-body">
+              <textarea class="anno-answer" data-comment="anno-r3-d1-s1-a3" data-annotation="r3-d1-s1-a3" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+              <div class="attach-slot" data-attach-slot="anno-r3-d1-s1-a3"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="d1-s2" data-nav-label="Offen" data-screen>
+      <div class="d1-r3-stage">
+        <div class="d1-r3-page">
+          <div class="d1-r3-hero"></div><div class="d1-r3-bar"></div><div class="d1-r3-bar d1-r3-short"></div>
+          <div class="d1-r3-footer">Footer der Seite</div>
+        </div>
+
+        <div class="d1-r3-row d1-r3-up" style="left:16%;bottom:5rem">
+          <span class="d1-r3-origin"><span class="d1-r3-pin d1-r3-pulse"></span><span class="d1-r3-line"></span></span>
+          <div class="d1-r3-open">
+            <span class="d1-r3-stripe"></span>
+            <div class="d1-r3-head">
+              <span class="d1-r3-q">Der Footer hat keinen Hintergrund mehr – passt das?</span>
+              <span class="d1-r3-close" data-screen-link="d1-s1" role="button" tabindex="0" aria-label="Einklappen">
+                <svg class="d1-r3-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+              </span>
+            </div>
+            <p class="d1-r3-chip"><strong>Verbessert</strong> · Transparent, Fan-Badge, Neuigkeiten</p>
+            <div class="d1-r3-field">Deine Antwort …</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="anno-layer" data-anno-layer>
+        <div class="anno" data-anno="r3-d1-s2-a1" data-anno-side="top" data-anno-target=".d1-r3-pin">
+          <button class="anno-pin" type="button" data-anno-pin="r3-d1-s2-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s2-a1" aria-label="{{anno.pin_label}}">1</button>
+          <div class="anno-bubble" id="anno-bubble-r3-d1-s2-a1" data-anno-bubble="r3-d1-s2-a1" data-open="false">
+            <p class="anno-bubble-improved"><strong>{{design.change_improved}}</strong> Ursprung wie eigene Notiz, blau</p>
+            <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d1-s2-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s2-a1">
+              <span class="anno-bubble-question">Glow-Stärke so, oder dezenter?</span>
+              <span class="anno-chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="anno-bubble-body">
+              <textarea class="anno-answer" data-comment="anno-r3-d1-s2-a1" data-annotation="r3-d1-s2-a1" data-attachable placeholder="{{anno.answer_placeholder}}">sehr schön! btw, die speech bubbles brauchen keinen pfeil mehr, siehe custom notizen ;) </textarea>
+              <div class="attach-slot" data-attach-slot="anno-r3-d1-s2-a1"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <section data-view="r3-summary" data-view-kind="decision" data-nav-label="Stand und Umsetzung" hidden>
+    <div class="view-frame">
+      <h2>Stand nach Runde 2 – was wird umgesetzt?</h2>
+      <p>Das hast du in Runde 1 festgelegt und in Runde 2 bestätigt. Jeder Punkt ist ein eigenes Paket und vorausgewählt. Passt alles, kannst du direkt aus dieser Runde umsetzen lassen.</p>
+
+      <div class="variant-evaluation" data-decision="r3-b1-hidden-pins" data-label="B1 Neue Notizen trotz Ausblenden sichtbar">
+        <h3>B1 · Neue Notizen bleiben im Ausblende-Modus sichtbar (#1)</h3>
+        <p>Eine Notiz, die du anlegst, während die Notizen ausgeblendet sind, bleibt sichtbar. Ältere bleiben ausgeblendet. Beim nächsten Ausblenden verschwinden wieder alle. Mit Test.</p>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-r3-b1-hidden-pins" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-r3-b1-hidden-pins" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="r3-b1-hidden-pins-note">{{decision.comment_label}}</label>
+          <textarea id="r3-b1-hidden-pins-note" data-comment="r3-b1-hidden-pins-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="variant-evaluation" data-decision="r3-b2-bubble" data-label="B2 Notiz-Blase wie dieser Entwurf">
+        <h3>B2 · Notiz-Blase wie dieser Entwurf (#3, #4)</h3>
+        <p>Ursprung ist der Sprechblasen-Pin der eigenen Notizen, nur blau, und pulsiert beim Öffnen einmal. Eingeklappt eine Zeile ohne Zahlenkreis, mit feinem Haken statt „›“ und blauem Streifen links. „Verbessert“ steht als grüner Text, offen als grüner Chip mit Innenabstand. Die Blase öffnet animiert und hat einen leichten blauen Glow. Die offenen Fragen dazu stehen als Pins im Entwurf.</p>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-r3-b2-bubble" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-r3-b2-bubble" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="r3-b2-bubble-note">{{decision.comment_label}}</label>
+          <textarea id="r3-b2-bubble-note" data-comment="r3-b2-bubble-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="variant-evaluation" data-decision="r3-b3-dock-keys" data-label="B3 Tastatur im Notizen-Panel">
+        <h3>B3 · Tastatur im Notizen-Panel (#6)</h3>
+        <ul>
+          <li><b>Strg+Enter</b> springt ins nächste Notizfeld, im letzten schließt es das Panel.</li>
+          <li><b>Strg+Leertaste</b> schließt das Panel.</li>
+          <li><b>Strg+Enter</b> ist kein Umsetzen-Hotkey mehr. Der Hinweis dazu fliegt aus den Tipps.</li>
+        </ul>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-r3-b3-dock-keys" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-r3-b3-dock-keys" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="r3-b3-dock-keys-note">{{decision.comment_label}}</label>
+          <textarea id="r3-b3-dock-keys-note" data-comment="r3-b3-dock-keys-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="variant-evaluation" data-decision="r3-b4-dim-pins" data-label="B4 Andere eigene Notizen abdimmen">
+        <h3>B4 · Andere eigene Notizen abdimmen statt ausblenden (#7)</h3>
+        <p>Ist eine eigene Notiz offen, bleiben die anderen eigenen Notizen abgedimmt sichtbar, so wie heute schon die automatischen.</p>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-r3-b4-dim-pins" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-r3-b4-dim-pins" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="r3-b4-dim-pins-note">{{decision.comment_label}}</label>
+          <textarea id="r3-b4-dim-pins-note" data-comment="r3-b4-dim-pins-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="variant-evaluation" data-decision="r3-pins-more-pages" data-label="Eigene Notizen auf mehr Seiten">
+        <h3>Eigene Notizen auf mehr Seiten (#2)</h3>
+        <p>Strg+Klick-Notizen gehen zusätzlich auf Fragen-Seiten in Design-Runden (wie „Stand und Umsetzung“) und im Abschlussbericht. Die Übersicht der Entwürfe bleibt außen vor.</p>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-r3-pins-more-pages" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-r3-pins-more-pages" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="r3-pins-more-pages-note">{{decision.comment_label}}</label>
+          <textarea id="r3-pins-more-pages-note" data-comment="r3-pins-more-pages-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="variant-evaluation" data-decision="r3-backlog-run" data-label="Danach den devops-Backlog abarbeiten">
+        <h3>Danach den devops-Backlog abarbeiten (#5)</h3>
+        <p>Wenn diese Pakete fertig sind, starte ich <code>do-run</code> im Backlog-Modus für dieses Repo. Das ist ein eigener, längerer Lauf.</p>
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-r3-backlog-run" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-r3-backlog-run" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="r3-backlog-run-note">{{decision.comment_label}}</label>
+          <textarea id="r3-backlog-run-note" data-comment="r3-backlog-run-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+</section>

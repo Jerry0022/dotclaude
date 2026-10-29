@@ -1,0 +1,186 @@
+[
+ {
+  "iteration": 1,
+  "action": "iterate",
+  "decisions": [
+   {
+    "id": "b1-hidden-pins",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "b2-bubble",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "b3-dock-keys",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "b4-dim-pins",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "pins-design-views",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "pins-final-report",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "pins-overview",
+    "evaluation": "discard",
+    "note": ""
+   },
+   {
+    "id": "backlog-run-after",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "backlog-issues",
+    "evaluation": "discard",
+    "note": ""
+   },
+   {
+    "id": "backlog-ignore",
+    "evaluation": "discard",
+    "note": ""
+   }
+  ],
+  "comments": [
+   {
+    "id": "anno-d1-s1-a1",
+    "text": "gern kurz pulsierend beim öffnen aber dann einheitlich!",
+    "attachments": []
+   },
+   {
+    "id": "anno-d1-s1-a2",
+    "text": "ja reicht vollkommen, super",
+    "attachments": []
+   },
+   {
+    "id": "anno-d1-s1-a3",
+    "text": "ja super! wobei orange ja fragen color ist.",
+    "attachments": []
+   },
+   {
+    "id": "anno-d2-s1-a3",
+    "text": "band finde ich zu viel... aber ich fidnee super das links an der box so ein farbstreifen ist, aber nciht für verbesserung sondern einfach so!",
+    "attachments": []
+   }
+  ]
+ },
+ {
+  "iteration": 2,
+  "action": "iterate",
+  "decisions": [
+   {
+    "id": "r2-b1-hidden-pins",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "r2-b2-bubble",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "r2-b3-dock-keys",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "r2-b4-dim-pins",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "r2-pins-more-pages",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "r2-backlog-run",
+    "evaluation": "include",
+    "note": ""
+   }
+  ],
+  "comments": [
+   {
+    "id": "anno-d1-s2-a1",
+    "text": "super!",
+    "attachments": []
+   },
+   {
+    "id": "d1-s1",
+    "text": "die verbesserungsinfo gern komplett in grün den text fihnd eich sogar noch besser! Außerdem nehme den kreis mit der ztahl raus, brauch tman gar nicht",
+    "attachments": []
+   },
+   {
+    "id": "d1-s2",
+    "text": "warum ist der punkt so hässlich geworden, orientiere dich exakt an den custom notizen mit der speech bubble etc. nur bläulich! und lass die gern auch animiert aufgehen! und die box eine glow etc.....",
+    "attachments": []
+   }
+  ]
+ },
+ {
+  "iteration": 3,
+  "action": "implement",
+  "decisions": [
+   {
+    "id": "r3-b1-hidden-pins",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "r3-b2-bubble",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "r3-b3-dock-keys",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "r3-b4-dim-pins",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "r3-pins-more-pages",
+    "evaluation": "include",
+    "note": ""
+   },
+   {
+    "id": "r3-backlog-run",
+    "evaluation": "include",
+    "note": ""
+   }
+  ],
+  "comments": [
+   {
+    "id": "anno-r3-d1-s1-a1",
+    "text": "verbessert benötigen wir nicht! Gern aber einfach den text irgendwie mit effekten hinterlegen statt nur grün zu machen den font text. ist ja nur eine andeutung, man kann es ja aufmachen!",
+    "attachments": []
+   },
+   {
+    "id": "anno-r3-d1-s1-a2",
+    "text": "nope",
+    "attachments": []
+   },
+   {
+    "id": "anno-r3-d1-s2-a1",
+    "text": "sehr schön! btw, die speech bubbles brauchen keinen pfeil mehr, siehe custom notizen ;)",
+    "attachments": []
+   }
+  ]
+ }
+]

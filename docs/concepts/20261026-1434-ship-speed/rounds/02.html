@@ -1,0 +1,89 @@
+<section data-iteration="2" data-iteration-template="free" data-final-report>
+  <div class="fr-head">
+    <span class="fr-phase">🏁 {{final.phase}}</span>
+    <h2 class="fr-title">Ship-Speed: drei Mal schneller ohne Qualitätsverlust</h2>
+  </div>
+
+  <ol class="fr-flow">
+    <li>Preflight + CI-Kontingent-Probe</li>
+    <li>Build: Lint + betroffene Tests (volle Suite auf CI)</li>
+    <li>Bump + CHANGELOG</li>
+    <li>Release mit Landing-Lock und Suite-Gate</li>
+    <li>Card; Aufräumen danach im Hintergrund</li>
+  </ol>
+
+  <p class="fr-label">{{final.done_what}}</p>
+  <p class="fr-sentence">Ein Ship läuft jetzt als ein deterministischer <code>ship_run</code>-Aufruf: Die volle Suite läuft als CI-Check, die Aufräumarbeit hängt nicht mehr vor der Card, und gemergt wird nie ohne vollen grünen Suite-Lauf auf exakt diesem Stand.</p>
+
+  <div class="fr-cols">
+    <div class="fr-card">
+      <p class="fr-label">{{final.results}}</p>
+      <ul class="fr-wins">
+        <li><span class="fr-win-icon" aria-hidden="true">🚀</span><span><b>Ein Aufruf statt 40–110</b>: <code>ship_run</code> hält nur an echten Entscheidungspunkten.</span></li>
+        <li><span class="fr-win-icon" aria-hidden="true">🧪</span><span><b>Suite einmal pro Stand</b>: auf CI in 4 Shards; ist das Kontingent leer, läuft sie sofort lokal.</span></li>
+        <li><span class="fr-win-icon" aria-hidden="true">⏱</span><span>Die Card zeigt die <b>Ship-Dauer</b> pro Schritt, die Messbasis für das Drittel-Ziel.</span></li>
+      </ul>
+    </div>
+    <div class="fr-card">
+      <p class="fr-label">{{final.holds}}</p>
+      <div class="fr-meters">
+        <div class="fr-meter" data-met="true" style="--fr-tested: 100%; --fr-target: 100%">
+          <span class="fr-meter-name">🧱 Datenintegrität</span>
+          <b class="fr-meter-value">0 Merges</b>
+          <div class="fr-meter-bar" aria-hidden="true"></div>
+          <p class="fr-meter-context">ohne vollen grünen Suite-Lauf: geprüft für einen fehlenden, übersprungenen und quota-blockierten suite-Check. <span class="fr-meter-verdict">✓ {{final.target_met}}</span></p>
+        </div>
+        <div class="fr-meter" data-met="true" style="--fr-tested: 95%; --fr-target: 80%">
+          <span class="fr-meter-name">🔒 Stabilität</span>
+          <b class="fr-meter-value">kein Hänger</b>
+          <div class="fr-meter-bar" aria-hidden="true"></div>
+          <p class="fr-meter-context">Landing-Lock pro Repo: Ein toter Prozess oder ein abgelaufener Heartbeat wird übernommen, nach der Wartezeit läuft der Ship ohne Lock weiter. 13 Tests, 3× einzeln stabil. <span class="fr-meter-verdict">✓ {{final.target_met}}</span></p>
+        </div>
+        <div class="fr-meter" data-met="false" style="--fr-tested: 30%; --fr-target: 100%">
+          <span class="fr-meter-name">⚡ Performance</span>
+          <b class="fr-meter-value">≈ 7–9 min</b>
+          <div class="fr-meter-bar" aria-hidden="true"></div>
+          <p class="fr-meter-context">erwartete Ship-Dauer statt 22,8 min Median, Ziel ≤ 10 min (geschätzt). Echt gemessen wird es erst beim ersten Ship mit der neuen Telemetrie. <span class="fr-meter-verdict">▲ noch nicht gemessen</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="fr-depth">
+    <p class="fr-label">{{final.depth}}</p>
+    <p class="fr-ladder-top">{{final.level_interplay}}<small>Stufe 3 von 7</small></p>
+    <ol class="fr-ladder">
+      <li data-level="1" data-state="done">{{final.level_code}}</li>
+      <li data-level="2" data-state="done">{{final.level_dry}}</li>
+      <li data-level="3" data-state="done">{{final.level_interplay}}</li>
+      <li data-level="4" data-state="open">{{final.level_local}}</li>
+      <li data-level="5" data-state="na">{{final.level_prod}}</li>
+      <li data-level="6" data-state="open">{{final.level_live}}</li>
+      <li data-level="7" data-state="you">{{final.level_accept}}</li>
+    </ol>
+    <p class="fr-ladder-foot">Volle Suite grün. Ein echter Ship über <code>ship_run</code> mit früh geöffnetem Draft-PR und dem ersten CI-Suite-Lauf steht noch aus. Das ist der erste Ship dieses Branches selbst (siehe 🧪).</p>
+  </div>
+
+  <section data-tests hidden aria-label="{{final.group_tests}}">
+    <ul>
+      <li data-todo-id="t-first-ship" data-crit="high" data-guide="">Ersten Ship über ship_run prüfen</li>
+      <li data-todo-id="t-ci-shards" data-crit="mid" data-guide="web">Laufzeit der CI-Suite-Shards ansehen</li>
+    </ul>
+  </section>
+  <section data-handoffs hidden aria-label="{{final.group_handoffs}}">
+    <ul>
+      <li data-todo-id="h-required-check" data-crit="high" data-guide="web">Check „suite“ als Pflicht in main setzen</li>
+    </ul>
+  </section>
+
+  <details class="fr-fold">
+    <summary>🛠 {{final.dev_fold}}</summary>
+    <ul class="fr-dev">
+      <li>Branch <code>claude/ship-duration-analysis-868b70</code> · HEAD <code>e5d64fbd7</code> · 25 Commits, 76 Dateien</li>
+      <li><code>ship/tools/run.js</code>, <code>ship/lib/landing-lock.js</code>, <code>ship/lib/ci-quota-probe.js</code>, <code>.github/workflows/ci-suite.yml</code></li>
+      <li>Tests: volle Suite 11007 grün (3 Fixture-Fehler danach behoben, Datei grün), Lint sauber</li>
+      <li>Reality-Check: auf main kamen #915/#916 hinzu (additiv in hygiene.js/release.js), integriert</li>
+      <li>Nebenbei behoben: Run-Vertrag zählte einen echten ship_release-Merge nicht als Merge</li>
+    </ul>
+  </details>
+</section>

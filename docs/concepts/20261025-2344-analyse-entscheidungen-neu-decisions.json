@@ -1,0 +1,68 @@
+[
+  {
+    "iteration": 1,
+    "action": "iterate",
+    "date": "2026-10-26",
+    "summary": {
+      "verdict": "Konzept wirkt führend; Full-Flow richtig",
+      "full": [
+        "Analyse in 3 Stufen (generell/Kategorie/Entscheidung), aktuelle lang, Rest kurz; lang = mit Darstellungsweise, nie Fullscreen",
+        "Entscheidung ~66 %, Analyse ~33 %",
+        "Stage halb geführt: zu viele Elemente, kleine Buttons",
+        "Stepper super, klickbar + Tooltips",
+        "Abweichungszähler oben rechts weg",
+        "kein Liste-Menübutton",
+        "Umsetzungszeitpunkt nie Hauptentscheidung, dezenter Issue/Epic-Link",
+        "wenige Labels, Typ-Chip \"Wählen\" hilft nicht"
+      ],
+      "palette": "≥30 Darstellungsweisen je Content mit Kurzbeschreibung für Claude, eigene nach Style-Regeln, genau 1 reine Text-Form",
+      "modes": "7 Entscheidungsmodi mit Wann-einsetzen-Text",
+      "bausteine": "Korpus-Statistik-Balken hilft nicht → raus",
+      "open": "Kurz vs. lang definieren"
+    }
+  },
+  {
+    "iteration": 2,
+    "action": "iterate",
+    "date": "2026-10-26",
+    "summary": {
+      "verdict": "Full wiedererkennbar, auf Kurs",
+      "rules": [
+        "kurz = 1 Satz + KPI/Mini-Grafik (Tendenz immer Grafik); ohne Zahl Formatierter Text",
+        "lang scrollt nie, Belege als Popup",
+        "Akkordeon",
+        "L1 klappt nach Briefing zu, wieder öffnbar",
+        "L2 kurz = Gruppenergebnis",
+        "L3 nach Entscheidung lang mit Folge",
+        "nur Empfehlung als Label (Badge an Option), immer Vorauswahl",
+        "keine Tragweite; Status nur im Stepper",
+        "kein Alle-übernehmen",
+        "unberührt nur wenn <3 s / nie geöffnet; Sprung zum ersten Unberührten",
+        "Review: Abweichungen → Issues → unberührt; Wirkung immer visualisiert",
+        "Submit nur Panel + FAB; Chat-FAB immer",
+        "max 3 Gruppen, Briefing aufrufend",
+        "animierte 3-Stufen-Choreografie (auch Lite)",
+        "klarer Weiter-Button",
+        "Hotkeys in Tooltips",
+        "Stepper: kräftigeres Häkchen, erledigt grün"
+      ]
+    }
+  },
+  {
+    "iteration": 3,
+    "action": "implement",
+    "date": "2026-10-26",
+    "summary": {
+      "final": [
+        "keine Rot/Grün/Orange-Themenfarben, Analysewerte hellblau",
+        "Motivationstext halb so lang, kein Sub-Header, Themenfelder nicht benennen",
+        "kein Abweichungs-Hinweis",
+        "ein direktes Notizfeld",
+        "Start pulsiert (a)",
+        "Übergang 2× 1 s, dann 0,3 s (b)",
+        "Lite 1–3 mit Fokus + Pfeiltasten überall"
+      ],
+      "implemented": "Vertrag+Gate (core), Engine-UI (frontend), Autoren-Doku (designer), QA grün"
+    }
+  }
+]
