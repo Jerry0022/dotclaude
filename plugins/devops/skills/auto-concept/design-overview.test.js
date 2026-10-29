@@ -721,16 +721,28 @@ describe("☰ overview row, the eye on the overview, draggable pins", () => {
   }, BOOT_TIMEOUT);
 });
 
-describe("B4 visuals — bleed preview, variant numbers, active chip, demo and the chip's own favourite star", () => {
-  test("a preview is one bleed clone (no mirror); the stage carries the design background and bleed flag", async () => {
+describe("B4 visuals — card preview, variant numbers, active chip, demo and the chip's own favourite star", () => {
+  test("a preview is one clone (no mirror) inside the big card; the CARD carries the design background, never the stage", async () => {
     const { document } = await boot(page(3));
     const prev = document.querySelector(".design-ov-slide .design-ov-preview");
     expect(prev.querySelector(".design-ov-mirror")).toBeNull();
     expect(prev.querySelectorAll(".design-ov-scale").length).toBe(1);
-    expect(document.querySelector("[data-design-overview]").dataset.bleed).toBe("true");
+    const ov = document.querySelector("[data-design-overview]");
+    expect(ov.dataset.bleed, "no stage-covering bleed mode").toBeUndefined();
+    expect(ov.style.getPropertyValue("--dz-ov-bg")).toBe("");
+    expect(prev.closest(".design-ov-slide").style.getPropertyValue("--dz-ov-bg")).not.toBe("");
     const ids = [...prev.querySelectorAll("[id]")].map((n) => n.id);
     expect(new Set(ids).size).toBe(ids.length);
   }, BOOT_TIMEOUT);
+  test("the centre stays a 16:10 card with its neighbours; full-app screens cover-scale inside it (user note, round 2)", () => {
+    // No rule may blow the centre slide up to the stage or hide the neighbours.
+    expect(md).not.toMatch(/data-bleed/);
+    expect(md).not.toMatch(/\.design-ov-slide\[data-pos="cur"\]\s*\{[^}]*100cqw/);
+    expect(md).toMatch(/\.design-ov-preview \{[^}]*border-radius: 22px;[^}]*var\(--dz-ov-bg-img, none\)/);
+    // fitPreviews: cover for a full-app screen (>= 700 of 1000px), contain otherwise.
+    expect(md).toMatch(/const full = content >= 700;\s*\n\s*p\.dataset\.fit = full \? 'cover' : 'contain';/);
+    expect(md).toMatch(/full \? Math\.max\(w \/ content, h \/ tall\) : Math\.min\(w \/ content, h \/ tall\)/);
+  });
   test("every variant shows its hotkey digit in the quick nav and the ☰ rows", async () => {
     const { document } = await boot(page(3));
     const nums = [...document.querySelectorAll("#design-quick .design-quick-seg .design-quick-n")].map((n) => n.textContent);

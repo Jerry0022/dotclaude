@@ -172,7 +172,9 @@ with an overview table carrying a recommendation column and jump links
 
    *Layout:* Claude arranges stages horizontally (tabs), vertically or combined per concept —
    whatever overwhelms the user least — and at the end always offers the most complete overview
-   possible.
+   possible. The engine shows them only in the ☰ panel, as a stepper whose nodes carry each
+   Etappe's kind glyph (read from its newest round); there is no Etappen glyph on the page
+   itself (`templates-stages.md`).
 
    **Single-screen, single-design (exactly one `data-screen`):** no
    screen-nav, no per-screen feedback textarea — the dock shows ONLY the
@@ -361,10 +363,21 @@ Lite never gets topics or a briefing; Full never hides inside a design round.
 what was analysed and found) → **Potential** (one prominent number, e.g.
 "≈ 51 M Tokens", as a `kpi`) → the **Themenfelder** as chips linked to the
 potential by connector lines (`data-share` = their part of it) → the
-**"Los geht's"** CTA that names the duration ("≈ 6 min"). The motivation is
+**"Los geht's"** button in the round's bar, beside the duration ("≈ 6 min"). The motivation is
 short and punchy — two sentences at most, no "was wir gemessen haben"
 sub-header, no "Deine drei Themenfelder" heading, no level numbers. A Full
 without what / why / potential fails the gate (A1).
+
+**One screen, no page scroll (Full).** The engine fits a Full round to the
+viewport (`templates-analysis-css.md` § fitted Full): the stepper is one line
+(only the open Themenfeld shows its dots), every stage ends in the same bar
+at the same spot — the optional note across the full width right above it,
+its 📎 inside the field — and the topic intro and the review show their
+decisions as an overview grid, not a list. Content that does not fit is
+condensed (layout first, then type) and only as a last resort scrolls inside
+its own box. Author for that budget: the round's `.iteration-intro` is one
+heading + one sentence (it opens the briefing), questions fit two lines,
+option consequences one or two, and no stage is a long list.
 
 **Themenfelder.** At most **3** per Full with at most **7** decisions each —
 3 and 7 are the golden numbers (gate A4 warns beyond). Group by what the

@@ -88,13 +88,9 @@ const STAGED = [
 ];
 
 describe("Etappen — staged concept", () => {
-  test("structure button + tab row, the current Etappe open", () => {
+  test("stepper tab row, the current Etappe open, no structure button on the page", () => {
     const p = page({ rounds: STAGED });
-    const btn = p.$("#stage-struct");
-    expect(btn, "structure button rendered").toBeTruthy();
-    expect(btn.hasAttribute("title")).toBe(false);
-    expect(btn.dataset.tip).toBe("stage.kind_doc\nstage.label B · iteration.tab 4");
-    expect(btn.querySelectorAll(".stage-gly u").length).toBe(3);
+    expect(p.$("#stage-struct"), "the top-left Etappen glyph is gone").toBeNull();
     const tabs = p.$$("#stage-tabs .stage-tab");
     expect(tabs.map((t) => t.dataset.stageId)).toEqual(["A", "B", "C"]);
     expect(tabs.map((t) => t.dataset.state)).toEqual(["done", "now", "ahead"]);
@@ -184,6 +180,48 @@ describe("Etappen — staged concept", () => {
     expect(p.$("#jr-next-stage")).toBeNull();
     expect(p.window.document.body.hasAttribute("data-stage-next")).toBe(false);
     expect(p.$("#jr-lock")).toBeTruthy();
+  });
+});
+
+describe("Etappen — stepper nodes", () => {
+  test("each tab leads with its kind glyph, the letter as badge, the kind + newest round as app tooltip", () => {
+    const p = page({ rounds: STAGED });
+    const tabs = p.$$("#stage-tabs .stage-tab");
+    const nodes = tabs.map((t) => t.firstElementChild);
+    expect(nodes.every((n) => n.classList.contains("stage-node"))).toBe(true);
+    expect(nodes.map((n) => n.dataset.kind)).toEqual(["doc", "doc", "none"]);
+    expect(nodes[0].querySelector("svg path")).toBeTruthy();
+    expect(nodes[2].querySelector("svg"), "no round yet: the letter alone").toBeNull();
+    expect(nodes.map((n) => n.querySelector(".stage-tl").textContent)).toEqual(["A", "B", "C"]);
+    expect(tabs[0].dataset.tip).toBe("stage.kind_doc\nstage.label A · iteration.tab 2");
+    expect(tabs[1].dataset.tip).toBe("stage.kind_doc\nstage.label B · iteration.tab 4");
+    expect(tabs[2].dataset.tip).toBe("stage.ahead");
+    expect(tabs.some((t) => t.hasAttribute("title"))).toBe(false);
+  });
+  test("the kind follows the Etappe's newest round: design sets and the analysis flow", () => {
+    const p = page({ rounds: STAGED });
+    const doc = p.window.document;
+    const r2 = doc.querySelector('section[data-iteration="2"]');
+    r2.dataset.iterationTemplate = "design";
+    r2.dataset.designSet = "topics";
+    r2.innerHTML = '<section data-design="a"></section><section data-design="b"></section>';
+    const r3 = doc.querySelector('section[data-iteration="3"]');
+    r3.dataset.iterationTemplate = "design";
+    r3.dataset.designSet = "alternatives";
+    r3.innerHTML = '<section data-design="a"></section><section data-design="b"></section><section data-design="c"></section>';
+    const r4 = doc.querySelector('section[data-iteration="4"]');
+    r4.dataset.analysis = "full";
+    r4.innerHTML += '<section id="d1" data-nav-label="d1" data-decision="d1" data-decision-mode="single"></section>';
+    p.window.renderStages();
+    const tabs = p.$$("#stage-tabs .stage-tab");
+    expect(tabs.map((t) => t.querySelector(".stage-node").dataset.kind)).toEqual(["seq", "analysis", "none"]);
+    expect(tabs[1].dataset.tip.split("\n")[0]).toBe("stage.kind_analysis");
+    expect(p.window.stageKindLine(r3)).toBe("stage.kind_pick");
+  });
+  test("the CSS joins the nodes with a connector and the structure button is gone", () => {
+    expect(md).toMatch(/\.stage-tab \+ \.stage-tab::before \{[^}]*top: calc\(5px \+ var\(--stage-node\) \/ 2/);
+    expect(md).not.toMatch(/\.stage-struct\s*\{/);
+    expect(md).not.toMatch(/function renderStageStruct/);
   });
 });
 

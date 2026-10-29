@@ -37,12 +37,6 @@ html:not([data-template="design"]) .upin-hint { display: none !important; }
    narrow window. */
 [data-template="design"] .design-ov {
   position: absolute; inset: 0; overflow: hidden;
-  /* Bleed: the centred variant's own background (layoutCarousel copies
-     --dz-ov-bg / --dz-ov-bg-img from the slide) fills the whole overview, so
-     no foreign panel shows around the preview. */
-  background-color: var(--dz-ov-bg, var(--bg-primary, #0d1117));
-  background-image: var(--dz-ov-bg-img, none); background-size: cover; background-position: center;
-  transition: background-color 0.25s ease;
   --dz-ov-top: 4rem; --dz-ov-bottom: 1.25rem;
   /* The overlay sits on arbitrary previews, not on the app surface: its own
      two tints, the bluish default and the warm graphite for bluish mocks. */
@@ -76,11 +70,9 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 }
 .design-ov-slide[data-pos="cur"] { --dz-s: 1; transform: translate(-50%, -50%); opacity: 1; filter: none; cursor: default; z-index: 1; }
 .design-ov-slide[data-pos="prev"]:hover, .design-ov-slide[data-pos="next"]:hover { opacity: 0.85; --dz-s: 0.8; }
-/* Bleed: a centred design fills the WHOLE stage edge to edge (the questions
-   tile stays a tile). The neighbours are behind it — hidden, the quick nav,
-   ← / → and the keys turn the carousel. */
-.design-ov[data-bleed="true"] .design-ov-slide[data-pos="cur"] { width: 100cqw; height: 100cqh; aspect-ratio: auto; }
-.design-ov[data-bleed="true"] .design-ov-slide:not([data-pos="cur"]) { visibility: hidden; pointer-events: none; }
+/* The centre is always the big 16:10 CARD, never the whole stage: a full-app
+   screen fills the card from inside (fitPreviews() cover-scales it, the card
+   takes the design's own background), the neighbours keep peeking in. */
 /* No ‹ › buttons: the side card itself is the control. On hover one tall,
    thin chevron fades in — no circle, just the glyph and its glow — in the
    tile's visible strip, pointing at the variant icon (.design-ov-side). */
@@ -96,19 +88,24 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-ov-slide[data-pos="prev"]:hover::after { opacity: 1; transform: translate(0, -50%); }
 .design-ov-slide[data-pos="next"]:hover::after { opacity: 1; transform: translate(0, -50%) scaleX(-1); }
 .design-ov-slide[data-pos="far"] { visibility: hidden; opacity: 0; }
+/* The card: framed, rounded, painted with the design's own background
+   (colour + image from buildSlide(), first non-transparent from the screen
+   up) so whatever the scaled clone does not reach reads as the app itself. */
 .design-ov-preview {
-  position: absolute; inset: 0; display: block; overflow: hidden;
-  background: transparent; box-shadow: none; transition: box-shadow 0.25s ease;
+  position: absolute; inset: 0; display: block; overflow: hidden; border-radius: 22px;
+  background-color: var(--dz-ov-bg, var(--bg-secondary, var(--panel-bg, #0d1117)));
+  background-image: var(--dz-ov-bg-img, none); background-size: cover; background-position: center;
+  box-shadow: var(--dz-ov-shadow), 0 0 0 2px var(--dz-color);
+  transition: box-shadow 0.25s ease;
 }
 .design-ov-slide[data-pos="cur"] .design-ov-preview { cursor: pointer; }
-/* Hover / focus on the centre preview: an inset glow in the variant colour,
-   never a scale. */
+/* Hover / focus on the centre card: a glow in the variant colour, never a
+   scale (the slide keeps --dz-ov-glow free above and below for it). */
 .design-ov-slide[data-pos="cur"] .design-ov-preview:hover,
 .design-ov-slide[data-pos="cur"] .design-ov-preview:focus-visible {
-  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--dz-color) 70%, transparent);
+  box-shadow: var(--dz-ov-shadow), 0 0 0 2px var(--dz-color),
+              0 0 44px 6px color-mix(in srgb, var(--dz-color) 55%, transparent);
 }
-/* A tile-shaped centre (the questions tile, a narrow window's fallback) keeps its frame. */
-.design-ov:not([data-bleed="true"]) .design-ov-slide[data-pos="cur"] .design-ov-preview { border-radius: 22px; box-shadow: var(--dz-ov-shadow), 0 0 0 2px var(--dz-color); }
 /* Neighbours are plain bordered tiles: no cut-off preview, no questions
    list — the icon beside the chevron names them. */
 .design-ov-slide:is([data-pos="prev"], [data-pos="next"]) .design-ov-preview,

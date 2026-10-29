@@ -150,12 +150,12 @@ must see their own language. The locale hint is authoritative.
 | `stage.label`                  | Stage                          | Etappe |
 | `stage.next`                   | Next stage                     | Nächste Etappe |
 | `stage.next_tip`               | On to stage {next} · {name}    | Weiter zu Etappe {next} · {name} |
-| `stage.struct`                 | Structure                      | Struktur |
 | `stage.kind_one`               | 1 direction                    | 1 Richtung |
 | `stage.kind_pick`              | {n} directions, one picked     | {n} Richtungen, eine gewählt |
 | `stage.kind_open`              | {n} directions                 | {n} Richtungen |
 | `stage.kind_seq`               | {n} topics in a row            | {n} Themen nacheinander |
 | `stage.kind_doc`               | {n} sections                   | {n} Abschnitte |
+| `stage.kind_analysis`          | {n} decisions, guided          | {n} Entscheidungen, geführt |
 | `stage.older`                  | Earlier rounds of this stage   | Frühere Runden dieser Etappe |
 | `stage.ahead`                  | Starts after the current stage. | Beginnt nach der aktuellen Etappe. |
 | `stage.prev`                   | Previous stages                | Vorherige Etappen |

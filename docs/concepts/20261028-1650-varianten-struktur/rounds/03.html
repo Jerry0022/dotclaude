@@ -1,0 +1,615 @@
+<section data-iteration="3" data-iteration-template="design" data-design-set="alternatives" data-baked>
+  <script type="application/json" data-frozen-feedback>{"general":{"text":"devops learn wenn gerade nicht die variante fokussiert ist die ein sternchen hat und man aber auf das sternchen draufdrückt, dann soll sich die variante einfach öffnen, aber nicht der stern favorit verschiwnden. Der verschwindet erst wenn man in einer fokussierten variante auf den stern klickt. \n\ndevops learn warum die custom notiz speech bubble abgeschnitten ist!","attachments":[{"id":"31cbf78bc1d393fdd649996d79102373cfd4e02c6cd5c270693e80ed2d524f20.png","name":"image.png","mime":"image/png","size":15170,"path":".claude/concepts/20261028-1650-varianten-struktur/attachments/31cbf78bc1d393fdd649996d79102373cfd4e02c6cd5c270693e80ed2d524f20.png"},{"id":"20a14fe7a35a7ae47f3ace26415d48aaf050133d8cff1e4db8229de666f09be5.png","name":"image.png","mime":"image/png","size":58231,"path":".claude/concepts/20261028-1650-varianten-struktur/attachments/20a14fe7a35a7ae47f3ace26415d48aaf050133d8cff1e4db8229de666f09be5.png"}]},"designs":{},"screens":{"d3-s2":"dieses fab menü finde ich am besten aber es wwird sehr voll und btw. etappe buchstbae, dann name, reicht vollkommen, kein subtitel. \nLass uns das nochmal refinnenen"},"views":{},"favorite":"schnellnav","userPins":[{"id":"up-mvsdgspslps3","design":"glyphe","screen":"d3-s2","x":90.1,"y":13.8,"target":"em \"3 Richtungen, eine gewählt\"","text":"Das finde ich super als titel, aber wie passt das mit den anderen elementen im fab menü header...","attachments":[]},{"id":"up-mvsdjpmqq1ox","design":"schnellnav","screen":"d2-s2","x":37.6,"y":3.2,"target":"u.mock-r3-u-off","text":"geniale idee aber dann lieber links neben dem eye icon dargestellt und im style mit dem krreislichen wie heute das eye ist","attachments":[]}]}</script>
+  <header class="iteration-intro">
+    <h2>{{iteration.tab}} 3 · Wo wohnt die Struktur?</h2>
+    <p>Runde 2 hat die Landkarte gewählt, sie soll ins ☰-Menü, die Etappen werden ein senkrechter Stepper mit Namen. Jetzt die Frage: Wo lebt die Struktur auf der Seite, ganz ohne ein weiteres schwebendes Panel?</p>
+  </header>
+  <style>
+    /* Round 3 mocks: the concept page chrome in a window frame. Own namespace mock-r3-, so the frozen round-2 rules never touch it. */
+    .mock-r3-win { position: relative; width: 100%; max-width: 1080px; aspect-ratio: 16 / 10; margin: 0 auto; overflow: hidden;
+      background: radial-gradient(120% 90% at 50% 40%, #121a24 0%, #0a0e13 70%); border: 1px solid #2a313b; border-radius: 14px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .45); color: #c9d1d9; font: 13px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+      --mock-r3-v1: #fb923c; --mock-r3-v2: #a78bfa; --mock-r3-v3: #facc15; }
+    .mock-r3-win * { box-sizing: border-box; }
+    .mock-r3-win button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+    .mock-r3-win .mock-r3-c1 { --mock-r3-c: var(--mock-r3-v1); }
+    .mock-r3-win .mock-r3-c2 { --mock-r3-c: var(--mock-r3-v2); }
+    .mock-r3-win .mock-r3-c3 { --mock-r3-c: var(--mock-r3-v3); }
+
+    /* chrome: eye, quick nav, FABs */
+    .mock-r3-eye { position: absolute; top: 14px; left: 16px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+      border: 1.5px solid rgba(88, 166, 255, .55); color: #58a6ff; font-size: 12px; opacity: .6; z-index: 3; }
+    .mock-r3-qnav { position: absolute; top: 11px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px;
+      border-radius: 18px; background: rgba(22, 27, 34, .94); border: 1px solid #30363d; z-index: 7; white-space: nowrap; }
+    .mock-r3-win .mock-r3-ovl { display: flex; align-items: center; gap: 0; height: 26px; padding: 0 7px; border-radius: 999px; color: #8b949e; font-size: 12px; }
+    .mock-r3-ovl i { font-style: normal; font-size: 14px; }
+    .mock-r3-ovl span { display: inline-block; max-width: 0; overflow: hidden; vertical-align: middle; transition: max-width .2s ease, margin .2s ease; }
+    .mock-r3-win .mock-r3-ovl:hover span, .mock-r3-win .mock-r3-ovl:focus-visible span { max-width: 80px; margin-left: 5px; }
+    .mock-r3-sep { width: 1px; height: 18px; background: #30363d; }
+    .mock-r3-chip { position: relative; display: flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 999px; color: #8b949e; font-size: 12px; }
+    .mock-r3-chip.mock-r3-on { background: rgba(88, 166, 255, .14); color: #e6edf3; box-shadow: inset 0 0 0 1px rgba(88, 166, 255, .45); }
+    .mock-r3-chip .mock-r3-sw { width: 8px; height: 8px; border-radius: 2px; background: var(--mock-r3-c, #484f58); }
+    .mock-r3-num { color: #58a6ff; font-weight: 700; }
+    .mock-r3-star { color: #e3b341; }
+    .mock-r3-win .mock-r3-fab { position: absolute; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; z-index: 8;
+      background: #58a6ff; color: #0b0f14; font-size: 16px; box-shadow: 0 6px 16px rgba(0, 0, 0, .4); }
+    .mock-r3-win .mock-r3-fab-menu { top: 9px; right: 14px; }
+    .mock-r3-win .mock-r3-fab-chat { bottom: 14px; right: 14px; }
+
+    /* stage, carousel, overview card */
+    .mock-r3-stage { position: absolute; top: 60px; right: 0; bottom: 20px; left: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .mock-r3-stage.mock-r3-dim { right: 300px; opacity: .5; }
+    .mock-r3-car { display: flex; align-items: center; justify-content: center; gap: 2.5%; width: 100%; height: 100%; }
+    .mock-r3-slide { flex: none; display: flex; flex-direction: column; gap: 8px; }
+    .mock-r3-slide.mock-r3-mid { width: 56%; }
+    .mock-r3-slide.mock-r3-side { width: 25%; opacity: .4; filter: saturate(.5); }
+    .mock-r3-shot { position: relative; aspect-ratio: 16 / 10; border-radius: 14px; overflow: hidden; }
+    .mock-r3-mid .mock-r3-shot { box-shadow: 0 0 0 2px rgba(45, 212, 191, .55), 0 18px 40px rgba(0, 0, 0, .5); }
+    .mock-r3-app { position: relative; width: 100%; height: 100%; padding: 6%; display: flex; flex-direction: column; gap: 6%; }
+    .mock-r3-app-1 { background: linear-gradient(160deg, #3a2414, #140c07 70%); }
+    .mock-r3-app-2 { background: radial-gradient(80% 70% at 60% 35%, #3b2a63 0%, #141026 70%); }
+    .mock-r3-app-3 { background: linear-gradient(180deg, #2e2a10, #110f05 75%); }
+    .mock-r3-a-bar { display: block; height: 8%; width: 45%; border-radius: 6px; background: rgba(255, 255, 255, .16); }
+    .mock-r3-a-hero { display: block; flex: 1; border-radius: 10px; background: rgba(255, 255, 255, .08); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); }
+    .mock-r3-a-cards { display: flex; gap: 5%; height: 22%; }
+    .mock-r3-a-cards i { flex: 1; border-radius: 8px; background: rgba(255, 255, 255, .1); }
+    .mock-r3-ovcard { position: absolute; left: 16px; bottom: 16px; width: 250px; padding: 12px 14px; border-radius: 12px; z-index: 4;
+      background: rgba(13, 17, 23, .88); border: 1px solid #30363d; }
+    .mock-r3-kicker { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8b949e; }
+    .mock-r3-motto { margin: 3px 0 6px; font-size: 15px; font-weight: 650; color: #e6edf3; }
+    .mock-r3-traits { margin: 0; padding-left: 16px; font-size: 11.5px; color: #a8b3bf; }
+
+    /* content pages inside the stage */
+    .mock-r3-page { width: 64%; max-width: 600px; padding: 18px 22px; border-radius: 14px; background: #111821; border: 1px solid #263040; }
+    .mock-r3-p-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+    .mock-r3-p-head b { font-size: 16px; color: #e6edf3; }
+    .mock-r3-p-head span { font-size: 11px; color: #8b949e; }
+    .mock-r3-crew-wrap { position: relative; padding: 26px 10px 10px; border-radius: 12px; outline: 1.5px dashed rgba(88, 166, 255, .55); outline-offset: 2px; }
+    .mock-r3-crew { display: flex; gap: 8px; }
+    .mock-r3-crew span { flex: 1; display: grid; grid-template-columns: 22px 1fr; column-gap: 6px; align-items: center; padding: 6px 8px; border-radius: 8px; background: #18212d; }
+    .mock-r3-crew i { grid-row: span 2; width: 22px; height: 22px; border-radius: 50%; background: #3a4a62; }
+    .mock-r3-crew b { font-size: 12px; color: #e6edf3; }
+    .mock-r3-crew em { font-size: 10.5px; font-style: normal; color: #8b949e; }
+    .mock-r3-ab { position: absolute; top: -12px; left: 12px; display: flex; gap: 2px; padding: 2px; border-radius: 999px; background: #0d1117; border: 1px solid #30363d; font-size: 11px; }
+    .mock-r3-ab span { padding: 3px 9px; border-radius: 999px; color: #8b949e; }
+    .mock-r3-ab span.mock-r3-ab-on { background: #58a6ff; color: #0b0f14; font-weight: 600; }
+    .mock-r3-p-body { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-top: 14px; }
+    .mock-r3-p-body i { height: 46px; border-radius: 8px; background: #18212d; }
+    .mock-r3-p-body i:first-child { grid-row: span 2; height: auto; }
+
+    /* ☰ panel (the existing decision panel, opened) */
+    .mock-r3-panel { position: absolute; top: 0; right: 0; bottom: 0; width: 300px; z-index: 6; display: flex; flex-direction: column; gap: 10px;
+      padding: 58px 16px 66px; background: #161b22; border-left: 1px solid #30363d; overflow: hidden; }
+    .mock-r3-pn-h { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: #6e7681; margin-bottom: 3px; }
+    .mock-r3-pn-row { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 7px; color: #a8b3bf; font-size: 12px; }
+    .mock-r3-pn-row.mock-r3-pn-on { background: rgba(88, 166, 255, .12); color: #e6edf3; }
+    .mock-r3-pn-row .mock-r3-sw { width: 8px; height: 8px; border-radius: 2px; background: var(--mock-r3-c, #484f58); }
+    .mock-r3-pn-sub { padding-left: 22px; color: #6e7681; font-size: 11px; }
+    .mock-r3-hist { display: flex; gap: 5px; }
+    .mock-r3-hist span { padding: 2px 8px; border-radius: 999px; font-size: 11px; color: #8b949e; border: 1px solid #30363d; }
+    .mock-r3-hist span.mock-r3-h-now { color: #e6edf3; border-color: rgba(88, 166, 255, .6); }
+    .mock-r3-submit { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
+    .mock-r3-win .mock-r3-btn { padding: 9px 12px; border-radius: 10px; text-align: left; font-size: 12.5px; border: 1px solid #3a4350; color: #c9d1d9; }
+    .mock-r3-win .mock-r3-btn.mock-r3-btn-main { background: #58a6ff; color: #0b0f14; border-color: #58a6ff; font-weight: 650; }
+    .mock-r3-btn small { display: block; font-size: 10.5px; font-weight: 400; opacity: .75; }
+    .mock-r3-hint { font-size: 10.5px; color: #6e7681; }
+
+    /* map grid (Landkarte): Etappen = columns, variants = rows */
+    .mock-r3-map { display: grid; grid-template-columns: 16px repeat(4, 1fr); gap: 3px; align-items: center; font-size: 10.5px; }
+    .mock-r3-mh { text-align: center; color: #6e7681; font-weight: 600; }
+    .mock-r3-mh.mock-r3-mh-done { color: #7ee2a8; }
+    .mock-r3-mh.mock-r3-mh-now { color: #2dd4bf; }
+    .mock-r3-ml { width: 8px; height: 8px; border-radius: 2px; background: var(--mock-r3-c, #484f58); justify-self: center; }
+    .mock-r3-win .mock-r3-mc { display: flex; align-items: center; justify-content: center; gap: 2px; height: 16px; border-radius: 4px; background: #2a3646; font-size: 9px; color: #7ee2a8; }
+    .mock-r3-win .mock-r3-mc.mock-r3-mc-done { background: rgba(126, 226, 168, .14); }
+    .mock-r3-win .mock-r3-mc.mock-r3-mc-lit { background: #2dd4bf; color: #0b0f14; box-shadow: 0 0 10px rgba(45, 212, 191, .6); }
+    .mock-r3-mc.mock-r3-mc-empty { background: none; outline: 1px dashed #30363d; outline-offset: -1px; }
+    .mock-r3-mc.mock-r3-mc-gone { background: none; }
+    .mock-r3-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(11, 15, 20, .45); }
+    .mock-r3-dot.mock-r3-dot-on { background: #0b0f14; }
+
+    /* vertical named stepper: fixed 220 px, names max. 24 characters */
+    .mock-r3-step { position: relative; width: 220px; display: flex; flex-direction: column; gap: 2px; }
+    .mock-r3-win .mock-r3-st { position: relative; display: grid; grid-template-columns: 18px 1fr; column-gap: 8px; padding: 4px 6px; border-radius: 8px; text-align: left; }
+    .mock-r3-st::before { content: ""; position: absolute; left: 14px; top: 20px; bottom: -6px; width: 2px; background: #30363d; }
+    .mock-r3-st:last-child::before { display: none; }
+    .mock-r3-st i { grid-row: span 2; width: 16px; height: 16px; margin-top: 1px; border-radius: 50%; border: 2px solid #3a4350; background: #0d1117;
+      font-style: normal; font-size: 9px; line-height: 12px; text-align: center; color: #0b0f14; position: relative; z-index: 1; }
+    .mock-r3-st b { font-size: 12.5px; font-weight: 600; color: #8b949e; white-space: nowrap; }
+    .mock-r3-st em { font-size: 10.5px; font-style: normal; color: #6e7681; }
+    .mock-r3-st.mock-r3-st-done i { background: #7ee2a8; border-color: #7ee2a8; }
+    .mock-r3-st.mock-r3-st-done b { color: #a8b3bf; }
+    .mock-r3-st.mock-r3-st-done::before { background: #7ee2a8; }
+    .mock-r3-st.mock-r3-st-now { background: rgba(45, 212, 191, .1); }
+    .mock-r3-st.mock-r3-st-now i { border-color: #2dd4bf; background: #2dd4bf; box-shadow: 0 0 8px rgba(45, 212, 191, .7); }
+    .mock-r3-st.mock-r3-st-now b { color: #e6edf3; }
+    .mock-r3-st .mock-r3-col { position: absolute; right: 6px; top: 6px; display: flex; flex-direction: column; gap: 2px; }
+    .mock-r3-col u { display: block; width: 10px; height: 4px; border-radius: 1px; background: #30363d; }
+    .mock-r3-col u.mock-r3-u-on { background: #f472b6; }
+    .mock-r3-ruler { display: flex; align-items: center; gap: 6px; width: 220px; margin-top: 2px; font-size: 9.5px; color: #6e7681; }
+    .mock-r3-ruler::before, .mock-r3-ruler::after { content: ""; flex: 1; height: 0; border-top: 1px dashed #3a4350; }
+
+    /* d1 · Im ☰-Menü: page strip under every variant */
+    .mock-r3-m-strip { display: flex; gap: 4px; }
+    .mock-r3-m-strip span { flex: 1; height: 22px; border-radius: 4px; border-top: 3px solid var(--mock-r3-c); background: rgba(255, 255, 255, .05);
+      font-size: 9.5px; line-height: 18px; text-align: center; color: #8b949e; overflow: hidden; }
+    .mock-r3-m-band { position: absolute; top: 0; left: 0; right: 0; height: 5px; background: var(--mock-r3-c); }
+    .mock-r3-m-note { font-size: 11px; color: #a8b3bf; text-align: center; }
+    .mock-r3-m-note b { color: var(--mock-r3-c); }
+
+    /* d2 · In der Schnellnavigation: grid segment inside the pill */
+    .mock-r3-win .mock-r3-q-seg { display: grid; grid-template-columns: repeat(4, 7px); grid-auto-rows: 5px; gap: 2px; padding: 4px 7px; border-radius: 10px; background: #0d1117; }
+    .mock-r3-q-seg u { display: block; border-radius: 1px; background: #30363d; }
+    .mock-r3-q-seg u.mock-r3-u-done { background: rgba(126, 226, 168, .5); }
+    .mock-r3-q-seg u.mock-r3-u-lit { background: #f59e0b; box-shadow: 0 0 6px rgba(245, 158, 11, .8); }
+    .mock-r3-q-seg u.mock-r3-u-off { background: none; }
+    .mock-r3-q-seg.mock-r3-q-rows { grid-template-columns: 16px; grid-auto-rows: 4px; }
+    .mock-r3-q-seg.mock-r3-q-one { grid-template-columns: repeat(3, 7px); grid-auto-rows: 7px; }
+    .mock-r3-q-seg.mock-r3-q-one u { border-radius: 50%; }
+    .mock-r3-qnav.mock-r3-q-open { border-radius: 18px; flex-wrap: wrap; width: 470px; justify-content: flex-start; }
+    .mock-r3-q-drop { flex-basis: 100%; margin-top: 4px; padding: 8px 10px 6px; border-top: 1px solid #262d36; display: flex; flex-direction: column; gap: 4px; white-space: normal; }
+    .mock-r3-q-cap { font-size: 10.5px; color: #f5b94a; font-weight: 600; }
+    .mock-r3-win .mock-r3-q-row { display: grid; grid-template-columns: 10px 110px 1fr auto; align-items: center; gap: 8px; padding: 3px 6px; border-radius: 7px; font-size: 12px; color: #a8b3bf; text-align: left; }
+    .mock-r3-win .mock-r3-q-row.mock-r3-q-on { background: rgba(245, 158, 11, .12); color: #e6edf3; }
+    .mock-r3-q-row .mock-r3-sw { width: 10px; height: 10px; border-radius: 3px; background: var(--mock-r3-c); }
+    .mock-r3-q-pdots { display: flex; gap: 4px; }
+    .mock-r3-q-pdots i { width: 9px; height: 9px; border-radius: 50%; background: var(--mock-r3-c); }
+    .mock-r3-q-row em { font-style: normal; font-size: 10.5px; color: #6e7681; }
+    .mock-r3-q-ring .mock-r3-shot { box-shadow: 0 0 0 3px var(--mock-r3-c), 0 18px 40px rgba(0, 0, 0, .5); }
+
+    /* d3 · Glyphe: the lit Etappen glyph */
+    .mock-r3-g-gly { display: inline-grid; grid-template-columns: repeat(4, 7px); grid-auto-rows: 7px; gap: 2px; vertical-align: middle; }
+    .mock-r3-g-gly u { display: block; border-radius: 2px; background: #30363d; }
+    .mock-r3-g-gly u.mock-r3-u-done { background: rgba(244, 114, 182, .35); }
+    .mock-r3-g-gly u.mock-r3-u-off { background: none; }
+    .mock-r3-g-gly u.mock-r3-u-lit { background: #f472b6; box-shadow: 0 0 7px rgba(244, 114, 182, .9); animation: mock-r3-glow 2.4s ease-in-out infinite; }
+    .mock-r3-g-gly.mock-r3-g-big { grid-template-columns: repeat(4, 12px); grid-auto-rows: 12px; gap: 3px; }
+    .mock-r3-g-gly u.mock-r3-u-split { background: none; display: flex; gap: 1px; align-items: center; justify-content: center; box-shadow: 0 0 7px rgba(244, 114, 182, .6); }
+    .mock-r3-g-gly u.mock-r3-u-split s { display: block; width: 3px; height: 3px; border-radius: 50%; background: rgba(244, 114, 182, .45); }
+    .mock-r3-g-gly u.mock-r3-u-split s.mock-r3-s-on { background: #f472b6; }
+    .mock-r3-g-gly.mock-r3-g-big u.mock-r3-u-split s { width: 3px; height: 8px; border-radius: 1px; }
+    .mock-r3-g-gly u.mock-r3-u-move { background: #f472b6; animation: mock-r3-move 2.6s ease-in-out infinite; }
+    .mock-r3-g-gly u.mock-r3-u-from { animation: mock-r3-fade 2.6s ease-in-out infinite; background: #f472b6; }
+    @keyframes mock-r3-glow { 0%, 100% { opacity: 1; } 50% { opacity: .65; } }
+    @keyframes mock-r3-move { 0%, 35% { opacity: 0; transform: translateX(-15px); } 60%, 100% { opacity: 1; transform: none; box-shadow: 0 0 9px rgba(244, 114, 182, .9); } }
+    @keyframes mock-r3-fade { 0%, 35% { opacity: 1; } 60%, 100% { opacity: .35; } }
+    @media (prefers-reduced-motion: reduce) { .mock-r3-win .mock-r3-g-gly u { animation: none; } }
+    .mock-r3-g-card { border-left: 4px solid var(--mock-r3-c); }
+    .mock-r3-g-tiles { display: flex; gap: 3px; margin-top: 8px; }
+    .mock-r3-g-tiles span { flex: 1; height: 16px; border-radius: 3px; background: var(--mock-r3-c); opacity: .75; font-size: 9px; line-height: 16px; text-align: center; color: #1a1205; }
+    .mock-r3-g-tl { margin-top: 4px; font-size: 10.5px; color: #a8b3bf; }
+    .mock-r3-g-wash .mock-r3-shot { box-shadow: inset 0 0 0 3px var(--mock-r3-c), 0 18px 40px rgba(0, 0, 0, .5); }
+    .mock-r3-g-wash .mock-r3-shot::after { content: ""; position: absolute; inset: 0; background: var(--mock-r3-c); opacity: .12; }
+    .mock-r3-g-corner { position: absolute; top: 15px; left: 50px; z-index: 3; display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: #8b949e; opacity: .85; }
+    .mock-r3-g-head { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: #0d1117; border: 1px solid #262d36; }
+    .mock-r3-g-head b { font-size: 12px; color: #fce7f3; }
+    .mock-r3-g-head em { display: block; font-style: normal; font-size: 10.5px; color: #8b949e; }
+    .mock-r3-stage.mock-r3-q-low { top: 200px; }
+    .mock-r3-win .mock-r3-g-head { text-align: left; width: 100%; }
+
+  </style>
+
+  <section data-design="menue" data-nav-label="Im ☰-Menü" data-design-active="true"
+           data-design-motto="Struktur nur im ☰-Menü"
+           data-design-traits="Bühne frei, keine Struktur-Anzeige außerhalb des Menüs|☰-Menü beginnt mit der Karte Etappen × Richtungen|Richtungen als Farbband plus Seitenstreifen je Karte"
+           data-design-icon="list" data-design-color="#2dd4bf">
+
+  <section id="d1-s1" data-nav-label="Richtungen" data-screen data-screen-active="true">
+    <div class="mock-r3-win">
+      <span class="mock-r3-eye" aria-hidden="true">◉</span><div class="mock-r3-qnav "><button type="button" class="mock-r3-ovl" aria-label="Übersicht"><i>⊞</i><span>Übersicht</span></button><i class="mock-r3-sep"></i><span class="mock-r3-chip mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</span><span class="mock-r3-chip mock-r3-c2 mock-r3-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></span><span class="mock-r3-chip mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</span></div>
+      <div class="mock-r3-stage"><div class="mock-r3-car"><div class="mock-r3-slide mock-r3-side mock-r3-c1 "><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-1"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div><i class="mock-r3-m-band"></i></div><div class="mock-r3-m-strip"><span>Start</span><span>Hub</span><span>Detail</span><span>Profil</span></div></div><div class="mock-r3-slide mock-r3-mid mock-r3-c2 "><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-2"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div><i class="mock-r3-m-band"></i></div><div class="mock-r3-m-strip"><span>Start</span><span>Hub</span><span>Detail</span><span>Profil</span></div><div class="mock-r3-m-note"><b>■</b> alle 4 Seiten anders</div></div><div class="mock-r3-slide mock-r3-side mock-r3-c3 "><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-3"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div><i class="mock-r3-m-band"></i></div><div class="mock-r3-m-strip"><span>Start</span><span>Hub</span><span>Detail</span><span>Profil</span></div></div></div></div>
+      <div class="mock-r3-ovcard mock-r3-c2"><div class="mock-r3-kicker"><span>◆ · 2 · Holo-Deck <span class="mock-r3-star">★</span></span></div><div class="mock-r3-motto">Der Hub bleibt im Raum.</div><ul class="mock-r3-traits"><li>Hub als drehbarer Raum</li><li>Unterseiten als Hologramme</li><li>Zurück per Schwenk</li></ul></div><button type="button" class="mock-r3-fab mock-r3-fab-menu" data-screen-link="d1-s2" aria-label="Menü">☰</button><span class="mock-r3-fab mock-r3-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r3-d1-s1-a1" data-anno-side="bottom" data-anno-target=".mock-r3-mid .mock-r3-m-strip">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d1-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d1-s1-a1" data-anno-bubble="r3-d1-s1-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d1-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s1-a1">
+            <span class="anno-bubble-question">Farbband oben plus Seitenstreifen unter jeder Richtung: siehst du daran, dass sich die Richtungen auf allen Seiten unterscheiden?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d1-s1-a1" data-annotation="r3-d1-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d1-s1-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r3-d1-s1-a2" data-anno-side="bottom" data-anno-target=".mock-r3-ovl">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d1-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d1-s1-a2" data-anno-bubble="r3-d1-s1-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d1-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s1-a2">
+            <span class="anno-bubble-question">Übersicht als Symbol vor den Chips, Text erst beim Überfahren: findest du sie so, oder soll „Übersicht“ immer dastehen?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d1-s1-a2" data-annotation="r3-d1-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d1-s1-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d1-s2" data-nav-label="Etappen im Menü" data-screen hidden>
+    <div class="mock-r3-win">
+      <span class="mock-r3-eye" aria-hidden="true">◉</span><div class="mock-r3-qnav "><button type="button" class="mock-r3-ovl" aria-label="Übersicht"><i>⊞</i><span>Übersicht</span></button><i class="mock-r3-sep"></i><span class="mock-r3-chip mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</span><span class="mock-r3-chip mock-r3-c2 mock-r3-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></span><span class="mock-r3-chip mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</span></div>
+      <div class="mock-r3-stage mock-r3-dim"><div class="mock-r3-car"><div class="mock-r3-slide mock-r3-side mock-r3-c1 "><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-1"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div><i class="mock-r3-m-band"></i></div><div class="mock-r3-m-strip"><span>Start</span><span>Hub</span><span>Detail</span><span>Profil</span></div></div><div class="mock-r3-slide mock-r3-mid mock-r3-c2 "><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-2"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div><i class="mock-r3-m-band"></i></div><div class="mock-r3-m-strip"><span>Start</span><span>Hub</span><span>Detail</span><span>Profil</span></div><div class="mock-r3-m-note"><b>■</b> alle 4 Seiten anders</div></div><div class="mock-r3-slide mock-r3-side mock-r3-c3 "><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-3"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div><i class="mock-r3-m-band"></i></div><div class="mock-r3-m-strip"><span>Start</span><span>Hub</span><span>Detail</span><span>Profil</span></div></div></div></div>
+      <div class="mock-r3-panel"><div><div class="mock-r3-pn-h">Karte · Etappe B von 4</div><div class="mock-r3-map"><span></span><b class="mock-r3-mh mock-r3-mh-done">A</b><b class="mock-r3-mh mock-r3-mh-now">B</b><b class="mock-r3-mh">C</b><b class="mock-r3-mh">D</b><i class="mock-r3-ml mock-r3-c1"></i><i class="mock-r3-mc mock-r3-mc-done">✓</i><button type="button" class="mock-r3-mc"></button><i class="mock-r3-mc mock-r3-mc-empty"></i><i class="mock-r3-mc mock-r3-mc-empty"></i><i class="mock-r3-ml mock-r3-c2"></i><i class="mock-r3-mc mock-r3-mc-gone"></i><button type="button" class="mock-r3-mc mock-r3-mc-lit" data-screen-link="d1-s3"></button><i class="mock-r3-mc mock-r3-mc-empty"></i><i class="mock-r3-mc mock-r3-mc-empty"></i><i class="mock-r3-ml mock-r3-c3"></i><i class="mock-r3-mc mock-r3-mc-gone"></i><button type="button" class="mock-r3-mc"></button><i class="mock-r3-mc mock-r3-mc-empty"></i><i class="mock-r3-mc mock-r3-mc-empty"></i></div></div><div><div class="mock-r3-pn-h">Etappen</div><div class="mock-r3-step"><button type="button" class="mock-r3-st mock-r3-st-done"><i>✓</i><b>A · Use Cases</b><em>Runde 1 · fertig</em></button><button type="button" class="mock-r3-st mock-r3-st-now"><i></i><b>B · Struktur</b><em>Runde 2–3 · jetzt</em></button><button type="button" class="mock-r3-st" data-screen-link="d1-s4"><i></i><b>C · Visuelles Design</b><em>als Nächstes</em></button><button type="button" class="mock-r3-st"><i></i><b>D · Animation</b><em>zuletzt</em></button></div><div class="mock-r3-ruler">220 px · Name max. 24 Zeichen</div></div><div><div class="mock-r3-pn-h">Verlauf</div><div class="mock-r3-hist"><span>Runde 1</span><span>Runde 2</span><span class="mock-r3-h-now">Runde 3</span></div></div><div><div class="mock-r3-pn-h">Inhalt</div><div class="mock-r3-pn-row">⊞ Übersicht</div><div class="mock-r3-pn-row mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</div><div class="mock-r3-pn-row mock-r3-c2 mock-r3-pn-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></div><div class="mock-r3-pn-row mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</div></div></div>
+      <button type="button" class="mock-r3-fab mock-r3-fab-menu" data-screen-link="d1-s1" aria-label="Menü">✕</button><span class="mock-r3-fab mock-r3-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r3-d1-s2-a1" data-anno-side="left" data-anno-target=".mock-r3-step">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d1-s2-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s2-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d1-s2-a1" data-anno-bubble="r3-d1-s2-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d1-s2-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s2-a1">
+            <span class="anno-bubble-question">Stepper fest 220 px breit, jeder Etappen-Name höchstens 24 Zeichen (Claude hält sich daran, nie abgeschnitten): passt das Maß?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d1-s2-a1" data-annotation="r3-d1-s2-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d1-s2-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r3-d1-s2-a2" data-anno-side="left" data-anno-target=".mock-r3-map">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d1-s2-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s2-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d1-s2-a2" data-anno-bubble="r3-d1-s2-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d1-s2-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s2-a2">
+            <span class="anno-bubble-question">Karte als Kopf des Menüs, Stepper direkt darunter: ergänzen sich Raster und Namen, oder ist das doppelt?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d1-s2-a2" data-annotation="r3-d1-s2-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d1-s2-a2"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r3-d1-s2-a3" data-anno-side="left" data-anno-target=".mock-r3-hist">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d1-s2-a3" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s2-a3" aria-label="{{anno.pin_label}}">3</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d1-s2-a3" data-anno-bubble="r3-d1-s2-a3" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d1-s2-a3" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s2-a3">
+            <span class="anno-bubble-question">Reihenfolge im Menü: Karte, Etappen, Verlauf, Inhalt. Richtig so, oder Inhalt nach oben?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d1-s2-a3" data-annotation="r3-d1-s2-a3" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d1-s2-a3"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d1-s3" data-nav-label="Detail-Varianten" data-screen hidden>
+    <div class="mock-r3-win">
+      <span class="mock-r3-eye" aria-hidden="true">◉</span><div class="mock-r3-qnav"><button type="button" class="mock-r3-ovl" aria-label="Übersicht"><i>⊞</i><span>Übersicht</span></button><i class="mock-r3-sep"></i><span class="mock-r3-chip mock-r3-c2 mock-r3-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Crew-Leiste</span><span class="mock-r3-chip">I · Brücke</span><span class="mock-r3-chip">II · Funk</span></div>
+      <div class="mock-r3-stage mock-r3-dim"><div class="mock-r3-page"><div class="mock-r3-p-head"><b>Brücke</b><span>Crew-Leiste</span></div><div class="mock-r3-crew-wrap"><div class="mock-r3-ab"><span>A · Weniger Luft</span><span class="mock-r3-ab-on">B · Name oben</span><span>C · Eine Zeile</span></div><div class="mock-r3-crew"><span><i></i><b>Ava</b><em>Pilotin</em></span><span><i></i><b>Bo</b><em>Technik</em></span><span><i></i><b>Cem</b><em>Medizin</em></span><span><i></i><b>Dee</b><em>Funk</em></span></div></div><div class="mock-r3-p-body"><i></i><i></i><i></i></div></div></div>
+      <div class="mock-r3-panel"><div><div class="mock-r3-pn-h">Karte · 1 Richtung, 3 Details</div><div class="mock-r3-map"><span></span><b class="mock-r3-mh mock-r3-mh-done">A</b><b class="mock-r3-mh mock-r3-mh-now">B</b><b class="mock-r3-mh">C</b><b class="mock-r3-mh">D</b><i class="mock-r3-ml mock-r3-c2"></i><i class="mock-r3-mc mock-r3-mc-gone"></i><button type="button" class="mock-r3-mc mock-r3-mc-lit"><i class="mock-r3-dot"></i><i class="mock-r3-dot mock-r3-dot-on"></i><i class="mock-r3-dot"></i></button><i class="mock-r3-mc mock-r3-mc-empty"></i><i class="mock-r3-mc mock-r3-mc-empty"></i></div></div><div><div class="mock-r3-pn-h">Etappen</div><div class="mock-r3-step"><button type="button" class="mock-r3-st mock-r3-st-done"><i>✓</i><b>A · Use Cases</b><em>Runde 1 · fertig</em></button><button type="button" class="mock-r3-st mock-r3-st-now"><i></i><b>B · Struktur</b><em>Runde 2–3 · jetzt</em></button><button type="button" class="mock-r3-st" data-screen-link="d1-s4"><i></i><b>C · Visuelles Design</b><em>als Nächstes</em></button><button type="button" class="mock-r3-st"><i></i><b>D · Animation</b><em>zuletzt</em></button></div></div><div><div class="mock-r3-pn-h">Inhalt</div><div class="mock-r3-pn-row">⊞ Übersicht</div><div class="mock-r3-pn-row mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</div><div class="mock-r3-pn-row mock-r3-c2 mock-r3-pn-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></div><div class="mock-r3-pn-sub">A · Weniger Luft · <b>B · Name oben</b> · C · Eine Zeile</div><div class="mock-r3-pn-row mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</div></div></div>
+      <button type="button" class="mock-r3-fab mock-r3-fab-menu" data-screen-link="d1-s1" aria-label="Menü">✕</button><span class="mock-r3-fab mock-r3-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r3-d1-s3-a1" data-anno-side="left" data-anno-target=".mock-r3-map .mock-r3-mc-lit">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d1-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s3-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d1-s3-a1" data-anno-bubble="r3-d1-s3-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d1-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s3-a1">
+            <span class="anno-bubble-question">Drei Punkte in der leuchtenden Zelle = Detail-Varianten: reicht das im Menü, wenn der A/B/C-Schalter ohnehin am Element sitzt?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d1-s3-a1" data-annotation="r3-d1-s3-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d1-s3-a1"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d1-s4" data-nav-label="Absenden in Etappe" data-screen hidden>
+    <div class="mock-r3-win">
+      <span class="mock-r3-eye" aria-hidden="true">◉</span><div class="mock-r3-qnav "><button type="button" class="mock-r3-ovl" aria-label="Übersicht"><i>⊞</i><span>Übersicht</span></button><i class="mock-r3-sep"></i><span class="mock-r3-chip mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</span><span class="mock-r3-chip mock-r3-c2 mock-r3-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></span><span class="mock-r3-chip mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</span></div>
+      <div class="mock-r3-stage mock-r3-dim"><div class="mock-r3-car"><div class="mock-r3-slide mock-r3-side mock-r3-c1 "><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-1"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div><i class="mock-r3-m-band"></i></div><div class="mock-r3-m-strip"><span>Start</span><span>Hub</span><span>Detail</span><span>Profil</span></div></div><div class="mock-r3-slide mock-r3-mid mock-r3-c2 "><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-2"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div><i class="mock-r3-m-band"></i></div><div class="mock-r3-m-strip"><span>Start</span><span>Hub</span><span>Detail</span><span>Profil</span></div><div class="mock-r3-m-note"><b>■</b> alle 4 Seiten anders</div></div><div class="mock-r3-slide mock-r3-side mock-r3-c3 "><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-3"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div><i class="mock-r3-m-band"></i></div><div class="mock-r3-m-strip"><span>Start</span><span>Hub</span><span>Detail</span><span>Profil</span></div></div></div></div>
+      <div class="mock-r3-panel"><div><div class="mock-r3-pn-h">Karte · Etappe B von 4</div><div class="mock-r3-map"><span></span><b class="mock-r3-mh mock-r3-mh-done">A</b><b class="mock-r3-mh mock-r3-mh-now">B</b><b class="mock-r3-mh">C</b><b class="mock-r3-mh">D</b><i class="mock-r3-ml mock-r3-c1"></i><i class="mock-r3-mc mock-r3-mc-done">✓</i><button type="button" class="mock-r3-mc"></button><i class="mock-r3-mc mock-r3-mc-empty"></i><i class="mock-r3-mc mock-r3-mc-empty"></i><i class="mock-r3-ml mock-r3-c2"></i><i class="mock-r3-mc mock-r3-mc-gone"></i><button type="button" class="mock-r3-mc mock-r3-mc-lit" data-screen-link="d1-s3"></button><i class="mock-r3-mc mock-r3-mc-empty"></i><i class="mock-r3-mc mock-r3-mc-empty"></i><i class="mock-r3-ml mock-r3-c3"></i><i class="mock-r3-mc mock-r3-mc-gone"></i><button type="button" class="mock-r3-mc"></button><i class="mock-r3-mc mock-r3-mc-empty"></i><i class="mock-r3-mc mock-r3-mc-empty"></i></div></div><div><div class="mock-r3-pn-h">Etappen</div><div class="mock-r3-step"><button type="button" class="mock-r3-st mock-r3-st-done"><i>✓</i><b>A · Use Cases</b><em>Runde 1 · fertig</em></button><button type="button" class="mock-r3-st mock-r3-st-now"><i></i><b>B · Struktur</b><em>Runde 2–3 · jetzt</em></button><button type="button" class="mock-r3-st"><i></i><b>C · Visuelles Design</b><em>als Nächstes</em></button><button type="button" class="mock-r3-st"><i></i><b>D · Animation</b><em>zuletzt</em></button></div></div><div class="mock-r3-submit"><button type="button" class="mock-r3-btn" data-screen-link="d1-s5">👉 Zur nächsten Runde<small>noch eine Runde in Etappe B</small></button><button type="button" class="mock-r3-btn mock-r3-btn-main mock-r3-next" data-screen-link="d1-s5">Nächste Etappe ›<small>weiter mit C · Visuelles Design</small></button><span class="mock-r3-hint">Umsetzen erst nach der letzten Etappe</span></div></div>
+      <button type="button" class="mock-r3-fab mock-r3-fab-menu" data-screen-link="d1-s1" aria-label="Menü">✕</button><span class="mock-r3-fab mock-r3-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r3-d1-s4-a1" data-anno-side="left" data-anno-target=".mock-r3-next">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d1-s4-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s4-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d1-s4-a1" data-anno-bubble="r3-d1-s4-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d1-s4-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s4-a1">
+            <span class="anno-bubble-question">„Nächste Etappe ›“ ersetzt „Jetzt umsetzen“. Soll in der letzten Etappe (D) dort wieder „Jetzt umsetzen“ stehen?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d1-s4-a1" data-annotation="r3-d1-s4-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d1-s4-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r3-d1-s4-a2" data-anno-side="left" data-anno-target=".mock-r3-submit .mock-r3-btn">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d1-s4-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s4-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d1-s4-a2" data-anno-bubble="r3-d1-s4-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d1-s4-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d1-s4-a2">
+            <span class="anno-bubble-question">„Zur nächsten Runde“ bleibt in Etappe B: verständlich so, oder lieber „Etappe B verfeinern“ nennen?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d1-s4-a2" data-annotation="r3-d1-s4-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d1-s4-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d1-s5" data-nav-label="Ohne Etappen" data-screen hidden>
+    <div class="mock-r3-win">
+      <span class="mock-r3-eye" aria-hidden="true">◉</span><div class="mock-r3-qnav "><button type="button" class="mock-r3-ovl" aria-label="Übersicht"><i>⊞</i><span>Übersicht</span></button><i class="mock-r3-sep"></i><span class="mock-r3-chip mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</span><span class="mock-r3-chip mock-r3-c2 mock-r3-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></span><span class="mock-r3-chip mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</span></div>
+      <div class="mock-r3-stage mock-r3-dim"><div class="mock-r3-car"><div class="mock-r3-slide mock-r3-side mock-r3-c1 "><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-1"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div><i class="mock-r3-m-band"></i></div><div class="mock-r3-m-strip"><span>Start</span><span>Hub</span><span>Detail</span><span>Profil</span></div></div><div class="mock-r3-slide mock-r3-mid mock-r3-c2 "><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-2"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div><i class="mock-r3-m-band"></i></div><div class="mock-r3-m-strip"><span>Start</span><span>Hub</span><span>Detail</span><span>Profil</span></div><div class="mock-r3-m-note"><b>■</b> alle 4 Seiten anders</div></div><div class="mock-r3-slide mock-r3-side mock-r3-c3 "><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-3"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div><i class="mock-r3-m-band"></i></div><div class="mock-r3-m-strip"><span>Start</span><span>Hub</span><span>Detail</span><span>Profil</span></div></div></div></div>
+      <div class="mock-r3-panel"><div><div class="mock-r3-pn-h">Inhalt</div><div class="mock-r3-pn-row">⊞ Übersicht</div><div class="mock-r3-pn-row mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</div><div class="mock-r3-pn-row mock-r3-c2 mock-r3-pn-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></div><div class="mock-r3-pn-row mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</div></div><div class="mock-r3-submit"><button type="button" class="mock-r3-btn mock-r3-btn-main" data-screen-link="d1-s1">👉 Zur nächsten Runde</button><button type="button" class="mock-r3-btn">Jetzt umsetzen</button></div></div>
+      <button type="button" class="mock-r3-fab mock-r3-fab-menu" data-screen-link="d1-s1" aria-label="Menü">✕</button><span class="mock-r3-fab mock-r3-fab-chat" aria-hidden="true">💬</span>
+    </div>
+  </section>
+  </section>
+
+  <section data-design="schnellnav" data-nav-label="In der Schnellnavigation" hidden
+           data-design-motto="Karte in der Schnellnavigation"
+           data-design-traits="Mini-Raster in der Pille, zwischen Übersicht und Chips|Beim Überfahren klappt die Pille nach unten zur Karte auf|Richtungen als Farbring und vier Seitenpunkte je Zeile"
+           data-design-icon="&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;&lt;rect x=&quot;2&quot; y=&quot;4&quot; width=&quot;20&quot; height=&quot;7&quot; rx=&quot;3.5&quot;/&gt;&lt;line x1=&quot;6&quot; y1=&quot;11&quot; x2=&quot;6&quot; y2=&quot;20&quot;/&gt;&lt;line x1=&quot;6&quot; y1=&quot;15&quot; x2=&quot;18&quot; y2=&quot;15&quot;/&gt;&lt;line x1=&quot;6&quot; y1=&quot;19&quot; x2=&quot;14&quot; y2=&quot;19&quot;/&gt;&lt;/svg&gt;" data-design-color="#f59e0b">
+
+  <section id="d2-s1" data-nav-label="Richtungen" data-screen data-screen-active="true">
+    <div class="mock-r3-win">
+      <span class="mock-r3-eye" aria-hidden="true">◉</span><div class="mock-r3-qnav mock-r3-q-open"><button type="button" class="mock-r3-ovl" aria-label="Übersicht"><i>⊞</i><span>Übersicht</span></button><i class="mock-r3-sep"></i><button type="button" class="mock-r3-q-seg" data-screen-link="d2-s2" aria-label="Karte"><u class="mock-r3-u-done"></u><u class=""></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-lit"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class=""></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u></button><span class="mock-r3-chip mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</span><span class="mock-r3-chip mock-r3-c2 mock-r3-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></span><span class="mock-r3-chip mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</span><div class="mock-r3-q-drop"><div class="mock-r3-q-cap">3 Richtungen · je 4 Seiten · Etappe B · Struktur</div><button type="button" class="mock-r3-q-row mock-r3-c1" data-screen-link="d2-s1"><i class="mock-r3-sw"></i><span><b class="mock-r3-num">1</b> · Anflug</span><span class="mock-r3-q-pdots"><i></i><i></i><i></i><i></i></span><em>alle Seiten anders</em></button><button type="button" class="mock-r3-q-row mock-r3-c2 mock-r3-q-on" data-screen-link="d2-s1"><i class="mock-r3-sw"></i><span><b class="mock-r3-num">2</b> · Holo-Deck</span><span class="mock-r3-q-pdots"><i></i><i></i><i></i><i></i></span><em>alle Seiten anders</em></button><button type="button" class="mock-r3-q-row mock-r3-c3" data-screen-link="d2-s3"><i class="mock-r3-sw"></i><span><b class="mock-r3-num">3</b> · Kapitel</span><span class="mock-r3-q-pdots"><i></i><i></i><i></i><i></i></span><em>alle Seiten anders</em></button></div></div>
+      <div class="mock-r3-stage"><div class="mock-r3-car"><div class="mock-r3-slide mock-r3-side mock-r3-c1 mock-r3-q-ring"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-1"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-mid mock-r3-c2 mock-r3-q-ring"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-2"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-side mock-r3-c3 mock-r3-q-ring"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-3"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r3-ovcard mock-r3-c2"><div class="mock-r3-kicker"><span>◆ · 2 · Holo-Deck <span class="mock-r3-star">★</span></span></div><div class="mock-r3-motto">Der Hub bleibt im Raum.</div><ul class="mock-r3-traits"><li>Hub als drehbarer Raum</li><li>Unterseiten als Hologramme</li><li>Zurück per Schwenk</li></ul></div><button type="button" class="mock-r3-fab mock-r3-fab-menu" data-screen-link="d2-s2" aria-label="Menü">☰</button><span class="mock-r3-fab mock-r3-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r3-d2-s1-a1" data-anno-side="right" data-anno-target=".mock-r3-q-drop">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d2-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d2-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d2-s1-a1" data-anno-bubble="r3-d2-s1-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d2-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d2-s1-a1">
+            <span class="anno-bubble-question">Beim Überfahren klappt die Karte nach unten auf, als Teil der Pille: aufklappen beim Überfahren, oder erst auf Klick?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d2-s1-a1" data-annotation="r3-d2-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d2-s1-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r3-d2-s1-a2" data-anno-side="right" data-anno-target=".mock-r3-q-on .mock-r3-q-pdots">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d2-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d2-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d2-s1-a2" data-anno-bubble="r3-d2-s1-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d2-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d2-s1-a2">
+            <span class="anno-bubble-question">Vier volle Punkte je Richtung = alle Seiten anders, dazu der Farbring um die Karte: ohne Legende verständlich?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d2-s1-a2" data-annotation="r3-d2-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d2-s1-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d2-s2" data-nav-label="Etappen im Menü" data-screen hidden>
+    <div class="mock-r3-win">
+      <span class="mock-r3-eye" aria-hidden="true">◉</span><div class="mock-r3-qnav "><button type="button" class="mock-r3-ovl" aria-label="Übersicht"><i>⊞</i><span>Übersicht</span></button><i class="mock-r3-sep"></i><button type="button" class="mock-r3-q-seg" data-screen-link="d2-s1" aria-label="Karte"><u class="mock-r3-u-done"></u><u class=""></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-lit"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class=""></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u></button><span class="mock-r3-chip mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</span><span class="mock-r3-chip mock-r3-c2 mock-r3-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></span><span class="mock-r3-chip mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</span></div>
+      <div class="mock-r3-stage mock-r3-dim"><div class="mock-r3-car"><div class="mock-r3-slide mock-r3-side mock-r3-c1 mock-r3-q-ring"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-1"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-mid mock-r3-c2 mock-r3-q-ring"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-2"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-side mock-r3-c3 mock-r3-q-ring"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-3"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r3-panel"><div><div class="mock-r3-pn-h">Etappen</div><div class="mock-r3-step"><button type="button" class="mock-r3-st mock-r3-st-done"><i>✓</i><b>A · Use Cases</b><em>Runde 1 · fertig</em></button><button type="button" class="mock-r3-st mock-r3-st-now"><i></i><b>B · Struktur</b><em>Runde 2–3 · jetzt</em></button><button type="button" class="mock-r3-st" data-screen-link="d2-s4"><i></i><b>C · Visuelles Design</b><em>als Nächstes</em></button><button type="button" class="mock-r3-st"><i></i><b>D · Animation</b><em>zuletzt</em></button></div><div class="mock-r3-ruler">220 px · Name max. 24 Zeichen</div></div><div><div class="mock-r3-pn-h">Verlauf</div><div class="mock-r3-hist"><span>Runde 1</span><span>Runde 2</span><span class="mock-r3-h-now">Runde 3</span></div></div><div><div class="mock-r3-pn-h">Inhalt</div><div class="mock-r3-pn-row">⊞ Übersicht</div><div class="mock-r3-pn-row mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</div><div class="mock-r3-pn-row mock-r3-c2 mock-r3-pn-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></div><div class="mock-r3-pn-row mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</div></div></div>
+      <button type="button" class="mock-r3-fab mock-r3-fab-menu" data-screen-link="d2-s1" aria-label="Menü">✕</button><span class="mock-r3-fab mock-r3-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r3-d2-s2-a1" data-anno-side="bottom" data-anno-target=".mock-r3-q-seg">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d2-s2-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d2-s2-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d2-s2-a1" data-anno-bubble="r3-d2-s2-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d2-s2-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d2-s2-a1">
+            <span class="anno-bubble-question">Mini-Raster in der Pille: 4 Etappen als Spalten, 3 Richtungen als Zeilen. Bei der Größe noch lesbar?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d2-s2-a1" data-annotation="r3-d2-s2-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d2-s2-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r3-d2-s2-a2" data-anno-side="left" data-anno-target=".mock-r3-step">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d2-s2-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d2-s2-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d2-s2-a2" data-anno-bubble="r3-d2-s2-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d2-s2-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d2-s2-a2">
+            <span class="anno-bubble-question">Hier steht der Stepper allein oben im Menü, fest 220 px, Namen höchstens 24 Zeichen: genug Platz für deine Etappen-Namen?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d2-s2-a2" data-annotation="r3-d2-s2-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d2-s2-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d2-s3" data-nav-label="Detail-Varianten" data-screen hidden>
+    <div class="mock-r3-win">
+      <span class="mock-r3-eye" aria-hidden="true">◉</span><div class="mock-r3-qnav mock-r3-q-open"><button type="button" class="mock-r3-ovl" aria-label="Übersicht"><i>⊞</i><span>Übersicht</span></button><i class="mock-r3-sep"></i><button type="button" class="mock-r3-q-seg mock-r3-q-one" data-screen-link="d2-s4" aria-label="Karte"><u></u><u class="mock-r3-u-lit"></u><u></u></button><span class="mock-r3-chip mock-r3-c2 mock-r3-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Crew-Leiste</span><span class="mock-r3-chip">I · Brücke</span><span class="mock-r3-chip">II · Funk</span><div class="mock-r3-q-drop"><div class="mock-r3-q-cap">1 Richtung · 3 Detail-Varianten an der Crew-Leiste</div><button type="button" class="mock-r3-q-row mock-r3-c2" data-screen-link="d2-s4"><i class="mock-r3-sw"></i><span>A · Weniger Luft</span><span class="mock-r3-q-pdots"><i></i></span><em>nur die Crew-Leiste</em></button><button type="button" class="mock-r3-q-row mock-r3-c2 mock-r3-q-on" data-screen-link="d2-s4"><i class="mock-r3-sw"></i><span>B · Name oben</span><span class="mock-r3-q-pdots"><i></i></span><em>nur die Crew-Leiste</em></button><button type="button" class="mock-r3-q-row mock-r3-c2" data-screen-link="d2-s4"><i class="mock-r3-sw"></i><span>C · Eine Zeile</span><span class="mock-r3-q-pdots"><i></i></span><em>nur die Crew-Leiste</em></button></div></div>
+      <div class="mock-r3-stage mock-r3-q-low"><div class="mock-r3-page"><div class="mock-r3-p-head"><b>Brücke</b><span>Crew-Leiste</span></div><div class="mock-r3-crew-wrap"><div class="mock-r3-ab"><span>A · Weniger Luft</span><span class="mock-r3-ab-on">B · Name oben</span><span>C · Eine Zeile</span></div><div class="mock-r3-crew"><span><i></i><b>Ava</b><em>Pilotin</em></span><span><i></i><b>Bo</b><em>Technik</em></span><span><i></i><b>Cem</b><em>Medizin</em></span><span><i></i><b>Dee</b><em>Funk</em></span></div></div><div class="mock-r3-p-body"><i></i><i></i><i></i></div></div></div>
+      <button type="button" class="mock-r3-fab mock-r3-fab-menu" data-screen-link="d2-s2" aria-label="Menü">☰</button><span class="mock-r3-fab mock-r3-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r3-d2-s3-a1" data-anno-side="bottom" data-anno-target=".mock-r3-q-one">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d2-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d2-s3-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d2-s3-a1" data-anno-bubble="r3-d2-s3-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d2-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d2-s3-a1">
+            <span class="anno-bubble-question">Bei Detail-Varianten wird das Raster zu drei Punkten in der Pille: klar, dass nur die Crew-Leiste wechselt?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d2-s3-a1" data-annotation="r3-d2-s3-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d2-s3-a1"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d2-s4" data-nav-label="Absenden in Etappe" data-screen hidden>
+    <div class="mock-r3-win">
+      <span class="mock-r3-eye" aria-hidden="true">◉</span><div class="mock-r3-qnav "><button type="button" class="mock-r3-ovl" aria-label="Übersicht"><i>⊞</i><span>Übersicht</span></button><i class="mock-r3-sep"></i><button type="button" class="mock-r3-q-seg" data-screen-link="d2-s1" aria-label="Karte"><u class="mock-r3-u-done"></u><u class=""></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-lit"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class=""></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u></button><span class="mock-r3-chip mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</span><span class="mock-r3-chip mock-r3-c2 mock-r3-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></span><span class="mock-r3-chip mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</span></div>
+      <div class="mock-r3-stage mock-r3-dim"><div class="mock-r3-car"><div class="mock-r3-slide mock-r3-side mock-r3-c1 mock-r3-q-ring"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-1"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-mid mock-r3-c2 mock-r3-q-ring"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-2"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-side mock-r3-c3 mock-r3-q-ring"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-3"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r3-panel"><div><div class="mock-r3-pn-h">Etappen</div><div class="mock-r3-step"><button type="button" class="mock-r3-st mock-r3-st-done"><i>✓</i><b>A · Use Cases</b><em>Runde 1 · fertig</em></button><button type="button" class="mock-r3-st mock-r3-st-now"><i></i><b>B · Struktur</b><em>Runde 2–3 · jetzt</em></button><button type="button" class="mock-r3-st"><i></i><b>C · Visuelles Design</b><em>als Nächstes</em></button><button type="button" class="mock-r3-st"><i></i><b>D · Animation</b><em>zuletzt</em></button></div></div><div><div class="mock-r3-pn-h">Verlauf</div><div class="mock-r3-hist"><span>Runde 1</span><span>Runde 2</span><span class="mock-r3-h-now">Runde 3</span></div></div><div class="mock-r3-submit"><button type="button" class="mock-r3-btn" data-screen-link="d2-s5">👉 Zur nächsten Runde<small>noch eine Runde in Etappe B</small></button><button type="button" class="mock-r3-btn mock-r3-btn-main mock-r3-next" data-screen-link="d2-s5">Nächste Etappe ›<small>weiter mit C · Visuelles Design</small></button><span class="mock-r3-hint">Umsetzen erst nach der letzten Etappe</span></div></div>
+      <button type="button" class="mock-r3-fab mock-r3-fab-menu" data-screen-link="d2-s1" aria-label="Menü">✕</button><span class="mock-r3-fab mock-r3-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r3-d2-s4-a1" data-anno-side="left" data-anno-target=".mock-r3-next">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d2-s4-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d2-s4-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d2-s4-a1" data-anno-bubble="r3-d2-s4-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d2-s4-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d2-s4-a1">
+            <span class="anno-bubble-question">Nach „Nächste Etappe ›“ bekommt das Raster in der Pille eine neue Spalte C. Soll die Pille das kurz zeigen, oder still umschalten?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d2-s4-a1" data-annotation="r3-d2-s4-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d2-s4-a1"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d2-s5" data-nav-label="Ohne Etappen" data-screen hidden>
+    <div class="mock-r3-win">
+      <span class="mock-r3-eye" aria-hidden="true">◉</span><div class="mock-r3-qnav "><button type="button" class="mock-r3-ovl" aria-label="Übersicht"><i>⊞</i><span>Übersicht</span></button><i class="mock-r3-sep"></i><button type="button" class="mock-r3-q-seg mock-r3-q-rows" data-screen-link="d2-s1" aria-label="Karte"><u></u><u class="mock-r3-u-lit"></u><u></u></button><span class="mock-r3-chip mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</span><span class="mock-r3-chip mock-r3-c2 mock-r3-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></span><span class="mock-r3-chip mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</span></div>
+      <div class="mock-r3-stage mock-r3-dim"><div class="mock-r3-car"><div class="mock-r3-slide mock-r3-side mock-r3-c1 mock-r3-q-ring"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-1"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-mid mock-r3-c2 mock-r3-q-ring"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-2"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-side mock-r3-c3 mock-r3-q-ring"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-3"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r3-panel"><div><div class="mock-r3-pn-h">Inhalt</div><div class="mock-r3-pn-row">⊞ Übersicht</div><div class="mock-r3-pn-row mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</div><div class="mock-r3-pn-row mock-r3-c2 mock-r3-pn-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></div><div class="mock-r3-pn-row mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</div></div><div class="mock-r3-submit"><button type="button" class="mock-r3-btn mock-r3-btn-main" data-screen-link="d2-s1">👉 Zur nächsten Runde</button><button type="button" class="mock-r3-btn">Jetzt umsetzen</button></div></div>
+      <button type="button" class="mock-r3-fab mock-r3-fab-menu" data-screen-link="d2-s1" aria-label="Menü">✕</button><span class="mock-r3-fab mock-r3-fab-chat" aria-hidden="true">💬</span>
+    </div>
+  </section>
+  </section>
+
+  <section data-design="glyphe" data-nav-label="Glyphe" hidden
+           data-design-motto="Leuchtende Glyphe als Anzeige"
+           data-design-traits="Glyphe 4 × 3 in der Info-Karte, die aktuelle Zelle leuchtet|Leuchten rückt beim Etappenwechsel eine Spalte weiter|Richtungen als Farbkante und Seitenkacheln in der Karte"
+           data-design-icon="&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;&lt;rect x=&quot;3&quot; y=&quot;3&quot; width=&quot;5&quot; height=&quot;5&quot;/&gt;&lt;rect x=&quot;10&quot; y=&quot;3&quot; width=&quot;5&quot; height=&quot;5&quot;/&gt;&lt;rect x=&quot;17&quot; y=&quot;3&quot; width=&quot;5&quot; height=&quot;5&quot;/&gt;&lt;rect x=&quot;3&quot; y=&quot;10&quot; width=&quot;5&quot; height=&quot;5&quot;/&gt;&lt;circle cx=&quot;12.5&quot; cy=&quot;12.5&quot; r=&quot;3.5&quot;/&gt;&lt;rect x=&quot;17&quot; y=&quot;10&quot; width=&quot;5&quot; height=&quot;5&quot;/&gt;&lt;rect x=&quot;3&quot; y=&quot;17&quot; width=&quot;5&quot; height=&quot;5&quot;/&gt;&lt;rect x=&quot;10&quot; y=&quot;17&quot; width=&quot;5&quot; height=&quot;5&quot;/&gt;&lt;rect x=&quot;17&quot; y=&quot;17&quot; width=&quot;5&quot; height=&quot;5&quot;/&gt;&lt;/svg&gt;" data-design-color="#f472b6">
+
+  <section id="d3-s1" data-nav-label="Richtungen" data-screen data-screen-active="true">
+    <div class="mock-r3-win">
+      <span class="mock-r3-eye" aria-hidden="true">◉</span><div class="mock-r3-qnav "><button type="button" class="mock-r3-ovl" aria-label="Übersicht"><i>⊞</i><span>Übersicht</span></button><i class="mock-r3-sep"></i><span class="mock-r3-chip mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</span><span class="mock-r3-chip mock-r3-c2 mock-r3-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></span><span class="mock-r3-chip mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</span></div>
+      <div class="mock-r3-stage"><div class="mock-r3-car"><div class="mock-r3-slide mock-r3-side mock-r3-c1 mock-r3-g-wash"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-1"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-mid mock-r3-c2 mock-r3-g-wash"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-2"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-side mock-r3-c3 mock-r3-g-wash"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-3"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r3-ovcard mock-r3-c2 mock-r3-g-card"><div class="mock-r3-kicker"><span class="mock-r3-g-gly mock-r3-g-main" aria-hidden="true"><u class="mock-r3-u-done"></u><u></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-lit"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u></span><span>◆ · 2 · Holo-Deck <span class="mock-r3-star">★</span></span></div><div class="mock-r3-motto">Der Hub bleibt im Raum.</div><ul class="mock-r3-traits"><li>Hub als drehbarer Raum</li><li>Unterseiten als Hologramme</li><li>Zurück per Schwenk</li></ul><div class="mock-r3-g-tiles"><span>Start</span><span>Hub</span><span>Detail</span><span>Profil</span></div><div class="mock-r3-g-tl">4 von 4 Seiten anders als bei Anflug und Kapitel</div></div><button type="button" class="mock-r3-fab mock-r3-fab-menu" data-screen-link="d3-s2" aria-label="Menü">☰</button><span class="mock-r3-fab mock-r3-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r3-d3-s1-a1" data-anno-side="right" data-anno-target=".mock-r3-g-main">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d3-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d3-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d3-s1-a1" data-anno-bubble="r3-d3-s1-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d3-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d3-s1-a1">
+            <span class="anno-bubble-question">Die leuchtende Glyphe ist die einzige Struktur-Anzeige auf der Bühne: reicht sie ohne Beschriftung?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d3-s1-a1" data-annotation="r3-d3-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d3-s1-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r3-d3-s1-a2" data-anno-side="right" data-anno-target=".mock-r3-g-tiles">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d3-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d3-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d3-s1-a2" data-anno-bubble="r3-d3-s1-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d3-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d3-s1-a2">
+            <span class="anno-bubble-question">Seitenkacheln in der Farbe der Richtung, dazu „4 von 4 Seiten anders“: zeigt das die Richtungen besser als bisher?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d3-s1-a2" data-annotation="r3-d3-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d3-s1-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d3-s2" data-nav-label="Etappen im Menü" data-screen hidden>
+    <div class="mock-r3-win">
+      <span class="mock-r3-eye" aria-hidden="true">◉</span><div class="mock-r3-qnav "><button type="button" class="mock-r3-ovl" aria-label="Übersicht"><i>⊞</i><span>Übersicht</span></button><i class="mock-r3-sep"></i><span class="mock-r3-chip mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</span><span class="mock-r3-chip mock-r3-c2 mock-r3-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></span><span class="mock-r3-chip mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</span></div>
+      <div class="mock-r3-stage mock-r3-dim"><div class="mock-r3-car"><div class="mock-r3-slide mock-r3-side mock-r3-c1 mock-r3-g-wash"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-1"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-mid mock-r3-c2 mock-r3-g-wash"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-2"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-side mock-r3-c3 mock-r3-g-wash"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-3"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r3-panel"><button type="button" class="mock-r3-g-head" data-screen-link="d3-s3"><span class="mock-r3-g-gly mock-r3-g-big" aria-hidden="true"><u class="mock-r3-u-done"></u><u></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-lit"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u></span><span><b>Etappe B · Struktur</b><em>3 Richtungen, eine gewählt</em></span></button><div><div class="mock-r3-pn-h">Etappen</div><div class="mock-r3-step"><button type="button" class="mock-r3-st mock-r3-st-done"><i>✓</i><b>A · Use Cases</b><em>Runde 1 · fertig</em><span class="mock-r3-col"><u class="mock-r3-u-on"></u><u class=""></u><u class=""></u></span></button><button type="button" class="mock-r3-st mock-r3-st-now"><i></i><b>B · Struktur</b><em>Runde 2–3 · jetzt</em><span class="mock-r3-col"><u class="mock-r3-u-on"></u><u class="mock-r3-u-on"></u><u class="mock-r3-u-on"></u></span></button><button type="button" class="mock-r3-st" data-screen-link="d3-s4"><i></i><b>C · Visuelles Design</b><em>als Nächstes</em><span class="mock-r3-col"><u class=""></u><u class=""></u><u class=""></u></span></button><button type="button" class="mock-r3-st"><i></i><b>D · Animation</b><em>zuletzt</em><span class="mock-r3-col"><u class=""></u><u class=""></u><u class=""></u></span></button></div><div class="mock-r3-ruler">220 px · Name max. 24 Zeichen</div></div><div><div class="mock-r3-pn-h">Verlauf</div><div class="mock-r3-hist"><span>Runde 1</span><span>Runde 2</span><span class="mock-r3-h-now">Runde 3</span></div></div><div><div class="mock-r3-pn-h">Inhalt</div><div class="mock-r3-pn-row">⊞ Übersicht</div><div class="mock-r3-pn-row mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</div><div class="mock-r3-pn-row mock-r3-c2 mock-r3-pn-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></div><div class="mock-r3-pn-row mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</div></div></div>
+      <button type="button" class="mock-r3-fab mock-r3-fab-menu" data-screen-link="d3-s1" aria-label="Menü">✕</button><span class="mock-r3-fab mock-r3-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r3-d3-s2-a1" data-anno-side="left" data-anno-target=".mock-r3-st-now .mock-r3-col">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d3-s2-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d3-s2-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d3-s2-a1" data-anno-bubble="r3-d3-s2-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d3-s2-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d3-s2-a1">
+            <span class="anno-bubble-question">Jede Etappe trägt rechts ihre Glyphen-Spalte (Zahl der Richtungen): hilfreich, oder Rauschen neben dem Namen?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d3-s2-a1" data-annotation="r3-d3-s2-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d3-s2-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r3-d3-s2-a2" data-anno-side="left" data-anno-target=".mock-r3-ruler">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d3-s2-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d3-s2-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d3-s2-a2" data-anno-bubble="r3-d3-s2-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d3-s2-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d3-s2-a2">
+            <span class="anno-bubble-question">Regel für Claude: Stepper 220 px, Etappen-Name höchstens 24 Zeichen, nie abgeschnitten. Soll die Regel auch für Rundentitel gelten?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d3-s2-a2" data-annotation="r3-d3-s2-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d3-s2-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d3-s3" data-nav-label="Detail-Varianten" data-screen hidden>
+    <div class="mock-r3-win">
+      <span class="mock-r3-eye" aria-hidden="true">◉</span><div class="mock-r3-g-corner"><span class="mock-r3-g-gly mock-r3-g-big mock-r3-g-split" aria-hidden="true"><u class="mock-r3-u-done"></u><u></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-split"><s></s><s class="mock-r3-s-on"></s><s></s></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u></span><span>B · Name oben</span></div><div class="mock-r3-qnav"><button type="button" class="mock-r3-ovl" aria-label="Übersicht"><i>⊞</i><span>Übersicht</span></button><i class="mock-r3-sep"></i><span class="mock-r3-chip mock-r3-c2 mock-r3-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Crew-Leiste</span><span class="mock-r3-chip">I · Brücke</span><span class="mock-r3-chip">II · Funk</span></div>
+      <div class="mock-r3-stage"><div class="mock-r3-page"><div class="mock-r3-p-head"><b>Brücke</b><span>Crew-Leiste</span></div><div class="mock-r3-crew-wrap"><div class="mock-r3-ab"><span>A · Weniger Luft</span><span class="mock-r3-ab-on">B · Name oben</span><span>C · Eine Zeile</span></div><div class="mock-r3-crew"><span><i></i><b>Ava</b><em>Pilotin</em></span><span><i></i><b>Bo</b><em>Technik</em></span><span><i></i><b>Cem</b><em>Medizin</em></span><span><i></i><b>Dee</b><em>Funk</em></span></div></div><div class="mock-r3-p-body"><i></i><i></i><i></i></div></div></div>
+      <button type="button" class="mock-r3-fab mock-r3-fab-menu" data-screen-link="d3-s2" aria-label="Menü">☰</button><span class="mock-r3-fab mock-r3-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r3-d3-s3-a1" data-anno-side="right" data-anno-target=".mock-r3-g-split">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d3-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d3-s3-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d3-s3-a1" data-anno-bubble="r3-d3-s3-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d3-s3-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d3-s3-a1">
+            <span class="anno-bubble-question">Auf der Design-Seite sitzt die Glyphe neben dem Auge; bei Detail-Varianten teilt sich die Zelle in drei Striche. Erkennbar?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d3-s3-a1" data-annotation="r3-d3-s3-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d3-s3-a1"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d3-s4" data-nav-label="Absenden in Etappe" data-screen hidden>
+    <div class="mock-r3-win">
+      <span class="mock-r3-eye" aria-hidden="true">◉</span><div class="mock-r3-qnav "><button type="button" class="mock-r3-ovl" aria-label="Übersicht"><i>⊞</i><span>Übersicht</span></button><i class="mock-r3-sep"></i><span class="mock-r3-chip mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</span><span class="mock-r3-chip mock-r3-c2 mock-r3-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></span><span class="mock-r3-chip mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</span></div>
+      <div class="mock-r3-stage mock-r3-dim"><div class="mock-r3-car"><div class="mock-r3-slide mock-r3-side mock-r3-c1 mock-r3-g-wash"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-1"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-mid mock-r3-c2 mock-r3-g-wash"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-2"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-side mock-r3-c3 mock-r3-g-wash"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-3"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r3-ovcard mock-r3-c2 mock-r3-g-card"><div class="mock-r3-kicker"><span class="mock-r3-g-gly mock-r3-g-anim" aria-hidden="true"><u class="mock-r3-u-done"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-from"></u><u class="mock-r3-u-move"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u></span><span>◆ · 2 · Holo-Deck <span class="mock-r3-star">★</span></span></div><div class="mock-r3-motto">Der Hub bleibt im Raum.</div><ul class="mock-r3-traits"><li>Hub als drehbarer Raum</li><li>Unterseiten als Hologramme</li><li>Zurück per Schwenk</li></ul></div>
+      <div class="mock-r3-panel"><div class="mock-r3-g-head"><span class="mock-r3-g-gly mock-r3-g-big" aria-hidden="true"><u class="mock-r3-u-done"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-from"></u><u class="mock-r3-u-move"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u><u class="mock-r3-u-off"></u></span><span><b>B → C</b><em>so rückt die Glyphe beim Wechsel</em></span></div><div><div class="mock-r3-pn-h">Etappen</div><div class="mock-r3-step"><button type="button" class="mock-r3-st mock-r3-st-done"><i>✓</i><b>A · Use Cases</b><em>Runde 1 · fertig</em><span class="mock-r3-col"><u class="mock-r3-u-on"></u><u class=""></u><u class=""></u></span></button><button type="button" class="mock-r3-st mock-r3-st-now"><i></i><b>B · Struktur</b><em>Runde 2–3 · jetzt</em><span class="mock-r3-col"><u class="mock-r3-u-on"></u><u class="mock-r3-u-on"></u><u class="mock-r3-u-on"></u></span></button><button type="button" class="mock-r3-st"><i></i><b>C · Visuelles Design</b><em>als Nächstes</em><span class="mock-r3-col"><u class=""></u><u class=""></u><u class=""></u></span></button><button type="button" class="mock-r3-st"><i></i><b>D · Animation</b><em>zuletzt</em><span class="mock-r3-col"><u class=""></u><u class=""></u><u class=""></u></span></button></div></div><div class="mock-r3-submit"><button type="button" class="mock-r3-btn" data-screen-link="d3-s5">👉 Zur nächsten Runde<small>noch eine Runde in Etappe B</small></button><button type="button" class="mock-r3-btn mock-r3-btn-main mock-r3-next" data-screen-link="d3-s5">Nächste Etappe ›<small>weiter mit C · Visuelles Design</small></button><span class="mock-r3-hint">Umsetzen erst nach der letzten Etappe</span></div></div>
+      <button type="button" class="mock-r3-fab mock-r3-fab-menu" data-screen-link="d3-s1" aria-label="Menü">✕</button><span class="mock-r3-fab mock-r3-fab-chat" aria-hidden="true">💬</span>
+    </div>
+    <div class="anno-layer" data-anno-layer>
+      <div class="anno" data-anno="r3-d3-s4-a1" data-anno-side="top" data-anno-target=".mock-r3-g-anim">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d3-s4-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d3-s4-a1" aria-label="{{anno.pin_label}}">1</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d3-s4-a1" data-anno-bubble="r3-d3-s4-a1" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d3-s4-a1" aria-expanded="false" aria-controls="anno-bubble-r3-d3-s4-a1">
+            <span class="anno-bubble-question">Beim Etappenwechsel rückt das Leuchten eine Spalte weiter (ca. 0,6 s, einmal): dezent genug, oder zu verspielt?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d3-s4-a1" data-annotation="r3-d3-s4-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d3-s4-a1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno" data-anno="r3-d3-s4-a2" data-anno-side="left" data-anno-target=".mock-r3-next">
+        <button class="anno-pin" type="button" data-anno-pin="r3-d3-s4-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d3-s4-a2" aria-label="{{anno.pin_label}}">2</button>
+        <div class="anno-bubble" id="anno-bubble-r3-d3-s4-a2" data-anno-bubble="r3-d3-s4-a2" data-open="false">
+          <button type="button" class="anno-bubble-summary" data-anno-summary="r3-d3-s4-a2" aria-expanded="false" aria-controls="anno-bubble-r3-d3-s4-a2">
+            <span class="anno-bubble-question">Hier gibt es kein „Jetzt umsetzen“ mehr bis Etappe D. Fehlt dir der Weg, einen Zwischenstand umzusetzen, oder ist das gewollt so?</span>
+          </button>
+          <div class="anno-bubble-body">
+            <textarea class="anno-answer" data-comment="anno-r3-d3-s4-a2" data-annotation="r3-d3-s4-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+            <div class="attach-slot" data-attach-slot="anno-r3-d3-s4-a2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="d3-s5" data-nav-label="Ohne Etappen" data-screen hidden>
+    <div class="mock-r3-win">
+      <span class="mock-r3-eye" aria-hidden="true">◉</span><div class="mock-r3-qnav "><button type="button" class="mock-r3-ovl" aria-label="Übersicht"><i>⊞</i><span>Übersicht</span></button><i class="mock-r3-sep"></i><span class="mock-r3-chip mock-r3-c1"><i class="mock-r3-sw"></i><b class="mock-r3-num">1</b> · Anflug</span><span class="mock-r3-chip mock-r3-c2 mock-r3-on"><i class="mock-r3-sw"></i><b class="mock-r3-num">2</b> · Holo-Deck <span class="mock-r3-star">★</span></span><span class="mock-r3-chip mock-r3-c3"><i class="mock-r3-sw"></i><b class="mock-r3-num">3</b> · Kapitel</span></div>
+      <div class="mock-r3-stage"><div class="mock-r3-car"><div class="mock-r3-slide mock-r3-side mock-r3-c1 mock-r3-g-wash"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-1"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-mid mock-r3-c2 mock-r3-g-wash"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-2"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div><div class="mock-r3-slide mock-r3-side mock-r3-c3 mock-r3-g-wash"><div class="mock-r3-shot"><div class="mock-r3-app mock-r3-app-3"><i class="mock-r3-a-bar"></i><i class="mock-r3-a-hero"></i><span class="mock-r3-a-cards"><i></i><i></i><i></i></span></div></div></div></div></div>
+      <div class="mock-r3-ovcard mock-r3-c2"><div class="mock-r3-kicker"><span>◆ · 2 · Holo-Deck <span class="mock-r3-star">★</span></span></div><div class="mock-r3-motto">Der Hub bleibt im Raum.</div><ul class="mock-r3-traits"><li>Hub als drehbarer Raum</li><li>Unterseiten als Hologramme</li><li>Zurück per Schwenk</li></ul></div><button type="button" class="mock-r3-fab mock-r3-fab-menu" data-screen-link="d3-s1" aria-label="Menü">☰</button><span class="mock-r3-fab mock-r3-fab-chat" aria-hidden="true">💬</span>
+    </div>
+  </section>
+  </section>
+</section>

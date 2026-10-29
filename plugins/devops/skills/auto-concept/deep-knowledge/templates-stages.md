@@ -1,4 +1,4 @@
-# Concept templates, part 47 of 48: Shared systems — Etappen (stages): contract, head name, round row, tabs, structure button, next-stage — markup and CSS
+# Concept templates, part 47 of 48: Shared systems — Etappen (stages): contract, head name, round row, stepper tabs, next-stage — markup and CSS
 
 ## Etappen (stages)
 
@@ -24,15 +24,24 @@ All concepts (with or without Etappen):
 
 Only with Etappen:
 
-- **Structure button** (`#stage-struct`) — round, same size and look as the
-  eye, LEFT of it (inside `#design-header` before `.design-header-eye`;
-  elsewhere fixed beside the document-pin eye's spot). Grid glyph, one cell
-  per Etappe (done · current · ahead). App tooltip, two lines: the kind of
-  the visible round ("3 Richtungen, eine gewählt" / "3 Themen nacheinander" /
-  "1 Richtung" / "n Abschnitte") and "Etappe B · Runde 4". Click opens ☰.
-- **Etappen tab row** (`#stage-tabs`) directly under the head: fixed-width
-  tabs (letter + name, two lines, never ellipsised — the 24-char limit is an
-  authoring rule), scroll-snap per tab, the viewport sized to whole tabs so
+- **No structure button on the page.** The stages live in the ☰ panel only:
+  no Etappen glyph sits in the page's top-left corner (it duplicated the tab
+  row and read as noise on the mock — user note, Kleingarten concept round 3).
+- **Etappen stepper** (`#stage-tabs`) directly under the head: tabs of one
+  width (widened to span the row when all fit, at most 7rem), each a **kind node** (26px circle) above the name (two lines, never
+  ellipsised — the 24-char limit is an authoring rule). The node shows the
+  glyph of the Etappe's kind, read from its newest round (`_stKindOf()`):
+  `pick` (≥2 designs, alternatives), `seq` (designs as topics), `open` (≥2
+  designs, no set), `one` (one design), `analysis` (`data-analysis="full"`),
+  `doc` (decision / free sections); an Etappe without a round yet shows its
+  letter instead. The letter otherwise sits as a small badge on the node.
+  The nodes are joined by a 2px connector at their centre height (done →
+  success colour, ahead → border colour), so the row reads as one stepper
+  and needs no more height than a tab. App tooltip, two lines: the kind
+  ("3 Richtungen, eine gewählt" / "3 Themen nacheinander" / "1 Richtung" /
+  "n Abschnitte" / "n Entscheidungen, geführt") and "Etappe B · Runde 4" (the
+  newest round), or "Beginnt nach der aktuellen Etappe." for an Etappe not
+  reached yet. Scroll-snap per tab, the viewport sized to whole tabs so
   none is cut. ‹ › are plain glyphs in their own gutters beside the row,
   shown on hover or keyboard focus only, and only when the row overflows.
   Roving tabindex: ←/→/Home/End move focus, Enter/Space opens the tab. On
@@ -68,50 +77,52 @@ body.viewing-frozen .screen-nav-rnd, body.viewing-frozen .panel-round-row { disp
 body[data-staged]:not(.viewing-frozen) #panel-here-rounds,
 body[data-staged]:not(.viewing-frozen) #panel-here-rounds-list { display: none !important; }
 
-.stage-struct {
-  box-sizing: border-box; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%;
-  display: inline-grid; place-items: center; flex: none; cursor: pointer;
-  color: var(--accent-color, #58a6ff);
-  background: color-mix(in srgb, var(--accent-color, #58a6ff) 20%, var(--panel-bg, #161b22));
-  box-shadow: 0 0 14px color-mix(in srgb, var(--accent-color, #58a6ff) 32%, transparent);
-  transition: transform 0.15s, box-shadow 0.15s;
-}
-.stage-struct:hover { transform: scale(1.08); box-shadow: 0 0 18px color-mix(in srgb, var(--accent-color, #58a6ff) 50%, transparent); }
-.stage-struct:focus-visible { outline: 2px solid var(--accent-color, #58a6ff); outline-offset: 2px; }
-.stage-struct[data-float] { position: fixed; top: 2.9rem; right: calc(6.6rem + 36px); z-index: 96; }
-.design-header .stage-struct { margin-right: 8px; }
-body.panel-open .stage-struct[data-float] { visibility: hidden; }
-.stage-gly { display: inline-grid; grid-auto-rows: 3px; gap: 1px; }
-.stage-gly u { display: block; width: 3px; height: 3px; border-radius: 1px; text-decoration: none;
-  background: color-mix(in srgb, var(--accent-color, #58a6ff) 38%, transparent); }
-.stage-gly u[data-state="done"] { background: color-mix(in srgb, var(--success-color, #3fb950) 85%, #fff); }
-.stage-gly u[data-state="now"] { background: var(--accent-color, #58a6ff); box-shadow: 0 0 4px var(--accent-color, #58a6ff); }
-
-.stage-tabs { --stage-tab-w: 4.25rem; --stage-tab-gap: 4px; position: relative; flex: 0 0 auto;
+.stage-tabs { --stage-tab-w: 4.6rem; --stage-tab-gap: 4px; --stage-node: 26px; position: relative; flex: 0 0 auto;
   display: flex; align-items: center; margin: 0 0 0.6rem; }
 .stage-tabs-sc { flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden;
   scroll-snap-type: x mandatory; scroll-behavior: smooth; padding-bottom: 2px; }
 .stage-tabs[data-overflow] .stage-tabs-sc { flex: none; }
 .stage-tabs-in { display: flex; gap: var(--stage-tab-gap); }
 .stage-tab {
-  position: relative; flex: none; box-sizing: border-box; width: var(--stage-tab-w); min-height: 3.1rem;
-  padding: 5px 3px 4px; border-radius: 9px; border: 1px solid transparent; background: none;
-  display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center;
+  position: relative; flex: none; box-sizing: border-box; width: var(--stage-tab-w); min-height: 3.5rem;
+  padding: 4px 3px; border-radius: 9px; border: 1px solid transparent; background: none;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center;
   scroll-snap-align: start; cursor: pointer; font: inherit; color: var(--text-secondary, #8b949e);
 }
 .stage-tab:hover { background: color-mix(in srgb, var(--accent-color, #58a6ff) 8%, transparent); }
 .stage-tab:focus-visible { outline: 2px solid var(--accent-color, #58a6ff); outline-offset: -2px; }
-.stage-tl { width: 18px; height: 18px; flex: none; border-radius: 50%; display: grid; place-items: center;
-  font-size: 10px; font-weight: 700; line-height: 1; border: 1.5px solid var(--border-color, #30363d); }
-.stage-tn { font-size: 0.66rem; line-height: 1.15; hyphens: auto; overflow-wrap: anywhere; }
-.stage-tab[data-state="done"] .stage-tl {
-  border-color: color-mix(in srgb, var(--success-color, #3fb950) 70%, transparent); color: var(--success-color, #3fb950);
-  background: color-mix(in srgb, var(--success-color, #3fb950) 16%, transparent);
+/* Stepper connector: from the previous node's right edge to this node's
+   left edge, at the node centre (the tab's own box is the reference). */
+.stage-tab + .stage-tab::before {
+  content: ""; position: absolute; z-index: 0; height: 2px; border-radius: 1px; pointer-events: none;
+  top: calc(5px + var(--stage-node) / 2 - 1px);
+  left: calc(-50% - var(--stage-tab-gap) + var(--stage-node) / 2 + 3px);
+  right: calc(50% + var(--stage-node) / 2 + 3px);
+  background: var(--border-color, #30363d);
 }
-.stage-tab[data-state="now"] .stage-tl {
+.stage-tab:is([data-state="done"], [data-state="now"]) + .stage-tab:is([data-state="done"], [data-state="now"])::before {
+  background: color-mix(in srgb, var(--success-color, #3fb950) 70%, transparent);
+}
+.stage-node { position: relative; z-index: 1; box-sizing: border-box; width: var(--stage-node); height: var(--stage-node);
+  flex: none; border-radius: 50%; display: grid; place-items: center;
+  border: 1.5px solid var(--border-color, #30363d); background: var(--panel-bg, #161b22); color: var(--text-secondary, #8b949e); }
+.stage-node svg { display: block; width: 14px; height: 14px; }
+.stage-tl { position: absolute; right: -5px; bottom: -4px; box-sizing: border-box; min-width: 13px; height: 13px; padding: 0 2px;
+  border-radius: 7px; display: grid; place-items: center; font-size: 8px; font-weight: 700; line-height: 1;
+  background: var(--panel-bg, #161b22); color: inherit; border: 1px solid currentColor; }
+.stage-node[data-kind="none"] .stage-tl { position: static; min-width: 0; height: auto; padding: 0; border: 0;
+  background: none; font-size: 11px; }
+.stage-tn { font-size: 0.66rem; line-height: 1.15; hyphens: auto; overflow-wrap: break-word; }
+.stage-tab[data-state="done"] .stage-node {
+  border-color: color-mix(in srgb, var(--success-color, #3fb950) 70%, transparent); color: var(--success-color, #3fb950);
+  background: color-mix(in srgb, var(--success-color, #3fb950) 16%, var(--panel-bg, #161b22));
+}
+.stage-tab[data-state="now"] .stage-node {
   border-color: var(--accent-color, #58a6ff); background: var(--accent-color, #58a6ff); color: #fff;
   box-shadow: 0 0 8px color-mix(in srgb, var(--accent-color, #58a6ff) 60%, transparent);
 }
+.stage-tab[data-state="now"] .stage-tl { background: var(--accent-color, #58a6ff); }
+.stage-tab[data-state="ahead"] .stage-node { border-style: dashed; }
 .stage-tab[aria-selected="true"] {
   color: var(--text-color, #e6edf3); background: color-mix(in srgb, var(--accent-color, #58a6ff) 13%, transparent);
   border-color: color-mix(in srgb, var(--accent-color, #58a6ff) 45%, transparent);

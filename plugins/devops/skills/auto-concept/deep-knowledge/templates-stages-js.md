@@ -85,52 +85,70 @@ function renderRoundRow() {
   row.textContent = _stRoundLabel(sec);
 }
 
-// The visible round's kind, line 1 of the structure button's tooltip.
-function stageKindLine(sec) {
-  if (!sec) return '';
+// A round's kind: the glyph of its Etappe's stepper node and line 1 of the
+// tab's tooltip.
+function _stKindOf(sec) {
+  if (!sec) return { kind: 'none', line: '' };
   const designs = sec.querySelectorAll(':scope > section[data-design]');
   const n = designs.length;
   if ((sec.dataset.iterationTemplate || '') === 'design' || n) {
-    if (n <= 1) return '{{stage.kind_one}}';
+    if (n <= 1) return { kind: 'one', line: '{{stage.kind_one}}' };
     const set = sec.dataset.designSet || '';
-    const key = set === 'topics' ? '{{stage.kind_seq}}' : set === 'alternatives' ? '{{stage.kind_pick}}' : '{{stage.kind_open}}';
-    return key.replace('{n}', String(n));
+    const kind = set === 'topics' ? 'seq' : set === 'alternatives' ? 'pick' : 'open';
+    const key = kind === 'seq' ? '{{stage.kind_seq}}' : kind === 'pick' ? '{{stage.kind_pick}}' : '{{stage.kind_open}}';
+    return { kind, line: key.replace('{n}', String(n)) };
+  }
+  if (sec.dataset.analysis === 'full') {
+    const decs = sec.querySelectorAll('[data-decision][data-decision-mode]').length;
+    return { kind: 'analysis', line: '{{stage.kind_analysis}}'.replace('{n}', String(decs)) };
   }
   const entries = sec.querySelectorAll('section[id][data-nav-label]').length;
-  return '{{stage.kind_doc}}'.replace('{n}', String(entries));
+  return { kind: 'doc', line: '{{stage.kind_doc}}'.replace('{n}', String(entries)) };
 }
+function stageKindLine(sec) { return _stKindOf(sec).line; }
 
-function renderStageStruct() {
-  const d = conceptStages();
-  let btn = document.getElementById('stage-struct');
-  if (!d.stages.length) { if (btn) btn.remove(); return; }
-  if (!btn) {
-    btn = _stEl('button', 'stage-struct');
-    btn.type = 'button';
-    btn.id = 'stage-struct';
-    btn.setAttribute('aria-haspopup', 'dialog');
-    btn.addEventListener('click', () => { if (typeof window.openPanel === 'function') window.openPanel(); });
-  }
-  const gly = _stEl('span', 'stage-gly');
-  gly.setAttribute('aria-hidden', 'true');
-  gly.style.gridTemplateColumns = 'repeat(' + Math.min(4, d.stages.length) + ', 3px)';
-  d.stages.forEach(s => { const u = _stEl('u'); u.dataset.state = _stState(s.id); gly.appendChild(u); });
-  btn.replaceChildren(gly);
-  const sec = _stVisibleRound();
-  const line2 = '{{stage.label}} ' + _stStageOf(sec) + ' · ' + _stRoundLabel(sec);
-  const tip = stageKindLine(sec) + '\n' + line2;
-  btn.dataset.tip = tip;
-  btn.setAttribute('aria-label', '{{stage.struct}}: ' + tip.replace('\n', ' · '));
-  // Left of the eye: inside the design header before its eye slot, otherwise
-  // floating beside the document-pin eye's fixed spot.
-  const slot = document.querySelector('#design-header .design-header-eye');
-  if (slot && slot.parentNode) {
-    if (btn.nextSibling !== slot || btn.parentNode !== slot.parentNode) slot.parentNode.insertBefore(btn, slot);
-    delete btn.dataset.float;
-  } else {
-    if (btn.parentNode !== document.body) document.body.appendChild(btn);
-    btn.dataset.float = '';
-  }
+// One stroke glyph per kind (16 × 16, currentColor).
+const _ST_GLYPHS = {
+  pick: 'M2 4h3v8H2zM6.5 4h3v8h-3zM11 4h3v8h-3zM6.5 14h3',
+  seq: 'M1.5 8h13M3.5 8a1.5 1.5 0 1 0 0 .01M8 8a1.5 1.5 0 1 0 0 .01M12.5 8a1.5 1.5 0 1 0 0 .01',
+  open: 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z',
+  one: 'M2 3h12v8H2zM6 14h4M8 11v3',
+  analysis: 'M3 13.5V9M8 13.5V3M13 13.5V6.5M1.5 13.5h13',
+  doc: 'M3 4h10M3 8h10M3 12h6'
+};
+function _stGlyph(kind) {
+  const d = _ST_GLYPHS[kind];
+  if (!d) return null;
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.6');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', d);
+  svg.appendChild(path);
+  return svg;
+}
+// The stepper node of one Etappe: its kind glyph (newest round) with the
+// letter as a badge; an Etappe without a round yet shows the letter alone.
+function _stNode(stage) {
+  const rounds = _stRounds().filter(r => r.dataset.stage === stage.id);
+  const newest = rounds[rounds.length - 1] || null;
+  const k = _stKindOf(newest);
+  const node = _stEl('span', 'stage-node');
+  node.setAttribute('aria-hidden', 'true');
+  node.dataset.kind = k.kind;
+  const g = _stGlyph(k.kind);
+  if (g) node.appendChild(g);
+  node.appendChild(_stEl('span', 'stage-tl', stage.id));
+  const tip = newest
+    ? k.line + '\n' + '{{stage.label}} ' + stage.id + ' · ' + _stRoundLabel(newest)
+    : '{{stage.ahead}}';
+  return { node, tip };
 }
 
 let _stageSelected = '';
@@ -200,10 +218,10 @@ function renderStageTabs() {
     const sel = s.id === _stageSelected;
     t.setAttribute('aria-selected', sel ? 'true' : 'false');
     t.tabIndex = sel ? 0 : -1;
-    const tl = _stEl('span', 'stage-tl', s.id);
-    tl.setAttribute('aria-hidden', 'true');
-    t.append(tl, _stEl('span', 'stage-tn', s.name || ''));
-    t.setAttribute('aria-label', '{{stage.label}} ' + s.id + ' · ' + (s.name || ''));
+    const nd = _stNode(s);
+    t.append(nd.node, _stEl('span', 'stage-tn', s.name || ''));
+    t.dataset.tip = nd.tip;
+    t.setAttribute('aria-label', '{{stage.label}} ' + s.id + ' · ' + (s.name || '') + ' · ' + nd.tip.replace('\n', ' · '));
     t.addEventListener('click', () => selectStageTab(s.id));
     list.appendChild(t);
   });
@@ -217,13 +235,19 @@ function layoutStageTabs(row) {
   const list = row.querySelector('.stage-tabs-in');
   const first = list.querySelector('.stage-tab');
   sc.style.width = '';
+  row.style.removeProperty('--stage-tab-w');
   delete row.dataset.overflow;
   const avail = row.getBoundingClientRect().width;
   const w = first ? first.getBoundingClientRect().width : 0;
   if (!avail || !w) { syncStageArrows(row); return; }
   const gap = 4;
   const n = list.children.length;
-  if (n * (w + gap) - gap > avail + 0.5) {
+  if (n * (w + gap) - gap <= avail + 0.5) {
+    // Few Etappen: the stepper spans the row (names wrap less, never cut),
+    // capped so two Etappen do not turn into wide slabs.
+    const fill = Math.min(7 * 16, Math.floor((avail - gap * (n - 1)) / n));
+    if (fill > w) row.style.setProperty('--stage-tab-w', fill + 'px');
+  } else {
     row.dataset.overflow = '';
     const k = Math.max(1, Math.floor((avail - 36 + gap) / (w + gap)));
     sc.style.width = (k * (w + gap) - gap) + 'px';
@@ -406,7 +430,6 @@ function renderStages() {
   const staged = conceptStages().stages.length > 0;
   if (staged) document.body.dataset.staged = ''; else delete document.body.dataset.staged;
   renderRoundRow();
-  renderStageStruct();
   renderStageTabs();
   renderStageNext();
 }

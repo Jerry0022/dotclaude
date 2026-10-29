@@ -68,11 +68,19 @@ returns — the single-design page is untouched.
   `section[data-design]` (a few words, ≤ ~40 chars, e.g. "Größere
   Tageskacheln"; longer text is cut at a word boundary). No attribute → no
   line, no chip.
-- **Bleed.** The centred variant's preview covers the whole overview stage
-  edge to edge (no tile, radius or inset): the clone is cover-scaled and
-  centred (capped at 2.5×), and the stage takes the design's own computed
-  background (colour + image, first non-transparent from the screen up).
-  Neighbour tiles are hidden behind it; the questions tile stays a tile.
+- **Big cards, filled from inside.** The centred variant is always the big
+  16:10 card (≈ 78 % of the stage width), framed and rounded, its
+  neighbours peeking in at the edges — never a preview that covers the
+  whole stage (an earlier "bleed" turned every full-app round into a
+  fullscreen picture and lost the cards; user note, Kleingarten concept
+  round 2). Inside the card the clone is scaled by what it shows
+  (`fitPreviews()`, `data-fit` on the preview): a **full-app screen**
+  (content ≥ 700 of the 1000px virtual width) is **cover**-scaled — it
+  fills the card edge to edge, centred, capped at 2.5× — while a narrower
+  widget or phone mock is **contain**-scaled (whole, centred, up to 2.5×).
+  The card takes the design's own computed background (colour + image,
+  first non-transparent from the screen up), so the area the clone does not
+  reach reads as the app, not as a foreign panel.
 - **Demo.** `data-ov-demo="<selector>"` (optional, on the design section):
   the slide zooms onto that element and loops `ov-demo-play` on it every few
   seconds instead of the full still (see views.md attribute table).
@@ -660,9 +668,8 @@ returns — the single-design page is untouched.
       if (demoScreen) { preview.dataset.demo = demoSel; shown = demoScreen; }
     }
     preview.appendChild(cloneScreen(shown, 'ov' + m.n + '-'));
-    // Bleed: the design's own background fills the whole stage behind the
-    // scaled clone (colour + image), set on the overview while this slide is
-    // centred (layoutCarousel).
+    // The design's own background (colour + image) paints the card behind
+    // the scaled clone (.design-ov-preview reads the two variables).
     const bg = designBackground(d, shown);
     slide.style.setProperty('--dz-ov-bg', bg.color);
     slide.style.setProperty('--dz-ov-bg-img', bg.image);
@@ -753,13 +760,6 @@ returns — the single-design page is untouched.
       s.querySelectorAll('button, .design-ov-preview').forEach(b => { b.tabIndex = off === 0 ? 0 : -1; });
     });
     ov.dataset.index = String(ovIndex);
-    // Bleed: the stage takes the centred variant's own background.
-    const curSlide = slides[ovIndex];
-    ov.dataset.bleed = String(!!curSlide && curSlide.dataset.questions !== 'true');
-    ['--dz-ov-bg', '--dz-ov-bg-img'].forEach(p => {
-      const v = curSlide && curSlide.style.getPropertyValue(p);
-      if (v) ov.style.setProperty(p, v); else ov.style.removeProperty(p);
-    });
     markQuickFocus(it || visibleIteration());
   }
   // On the overview the quick nav names the tile in the centre: that
@@ -1535,13 +1535,18 @@ returns — the single-design page is untouched.
       const tall = u.b > u.t ? u.b - u.t + 2 * PAD : 0;
       const fromY = u.b > u.t ? Math.max(0, u.t - PAD) : 0;
       const h = p.clientHeight;
-      // Bleed: the clone COVERS the whole stage (no tile, no inset) — the
-      // larger of the width / height fit, capped at 2.5× so a small widget
-      // is not blown up; the design's own background (set on the stage)
-      // fills whatever the content does not reach. Centred on both axes.
-      // The info card always sits bottom-left and overlays the picture.
-      let scale = Math.min(2.5, tall ? Math.max(w / content, h / tall) : w / content);
+      // Inside the CARD (never the whole stage): a full-app screen (content
+      // >= 700 of the 1000px canvas) COVERS the card — the larger of the
+      // width / height fit, capped at 2.5× — so the card's space is used; a
+      // page taller than the card keeps its top (the app header) and crops
+      // at the bottom. A narrower widget / phone mock is CONTAINED (whole,
+      // up to 2.5×). The card's own background (the design's) fills what
+      // the content does not reach. The info card sits bottom-left on top.
+      const full = content >= 700;
+      p.dataset.fit = full ? 'cover' : 'contain';
+      let scale = Math.min(2.5, tall ? (full ? Math.max(w / content, h / tall) : Math.min(w / content, h / tall)) : w / content);
       let cx = from, cy = fromY, cw = content, ch = tall || h / Math.max(scale, 0.01);
+      let topAnchor = full && tall * scale > h + 0.5;
       // `data-ov-demo`: zoom onto the differing element instead — fitted
       // (contain, up to 4×) to its own box, centred.
       const demo = p.dataset.demo && demoTarget(wrap, p.dataset.demo);
@@ -1552,6 +1557,8 @@ returns — the single-design page is untouched.
           const DP = 32;
           scale = Math.max(0.05, Math.min(4, w / (dw + 2 * DP), h / (dh + 2 * DP)));
           cx = dl; cy = dt; cw = dw; ch = dh;
+          topAnchor = false;
+          p.dataset.fit = 'demo';
         }
       }
       wrap.style.removeProperty('--dz-ov-scale');
@@ -1559,7 +1566,7 @@ returns — the single-design page is untouched.
       wrap.style.removeProperty('--dz-ov-y');
       p.style.setProperty('--dz-ov-scale', String(scale));
       p.style.setProperty('--dz-ov-x', ((w - cw * scale) / 2 - cx * scale).toFixed(1) + 'px');
-      p.style.setProperty('--dz-ov-y', ((h - ch * scale) / 2 - cy * scale).toFixed(1) + 'px');
+      p.style.setProperty('--dz-ov-y', (topAnchor ? -cy * scale : (h - ch * scale) / 2 - cy * scale).toFixed(1) + 'px');
     });
   }
   // The element a `data-ov-demo` selector names, inside a preview clone.
