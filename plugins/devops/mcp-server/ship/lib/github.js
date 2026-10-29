@@ -170,6 +170,47 @@ function pollPRState(prNumber, opts, { attempts = 3, sleep = sleepSync } = {}) {
 }
 
 /**
+ * Read the fields the land-a-bot-PR gate needs (#955).
+ * @returns {{ author: string, isDraft: boolean, mergeable: string, statusCheckRollup: object[], headRefName: string, baseRefName: string, state: string }}
+ */
+export function readPRForLand(prNumber, opts) {
+  const raw = gh(["pr", "view", String(prNumber), "--json", "author,isDraft,mergeable,statusCheckRollup,headRefName,baseRefName,state"], opts);
+  const j = JSON.parse(raw);
+  return {
+    author: j.author?.login || "",
+    isDraft: !!j.isDraft,
+    mergeable: j.mergeable || "UNKNOWN",
+    statusCheckRollup: Array.isArray(j.statusCheckRollup) ? j.statusCheckRollup : [],
+    headRefName: j.headRefName || "",
+    baseRefName: j.baseRefName || "main",
+    state: j.state || "",
+  };
+}
+
+const BOT_AUTHORS = new Set(["app/dependabot", "dependabot[bot]", "dependabot"]);
+const GREEN_CONCLUSIONS = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
+
+/**
+ * Pure gate: may this PR be landed through ship_run `landPr`? Only an open,
+ * non-draft, mergeable Dependabot PR whose every check is green.
+ * @returns {{ ok: true } | { ok: false, reason: string }}
+ */
+export function landEligibility(pr) {
+  if (!BOT_AUTHORS.has(String(pr.author || "").toLowerCase())) return { ok: false, reason: `author "${pr.author}" is not Dependabot` };
+  if (pr.state && pr.state !== "OPEN") return { ok: false, reason: `PR is ${pr.state}, not OPEN` };
+  if (pr.isDraft) return { ok: false, reason: "PR is a draft" };
+  if (pr.mergeable !== "MERGEABLE") return { ok: false, reason: `PR is not mergeable (${pr.mergeable})` };
+  const checks = pr.statusCheckRollup || [];
+  if (!checks.length) return { ok: false, reason: "PR reports no checks" };
+  const bad = checks.filter((c) => {
+    if (c.__typename === "StatusContext" || (c.state !== undefined && c.conclusion === undefined)) return c.state !== "SUCCESS";
+    return c.status !== "COMPLETED" || !GREEN_CONCLUSIONS.has(c.conclusion);
+  });
+  if (bad.length) return { ok: false, reason: `checks not green: ${bad.map((c) => c.name || c.context || "?").join(", ")}` };
+  return { ok: true };
+}
+
+/**
  * Merge a PR by number, delete remote branch.
  *
  * Contract (#398): the merge is the ONE irreversible step of a ship, so this

@@ -226,3 +226,53 @@ describe("ship_run — switches and helpers", () => {
     expect(insertChangelogEntry("", "0.1.0", "## [0.1.0]\n\n- first", now)).toBe("# Changelog\n\n## [0.1.0] — 2026-10-26\n\n- first\n");
   });
 });
+
+describe("ship_run — landPr (#955)", () => {
+  const prData = { author: "app/dependabot", isDraft: false, mergeable: "MERGEABLE", state: "OPEN", headRefName: "dependabot/npm/x", baseRefName: "main", statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS", name: "t" }] };
+  const land = (pr = prData, over = {}) => {
+    const h = harness();
+    const github = { readPR: vi.fn(() => pr), merge: vi.fn(() => ({ sha: "abc1234", verified: true })), deleteBranch: vi.fn(() => ({ ok: true })), ...over };
+    return { h, github, run: () => handler({ ...DEFAULTS, cwd: "/repo", landPr: 37 }, { ...h.deps, github, repoMode: () => "git" }) };
+  };
+
+  test("lands an eligible PR: squash merge, branch delete, no pipeline stages", async () => {
+    const { h, github, run } = land();
+    const r = await run();
+    expect(r.ok).toBe(true);
+    expect(r.landed).toMatchObject({ pr: 37, mergeSha: "abc1234", verified: true });
+    expect(github.merge).toHaveBeenCalledWith(37, "main", { cwd: "/repo" }, { strategy: "squash", skipDeleteBranch: true });
+    expect(github.deleteBranch).toHaveBeenCalledWith("dependabot/npm/x", { cwd: "/repo" });
+    expect(h.names()).toEqual([]);
+  });
+
+  test("refuses a human-authored PR with needs land-refused and does not merge", async () => {
+    const { github, run } = land({ ...prData, author: "octocat" });
+    const r = await run();
+    expect(r).toMatchObject({ ok: false, needs: "land-refused" });
+    expect(r.detail.reason).toMatch(/not Dependabot/);
+    expect(github.merge).not.toHaveBeenCalled();
+  });
+
+  test("refuses a PR with a pending check", async () => {
+    const { github, run } = land({ ...prData, statusCheckRollup: [{ status: "IN_PROGRESS", conclusion: "", name: "t" }] });
+    expect((await run()).needs).toBe("land-refused");
+    expect(github.merge).not.toHaveBeenCalled();
+  });
+
+  test("refuses outside a usable repo (detectRepoMode)", async () => {
+    const h = harness();
+    const github = { readPR: vi.fn(), merge: vi.fn(), deleteBranch: vi.fn() };
+    const r = await handler({ ...DEFAULTS, cwd: "/x", landPr: 1 }, { ...h.deps, github, repoMode: () => "none" });
+    expect(r.needs).toBe("land-refused");
+    expect(github.readPR).not.toHaveBeenCalled();
+  });
+
+  test("a failed merge is a tool-error, a failed branch delete only a warning", async () => {
+    const bad = land(prData, { merge: vi.fn(() => { throw new Error("boom"); }) });
+    expect((await bad.run()).needs).toBe("tool-error");
+    const warn = land(prData, { deleteBranch: vi.fn(() => ({ ok: false, error: "x" })) });
+    const r = await warn.run();
+    expect(r.ok).toBe(true);
+    expect(r.warnings[0]).toMatch(/not deleted/);
+  });
+});

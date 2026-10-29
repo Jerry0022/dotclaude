@@ -56,6 +56,7 @@ A ship always lands on **alpha**. Naming a higher channel means "ship if anythin
 | `--cwd=<path>` | Every `ship_*` MCP call passes this path as `cwd`, git runs as `git -C <path>`, the Step 1e passes get `--cwd=<path>`. `ExitWorktree` is **never** called — `--cwd` implies `--keep`. Pre-Steps B/C still refer to this session. |
 | `--keep` | `ship_run({ …, keep: true })` — no branch or worktree teardown, only sentinel + lockout marker cleared. |
 | `--queued` | `ship_run({ …, queued: true })` — no hygiene; summary suffix `(Queue n/N)`; a blocked outcome is parked by the caller, not retried here. |
+| land a green Dependabot PR | `ship_run({ cwd, landPr: <n> })` — squash-merges it, no worktree/bump/changelog; `needs: "land-refused"` unless bot-authored, non-draft, mergeable, all checks green. `gh pr merge` stays guarded. |
 | `.claude/.ship-queue` marker, `--delegated`, `--card-data`, `--resume`, `--inline` | read `deep-knowledge/composed-ships.md` (§ Queue marker, § Run flags) before Pre-Step A. |
 
 ## Pre-steps — model-side, before `ship_run`
