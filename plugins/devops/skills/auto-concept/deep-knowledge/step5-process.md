@@ -27,7 +27,8 @@ deferred-tools list, load both once with `ToolSearch`
 `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`,
 then call them. Skip silently only when the tools are truly missing or fail.
 When the `post.concept.title` hook already handed over this rename (it
-fires on the first tool call after the submission landed, #930), the title
+fires on the first tool call after the submission landed, also after the
+waker's pickup, #930/#956), the title
 is already `⏳ ➜ 🧭 Concept ┃ ` and this step finds nothing to change.
 
 This round then MUST end with its completion card (`concept` field + `cwd`,
