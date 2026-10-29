@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   stripAnsi, parseFailingTests, isEnvCleanupFailure, classifyFailure, parseLockWait,
-  readLockHolder, busyPct, sampleCpu, buildLoad, buildPreRunWarning,
+  readLockHolder, busyPct, sampleCpu, buildLoad, buildPreRunWarning, createLockWatch,
 } from "./test-step.js";
 
 const ESC = String.fromCharCode(27);
@@ -150,5 +150,46 @@ describe("buildLoad", () => {
   test("busy CPU or a holder at start alone is enough", () => {
     expect(buildLoad({ cpu: { busyPct: 90, cores: 8 } }).note).toMatch(/CPU 90% busy/);
     expect(buildLoad({ holderAtStart: { pid: 3, cwd: null } }).holder).toEqual({ pid: 3, cwd: null });
+  });
+});
+
+describe("createLockWatch", () => {
+  const WAITING = "[suite-lock] another full test run is active (pid 7, C:/x) — waiting\n";
+  const clock = () => { const c = { t: 1000, now: () => c.t }; return c; };
+
+  test("measures an open wait live and the closed wait after `acquired`", () => {
+    const c = clock();
+    const w = createLockWatch(c.now);
+    expect(w.waitedMs()).toBe(0);
+    w.feed(WAITING);
+    c.t += 40_000;
+    expect(w.waiting()).toBe(true);
+    expect(w.waitedMs()).toBe(40_000);
+    c.t += 20_000;
+    w.feed("[suite-lock] acquired after 60 s\n");
+    c.t += 90_000;
+    expect(w.waiting()).toBe(false);
+    expect(w.waitedMs()).toBe(60_000);
+  });
+
+  test("a line split across chunks is still seen", () => {
+    const w = createLockWatch(clock().now);
+    w.feed(WAITING.slice(0, 30));
+    expect(w.waiting()).toBe(false);
+    w.feed(WAITING.slice(30));
+    expect(w.waiting()).toBe(true);
+  });
+
+  test("uses the reported wait when both lines arrive in one chunk", () => {
+    const w = createLockWatch(() => 5);
+    w.feed(`${WAITING}[suite-lock] acquired after 147 s\n`);
+    expect(w.waitedMs()).toBe(147_000);
+  });
+
+  test("a run that never waited stays at zero", () => {
+    const w = createLockWatch();
+    w.feed("RUN  v5.0.5\n");
+    expect(w.waitedMs()).toBe(0);
+    expect(w.waiting()).toBe(false);
   });
 });

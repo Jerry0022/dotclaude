@@ -14,6 +14,13 @@ describe("runChild", () => {
     expect(r).toMatchObject({ code: 3, stdout: "ABC", timedOut: false, error: null });
   });
 
+  test("onStderr sees stderr chunks while the child still runs", async () => {
+    const seen = [];
+    const r = await runChild(node, ["-e", "process.stderr.write('hello');setTimeout(()=>{},300)"], { onStderr: (b) => seen.push(String(b)) });
+    expect(seen.join("")).toBe("hello");
+    expect(r.stderr).toBe("hello");
+  });
+
   test("does not block the event loop while the child runs", async () => {
     let ticks = 0;
     const iv = setInterval(() => { ticks++; }, 20);

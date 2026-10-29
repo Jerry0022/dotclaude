@@ -202,7 +202,7 @@ export async function handler(params, injected = {}) {
     if (!parsed.success) throw new Error(`${name} params invalid: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
     const startedAt = deps.now();
     try {
-      const result = await fn(parsed.data);
+      const result = await fn(parsed.data, { progress: deps.progress });
       deps.recordTiming({ cwd, tool: name, startedAt, durationMs: deps.now() - startedAt, result });
       deps.checkpoint.record(name, parsed.data, result);
       out.stagesRun.push(name);
