@@ -349,10 +349,10 @@ describe("prompt.knowledge.dispatch — the payload stays under the harness limi
     expect(ctx.length).toBeLessThanOrEqual(DISPATCH_CONTEXT_CHARS);
     const title = req("./prompt.flow.title-work.js").instruction("A long working title for this session here", "de");
     const scopeCwd = emptyProject();
-    const scope = spawnSync(process.execPath, [path.resolve(import.meta.dirname, "prompt.plugin.scope.js")], {
+    const scope = JSON.parse(spawnSync(process.execPath, [path.resolve(import.meta.dirname, "prompt.plugin.scope.js")], {
       input: JSON.stringify({ session_id: "vitest-scope", prompt: "der devops plugin hook ist kaputt, skill fix", cwd: scopeCwd }),
       cwd: scopeCwd, encoding: "utf8",
-    }).stdout;
+    }).stdout).hookSpecificOutput.additionalContext;
     expect(scope.length).toBeGreaterThan(0);
     expect(ctx.length + String(title).length + scope.length + 4).toBeLessThanOrEqual(SAFE_CONTEXT_CHARS);
   });
