@@ -23,6 +23,8 @@ const path = require('path');
 const { STATUS, INTERRUPTED_PREFIX, stripPrefixes, classify } = require('./title-scheme');
 
 const IDLE_MS = 2 * 60_000;
+/** A live session idle this long with no open background work is treated as idle too (#964). */
+const LIVE_IDLE_MS = 60 * 60_000;
 const MAX_AGE_MS = 7 * 24 * 3_600_000;
 
 function mtime(p) {
@@ -40,6 +42,14 @@ function governorAlive(id, governorDir) {
   try {
     const s = JSON.parse(fs.readFileSync(path.join(governorDir, `${id}.json`), 'utf8'));
     return pidAlive(Number(s.claudePid));
+  } catch { return false; }
+}
+
+/** True when the transcript shows no open background work (dev servers do not count). Unknown → false. */
+function noOpenWork(transcript) {
+  try {
+    const { scanOpenTasksInFile } = require("./pending-tasks");
+    return scanOpenTasksInFile(transcript).length === 0;
   } catch { return false; }
 }
 
@@ -77,22 +87,26 @@ function findStaleTitles({
       const sidecar = path.join(root, slug.name, id.name, 'custom-title.json');
       const sm = mtime(sidecar);
       if (sm === null || now - sm > MAX_AGE_MS) continue;
-      const tm = mtime(path.join(root, slug.name, `${id.name}.jsonl`)) ?? sm;
+      const jsonl = path.join(root, slug.name, `${id.name}.jsonl`);
+      const tm = mtime(jsonl) ?? sm;
       const prev = newest.get(id.name);
-      if (!prev || sm > prev.sm) newest.set(id.name, { sidecar, sm, tm: Math.max(tm, prev ? prev.tm : 0) });
+      if (!prev || sm > prev.sm) newest.set(id.name, { sidecar, sm, jsonl, tm: Math.max(tm, prev ? prev.tm : 0) });
       else prev.tm = Math.max(prev.tm, tm);
     }
   }
   const out = [];
-  for (const [sessionId, { sidecar, tm }] of newest) {
+  for (const [sessionId, { sidecar, tm, jsonl }] of newest) {
     if (now - tm < idleMs || seen[sessionId] === tm) continue;
     let title;
     try { title = JSON.parse(fs.readFileSync(sidecar, 'utf8')).customTitle; } catch { continue; }
     const next = interruptedFor(title);
-    if (!next || governorAlive(sessionId, governorDir)) continue;
+    if (!next) continue;
+    // A live process normally keeps the title; only a long idle session whose
+    // transcript holds no open work (a dev server does not count) is handed on.
+    if (governorAlive(sessionId, governorDir) && (now - tm < LIVE_IDLE_MS || !noOpenWork(jsonl))) continue;
     out.push({ sessionId, title, next, mtimeMs: tm });
   }
   return out.sort((a, b) => b.mtimeMs - a.mtimeMs);
 }
 
-module.exports = { findStaleTitles, interruptedFor, IDLE_MS };
+module.exports = { findStaleTitles, interruptedFor, IDLE_MS, LIVE_IDLE_MS };

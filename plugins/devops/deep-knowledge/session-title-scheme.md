@@ -84,6 +84,17 @@ the exact old → new titles; Claude renames the ones `list_sessions` reports
 concept page included. Nothing runs before a session is started, and an
 interrupted session asks nothing by itself: it waits for the user's next prompt.
 
+**Dev servers are not pending work (#964).** A background command that never exits
+by design — `ng serve`, `npm start` / `npm run dev` / `npm run serve` (also pnpm,
+yarn, bun), `vite`, `next dev`, `python -m http.server`, and an `until …` loop
+waiting on a server's ready line — is matched by command pattern
+(`isDevServer` in `lib/pending-tasks.js`, next to the concept-bridge exception)
+and never counts as open work. A command that also builds, tests or lints stays
+work. So a card-less turn end whose only open background work is such a server
+drops the ⏳ like any idle end. On resume, `ss.title.sweep` also hands on a ⏳
+session whose governor pid is alive when its transcript has been idle ≥ 1 h with no
+open work (servers excluded); Claude's `isRunning:false` check still has the last word.
+
 **Legacy prefixes.** Titles in the wild may carry the bar-first order of
 v0.292–v0.296 (`<STATUS> ┃ <ACTIVITY> <Word> `, e.g. `👉 ┃ 📦 Ready `), the word-first order of
 v0.287–v0.291 (`<STATUS> ┃ <Word> <ACTIVITY> `, e.g. `👉 ┃ Ready 📦 `,

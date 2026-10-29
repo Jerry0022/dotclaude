@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  scanOpenTasks, scanOpenTasksInFile, openTaskNames, labelFor, withoutOwnShipAgent, isConceptInfra, responseTaskId, responseLaunch, taskEnds,
+  scanOpenTasks, scanOpenTasksInFile, openTaskNames, labelFor, withoutOwnShipAgent, isConceptInfra, isDevServer, responseTaskId, responseLaunch, taskEnds,
   AGENT_LAUNCH_MARKER, BASH_LAUNCH_MARKER, WORKFLOW_LAUNCH_MARKER,
 } from './pending-tasks.js';
 
@@ -976,6 +976,18 @@ describe('scanOpenTasks — concept bridge infrastructure is not work', () => {
   });
 });
 
+describe("scanOpenTasks — a dev server is not pending work (#964)", () => {
+  const bg = (id, taskId, input) => [toolUse(id, "Bash", input), toolResult(id, BASH_BG_TEXT.replace("b68oycrr6", taskId))];
+  test("ng serve and its ready-line wait open nothing; a real test task still does", () => {
+    const open = scanOpenTasks([
+      ...bg("toolu_a", "srv1", { command: "ng serve", description: "Start the dev server" }),
+      ...bg("toolu_b", "mon1", { command: "until grep -q Local: out.log; do sleep 2; done", description: "Wait for ready" }),
+      ...bg("toolu_c", "tst1", { command: "npm test", description: "Run tests" }),
+    ].join("\n"));
+    expect(open).toEqual([{ id: "tst1", kind: "task", name: "Run tests" }]);
+  });
+});
+
 describe('isConceptInfra', () => {
   test('matches the three bridge scripts and their role names', () => {
     expect(isConceptInfra({ command: 'python x/concept-server.py 8840 .' })).toBe(true);
@@ -1118,5 +1130,21 @@ describe('#807 — only live, model-started work counts, and it is always named'
     expect(withoutOwnShipAgent(['do-ship', 'Ship im Subagenten', 'x --delegated'], 'ship-successful')).toEqual([]);
     const keep = ['ship the fix', 'ship-watcher', 'Deploy and ship tests'];
     expect(withoutOwnShipAgent(keep, 'ship-successful')).toEqual(keep);
+  });
+});
+
+describe('isDevServer (#964)', () => {
+  test('matches dev servers and ready-line waits', () => {
+    for (const command of ['ng serve --port 4200', 'npm start', 'npm run dev', 'pnpm run serve', 'vite',
+      'npx next dev', 'python -m http.server 8000', 'until grep -q "Local:" out.log; do sleep 1; done']) {
+      expect(isDevServer({ command })).toBe(true);
+    }
+  });
+
+  test('keeps builds and tests as work', () => {
+    for (const command of ['npm test', 'npm run build', 'ng serve && npm test', 'npm start; npm run lint', '']) {
+      expect(isDevServer({ command })).toBe(false);
+    }
+    expect(isDevServer(undefined)).toBe(false);
   });
 });

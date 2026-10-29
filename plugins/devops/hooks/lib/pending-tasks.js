@@ -260,6 +260,31 @@ function isConceptInfra(input) {
   return text.some(t => CONCEPT_INFRA_RE.test(t));
 }
 
+/**
+ * Dev-server launches and ready-line waits: they never exit by design, so as
+ * background work they are not "pending" for the session title (#964).
+ */
+const DEV_SERVER_RE = new RegExp([
+  '\\bng\\s+serve\\b',
+  '\\b(?:npm|pnpm|yarn|bun)\\s+(?:run\\s+)?(?:start|dev|serve)\\b',
+  '\\bvite\\b',
+  '\\bnext\\s+dev\\b',
+  '\\bhttp\\.server\\b',
+  '\\buntil\\b[^\\n]*\\b(?:ready|listening|Local:|compiled successfully)',
+].join('|'), 'i');
+/** A command that also builds or tests is real work, whatever else it starts. */
+const REAL_WORK_RE = /\b(?:test|build|lint|tsc|vitest|jest|pytest|ship)\b/i;
+
+/**
+ * True when a Bash launch is a long-running dev server (or a wait on its ready
+ * line) rather than work that finishes.
+ * @param {object} input — the Bash tool_use input ({ command })
+ */
+function isDevServer(input) {
+  const cmd = String((input || {}).command || '');
+  return DEV_SERVER_RE.test(cmd) && !REAL_WORK_RE.test(cmd);
+}
+
 /** A ship subagent's launch label: "devops:do-ship", "ship" ... */
 const SHIP_AGENT_NAME_RE = /^(?:devops:)?do-ship$|^ship (?:im subagenten|in subagent)|--delegated/i;
 
@@ -595,7 +620,8 @@ function scanOpenTasks(transcriptContent) {
       if (taskId) {
         // Concept bridge plumbing (server / pulser / waker) runs for the whole
         // concept session and yields no result — it is never "still running work".
-        if (isConceptInfra(input)) continue;
+        // A dev server (or a wait on its ready line) never exits by design (#964).
+        if (isConceptInfra(input) || isDevServer(input)) continue;
         // A task starts and ends once, and its end can be written first: a
         // command that finishes just as the timeout moves it to the background
         // has its notification enqueued between the call and this result (27
@@ -777,6 +803,7 @@ module.exports = {
   responseTaskId,
   responseLaunch,
   isConceptInfra,
+  isDevServer,
   scanOpenTasks,
   scanOpenTasksInFile,
   openTaskNames,
