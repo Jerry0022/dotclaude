@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.330.0] — 2026-10-29
+
+### Added
+- auto-concept: Etappen (staged concepts) — `stages` in page.json, `init --stages`, `next-stage` action, panel stepper with kind glyphs, gate rules E1–E10
+- auto-concept: `data-ov-demo` zoom/loop for variants that differ only in a sub-element or animation; gate V8 (near-identical first screens) and P34 (alternatives differing only on sub-pages)
+- auto-concept: variant digits 1·2·3 in quick nav and ☰ menu; active chip click rotates through sub-pages
+
+### Changed
+- auto-concept: overview card always bottom-left (V7 warns on `data-design-overlay`); panel background follows the variant's design
+- auto-concept: full analysis round fits one screen — fixed back/next bar, full-width note with the attach button inside, one-line TOC, overview grids
+- auto-concept: design overview keeps the centred 16:10 card; full-app screens cover the card, narrow mocks stay whole
+
+### Fixed
+- auto-concept: star press no longer turns pages; a star on a non-focused chip opens that variant
+- auto-concept: own-note bubbles are filled like annotations and their editor is never clipped
+
 ## [0.329.3] — 2026-10-29
 
 ### Fixed
