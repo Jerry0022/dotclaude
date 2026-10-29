@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.knowledge.dispatch
- * @version 0.12.0
+ * @version 0.13.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description On-demand deep-knowledge injection based on prompt keywords.
@@ -38,7 +38,7 @@ const { isNonUserPrompt } = require('../lib/non-user-prompt');
 const { readBudget, maybeRefreshUsage, nudgeSuffix, budgetLine } = require('../lib/budget');
 const { readDelegation } = require('../lib/delegation');
 const { matchPointers, legacyOverrides, pointerLine } = require('../lib/knowledge-pointers');
-const { SAFE_CONTEXT_CHARS } = require('../lib/context-cap');
+const { DISPATCH_CONTEXT_CHARS } = require('../lib/context-cap');
 const { runOnce } = require('../lib/run-once');
 const features = require('../lib/features');
 
@@ -418,6 +418,8 @@ process.stdin.on('end', () => {
   // does not fit whole goes in as its head, cut at a section or paragraph
   // boundary, with the path of the full file; with no room left for a useful
   // head it becomes a one-line pointer to that path.
+  // The budget is DISPATCH_CONTEXT_CHARS, not the whole limit: the sibling
+  // hooks share the same merged payload (#959, lib/context-cap).
   const sections = [];
   let totalBytes = 0;
   const docPath = (file) => path.join(dkDir, file).replace(/\\/g, '/');
@@ -431,12 +433,12 @@ process.stdin.on('end', () => {
     const whole = `${title}\n${doc.content}`;
     const entryBytes = Buffer.byteLength(doc.content, 'utf8');
     const underCap = sections.length === 0 || totalBytes + entryBytes <= MAX_INJECT_BYTES;
-    if (underCap && sizeWith([whole]) + reserve(i) <= SAFE_CONTEXT_CHARS) {
+    if (underCap && sizeWith([whole]) + reserve(i) <= DISPATCH_CONTEXT_CHARS) {
       sections.push(whole);
       totalBytes += entryBytes;
     } else {
       const tail = `[… ${doc.file} continues — read the full file before acting on its topic: ${docPath(doc.file)}]`;
-      const room = SAFE_CONTEXT_CHARS - reserve(i) - sizeWith([`${title}\n\n${tail}`]);
+      const room = DISPATCH_CONTEXT_CHARS - reserve(i) - sizeWith([`${title}\n\n${tail}`]);
       const head = headOf(doc.content, Math.min(room, sections.length === 0 ? Infinity : MAX_INJECT_BYTES - totalBytes));
       if (head.length >= MIN_USEFUL_HEAD) {
         sections.push(`${title}\n${head}\n${tail}`);

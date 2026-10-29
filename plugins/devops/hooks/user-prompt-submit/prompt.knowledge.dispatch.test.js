@@ -337,6 +337,26 @@ describe("prompt.knowledge.dispatch — the payload stays under the harness limi
     expect(ctx).toMatch(/\[… ui-defaults\.md continues — read the full file before acting on its topic: /);
   });
 
+  // #959: the dispatcher merges every UserPromptSubmit context into one
+  // payload. With the two largest docs, the dispatch plus the first-prompt
+  // siblings (title-work instruction, scope-routing note) must still fit, or
+  // the harness persists the sum and the title instruction is lost.
+  test("dispatch + title-work + scope note together stay under the harness limit", () => {
+    const req = createRequire(import.meta.url);
+    const { DISPATCH_CONTEXT_CHARS } = req("../lib/context-cap.js");
+    const ctx = run("git hygiene für den codex review — branch aufräumen und codex gate prüfen");
+    expect(ctx).toMatch(/git-hygiene\.md|codex-integration\.md/);
+    expect(ctx.length).toBeLessThanOrEqual(DISPATCH_CONTEXT_CHARS);
+    const title = req("./prompt.flow.title-work.js").instruction("A long working title for this session here", "de");
+    const scopeCwd = emptyProject();
+    const scope = spawnSync(process.execPath, [path.resolve(import.meta.dirname, "prompt.plugin.scope.js")], {
+      input: JSON.stringify({ session_id: "vitest-scope", prompt: "der devops plugin hook ist kaputt, skill fix", cwd: scopeCwd }),
+      cwd: scopeCwd, encoding: "utf8",
+    }).stdout;
+    expect(scope.length).toBeGreaterThan(0);
+    expect(ctx.length + String(title).length + scope.length + 4).toBeLessThanOrEqual(SAFE_CONTEXT_CHARS);
+  });
+
   test("a small doc still goes in whole, with no pointer", () => {
     const body = "# Tool Selection\n\nUse the Grep tool.\n";
     const ctx = run("which tool selection rule applies on windows tools?", { root: fakeRoot({ "tool-selection.md": body }) });

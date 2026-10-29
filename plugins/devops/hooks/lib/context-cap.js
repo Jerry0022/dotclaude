@@ -1,6 +1,6 @@
 /**
  * @module context-cap
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description The size a hook's additionalContext may have before Claude
  *   Code stops showing it.
@@ -26,9 +26,22 @@ const HARNESS_CONTEXT_LIMIT = 10000;
 /** What a hook may send, with room for the harness' own wrapper text. */
 const SAFE_CONTEXT_CHARS = 9500;
 
+/**
+ * Room the knowledge dispatch leaves for its sibling UserPromptSubmit hooks
+ * (#959). The dispatcher merges every hook's additionalContext into ONE
+ * payload, and the harness limit applies to that sum: on a first work prompt
+ * the title-work instruction (~2.2 KB) and the scope-routing note (~1 KB) ride along,
+ * so a dispatch that used the whole 9 500 pushed the total to 11.4 KB — the
+ * harness persisted it, and the title instruction sank into a file preview.
+ */
+const SIBLING_CONTEXT_RESERVE = 3500;
+
+/** What the knowledge dispatch itself may send. */
+const DISPATCH_CONTEXT_CHARS = SAFE_CONTEXT_CHARS - SIBLING_CONTEXT_RESERVE;
+
 /** @param {string} text */
 function fits(text, limit = SAFE_CONTEXT_CHARS) {
   return String(text).length <= limit;
 }
 
-module.exports = { HARNESS_CONTEXT_LIMIT, SAFE_CONTEXT_CHARS, fits };
+module.exports = { HARNESS_CONTEXT_LIMIT, SAFE_CONTEXT_CHARS, SIBLING_CONTEXT_RESERVE, DISPATCH_CONTEXT_CHARS, fits };
