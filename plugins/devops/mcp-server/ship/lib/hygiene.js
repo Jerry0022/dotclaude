@@ -1525,7 +1525,18 @@ export function cardLines(result, lang = "de") {
       text: `${plural(rs.length, "remote branch", "remote branches")} with no PR and no local copy, last commit older than ${REMOTE_STALE_DAYS} days: ${names} — review and delete?`,
       reply: `Review the remote branches without a PR: ${rs.map((x) => x.name).join(", ")}.`,
     }] : [];
-  if (stale.length || decisions.length || remoteItems.length) out.openItems = [...stale, ...decisions, ...remoteItems];
+  const st = result.stranded || [];
+  const sn = st.slice(0, 3).map((x) => `${x.branch}${x.path ? ` (${x.path})` : ""}`).join(", ") + (st.length > 3 ? ` +${st.length - 3}` : "");
+  const strandedItems = st.length ? [de
+    ? {
+      text: `Gepushter Branch ohne PR, Inhalt nicht in main: ${sn} — PR öffnen?`,
+      reply: `Öffne einen PR für ${st.slice(0, 3).map((x) => x.branch).join(", ")}.`,
+    }
+    : {
+      text: `Pushed branch without a PR, content not in main: ${sn} — open a PR?`,
+      reply: `Open a PR for ${st.slice(0, 3).map((x) => x.branch).join(", ")}.`,
+    }] : [];
+  if (stale.length || decisions.length || remoteItems.length || strandedItems.length) out.openItems = [...stale, ...decisions, ...strandedItems, ...remoteItems];
   const risk = result.atRisk || [];
   if (risk.length) {
     const shown = risk.slice(0, 3).map((x) => {
@@ -1695,6 +1706,9 @@ export function runHygiene(p) {
     state.repos[key] = repo;
     writeState(statePath, state);
   }
+  // pushed, content not in main, no open PR: the fix nobody opened a PR for (#951), with its worktree path
+  result.stranded = (result.atRisk || []).filter((x) => x.pushed === true && x.branch && x.state !== "landed")
+    .map((x) => ({ branch: x.branch, path: x.path || null, head: x.head, commits: x.commits }));
   result.card = cardLines(result, lang);
   return result;
 }

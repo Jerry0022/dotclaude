@@ -148,3 +148,20 @@ describe("stale remote-only branches", () => {
     expect(res.remoteStale.map((x) => x.name)).toEqual(["mid"]);
   });
 });
+
+describe("pushed branch without a PR (#951)", () => {
+  test("listed as stranded with a card item; an unpushed or PR'd one is not", () => {
+    const { dir, tips } = setup([{ name: "fix-pushed", ageDays: 2 }, { name: "fix-with-pr", ageDays: 2 }]);
+    git(dir, "branch", "-q", "fix-pushed", tips["fix-pushed"]);
+    git(dir, "branch", "-q", "fix-with-pr", tips["fix-with-pr"]);
+    git(dir, "checkout", "-q", "-b", "fix-local", "main");
+    commit(dir, "local.txt", "l\n", when(2));
+    git(dir, "checkout", "-q", "main");
+    const res = run(dir, {
+      fetchMerged: mergedOf(tips, []),
+      fetchOpen: () => ({ names: new Set(["fix-with-pr"]), shas: new Set() }),
+    });
+    expect(res.stranded.map((x) => x.branch)).toEqual(["fix-pushed"]);
+    expect(res.card.openItems.some((i) => i.text.includes("fix-pushed") && i.text.includes("PR"))).toBe(true);
+  });
+});

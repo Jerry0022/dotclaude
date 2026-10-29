@@ -233,6 +233,12 @@ log); offline gh deletes nothing. Remote-only branches without any PR and
 quiet for `cleanup.remoteStaleDays` (14) days are listed on the card as an open
 item — never deleted without the user's answer.
 
+**Stranded branches (#951).** `ship_hygiene` also lists pushed branches whose
+content is not in main and that have no open PR (`stranded`, with the worktree
+path) as a card open item "PR öffnen?". `ship_preflight` warns when the
+worktree left such a branch behind; the session-archive guard warns (never
+blocks) when archiving would strand one.
+
 **Off the critical path.** After a ship the call returns in seconds: it scans,
 decides the nudge and the stale-PR lines, and hands the removal (plus size
 measurement) to a detached, low-priority worker (`ship/hygiene-worker.js`).

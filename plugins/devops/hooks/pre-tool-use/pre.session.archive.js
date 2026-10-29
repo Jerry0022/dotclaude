@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.session.archive
- * @version 0.3.1
+ * @version 0.3.2
  * @event PreToolUse
  * @plugin devops
  * @description Only the post-ship hand-over archives this session (#632).
@@ -94,7 +94,14 @@ process.stdin.on('end', () => {
     );
     process.exit(2);
   }
-  if (gate.isReleased(hook.session_id) || intent === 'ask') process.exit(0);
+  if (gate.isReleased(hook.session_id) || intent === 'ask') {
+    // allowed - but say so when the archive strands pushed work without a PR (#951); never blocks
+    try {
+      const text = gate.strandedWarning(hook.cwd);
+      if (text) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: text } }));
+    } catch { /* advisory only */ }
+    process.exit(0);
+  }
   process.stderr.write(
     '[devops] archive_session on this session is not released: only a merged ship card ' +
     '(its hook hands the call over) or the user\'s own request archives it. Do not retry; ' +

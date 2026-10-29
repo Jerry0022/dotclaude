@@ -254,6 +254,21 @@ trigger `promote`. Remote-only branches without any PR (no local copy, last
 commit older than `cleanup.remoteStaleDays`, default 14) are only LISTED as a
 card item; the owner decides.
 
+**Stranded branches (#951).** A pushed branch whose content is not in the
+default branch (content check, `scripts/lib/content-landed.js` - `git cherry`
+cannot see a squash merge) and that has no open PR is a stranded fix: its
+session ended, or its worktree moved on to another branch. Three places say so,
+all through `scripts/lib/stranded-branch.js`, all silent when gh is unavailable:
+(a) `ship_hygiene` lists them (`stranded`, with the worktree path, as a card
+open item); (b) the session-archive guard WARNS when the archive goes ahead
+(additional context on the allow path - it never blocks and never changes an
+allow/deny); (c) `ship_preflight` warns when the branch it ships was reached
+after leaving a stranded one in the same worktree (HEAD reflog "moving from A
+to B", at most 3 branches). (c) lives in preflight, not in wip-watch: preflight
+already runs per ship with the worktree and a gh-tolerant warnings list, while
+wip-watch is a debounced crash net for uncommitted work and would need its own
+gh polling.
+
 **Landed proof by PR chain, expiry, temp worktrees.** A branch whose tip is an
 ancestor of a merged PR's head counts as landed when that head still holds all
 its changes (an integration branch collecting sub-agent branches); commits on

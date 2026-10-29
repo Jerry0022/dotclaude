@@ -26,6 +26,7 @@ import { createRequire } from "node:module";
 
 // Same reading of `validation` as ship_release, the completion card and stop.flow.guard.
 const { classify } = createRequire(import.meta.url)("../../../hooks/lib/validation-gaps.js");
+const { leftBehindBranches } = createRequire(import.meta.url)("../../../scripts/lib/stranded-branch.js");
 
 export const schema = z.object({
   base: z.string().optional().describe("Base branch to ship into. Omit to auto-detect: parent branch (from sub-branch naming) or the repository's default branch (origin/HEAD, typically 'main' or 'master')."),
@@ -620,6 +621,16 @@ export async function handler(params) {
     if (gaps.length) {
       warnings.push(`${gaps.length} requirement(s) are still your own work (${gaps.map(g => g.requirement).join("; ")}) - close them BEFORE ship_build; ship_release will refuse the merge otherwise.`);
     }
+  }
+
+  // #951: a pushed branch this worktree left behind (switched away from, or shipped past)
+  // that has content missing from the base and no open PR. Silent when gh is unavailable.
+  if (!noRemote && branch) {
+    try {
+      for (const s of leftBehindBranches(cwd, branch)) {
+        warnings.push(`Branch ${s.branch} (${s.commits} commit${s.commits === 1 ? "" : "s"}) was left behind in this worktree: pushed, content not in ${base}, no open PR - open a PR for it or discard it on purpose.`);
+      }
+    } catch { /* advisory only */ }
   }
 
   const ready = errors.length === 0;

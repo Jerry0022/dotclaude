@@ -16,6 +16,9 @@
  *   - pre.session.archive denies archive_session on this session unless the
  *     hand-over released it (or the user's own prompt asked for an archive).
  *   - prompt.flow.silent-turn drops every archive flag on a new user prompt.
+ *   - strandedWarning: an archive that goes ahead still WARNS when the
+ *     session's branch (or one its work tree just left) is pushed, has
+ *     content missing from main and no open PR (#951). Never blocks.
  *
  *   Fail closed throughout: an unreadable flag, tree or path never archives.
  */
@@ -25,6 +28,7 @@ const path = require('path');
 const { sessionFile, writeSessionFile } = require('./session-id');
 const { findRepoRoot, samePath } = require('./project-root');
 const { gitRun } = require('./git-timeout');
+const { strandedBranch, leftBehindBranches } = require('../../scripts/lib/stranded-branch');
 
 /** Written by the completion MCP (keyed by the model-supplied id), adopted onto the real id. */
 const FLAG = 'dotclaude-devops-card-archive';
@@ -146,6 +150,35 @@ function autosaveRunning(sessionId) {
   try { return require('./session-autosave-worker').isRunning(sessionId); } catch { return false; }
 }
 
+/**
+ * The warning for an archive that is about to go ahead: the branch the
+ * session works on - and the ones its work tree recently left behind - when
+ * pushed, not in the default branch by content, and without an open PR.
+ * null when there is nothing to say or anything cannot be told (no gh,
+ * offline, no origin, detached HEAD): advisory, silent on doubt.
+ * @param {string} cwd
+ * @param {{prs?:Function}} [opts]  injectable gh lookup for tests
+ * @returns {string|null}
+ */
+function strandedWarning(cwd, opts = {}) {
+  try {
+    if (!cwd || !fs.statSync(cwd).isDirectory()) return null;
+    const branch = gitRun(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']).trim();
+    const found = [];
+    if (branch && branch !== 'HEAD') {
+      const own = strandedBranch(cwd, branch, opts);
+      if (own) found.push(own);
+    }
+    found.push(...leftBehindBranches(cwd, branch, opts));
+    if (!found.length) return null;
+    const list = found.map((s) => `${s.branch} (${s.commits} commit${s.commits === 1 ? '' : 's'})`).join(', ');
+    return `[devops] Archiving this session leaves pushed work without a PR: ${list} - content not in the default branch, no open PR ` +
+      `(work tree: ${path.resolve(cwd)}). Open a PR for it (or park/discard it on purpose) - the archive itself is not blocked.`;
+  } catch {
+    return null;
+  }
+}
+
 function targetsSelf(toolInput, sessionId) {
   const id = toolInput && toolInput.session_id;
   return id === undefined || id === null || id === '' || id === 'self' || id === sessionId;
@@ -168,4 +201,5 @@ module.exports = {
   consumeReleased,
   targetsSelf,
   autosaveRunning,
+  strandedWarning,
 };
