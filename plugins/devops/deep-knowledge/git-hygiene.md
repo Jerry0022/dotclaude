@@ -215,7 +215,18 @@ kept — and, since the at-risk definition was widened, reported.
 `landed` (ancestor of the default branch, head of a merged PR, a trial
 `merge-tree` that changes nothing, or every touched file's patch reverse-applies
 to the base), `partial` (some files' changes are in the base, others are not —
-a squash merge plus later edits) or `unlanded`. `partial` is never removable.
+a squash merge plus later edits) or `unlanded`.
+
+**Partial branches by content (#953).** A `partial` branch is removable when at
+least 95 % of the lines it added (blank lines ignored) are present in the base's
+versions of those files (`residualOf`) — no open PR, no live session, a clean
+worktree. Its tip is first tagged `archive/<YYYY-MM-DD>/<branch>` (pushed when
+the branch was pushed; a failed tag or tag push keeps the branch), then the
+branch goes. Below 95 % it is NEVER deleted automatically: the residual is
+classified by content — `outdated` (the base changed or dropped the file since
+the fork point) or `new` (unique work the base never touched) — and the card
+lists it as a decision item: merge, re-implement, or delete after confirmation.
+Age alone never decides.
 
 **At risk** = not landed (`unlanded` or `partial`) AND no open PR AND no live
 session AND not parked; plus any worktree (session or agent) with real
@@ -232,6 +243,31 @@ contains `ARCHIVED`. The register is derived from refs
 commit's subject and date. A parked entry older than 30 days gets the nudge
 "behalten, integrieren oder verwerfen" in the orphan report. Stashes are
 listed per repo in the same report.
+
+**Remote branches (#954).** The auto-clean also reads origin: a remote branch
+whose tip equals the head of a MERGED PR of that name into the default branch
+(claude.ai web sessions merge without `--delete-branch`) is deleted with
+`push --delete --force-with-lease=<name>:<sha>` (log trigger `merged-pr`) —
+never the default branch, never with an open PR, never one checked out in a
+worktree, nothing when gh is offline or the open-PR lookup failed, nothing on
+trigger `promote`. Remote-only branches without any PR (no local copy, last
+commit older than `cleanup.remoteStaleDays`, default 14) are only LISTED as a
+card item; the owner decides.
+
+**Stranded branches (#951).** A pushed branch whose content is not in the
+default branch (content check, `scripts/lib/content-landed.js` - `git cherry`
+cannot see a squash merge) and that has no open PR is a stranded fix: its
+session ended, or its worktree moved on to another branch. Three places say so,
+all through `scripts/lib/stranded-branch.js`, all silent when gh is unavailable:
+(a) `ship_hygiene` lists them (`stranded`, with the worktree path, as a card
+open item); (b) the session-archive guard WARNS when the archive goes ahead
+(additional context on the allow path - it never blocks and never changes an
+allow/deny); (c) `ship_preflight` warns when the branch it ships was reached
+after leaving a stranded one in the same worktree (HEAD reflog "moving from A
+to B", at most 3 branches). (c) lives in preflight, not in wip-watch: preflight
+already runs per ship with the worktree and a gh-tolerant warnings list, while
+wip-watch is a debounced crash net for uncommitted work and would need its own
+gh polling.
 
 **Landed proof by PR chain, expiry, temp worktrees.** A branch whose tip is an
 ancestor of a merged PR's head counts as landed when that head still holds all

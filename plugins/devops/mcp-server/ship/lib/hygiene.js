@@ -390,6 +390,9 @@ export function fetchMergedHeads(cwd, defaultBranch) {
   const list = all.filter((pr) => pr && pr.state === "MERGED");
   const bySha = new Set();
   const byName = new Map();
+  // every head name of any state/base: a remote branch with none has no PR at all
+  // (null on a truncated list - it may hide one)
+  const anyNames = all.length >= PR_LIST_LIMIT ? null : new Set(all.map((pr) => pr && pr.headRefName).filter(Boolean));
   for (const pr of list) {
     if (!pr || pr.baseRefName !== defaultBranch || !pr.headRefOid) continue;
     bySha.add(pr.headRefOid);
@@ -398,7 +401,7 @@ export function fetchMergedHeads(cwd, defaultBranch) {
       byName.get(pr.headRefName).push(pr.headRefOid);
     }
   }
-  return { bySha, byName };
+  return { bySha, byName, anyNames };
 }
 
 /**
@@ -493,6 +496,109 @@ export function landingState(sha, branch, ctx) {
   if (f.filesTotal > 0 && f.filesIn === f.filesTotal) return done({ state: "landed", via: "tree", ...f });
   if (f.filesIn > 0) return done({ state: "partial", via: null, ...f });
   return done({ state: "unlanded", via: null, ...f });
+}
+
+/**
+ * A `partial` branch (a squash merge plus later edits) is removable when at
+ * least this share of the lines it added is present in the base's versions of
+ * those files (#953) - it is tagged `archive/<date>/<branch>` first.
+ */
+export const RESIDUAL_REMOVABLE = 0.95;
+
+/**
+ * What of a branch's own change is still missing from the base, by content:
+ * the share of its added lines (blank lines ignored) that exist in the base's
+ * version of the same file, and for the missing rest whether it is OUTDATED
+ * (the base changed or dropped that file since the fork point - the branch
+ * edits code main has moved on from) or NEW (the base never touched the file -
+ * unique work to merge or re-implement). null when it cannot be told (git
+ * error, too many files, huge diff): callers then keep the branch.
+ * Memoized per `ctx`.
+ * @returns {{ratio:number, added:number, present:number, kind:"none"|"outdated"|"new", newFiles:string[], outdatedFiles:string[]}|null}
+ */
+export function residualOf(sha, ctx) {
+  const cache = ctx.residuals || (ctx.residuals = new Map());
+  if (cache.has(sha)) return cache.get(sha);
+  const res = computeResidual(sha, ctx);
+  cache.set(sha, res);
+  return res;
+}
+
+/** Not trivial: at least 4 chars and a letter or digit (`}`, `});`, `else {`, `return;` say nothing about content). */
+function isMeaningfulLine(l) {
+  return l.length >= 4 && /[\p{L}\p{N}]/u.test(l) && !/^(?:else\s*\{?|return;?|break;?|continue;?)$/.test(l);
+}
+
+function computeResidual(sha, ctx) {
+  const lit = "--literal-pathspecs";
+  const mb = gitOut(["merge-base", sha, ctx.baseRef], ctx.cwd);
+  if (!mb) return null;
+  const names = gitOut(["diff", "--no-renames", "--name-only", "-z", mb, sha], ctx.cwd);
+  if (names === null) return null;
+  const files = names.split("\0").filter(Boolean);
+  if (files.length === 0 || files.length > TREE_CHECK_MAX_FILES) return null;
+  let added = 0;
+  let present = 0;
+  let vetoed = false;
+  const newFiles = [];
+  const outdatedFiles = [];
+  for (const f of files) {
+    const patch = gitOut([lit, "diff", "--no-renames", "-U0", "--no-color", mb, sha, "--", f], ctx.cwd);
+    if (patch === null) return null;
+    let lines;
+    let inBase;
+    let veto = false;
+    if (/^Binary files /m.test(patch)) {
+      const a = gitOut(["rev-parse", "-q", "--verify", `${sha}:${f}`], ctx.cwd);
+      const b = gitOut(["rev-parse", "-q", "--verify", `${ctx.baseRef}:${f}`], ctx.cwd);
+      lines = a ? ["<binary>"] : [];
+      inBase = (l) => Boolean(a) && a === b && l === "<binary>";
+      veto = !a && Boolean(b); // the branch deleted a binary main still has
+    } else {
+      // only what follows the first hunk header is content ("+++ b/x" above it is not)
+      const body = patch.split("\n");
+      const first = body.findIndex((l) => l.startsWith("@@"));
+      const hunk = first < 0 ? [] : body.slice(first);
+      lines = hunk.filter((l) => l.startsWith("+")).map((l) => l.slice(1).trim()).filter(isMeaningfulLine);
+      const removed = hunk.filter((l) => l.startsWith("-")).map((l) => l.slice(1).trim()).filter(isMeaningfulLine);
+      const text = lines.length || removed.length ? gitOut(["show", `${ctx.baseRef}:${f}`], ctx.cwd) : null;
+      const set = text === null ? null : new Set(text.split("\n").map((l) => l.trim()));
+      inBase = (l) => Boolean(set) && set.has(l);
+      // a line (or whole file) the branch removed that main still has is unique work
+      veto = removed.some(inBase);
+    }
+    const hit = lines.filter(inBase).length;
+    added += lines.length;
+    present += hit;
+    if (veto) vetoed = true;
+    if (hit < lines.length || veto) {
+      // did the base change (or drop) this file since the fork point?
+      (gitOk([lit, "diff", "--quiet", mb, ctx.baseRef, "--", f], ctx.cwd) ? newFiles : outdatedFiles).push(f);
+    }
+  }
+  const kind = newFiles.length ? "new" : (outdatedFiles.length ? "outdated" : "none");
+  // nothing comparable (no meaningful added line): not provably in the base - unique work
+  if (added === 0) return { ratio: 0, added, present, vetoed, kind: "new", newFiles: files, outdatedFiles };
+  return { ratio: present / added, added, present, vetoed, kind, newFiles, outdatedFiles };
+}
+
+/**
+ * Landed, or partial with >= RESIDUAL_REMOVABLE of its added lines in the
+ * base, no open PR (a lookup that failed = unknown = keep) and a branch to tag.
+ */
+function landedEnough(unit, ctx) {
+  const l = landingState(unit.head, unit.branch, ctx);
+  if (l.state === "landed") return true;
+  if (l.state !== "partial" || !unit.branch || unit.detached || !ctx.open) return false;
+  if (ctx.open.names.has(unit.branch) || ctx.open.shas.has(unit.head)) return false;
+  const r = residualOf(unit.head, ctx);
+  return Boolean(r) && !r.vetoed && r.added > 0 && r.ratio >= RESIDUAL_REMOVABLE;
+}
+
+/** The residual verdict an at-risk item carries onto the card (decision item, #953). */
+function residualFields(sha, ctx) {
+  const r = residualOf(sha, ctx);
+  return r ? { residual: { ratio: Math.round(r.ratio * 1000) / 1000, kind: r.kind, files: [...r.newFiles, ...r.outdatedFiles].slice(0, 5) } } : {};
 }
 
 /** An ignored porcelain path that is regenerable build output. */
@@ -696,7 +802,7 @@ function keepReason(unit, ctx) {
   if (unit.kind === "worktree" && unit.temp && !unit.session) {
     const held = tempHeldReason(unit, ctx.now);
     if (held) return held;
-    if (!unit.detached && landingState(unit.head, unit.branch, ctx).state !== "landed") return "not-landed";
+    if (!unit.detached && !landedEnough(unit, ctx)) return "not-landed";
     return worktreeContentReason(unit.path, ctx.mainPath) || null;
   }
   if (unit.kind === "worktree") {
@@ -708,7 +814,7 @@ function keepReason(unit, ctx) {
     const why = worktreeContentReason(unit.path, ctx.mainPath);
     if (why) return why;
   }
-  return landingState(unit.head, unit.branch, ctx).state === "landed" ? null : "not-landed";
+  return landedEnough(unit, ctx) ? null : "not-landed";
 }
 
 /** A non-session linked worktree whose work landed and that holds nothing: no lock, live session, nested checkout or changes. */
@@ -781,6 +887,8 @@ export function openHeadsFromList(all) {
   return {
     names: new Set(list.map((p) => p.headRefName).filter(Boolean)),
     shas: new Set(list.map((p) => p.headRefOid).filter(Boolean)),
+    // a branch an open (stacked) PR targets: deleting it would close that PR
+    bases: new Set(list.map((p) => p.baseRefName).filter(Boolean)),
   };
 }
 
@@ -835,10 +943,11 @@ export function classifyUnits(scan, io) {
   const merged = fetchMerged(io.cwd, scan.defaultBranch);
   // injected merged heads (tests) mean no network: open PRs stay unknown too
   const fetchOpen = io.fetchOpen || (io.fetchMerged ? () => null : fetchOpenHeads);
-  const open = scan.units.length ? fetchOpen(io.cwd) : null;
+  const open = fetchOpen(io.cwd);
   const ctx = {
     cwd: io.cwd, baseRef, merged, viaMerged: reachableFromMerged(io.cwd, merged, baseRef),
     projectsDir: io.projectsDir, mainPath: scan.main || null, paths: scan.paths, current: scan.current, now: io.now ?? Date.now(),
+    open,
   };
   const removable = [];
   const keep = [];
@@ -858,7 +967,8 @@ export function classifyUnits(scan, io) {
       landedOutside.push(u);
       continue;
     }
-    if (!reason) removable.push(u);
+    // a partial one that is removable at all is the >= 95 % case: tagged before it goes (#953)
+    if (!reason) removable.push(landingState(u.head, u.branch, ctx).state === "partial" ? { ...u, archive: true } : u);
     else keep.push({ ...u, reason });
 
     const live = u.kind === "worktree"
@@ -867,7 +977,7 @@ export function classifyUnits(scan, io) {
     const dirty = u.kind === "worktree" ? uncommittedCount(u.path) : 0;
     const openPr = Boolean(open && ((u.branch && open.names.has(u.branch)) || open.shas.has(u.head)));
     const landing = landingState(u.head, u.branch, ctx);
-    const unlanded = landing.state !== "landed" && merged !== null && !openPr;
+    const unlanded = landing.state !== "landed" && merged !== null && !openPr && !(!reason && landing.state === "partial");
     const subject = unlanded ? gitOut(["log", "-1", "--format=%s", u.head], io.cwd) || "" : "";
     // parked by name, or the same work is kept on a parked ref (local or origin/ —
     // salvage copies live remote-only) whose history contains this tip
@@ -881,6 +991,7 @@ export function classifyUnits(scan, io) {
         commits: ownCommits(u.head, ctx),
         state: landing.state, filesIn: landing.filesIn, filesTotal: landing.filesTotal,
         pushed: isPushed(u, io.cwd), dirty,
+        ...(landing.state === "partial" ? residualFields(u.head, ctx) : {}),
       });
     }
   }
@@ -910,10 +1021,11 @@ export function planAutoClean(scan, settings, io) {
   const keepNewest = settings.autoCleanKeepNewest ?? 0;
   const maxBytes = (settings.autoCleanMaxGB ?? 0) * GB;
   const expiryDays = settings.backupExpiryDays ?? BACKUP_EXPIRY_DAYS;
-  if (scan.units.length === 0 && !hasBackupRefs(io.cwd)) {
-    return { gateOpen: false, reason: "no leftovers", remove: [], keep: [], atRisk: [], remoteExpire: [], offline: false, keptBytes: null };
+  if (scan.units.length === 0 && !hasBackupRefs(io.cwd) && !hasRemoteBranches(io.cwd, scan.defaultBranch)) {
+    return { gateOpen: false, reason: "no leftovers", remove: [], keep: [], atRisk: [], remoteExpire: [], remoteMerged: [], remoteStale: [], offline: false, keptBytes: null };
   }
-  const { ctx, removable, keep: kept, atRisk, merged } = classifyUnits(scan, io);
+  const { ctx, removable, keep: kept, atRisk, merged, open } = classifyUnits(scan, io);
+  const remote = remoteBranchPlan(ctx, open, scan.defaultBranch, settings.remoteStaleDays ?? REMOTE_STALE_DAYS, io.now ?? Date.now());
   const keep = kept.filter((k) => k.ageDays > minAge);
   const remoteExpire = merged === null ? [] : expiredBackupRefs(ctx, removable, expiryDays, io.now ?? Date.now());
 
@@ -964,12 +1076,14 @@ export function planAutoClean(scan, settings, io) {
       : `${(keptBytes / GB).toFixed(1)} of at most ${settings.autoCleanMaxGB} GB`);
   }
   return {
-    gateOpen: remove.length > 0 || remoteExpire.length > 0,
-    reason: remove.length > 0 || remoteExpire.length > 0 ? null : `nothing to remove: ${rules.join(", ")}`,
+    gateOpen: remove.length > 0 || remoteExpire.length > 0 || remote.merged.length > 0,
+    reason: remove.length > 0 || remoteExpire.length > 0 || remote.merged.length > 0 ? null : `nothing to remove: ${rules.join(", ")}`,
     remove,
     keep,
     atRisk,
     remoteExpire,
+    remoteMerged: remote.merged,
+    remoteStale: remote.stale,
     offline: merged === null,
     keptBytes,
   };
@@ -1005,6 +1119,77 @@ export function expiredBackupRefs(ctx, removable, days, now = Date.now()) {
   return res;
 }
 
+/**
+ * Tag the tip of a branch that goes although a residual of it is not in the
+ * base (#953): `archive/<YYYY-MM-DD>/<branch>`, pushed when `push` and the
+ * branch was pushed. Returns the tag, or a skip reason `{why}` - the branch
+ * then stays, nothing is lost.
+ * @returns {{tag:string}|{why:string}}
+ */
+function archiveTip(u, cwd, date, push) {
+  let tag = `archive/${date}/${u.branch}`;
+  const have = gitOut(["rev-parse", "--verify", "-q", `refs/tags/${tag}`], cwd);
+  if (have !== null && have !== u.head) tag += `-${u.head.slice(0, 7)}`;
+  if (gitOut(["rev-parse", "--verify", "-q", `refs/tags/${tag}`], cwd) === null && !gitOk(["tag", tag, u.head], cwd)) return { why: "archive-tag-failed" };
+  // the tag must really hold the tip before anything is deleted
+  if (gitOut(["rev-parse", "--verify", "-q", `refs/tags/${tag}^{commit}`], cwd) !== u.head) return { why: "archive-tag-failed" };
+  if (push && isPushed(u, cwd) && !gitOk(["push", "origin", `refs/tags/${tag}`], cwd, NETWORK_TIMEOUT)) return { why: "archive-push-failed" };
+  return { tag };
+}
+
+/** Remote-only branches without any PR are listed once their last commit is older than this many days (#954). */
+export const REMOTE_STALE_DAYS = 14;
+
+/** Is `name` (an origin branch) a default branch, protected name or safety-copy ref? */
+function isSpecialRemote(name, defaultBranch) {
+  if (name === "HEAD" || name === defaultBranch || NEVER_DELETE.has(name)) return true;
+  const ref = `refs/remotes/origin/${name}`;
+  return BACKUP_PATTERNS.some((p) => ref === p || ref.startsWith(`${p}/`));
+}
+
+/** Any origin branch besides HEAD, the default branch and the safety-copy namespaces. */
+function hasRemoteBranches(cwd, defaultBranch) {
+  const out = gitOut(["for-each-ref", "--format=%(refname)", "refs/remotes/origin"], cwd) || "";
+  return out.split("\n").some((r) => r && !isSpecialRemote(r.slice("refs/remotes/origin/".length), defaultBranch));
+}
+
+/**
+ * Remote branches on origin, read-only (#954):
+ * - `merged`: the tip IS the head of a merged PR of that branch name into the
+ *   default branch, no open PR, not checked out in any worktree - deleted
+ *   (lease-guarded) by the auto-clean;
+ * - `stale`: no local branch, no PR of any state, last commit older than
+ *   `days` - only LISTED, the owner decides.
+ * Nothing at all when gh is unavailable (merged === null) or the open-PR
+ * lookup failed: both facts are needed to call a branch safe or abandoned.
+ * @returns {{merged:{name:string, sha:string}[], stale:{name:string, sha:string, ageDays:number}[]}}
+ */
+export function remoteBranchPlan(ctx, open, defaultBranch, days, now = Date.now()) {
+  const res = { merged: [], stale: [] };
+  if (!ctx.merged || !open) return res;
+  const wt = listWorktrees(ctx.cwd);
+  if (!wt) return res;
+  const checkedOut = new Set(wt.map((w) => w.branch).filter(Boolean));
+  const local = new Set((gitOut(["for-each-ref", "--format=%(refname:short)", "refs/heads"], ctx.cwd) || "").split("\n").filter(Boolean));
+  const out = gitOut(["for-each-ref", "--format=%(refname)%09%(objectname)%09%(committerdate:unix)", "refs/remotes/origin"], ctx.cwd) || "";
+  for (const line of out.split("\n")) {
+    const [ref, sha, ts] = line.trim().split("\t");
+    if (!ref || !sha) continue;
+    const name = ref.slice("refs/remotes/origin/".length);
+    if (isSpecialRemote(name, defaultBranch)) continue;
+    if (open.names.has(name) || open.shas.has(sha) || (open.bases && open.bases.has(name))) continue;
+    if ((ctx.merged.byName.get(name) || []).includes(sha)) {
+      if (!checkedOut.has(name)) res.merged.push({ name, sha });
+      continue;
+    }
+    const ageDays = (now - Number(ts) * 1000) / DAY_MS;
+    if (!local.has(name) && ctx.merged.anyNames && !ctx.merged.anyNames.has(name) && Number.isFinite(ageDays) && ageDays > days) {
+      res.stale.push({ name, sha, ageDays: Math.floor(ageDays) });
+    }
+  }
+  return res;
+}
+
 /** `branch -D` after re-checking the subject; returns a skip reason or null. */
 function deleteBranch(name, sha, cwd, defaultBranch) {
   if (NEVER_DELETE.has(name) || name === defaultBranch) return "protected";
@@ -1028,7 +1213,8 @@ function deleteRemoteTwin(name, sha, cwd) {
   const remote = gitOut(["rev-parse", "--verify", "-q", `refs/remotes/origin/${name}`], cwd);
   if (remote === null) return "none";
   if (remote !== sha) return "remote-moved";
-  return gitOk(["push", "origin", "--delete", name], cwd, NETWORK_TIMEOUT) ? null : "remote-delete-failed";
+  // the lease fails the delete when someone pushed to the ref since our (possibly stale) read
+  return gitOk(["push", "origin", "--delete", name, `--force-with-lease=${name}:${sha}`], cwd, NETWORK_TIMEOUT) ? null : "remote-delete-failed";
 }
 
 /**
@@ -1083,8 +1269,10 @@ export function executeAutoClean(plan, scan, {
   const deadline = now() + budgetMs;
   // a crashed git's leftover ref lock makes every branch -D / push --delete below fail
   clearStaleLocks(cwd);
+  const date = new Date(now()).toISOString().slice(0, 10);
+  const archived = new Map();
   const branchGone = (name, sha) => {
-    removed.push({ kind: "branch", name, sha });
+    removed.push({ kind: "branch", name, sha, ...(archived.has(name) && { archived: archived.get(name) }) });
     if (!remotes) return;
     const why = deleteRemoteTwin(name, sha, cwd);
     if (why === null) removed.push({ kind: "remote", name, sha });
@@ -1095,6 +1283,14 @@ export function executeAutoClean(plan, scan, {
     if (left <= 0) {
       skipped.push({ kind: "worktree", path: u.path, branch: u.branch, reason: "time-budget" });
       continue;
+    }
+    if (u.archive && u.branch && !u.keepBranch) {
+      const a = archiveTip(u, cwd, date, remotes);
+      if (a.why) {
+        skipped.push({ kind: "worktree", path: u.path, branch: u.branch, reason: a.why });
+        continue;
+      }
+      archived.set(u.branch, a.tag);
     }
     const why = removeWorktree(u, cwd, scan.current, removeTimeout, projectsDir, scan.main || null);
     if (why && typeof why === "object") {
@@ -1114,12 +1310,25 @@ export function executeAutoClean(plan, scan, {
     }
   }
   for (const u of plan.remove.filter((x) => x.kind === "branch")) {
+    if (u.archive) {
+      const a = archiveTip(u, cwd, date, remotes);
+      if (a.why) {
+        skipped.push({ kind: "branch", name: u.branch, reason: a.why });
+        continue;
+      }
+      archived.set(u.branch, a.tag);
+    }
     const why = deleteBranch(u.branch, u.head, cwd, scan.defaultBranch);
     if (why) skipped.push({ kind: "branch", name: u.branch, reason: why });
     else branchGone(u.branch, u.head);
   }
   if (remotes) {
-    for (const r of plan.remoteExpire || []) {
+    const doomed = [
+      ...(plan.remoteExpire || []).map((r) => ({ ...r, trigger: "backup-expiry" })),
+      ...(plan.remoteMerged || []).map((r) => ({ ...r, trigger: "merged-pr" })),
+    ];
+    for (const r of doomed) {
+      if (removed.some((x) => x.kind === "remote" && x.name === r.name)) continue; // went with its local twin
       const tip = gitOut(["rev-parse", "--verify", "-q", `refs/remotes/origin/${r.name}`], cwd);
       if (tip !== r.sha) {
         skipped.push({ kind: "remote", name: r.name, reason: tip === null ? "gone" : "remote-moved" });
@@ -1127,7 +1336,7 @@ export function executeAutoClean(plan, scan, {
       }
       // the lease makes the delete fail if someone pushed to the ref meanwhile
       const ok = gitOk(["push", "origin", "--delete", r.name, `--force-with-lease=${r.name}:${r.sha}`], cwd, NETWORK_TIMEOUT);
-      if (ok) removed.push({ kind: "remote", name: r.name, sha: r.sha, trigger: "backup-expiry" });
+      if (ok) removed.push({ kind: "remote", name: r.name, sha: r.sha, trigger: r.trigger });
       else skipped.push({ kind: "remote", name: r.name, reason: "remote-delete-failed" });
     }
   }
@@ -1275,6 +1484,8 @@ export function cardLines(result, lang = "de") {
     let text = parts.length
       ? `${parts.join(" · ")} ${de ? "entfernt" : "removed"}`
       : (de ? "nichts entfernt" : "nothing removed");
+    const arch = ac.removed.filter((x) => x.archived).length;
+    if (arch) text += de ? ` · ${arch} als archive/-Tag gesichert` : ` · ${arch} kept as archive/ tag`;
     if (ac.freedBytes >= 0.1 * GB) text += ` · ${(ac.freedBytes / GB).toFixed(1)} GB ${de ? "frei" : "freed"}`;
     if (ac.skipped.length) text += de ? ` · ${ac.skipped.length} übersprungen` : ` · ${ac.skipped.length} skipped`;
     const damaged = [...new Set([...ac.skipped.filter((x) => x.orphan).map((x) => x.orphan), ...(result.damaged || [])])];
@@ -1310,7 +1521,43 @@ export function cardLines(result, lang = "de") {
         : `PR #${x.number} untouched for ${x.days} days, no worktree${x.title ? ` (${x.title})` : ""} — close it?`,
       reply: `Close PR #${x.number} — superseded by main.`,
     }));
-  if (stale.length) out.openItems = stale;
+  // a partial branch below the removal bar is never auto-deleted: the owner decides by content (#953)
+  const decisions = (result.atRisk || []).filter((x) => x.state === "partial" && x.residual && x.branch).slice(0, 5).map((x) => {
+    const pct = Math.round(x.residual.ratio * 100);
+    const outdated = x.residual.kind === "outdated";
+    return de
+      ? {
+        text: `Branch ${x.branch}: ${pct} % in main, der Rest ${outdated ? "betrifft Code, den main seither geändert oder entfernt hat (veraltet)" : "ist eigenständige neue Arbeit"} — mergen, neu implementieren oder nach Bestätigung löschen?`,
+        reply: `Branch ${x.branch}: Rest prüfen — mergen, neu implementieren oder löschen (nur nach meiner Bestätigung).`,
+      }
+      : {
+        text: `Branch ${x.branch}: ${pct}% in main, the rest ${outdated ? "touches code main has since changed or removed (outdated)" : "is unique new work"} — merge, re-implement or delete after confirmation?`,
+        reply: `Branch ${x.branch}: review the residual — merge, re-implement or delete (only after my confirmation).`,
+      };
+  });
+  const rs = result.remoteStale || [];
+  const names = rs.slice(0, 3).map((x) => x.name).join(", ") + (rs.length > 3 ? ` +${rs.length - 3}` : "");
+  const remoteItems = rs.length ? [de
+    ? {
+      text: `${plural(rs.length, "Remote-Branch", "Remote-Branches")} ohne PR und ohne lokale Kopie, letzter Commit älter als ${REMOTE_STALE_DAYS} Tage: ${names} — prüfen und löschen?`,
+      reply: `Remote-Branches ohne PR prüfen: ${rs.map((x) => x.name).join(", ")}.`,
+    }
+    : {
+      text: `${plural(rs.length, "remote branch", "remote branches")} with no PR and no local copy, last commit older than ${REMOTE_STALE_DAYS} days: ${names} — review and delete?`,
+      reply: `Review the remote branches without a PR: ${rs.map((x) => x.name).join(", ")}.`,
+    }] : [];
+  const st = result.stranded || [];
+  const sn = st.slice(0, 3).map((x) => `${x.branch}${x.path ? ` (${x.path})` : ""}`).join(", ") + (st.length > 3 ? ` +${st.length - 3}` : "");
+  const strandedItems = st.length ? [de
+    ? {
+      text: `Gepushter Branch ohne PR, Inhalt nicht in main: ${sn} — PR öffnen?`,
+      reply: `Öffne einen PR für ${st.slice(0, 3).map((x) => x.branch).join(", ")}.`,
+    }
+    : {
+      text: `Pushed branch without a PR, content not in main: ${sn} — open a PR?`,
+      reply: `Open a PR for ${st.slice(0, 3).map((x) => x.branch).join(", ")}.`,
+    }] : [];
+  if (stale.length || decisions.length || remoteItems.length || strandedItems.length) out.openItems = [...stale, ...decisions, ...strandedItems, ...remoteItems];
   const risk = result.atRisk || [];
   if (risk.length) {
     const shown = risk.slice(0, 3).map((x) => {
@@ -1394,6 +1641,7 @@ export function runHygiene(p) {
       result.atRisk = persisted;
       result.atRiskSource = { from: "last-hygiene-run", at: repo.atRisk.at };
     }
+    if (repo.remoteStale && Array.isArray(repo.remoteStale.items) && repo.remoteStale.items.length) result.remoteStale = repo.remoteStale.items;
     if (scan.units.length > 0) {
       if (workerLockHeld(cwd, now)) {
         result.autoClean.reason = "deferred — worker already running";
@@ -1419,6 +1667,8 @@ export function runHygiene(p) {
     result.autoClean.kept = plan.keep.length;
     result.autoClean.offline = plan.offline;
     result.atRisk = plan.atRisk;
+    result.remoteStale = plan.remoteStale;
+    repo.remoteStale = { at: new Date(now).toISOString(), items: plan.remoteStale.slice(0, AT_RISK_KEEP) };
     repo.atRisk = { at: new Date(now).toISOString(), items: plan.atRisk.slice(0, AT_RISK_KEEP) };
     dirty = true;
     if (!plan.gateOpen) {
@@ -1477,6 +1727,9 @@ export function runHygiene(p) {
     state.repos[key] = repo;
     writeState(statePath, state);
   }
+  // pushed, content not in main, no open PR: the fix nobody opened a PR for (#951), with its worktree path
+  result.stranded = (result.atRisk || []).filter((x) => x.pushed === true && x.branch && x.state !== "landed")
+    .map((x) => ({ branch: x.branch, path: x.path || null, head: x.head, commits: x.commits }));
   result.card = cardLines(result, lang);
   return result;
 }

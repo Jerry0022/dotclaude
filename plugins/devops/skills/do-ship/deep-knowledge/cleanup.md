@@ -219,6 +219,26 @@ younger leftovers stay for the page. It flags unlanded work on a
 cleanup page is worth suggesting (more than 50 leftovers, at most once a
 week).
 
+**Partial branches (#953).** A branch whose squash merge was followed by
+later edits (landing state `partial`) is archived and removed once >= 95 % of
+its added lines are in main: tag `archive/<date>/<branch>` at the tip (pushed
+when the branch was), then delete. Below 95 % nothing is deleted; the card
+shows a decision item per branch (merge / re-implement / delete after
+confirmation) and says whether the residual is outdated (main changed that
+code since) or new work. Never for live sessions, locks or dirty worktrees.
+
+**Remote branches (#954).** Origin branches whose tip is the head of a merged
+PR (and that have no open PR) are deleted lease-guarded (`merged-pr` in the
+log); offline gh deletes nothing. Remote-only branches without any PR and
+quiet for `cleanup.remoteStaleDays` (14) days are listed on the card as an open
+item — never deleted without the user's answer.
+
+**Stranded branches (#951).** `ship_hygiene` also lists pushed branches whose
+content is not in main and that have no open PR (`stranded`, with the worktree
+path) as a card open item "PR öffnen?". `ship_preflight` warns when the
+worktree left such a branch behind; the session-archive guard warns (never
+blocks) when archiving would strand one.
+
 **Off the critical path.** After a ship the call returns in seconds: it scans,
 decides the nudge and the stale-PR lines, and hands the removal (plus size
 measurement) to a detached, low-priority worker (`ship/hygiene-worker.js`).
