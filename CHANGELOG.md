@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.330.8] — 2026-10-29
+
+### Fixed
+- The concept title reminder now fires after a waker pickup too, so the session title leaves 👉 once the submission is processed (#956).
+
 ## [0.330.7] — 2026-10-29
 
 ### Changed
