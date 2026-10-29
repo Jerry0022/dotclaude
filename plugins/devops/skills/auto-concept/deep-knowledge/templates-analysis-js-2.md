@@ -70,7 +70,7 @@
     g.decs.forEach(d => rows.appendChild(rowFor(inst, d)));
     el.appendChild(rows);
     const foot = h('div', 'an-foot');
-    foot.appendChild(h('div', 'an-quiet')).appendChild(listLink(inst));
+    foot.appendChild(h('div', 'an-quiet'));
     foot.appendChild(goButtons(inst, L('Starten', 'Start')));
     el.appendChild(foot);
   }
@@ -154,16 +154,24 @@
         if (!f.placeholder) f.placeholder = L('kurz eintippen', 'type briefly');
       }
     }
-    // Foot: ONE note field across the full width (its 📎 inside it), then
-    // the bar: discreet issue link left, Zurück / Weiter right.
+    // An option can be deselected again: a click on the card that is already on
+    // clears the choice (radios cannot do that natively). Nothing picked AND an
+    // empty note = the question counts as untouched again (see answerEmpty).
+    if (!['multi', 'slider', 'order'].includes(mode)) {
+      d.querySelectorAll('[data-options] input[type=radio]').forEach(r => r.addEventListener('click', () => {
+        if (r.checked && d.__sel && d.__sel === r.value) { r.checked = false; fire(r); }
+      }));
+    }
+    // Note: ONE field, 3 rows, full width directly under the options (its 📎
+    // inside it). Foot: discreet issue link left, Zurück / Weiter right.
     const foot = h('div', 'an-foot'), quiet = h('div', 'an-quiet');
     const note = d.querySelector('[data-comment="' + cssEsc(id + '-note') + '"]');
     let notew = null;
     if (note) {
-      note.classList.add('an-note'); note.rows = 1;
+      note.classList.add('an-note'); note.rows = 3;
       note.setAttribute('aria-label', L('Notiz zu dieser Frage', 'Note on this question'));
       tip(note, '', 'N');
-      note.addEventListener('input', () => { note.style.height = 'auto'; note.style.height = Math.min(note.scrollHeight, 120) + 'px'; });
+      note.addEventListener('input', () => { note.style.height = 'auto'; note.style.height = Math.min(Math.max(note.scrollHeight, 84), 168) + 'px'; });
       // A bar wired before this move sits where the note was; it follows the
       // note and stays its adjacent sibling (`textarea[hidden] + .attach-bar`).
       // A bar wired later is mounted right after the textarea anyway.
@@ -182,8 +190,9 @@
     epic.setAttribute('aria-label', 'Epic');
     iss.addEventListener('click', () => toggleIssue(inst, d));
     epic.addEventListener('input', () => setHidden(d, '-epic', epic.value.trim()));
-    quiet.append(iss, epic, listLink(inst));
-    if (notew) foot.appendChild(notew);
+    quiet.append(iss, epic);
+    // The note sits right UNDER the option cards (zone), not in the Zurück / Weiter row.
+    if (notew) zone.after(notew);
     foot.append(quiet, goButtons(inst));
     d.appendChild(foot);
     st.iss = iss; st.epic = epic;
@@ -286,6 +295,7 @@
   function syncDecision(d) {
     d.querySelectorAll('[data-opt]').forEach(o => { const i = o.querySelector('input'); if (i) o.classList.toggle('is-on', !!i.checked); });
     const id = decId(d), checked = ctl(d, 'dm-' + id).find(c => c.type === 'radio' && c.checked);
+    d.__sel = checked ? checked.value : '';
     d.querySelectorAll('.an-inl').forEach(w => {
       const on = !!checked && w.dataset.when.split('|').indexOf(checked.value) >= 0;
       w.classList.toggle('an-show', on);
@@ -303,6 +313,14 @@
       if (ev && !st.epic.value) st.epic.value = ev.value;
     }
   }
+  /** Radio decision with no option picked, no note and no issue: nothing was answered. */
+  function answerEmpty(d) {
+    if (['multi', 'slider', 'order'].includes(d.dataset.decisionMode)) return false;
+    const id = decId(d), note = d.querySelector('.an-note');
+    return !ctl(d, 'dm-' + id).some(c => c.type === 'radio' && c.checked)
+      && !(note && note.value.trim())
+      && (ctl1(d, 'dm-' + id + '-issue') || {}).value !== '1';
+  }
   function onEdit(inst, e) {
     const d = e.target.closest && e.target.closest('[data-decision][data-decision-mode]');
     if (!d) return;
@@ -311,6 +329,7 @@
     syncDecision(d);
     if (e.target.classList && e.target.classList.contains('an-epic')) return;
     if (e.target.type === 'radio' && d.dataset.decisionMode === 'wording' && e.target.value === 'custom') { const t = ctl1(d, 'dm-' + decId(d) + '-text'); if (t) t.focus(); }
+    if (answerEmpty(d)) { if (!setHidden(d, '-touched', '')) refresh(inst); return; }
     if (!markTouched(d)) refresh(inst);
   }
   function refresh(inst) {
@@ -392,7 +411,7 @@
   function armTouch(inst) {
     clearTimeout(inst.touchTimer);
     const st = inst.stages[inst.idx];
-    if (!st || st.kind !== 'dec' || !canTouch(inst)) return;
+    if (!st || st.kind !== 'dec' || !canTouch(inst) || answerEmpty(st.el)) return;
     inst.touchTimer = setTimeout(() => { if (inst.stages[inst.idx] === st && canTouch(inst)) markTouched(st.el); }, TOUCH_MS);
   }
   function go(inst, i, opt) {
@@ -536,7 +555,7 @@
     rv.appendChild(side);
     el.appendChild(rv);
     const foot = h('div', 'an-foot');
-    foot.appendChild(h('div', 'an-quiet')).appendChild(listLink(inst));
+    foot.appendChild(h('div', 'an-quiet'));
     foot.appendChild(goButtons(inst, L('Weiter', 'Next')));
     el.appendChild(foot);
     if (keepFocus) { const f = el.querySelector('.' + keepFocus.split(' ')[0]); if (f) f.focus({ preventScroll: true }); }
@@ -604,24 +623,35 @@
     const again = btn('an-btn2', L('Nochmal ansehen', 'Look again'));
     again.addEventListener('click', () => go(inst, inst.stages.indexOf(inst.decs[0])));
     foot.appendChild(h('div', 'an-quiet')).appendChild(again);
+    // Bottom right: Zurück, then the FAB-style actions (the same two the ☰ menu holds).
     const go2 = goButtons(inst, '', { noNext: true, noPh: true });
-    doneSubmitButtons().forEach(b => go2.appendChild(b));
+    const fabs = h('div', 'an-fabs');
+    doneSubmitButtons().forEach(b => fabs.appendChild(b));
+    go2.appendChild(fabs);
     foot.appendChild(go2);
     el.appendChild(foot);
   }
-  // The last step ends in the two ways out — next round and implement — in
-  // the SAME style as "Look again" (.an-btn2) and through the SAME submit
+  // The last step ends in the two ways out — next round and implement — as
+  // FAB-style pills (.an-fab) and through the SAME submit
   // path as the dock journey: a click is a click on #submit-iterate-btn /
   // #submit-implement-btn. Implement keeps the journey's unlock: the first
   // click only unlocks (label turns into the confirmation, the dock lock opens
   // with it), the second submits; a pause of 5 s or Escape re-locks.
   function doneSubmitButtons() {
     const q = id => document.getElementById(id);
-    const next = btn('an-btn2', L('Zur nächsten Runde', 'To the next round'));
+    // The concept FAB menu's two actions, adapted: pill FABs (icon disc + label), the
+    // round's own accent for the next round, the warning tint for the one-way implement.
+    const fab = (cls, icon, label) => {
+      const b = btn('an-fab ' + cls);
+      b.append(h('span', 'an-fab-i', icon), h('span', 'an-fab-l', label));
+      b.setLabel = t => { b.querySelector('.an-fab-l').textContent = t; };
+      return b;
+    };
+    const next = fab('an-fab-main', '→', L('Zur nächsten Runde', 'To the next round'));
     next.dataset.anAct = 'iterate';
     tip(next, L('Antworten absenden, Claude denkt die nächste Runde', 'Submit and let Claude rethink the next round'), '');
     next.addEventListener('click', () => { const t = q('submit-iterate-btn'); if (t && !t.disabled) t.click(); });
-    const impl = btn('an-btn2', L('Jetzt umsetzen', 'Implement now'));
+    const impl = fab('an-fab-warn', '⚠', L('Jetzt umsetzen', 'Implement now'));
     impl.dataset.anAct = 'implement';
     impl.dataset.armed = 'false';
     const idle = L('Jetzt umsetzen', 'Implement now');
@@ -629,7 +659,7 @@
     const lock = () => {
       clearTimeout(timer);
       if (impl.dataset.armed !== 'true') return;
-      impl.dataset.armed = 'false'; impl.textContent = idle;
+      impl.dataset.armed = 'false'; impl.setLabel(idle);
       impl.setAttribute('data-tip', L('Zweimal klicken: keine weitere Runde, direkt umsetzen', 'Click twice: no further round, implement right away'));
       if (typeof setJourneyUnlocked === 'function') setJourneyUnlocked(false);
     };
@@ -637,7 +667,7 @@
     impl.addEventListener('click', () => {
       if (impl.dataset.armed !== 'true') {
         impl.dataset.armed = 'true';
-        impl.textContent = L('Sicher? Nochmal klicken', 'Sure? Click again');
+        impl.setLabel(L('Sicher? Nochmal klicken', 'Sure? Click again'));
         impl.setAttribute('data-tip', L('Zweiter Klick setzt um', 'The second click implements'));
         if (typeof setJourneyUnlocked === 'function') setJourneyUnlocked(true);
         // setJourneyUnlocked() parks focus on the dock button after its
@@ -647,7 +677,7 @@
         return;
       }
       clearTimeout(timer);
-      impl.dataset.armed = 'false'; impl.textContent = idle;
+      impl.dataset.armed = 'false'; impl.setLabel(idle);
       const t = q('submit-implement-btn'); if (t && !t.disabled) t.click();
     });
     impl.addEventListener('keydown', e => { if (e.key === 'Escape' && impl.dataset.armed === 'true') { e.stopPropagation(); lock(); } });

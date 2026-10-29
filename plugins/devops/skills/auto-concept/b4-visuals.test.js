@@ -48,6 +48,79 @@ function page(html, { lang = "en", store = {} } = {}) {
 }
 
 
+describe("deselect, untouched, answered, list icon", () => {
+  const radios = (doc, id) => [...doc.querySelectorAll(`#${id} [data-options] input[type=radio]`)];
+  const touched = (doc, id) => doc.querySelector(`input[name="dm-${id}-touched"]`).value;
+  test("clicking the selected card again clears the choice; empty note => untouched again", () => {
+    const { doc, ca } = page(LITE);
+    const inst = ca.instances[0];
+    ca.go(inst, inst.stages.findIndex(s => s.kind === "dec"));
+    const [a, b] = radios(doc, "q1");
+    expect(a.checked).toBe(true);
+    b.click();
+    expect(touched(doc, "q1")).toBe("1");
+    b.click();
+    expect(radios(doc, "q1").some(r => r.checked)).toBe(false);
+    expect(touched(doc, "q1")).toBe("");
+    expect(doc.querySelector("#q1").classList.contains("an-stage")).toBe(true);
+  });
+  test("a note alone counts when nothing is picked; clearing it makes the question untouched", () => {
+    const { doc, ca } = page(LITE);
+    const inst = ca.instances[0];
+    ca.go(inst, inst.stages.findIndex(s => s.kind === "dec"));
+    const [a] = radios(doc, "q1");
+    a.click();                                   // deselect the recommendation
+    expect(touched(doc, "q1")).toBe("");
+    const note = doc.querySelector("#q1 .an-note");
+    note.value = "only a note";
+    note.dispatchEvent(new doc.defaultView.Event("input", { bubbles: true }));
+    expect(touched(doc, "q1")).toBe("1");
+    note.value = "";
+    note.dispatchEvent(new doc.defaultView.Event("input", { bubbles: true }));
+    expect(touched(doc, "q1")).toBe("");
+  });
+  test("the 3 s dwell does not touch a deselected question", () => {
+    const { doc, ca, timers } = page(LITE);
+    const inst = ca.instances[0];
+    ca.go(inst, inst.stages.findIndex(s => s.kind === "dec"));
+    radios(doc, "q1")[0].click();
+    timers.length = 0;
+    ca.go(inst, inst.stages.findIndex(s => s.kind === "dec"));
+    timers.filter(t => t.ms === ca.TOUCH_MS).forEach(t => t.f());
+    expect(touched(doc, "q1")).toBe("");
+  });
+  test("a lite view is answered only when every decision is touched, never by paging through it", () => {
+    const { doc, ca } = page(LITE);
+    const inst = ca.instances[0];
+    expect(typeof inst.root.__anAnswered).toBe("function");
+    inst.root.click();
+    ca.go(inst, inst.stages.findIndex(s => s.kind === "dec"));
+    ca.step(inst, 1);
+    ca.step(inst, -1);
+    expect(inst.root.__anAnswered()).toBe(false);
+    ca.markTouched(doc.getElementById("q1"));
+    expect(inst.root.__anAnswered()).toBe(false);
+    ca.markTouched(doc.getElementById("q2"));
+    expect(inst.root.__anAnswered()).toBe(true);
+  });
+  test("the design overview asks the analysis view before its own interaction heuristics", () => {
+    expect(md).toMatch(/function viewAnswered\(v\) \{[\s\S]*?v\.__anAnswered[\s\S]*?v\.dataset\.interacted/);
+  });
+  test("All as list: one icon in the header row, no text link in the bars; the lite round has the list stage", () => {
+    const { doc, ca } = page(LITE);
+    const inst = ca.instances[0];
+    const icon = inst.stepEl.querySelector(".an-listbtn");
+    expect(icon).toBeTruthy();
+    expect(icon.querySelector("svg")).toBeTruthy();
+    expect(doc.querySelector(".an-foot .an-link[data-tip*='list' i]")).toBeNull();
+    expect(inst.root.textContent).not.toMatch(/All as list/);
+    icon.click();
+    expect(inst.stages[inst.idx].kind).toBe("list");
+    ca.step(inst, 1);                           // aux stage: back to where it came from
+    expect(inst.stages[inst.idx].kind).not.toBe("list");
+  });
+});
+
 describe("Fertig step — next round / implement beside Look again", () => {
   const done = () => {
     const { w, ca, doc } = page(LITE + '<button id="submit-iterate-btn">i</button><button id="submit-implement-btn">m</button>');
@@ -59,11 +132,11 @@ describe("Fertig step — next round / implement beside Look again", () => {
     ca.go(inst, idx);
     return { w, doc, hits, root: inst.root };
   };
-  test("both buttons use the .an-btn2 style of Look again and no Weiter button is left", () => {
+  test("Look again stays bottom left; both actions are FAB-style pills bottom right and no Weiter button is left", () => {
     const { root } = done();
-    const again = [...root.querySelectorAll(".an-foot .an-btn2")];
-    expect(again.map(b => b.dataset.anAct || "again")).toEqual(["again", "iterate", "implement"]);
-    const foot = root.querySelector(".an-foot .an-btn2").closest(".an-foot");
+    const foot = root.querySelector(".an-fin .an-foot");
+    expect(foot.querySelector(".an-quiet .an-btn2")).toBeTruthy();
+    expect([...foot.querySelectorAll(".an-go .an-fabs .an-fab")].map(b => b.dataset.anAct)).toEqual(["iterate", "implement"]);
     expect(foot.querySelector(".an-btn")).toBeNull();
   });
   test("next round is one click on the dock's iterate button", () => {

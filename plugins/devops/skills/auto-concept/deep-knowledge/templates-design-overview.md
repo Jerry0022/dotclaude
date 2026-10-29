@@ -889,6 +889,9 @@ returns — the single-design page is untouched.
   // (`data-touched`, set by the change listener of § Submit). The default
   // "include" alone is not an answer.
   function viewAnswered(v) {
+    // A lite analysis view answers for itself (every decision touched): paging through it by
+    // click / key / scroll is not answering it.
+    if (typeof v.__anAnswered === 'function') return !!v.__anAnswered();
     if (v.dataset.interacted === 'true') return true;
     const filled = ta => !!(ta && (ta.value || '').trim());
     if ([...v.querySelectorAll('textarea')].some(filled)) return true;

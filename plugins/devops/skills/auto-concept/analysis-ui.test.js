@@ -322,17 +322,19 @@ describe("fitted Full round", () => {
     next.click();
     expect(inst.stages[inst.idx].kind).toBe("topic");
   });
-  test("the note spans the foot above the bar and keeps its 📎 inside", () => {
+  test("the note sits right under the option cards (3 rows), not in the foot, and keeps its 📎 inside", () => {
     const html = FULL.replace('<textarea data-comment="a1-note"></textarea>',
       '<textarea data-comment="a1-note" data-attachable></textarea><div class="attach-bar" data-attach-for="a1-note"><button class="attach-btn">📎</button></div>');
     const { doc } = page(html);
     const foot = doc.querySelector("#a1 .an-foot");
-    const nw = foot.firstElementChild;
-    expect(nw.classList.contains("an-notew")).toBe(true);
+    const nw = doc.querySelector("#a1 .an-notew");
+    expect(nw.previousElementSibling.classList.contains("an-zone")).toBe(true);
+    expect(foot.querySelector(".an-notew")).toBeNull();
+    expect(nw.querySelector("textarea").rows).toBe(3);
     expect(nw.querySelector("textarea.an-note")).toBeTruthy();
     expect(nw.querySelector("textarea").nextElementSibling.matches('.attach-bar[data-attach-for="a1-note"]')).toBe(true);
     expect(foot.querySelector(".an-quiet textarea")).toBeNull();
-    expect(CSS).toMatch(/\.an-notew \{ position: relative; flex: 1 1 100%;/);
+    expect(CSS).toMatch(/\.an-notew \{ position: relative; flex: none; width: 100%;/);
     expect(CSS).toMatch(/\.an-notew \.attach-bar \{ position: absolute;/);
   });
   test("one-line stepper: only the active topic shows its dots; labels ellipsise", () => {
