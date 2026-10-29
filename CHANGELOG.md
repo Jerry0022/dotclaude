@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.332.0] — 2026-10-29
+
+### Added
+- While a `skip-checks` decision is stored and the Actions minutes are blocked, the ship pauses the repo's push/PR workflows so no doomed runs pile up, and re-enables them when the quota clears, the decision is revoked or the reset passes — also from a SessionStart sweep (#949).
+
 ## [0.331.0] — 2026-10-29
 
 ### Added
