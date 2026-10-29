@@ -71,7 +71,7 @@ import * as quotaLib from "../lib/ci-quota.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isWorktree, fileOverlap, dirtyState, gitTry } from "../lib/git.js";
+import { isWorktree, fileOverlap, dirtyState, gitTry, branchExists } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { scanConflictMarkers } from "../lib/conflict-markers.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
@@ -195,6 +195,22 @@ describe("ship_preflight — clean-tree gate", () => {
     const result = await handler({ cwd: CWD });
     expect(result.errors.some((e) => e.includes("Dirty working tree: 2 modified, 1 untracked"))).toBe(true);
     expect(result.ready).toBe(false);
+    expect(result.uncommittedWork).toBeUndefined();
+  });
+
+  test("tracked edits as the only blocker → uncommittedWork with the file list (#940)", async () => {
+    dirtyState.mockReturnValue({ dirty: true, modified: ["a.js", "b.js"], untracked: [], lines: [] });
+    const result = await handler({ cwd: CWD });
+    expect(result.ready).toBe(false);
+    expect(result.uncommittedWork).toMatchObject({ files: ["a.js", "b.js"] });
+  });
+
+  test("tracked edits plus another hard error → no uncommittedWork (#940)", async () => {
+    dirtyState.mockReturnValue({ dirty: true, modified: ["a.js"], untracked: [], lines: [] });
+    branchExists.mockReturnValueOnce(false);
+    const result = await handler({ cwd: CWD });
+    expect(result.errors.some((e) => e.includes("does not exist"))).toBe(true);
+    expect(result.uncommittedWork).toBeUndefined();
   });
 });
 

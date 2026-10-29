@@ -293,12 +293,12 @@ export async function handler(params) {
 
   // 4. Dirty state
   const state = dirtyState(opts);
+  let dirtyError = null;
   if (state.error) {
     errors.push(`Working tree unreadable: git status failed (${state.error}) — cannot prove it is clean`);
   } else if (state.dirty) {
-    errors.push(
-      `Dirty working tree: ${state.modified.length} modified, ${state.untracked.length} untracked`
-    );
+    dirtyError = `Dirty working tree: ${state.modified.length} modified, ${state.untracked.length} untracked`;
+    errors.push(dirtyError);
   }
   checks.push({ name: "clean-tree", ok: !state.dirty, modified: state.modified.length, untracked: state.untracked.length });
 
@@ -309,9 +309,8 @@ export async function handler(params) {
   const originBase = `origin/${base}`;
   const aheadRef = !noRemote && (baseExists === "remote" || baseExists === "local") ? originBase : base;
   const ahead = commitsAhead(aheadRef, opts);
-  if (ahead === 0) {
-    errors.push(`No commits ahead of ${base} — nothing to ship`);
-  }
+  const noAheadError = ahead === 0 ? `No commits ahead of ${base} — nothing to ship` : null;
+  if (noAheadError) errors.push(noAheadError);
   checks.push({ name: "commits-ahead", value: ahead, ok: ahead > 0 });
 
   // 7. Unpushed commits (hard gate — must be 0 before shipping; skip when no remote)
@@ -566,6 +565,14 @@ export async function handler(params) {
 
   const ready = errors.length === 0;
 
+  // Tracked edits as the only blocker (#940): the session's work is still
+  // uncommitted. That is a decision point (commit it as the ship's work
+  // commit), not a failure. Untracked files keep their own path.
+  const uncommittedWork = !ready && dirtyError && state.modified.length > 0 && state.untracked.length === 0 &&
+    errors.every((e) => e === dirtyError || e === noAheadError)
+    ? { files: state.modified, ahead }
+    : null;
+
   // Mark the ship pipeline as in-progress only after all hard gates passed,
   // so pre.main.guard / pre.edit.branch don't block ship internals when Claude
   // falls back to Bash. Cleared by ship_cleanup on every exit path.
@@ -596,6 +603,7 @@ export async function handler(params) {
     workflowHygiene,
     ciQuota,
     ...(validationGaps && { validationGaps }),
+    ...(uncommittedWork && { uncommittedWork }),
     ...early,
     checks,
     warnings,

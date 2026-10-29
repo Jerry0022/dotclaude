@@ -104,6 +104,7 @@ describe("ship_run — happy path", () => {
 describe("ship_run — decision points", () => {
   test.each([
     ["preflight-failed", { ship_preflight: () => ({ ready: false, errors: ["dirty"] }) }, {}],
+    ["uncommitted-work", { ship_preflight: () => ({ ready: false, errors: ["dirty"], uncommittedWork: { files: ["a.js"], ahead: 0 } }) }, {}],
     ["validation-gaps", { ship_preflight: () => ({ ...ok.ship_preflight(), validationGaps: [{ requirement: "r" }] }) }, {}],
     ["build-red", { ship_build: () => ({ success: false, steps: [{ step: "test", success: false }] }) }, {}],
     ["codex-judgment", {}, { codexGate: true }],
