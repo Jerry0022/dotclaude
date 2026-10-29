@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.330.10] — 2026-10-29
+
+### Fixed
+- A background dev server (ng serve, npm start/dev, vite, next dev, http.server) no longer keeps the session title on ⏳; a resumed session left on ⏳ with only such a server is handed on after an hour idle (#964).
+
 ## [0.330.9] — 2026-10-29
 
 ### Fixed
