@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.333.0] — 2026-10-29
+
+### Added
+- Branch hygiene archives (tag) and removes partial branches whose added work is ≥ 95 % in main, and lists the rest as decisions by content (#953).
+- Remote branches of merged PRs are pruned lease-guarded; remote-only branches older than 14 days are listed, never deleted (#954).
+- Pushed branches with unlanded work and no PR are flagged by hygiene, the session-archive guard and ship preflight (#951).
+
 ## [0.332.0] — 2026-10-29
 
 ### Added
