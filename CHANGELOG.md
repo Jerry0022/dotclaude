@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.329.3] — 2026-10-29
+
+### Fixed
+- The session-archive guard reads "nicht archivieren kann" / "I can't archive it" as a request to archive, not as a refusal.
+
 ## [0.329.2] — 2026-10-29
 
 ### Fixed

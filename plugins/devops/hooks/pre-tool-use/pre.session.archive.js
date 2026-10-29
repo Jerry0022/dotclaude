@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.session.archive
- * @version 0.3.0
+ * @version 0.3.1
  * @event PreToolUse
  * @plugin devops
  * @description Only the post-ship hand-over archives this session (#632).
@@ -47,11 +47,23 @@ const USER_REFUSES_ARCHIVE = new RegExp([
   String.raw`\boffen\s+lassen\b`,
 ].join('|'), 'i');
 
+/**
+ * The user reports that archiving does not work ("warum ich sie nicht
+ * archivieren kann", "lässt sich nicht archivieren", "I can't archive it").
+ * That "nicht … archiv" is an inability, not a refusal — it reads as a request.
+ */
+const USER_CANNOT_ARCHIVE = new RegExp([
+  String.raw`\b(?:kann|kannst|können|konnte|lässt|laesst|geht|klappt|funktioniert)\b[^.!?,;\n]*?\bnicht\s+(?:\w+\s+){0,2}archiv\w*`,
+  String.raw`\bnicht\s+(?:\w+\s+){0,2}archiv\w*\s+(?:kann|kannst|können|konnte|lässt|laesst|geht|klappt|funktioniert)\b`,
+  String.raw`\b(?:can'?t|cannot|can\s+not|unable\s+to|won'?t\s+let\s+me)\s+(?:\w+\s+){0,2}archiv\w*`,
+].join('|'), 'i');
+
 /** 'ask' | 'refuse' | null — what the user's latest prompt says about archiving. */
 function userArchiveIntent(hook) {
   try {
     const transcript = transcriptTools.safeReadTranscript(hook.transcript_path, transcriptTools.TRANSCRIPT_TAIL_BYTES);
     const text = promptTools.lastUserPromptText(transcript) || '';
+    if (USER_CANNOT_ARCHIVE.test(text)) return 'ask';
     if (USER_REFUSES_ARCHIVE.test(text)) return 'refuse';
     return USER_ASKS_ARCHIVE.test(text) ? 'ask' : null;
   } catch {
