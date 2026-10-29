@@ -288,6 +288,26 @@ describe("fitted Full round", () => {
     expect(visibleFoot(inst).querySelector(".an-go-ph")).toBeTruthy();
     expect(CSS).toMatch(/\.an-go \.an-btn, \.an-go-ph \{ min-width: 10\.5rem; \}/);
   });
+  test("the first stage shows no back control; from the second on it is visible (#962)", () => {
+    const seen = { hidden: 0, shown: 0 };
+    [LITE, FULL].forEach((html) => {
+      const { ca } = page(html);
+      const inst = ca.instances[0];
+      const order = inst.stages.map((s, i) => [s, i]).sort((a, b) => inst.seq.indexOf(a[0]) - inst.seq.indexOf(b[0]));
+      [...order, order[0]].forEach(([s, i]) => {
+        ca.go(inst, i);
+        const back = s.el && s.el.querySelector(".an-back");
+        if (!back) return;
+        const first = s === inst.seq[0];
+        expect(back.style.visibility, s.kind).toBe(first ? "hidden" : "");
+        expect(back.disabled, s.kind).toBe(first);
+        seen[first ? "hidden" : "shown"]++;
+      });
+    });
+    expect(seen.hidden).toBeGreaterThan(0);
+    expect(seen.shown).toBeGreaterThan(0);
+    expect(CSS).toMatch(/\.an-back\[disabled\] \{ visibility: hidden;/);
+  });
   test("the briefing: intro moved in, its way on is the shared bar (no CTA box)", () => {
     const { doc, ca } = page(FULL);
     const inst = ca.instances[0];

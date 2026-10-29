@@ -257,7 +257,7 @@ section[data-view].an-lite { max-width: none; margin: 0; border: 0; border-radiu
 .an-btn2:hover { color: var(--an-tx); background: var(--an-s3); }
 .an-back { height: 44px; padding: 0 12px; display: inline-flex; align-items: center; font-size: 13.5px; color: var(--an-mu); border-radius: 10px; }
 .an-back:hover { color: var(--an-tx); background: var(--an-s1); }
-.an-back[disabled] { opacity: .4; pointer-events: none; }
+.an-back[disabled] { visibility: hidden; pointer-events: none; }
 /* Constant widths: "Weiter" / "Starten" / "Los geht's" and an absent next
    button (.an-go-ph) take the same room, so Zurück never moves either. */
 .an-go .an-btn, .an-go-ph { min-width: 10.5rem; }
