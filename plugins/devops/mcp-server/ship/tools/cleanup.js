@@ -44,6 +44,45 @@ export function porcelainLines(cwd) {
   } catch { return null; }
 }
 
+/**
+ * Keep-mode after a merged ship (#942): the squash landed on `origin/<base>`,
+ * the remote branch is gone, but the kept local branch still carries the
+ * pre-squash commits — they exist on no remote and the app refuses a clean
+ * archive. When the branch's tree equals the merged base, point the branch at
+ * `origin/<base>` (a guarded ref move like local-merge.js: same tree, so index
+ * and working tree already match) and drop the gone upstream.
+ *
+ * Moves nothing unless all hold: HEAD is `branch`, the tree is clean, the
+ * upstream was set and is gone (a ship-blocked exit never pushed or still has
+ * its remote branch), and the trees match. Returns { synced, from, to } or
+ * { synced: false, reason }.
+ */
+export function syncKeptBranch(cwd, branch, base) {
+  const opts = { cwd };
+  if (gitTry(["rev-parse", "--abbrev-ref", "HEAD"], opts) !== branch) return { synced: false, reason: "not-on-branch" };
+  const dirty = porcelainLines(cwd);
+  if (dirty === null || dirty.length > 0) return { synced: false, reason: "dirty-tree" };
+  if (!gitTry(["config", "--get", `branch.${branch}.merge`], opts)) return { synced: false, reason: "no-upstream" };
+  gitTry(["fetch", "--prune", "origin"], { cwd, timeout: NETWORK_TIMEOUT });
+  if (gitTry(["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${branch}`], opts)) {
+    return { synced: false, reason: "upstream-present" };
+  }
+  const headSha = gitTry(["rev-parse", "HEAD"], opts);
+  const baseSha = gitTry(["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${base}`], opts);
+  if (!headSha || !baseSha) return { synced: false, reason: "unresolved-ref" };
+  if (headSha === baseSha) return { synced: false, reason: "already-on-base" };
+  if (gitTry(["rev-parse", `${headSha}^{tree}`], opts) !== gitTry(["rev-parse", `${baseSha}^{tree}`], opts)) {
+    return { synced: false, reason: "tree-differs" };
+  }
+  try {
+    gitArgs(["update-ref", `refs/heads/${branch}`, baseSha, headSha], opts);
+  } catch (e) {
+    return { synced: false, reason: `update-ref failed: ${String(e && e.message).split("\n")[0]}` };
+  }
+  gitTry(["branch", "--unset-upstream", branch], opts);
+  return { synced: true, from: headSha, to: baseSha };
+}
+
 export async function handler(params) {
   const { branch, base, cwd, keep } = params;
   if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
@@ -108,13 +147,25 @@ export async function handler(params) {
   // "ship in progress" and the next ship does not inherit the lockout marker.
   if (keep) {
     const shipState = clearShipState(cwd);
+    const keepWarnings = [`Keep-mode: branch '${branch}' and worktree preserved for follow-up work`];
+    let branchSync = { synced: false, reason: "intermediate" };
+    if (!intermediate) {
+      try { branchSync = syncKeptBranch(cwd, branch, base); } catch (e) { branchSync = { synced: false, reason: String(e && e.message) }; }
+    }
+    if (branchSync.synced) {
+      shipState.push(`branch-synced:${base}`);
+      keepWarnings.push(`Keep-mode: '${branch}' moved to origin/${base} (merged, same tree) — no unpushed commits left`);
+    } else if (branchSync.reason === "tree-differs") {
+      keepWarnings.push(`Keep-mode: '${branch}' left as is — its tree differs from origin/${base}, so it holds work that did not land`);
+    }
     return {
       success: true,
       kept: true,
       intermediate,
       branchBeforeCleanup: git("rev-parse --abbrev-ref HEAD", opts) || null,
       cleaned: shipState,
-      warnings: [`Keep-mode: branch '${branch}' and worktree preserved for follow-up work`],
+      warnings: keepWarnings,
+      branchSync,
       porcelain: porcelainLines(cwd),
       ...lockFields,
     };

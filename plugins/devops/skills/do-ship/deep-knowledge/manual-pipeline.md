@@ -360,6 +360,8 @@ Skip this step entirely when `$WORKTREE_PATH` was empty in Substep 1. Otherwise 
 **Runs when Step 5a chose keep-mode — deliberately (follow-up work expected) or because the worktree is harness-created (Claude Desktop, #442).** Do NOT call `ExitWorktree` — the worktree stays. Do NOT delete the branch. Call `ship_cleanup` with `keep: true` to clear the ship-in-progress sentinel (so Edit/branch guards reset) without touching anything else:
 `ship_cleanup({ branch: "claude/feature-branch", base: "main", cwd: "<cwd>", keep: true })`
 
+After a merged final ship, keep-mode also points the kept branch at `origin/<base>` when its tree equals the merged base and its upstream is gone (`branchSync` in the result, #942): the squash landed, so the pre-squash commits are dropped from the branch and the worktree carries nothing that exists on no remote. A differing tree, a remote branch that still exists, or a dirty tree leaves the branch as it is.
+
 Harness-created worktree: read `ship_cleanup`'s `porcelain` (the `git status --porcelain` lines it returns — no own git call). Anything listed blocks the Desktop archive — settle it per Step 1a (*Dirty tree from untracked files*) before the card, never by restoring a parked copy. A `remoteBranchWarning` in the release result → one `open` item, nothing else: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/cleanup.md` § Keep-mode: the remote branch (Step 5c).
 
 In Step 6:
