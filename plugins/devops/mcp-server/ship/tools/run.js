@@ -40,7 +40,7 @@ const validationItems = z.preprocess(
 );
 
 export const NEEDS = [
-  "preflight-failed", "conflict", "rebase-required", "validation-gaps", "build-red", "codex-judgment",
+  "preflight-failed", "uncommitted-work", "conflict", "rebase-required", "validation-gaps", "build-red", "codex-judgment",
   "bump-required", "major-bump", "bump-mismatch", "full-suite-required", "checks-failed", "release-failed", "tool-error",
 ];
 
@@ -237,6 +237,10 @@ export async function handler(params, injected = {}) {
           ...(params.base ? { base: params.base } : {}),
         });
         out.preflight = r;
+        if (!r.ready && r.uncommittedWork) {
+          return needs("uncommitted-work", { files: r.uncommittedWork.files, ahead: r.uncommittedWork.ahead, warnings: r.warnings || [] },
+            { hint: "commit the listed tracked changes as the ship's work commit (conventional message from the PR title), then call ship_run again" });
+        }
         if (!r.ready) return needs("preflight-failed", { errors: r.errors || [], warnings: r.warnings || [] });
         if (r.needsRebase) {
           if (round >= MAX_REBASE_ROUNDS) return needs("rebase-required", { reason: "base kept moving during the rebase loop" });

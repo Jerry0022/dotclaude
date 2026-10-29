@@ -20,6 +20,22 @@ each file where it belongs, inside this ship:
   add it to that list), or delete it when
   it is a stray hook artifact (e.g. a `.claude/` created in a subdirectory).
 
+## Uncommitted tracked work
+
+`ship_run` returns `needs: "uncommitted-work"` when tracked modifications are
+the only thing between the branch and a ship (#940) — typically "ship it" right
+after a working session, with nothing committed yet. Those edits ARE the ship:
+1. Read `detail.files`. A file this session did not touch and that does not
+   belong to the branch's work (a stray local tweak) → leave it out and say so;
+   it stays dirty, so the re-call reports `preflight-failed` and the ship
+   BLOCKs on it.
+2. Stage the rest by name (never `git add -A`) and commit once with a
+   conventional message taken from the planned PR title.
+3. Call `ship_run` again with the same params — preflight now sees the commit
+   ahead of base and pushes it.
+
+Untracked files never land here; they keep § Dirty tree from untracked files.
+
 ## Rebase loop
 
 Step 1b, only when `needsRebase: true`:

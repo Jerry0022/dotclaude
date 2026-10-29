@@ -93,6 +93,7 @@ Handle the need, then call `ship_run` again with the same params (plus what `res
 | `needs` | What you do |
 |---|---|
 | `preflight-failed` | report `detail.errors`; dirty tree from untracked files → settle per `deep-knowledge/preflight-rebase.md` § Dirty tree from untracked files, then re-call; else BLOCK |
+| `uncommitted-work` | the ship's content is still uncommitted (`detail.files`, tracked only): commit it as the work commit, then re-call — `deep-knowledge/preflight-rebase.md` § Uncommitted tracked work |
 | `conflict` | the rebase hit a code conflict and was aborted: resolve per `deep-knowledge/preflight-rebase.md` § Rebase conflict resolution (then `git push --force-with-lease` and re-call). Truly ambiguous → ask (lockout: BLOCK "unresolvable merge conflict — needs human decision"). Re-run the **Step 1d full check** after any rebase |
 | `rebase-required` | base kept moving: rebase as above, re-call |
 | `validation-gaps` | close the listed gaps, re-call with updated `validation`; `acceptGaps: true` only when the user said to ship as-is |
