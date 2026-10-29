@@ -22,10 +22,10 @@ function activate() {
     JSON.stringify({ port: 8742, html_path: `docs/concepts/${SLUG}.html`, owner: "abc" }),
   );
 }
-function writeState({ submitted = true, version = 3, picked_up_at = "" } = {}) {
+function writeState({ submitted = true, version = 3, picked_up_at = "", processed_at = "" } = {}) {
   fs.writeFileSync(
     path.join(store(), "state.json"),
-    JSON.stringify({ decisions: JSON.stringify({ submitted, action: "iterate" }), version, picked_up_at }),
+    JSON.stringify({ decisions: JSON.stringify({ submitted, action: "iterate" }), version, picked_up_at, processed_at }),
   );
 }
 const run = (title, tool_name = "Bash") => main({ tool_name, cwd }, { cwd, readTitle: () => title });
@@ -61,7 +61,17 @@ describe("post.concept.title", () => {
     activate();
     writeState({ submitted: false });
     expect(run(`${CONCEPT_PREFIX}Header`)).toBeNull();
+    writeState({ processed_at: "2026-10-28T12:00:00Z" });
+    expect(run(`${CONCEPT_PREFIX}Header`)).toBeNull();
+  });
+
+  // #956: the waker's /pending=true poll stamps picked_up_at before the wake-up
+  // notification turn (no user prompt) makes its first tool call.
+  test("fires on the notification turn after a waker pickup (picked_up_at already set)", () => {
+    activate();
     writeState({ picked_up_at: "2026-10-28T12:00:00Z" });
+    const out = run(`${CONCEPT_PREFIX}Header`);
+    expect(out.context).toContain(JSON.stringify(`${CONCEPT_WORKING_PREFIX}Header`));
     expect(run(`${CONCEPT_PREFIX}Header`)).toBeNull();
   });
 

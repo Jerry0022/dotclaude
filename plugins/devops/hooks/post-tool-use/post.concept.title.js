@@ -16,8 +16,9 @@
  *   The signal is the bridge's durable store, read from disk — no HTTP probe:
  *   `.claude/concept-active.json` names the concept, its store
  *   (`.claude/concepts/<html basename>/state.json`) holds the live payload.
- *   A payload with `submitted: true` that Claude has not picked up yet
- *   (`picked_up_at` empty) is a submission waiting for Claude. Each
+ *   A payload with `submitted: true` that is not processed yet
+ *   (`processed_at` empty; `picked_up_at` may already be set by the waker, #956)
+ *   is a submission Claude is on. Each
  *   submission `version` is announced once (`<store>/.title-notified`), and
  *   only when the transcript shows the title still on the waiting prefix.
  *
@@ -63,7 +64,11 @@ function activeStore(cwd) {
  */
 function waitingVersion(state) {
   if (!state || typeof state !== 'object') return null;
-  if (state.picked_up_at) return null;
+  // Not gated on picked_up_at: the pickup waker's /pending=true poll stamps it
+  // before the model's first tool call, so that gate never let the waker path
+  // through (#956). A processed round is over; the per-version marker is the
+  // once-guard.
+  if (state.processed_at) return null;
   let payload = null;
   try { payload = JSON.parse(state.decisions); } catch { return null; }
   if (!payload || payload.submitted !== true) return null;
