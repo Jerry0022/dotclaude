@@ -419,7 +419,9 @@
       const same = !!prev && prev.kind === 'dec' && st.kind === 'dec' && prev.topic === st.topic;
       applyLevels(inst, st, { swap: same, dur: opt.initial ? 0 : undefined });
     }
-    inst.root.querySelectorAll('.an-back').forEach(x => { x.disabled = st === inst.seq[0]; });
+    // First stage: no way back — hidden, not dimmed; visibility keeps its space so Weiter stays put (#962).
+    const first = st === inst.seq[0];
+    inst.root.querySelectorAll('.an-back').forEach(x => { x.disabled = first; x.style.visibility = first ? 'hidden' : ''; });
     refreshStepper(inst);
     if (typeof updateSectionNavState === 'function') updateSectionNavState();
     armTouch(inst);
