@@ -241,7 +241,9 @@ and the app owns the worktree lifecycle (auto-archive removes worktree + branch)
 this up front — before the signals below — and go straight to Step 5c: `ship_cleanup({
 keep: true })`, normal DONE CTA (no `state.kept`, see 5c). The remote branch was
 already deleted by `ship_release` (`remoteBranchDeleted`); the local branch and
-worktree are the app's to remove.
+worktree are the app's to remove. `ship_cleanup` moves that local branch to the
+merged `origin/<base>` first when the trees match (`branchSync`, #942), so the app
+archives it without a "pending changes" warning.
 
 In Step 6 such a worktree renders the **normal** merge heading — no `state.kept`, no
 cleanup note. The `weiter in <branch>?` heading is

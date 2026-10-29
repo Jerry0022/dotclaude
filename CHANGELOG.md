@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.329.2] — 2026-10-29
+
+### Fixed
+- `ship_cleanup` keep-mode now moves the kept branch to the merged base after a squash ship when the trees match and nothing unpushed is on it, so a harness worktree carries no stray pre-squash commits and the session archives cleanly (#942).
+
 ## [0.329.1] — 2026-10-29
 
 ### Fixed
