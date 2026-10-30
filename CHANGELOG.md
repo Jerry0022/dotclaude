@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.335.0] — 2026-10-30
+
+### Added
+- German sessions get an explicit "answer in German" instruction with the locale tag on every prompt, so replies after English tool, agent or notification output stay German.
+- Batch mode: the default execute marker `los` also accepts the English `go` (alone or followed by punctuation; "go to …" stays a note).
+
+### Fixed
+- The locale tests no longer fail on a machine whose Claude Code `language` setting or OS locale is German.
+
 ## [0.334.1] — 2026-10-30
 
 ### Fixed
