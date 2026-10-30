@@ -349,3 +349,50 @@ describe("main checkout on a landed local-only branch (#879) and landed worktree
     expect(cls.removable).toEqual([]);
   });
 });
+
+describe("sub-agent worktrees after a ship (#982)", () => {
+  const stub = () => ({ bySha: new Set(), byName: new Map() });
+  function agentWorktree(dir, c1, name, branch, { commit = false, dirty = false } = {}) {
+    const wt = path.join(dir, ".claude", "worktrees", name);
+    git(dir, "worktree", "add", "-q", "-b", branch, wt, c1);
+    if (commit) commitAt(wt, "agent.txt", "work\n", daysAgo(1));
+    if (dirty) fs.writeFileSync(path.join(wt, "a.txt"), "dirty\n");
+    return wt;
+  }
+  const plan = (dir) => {
+    const scan = scanRepo(dir, NOW);
+    return { scan, plan: planAutoClean(scan, SETTINGS, { cwd: dir, fetchMerged: stub, projectsDir: null, now: NOW }) };
+  };
+
+  test("a fresh landed clean agent worktree and its branch go right away", () => {
+    const { dir, c1 } = makeRepo();
+    const wt = agentWorktree(dir, c1, "agent-a1b2c3", "worktree-agent-a1b2c3");
+    const { scan, plan: p } = plan(dir);
+    expect(p.remove.map((u) => [path.basename(u.path), u.trigger])).toEqual([["agent-a1b2c3", "agent"]]);
+    const done = executeAutoClean(p, scan, { cwd: dir, projectsDir: null });
+    expect(done.removed.some((r) => r.kind === "worktree")).toBe(true);
+    expect(fs.existsSync(wt)).toBe(false);
+    expect(git(dir, "branch", "--list", "worktree-agent-a1b2c3")).toBe("");
+  });
+
+  test("a dirty agent worktree stays", () => {
+    const { dir, c1 } = makeRepo();
+    const wt = agentWorktree(dir, c1, "agent-d1d1d1", "worktree-agent-d1d1d1", { dirty: true });
+    expect(plan(dir).plan.remove).toEqual([]);
+    expect(fs.existsSync(wt)).toBe(true);
+  });
+
+  test("an unlanded agent worktree stays", () => {
+    const { dir, c1 } = makeRepo();
+    const wt = agentWorktree(dir, c1, "agent-e2e2e2", "worktree-agent-e2e2e2", { commit: true });
+    expect(plan(dir).plan.remove).toEqual([]);
+    expect(fs.existsSync(wt)).toBe(true);
+  });
+
+  test("a fresh landed non-agent session worktree keeps the age gate", () => {
+    const { dir, c1 } = makeRepo();
+    const wt = agentWorktree(dir, c1, "dev-start-b46717", "claude/dev-start");
+    expect(plan(dir).plan.remove).toEqual([]);
+    expect(fs.existsSync(wt)).toBe(true);
+  });
+});
