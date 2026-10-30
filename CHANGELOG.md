@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.334.1] — 2026-10-30
+
+### Fixed
+- The ship's release step waits for the CI suite check to register instead of starting a local full test run that times out, saving ~25 minutes per ship.
+
 ## [0.334.0] — 2026-10-29
 
 ### Added
