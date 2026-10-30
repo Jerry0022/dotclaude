@@ -2301,7 +2301,7 @@ function startBackgroundUsageRefresh() {
     const done = () => { if (_bgRefreshChild === child) _bgRefreshChild = null; };
     child.on('exit', done);
     child.on('error', done);
-    setTimeout(() => { try { child.kill(); } catch {} done(); }, BG_REFRESH_KILL_MS).unref();
+    setTimeout(() => { try { child.kill(); } catch { /* already exited */ } done(); }, BG_REFRESH_KILL_MS).unref();
     child.unref();
     return true;
   } catch (err) {
