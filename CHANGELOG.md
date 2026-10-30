@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.335.8] — 2026-10-30
+
+### Changed
+- **Ship pipeline**: a ship runs the full CI suite once instead of twice — a release-only push (version + CHANGELOG) on a green head reuses the earlier run; any doubt runs the suite as before.
+- **Landing lock**: a ship that died mid-run frees the lock after ≈ 2.5 min instead of the whole CI timeout (30 s heartbeat).
+- **Completion card**: appears at once even after a pause — it shows the last usage reading ("Stand vor X min") and refreshes it in the background.
+
+### Fixed
+- **Concept page**: "Jetzt umsetzen" no longer opens an extra browser confirmation dialog.
+
 ## [0.335.7] — 2026-10-30
 
 ### Fixed
