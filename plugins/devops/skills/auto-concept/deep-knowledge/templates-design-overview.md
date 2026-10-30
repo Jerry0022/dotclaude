@@ -795,6 +795,10 @@ returns — the single-design page is untouched.
       s.dataset.ovFocus = String(!!id && s.dataset.designId === id);
     });
     quick.querySelectorAll('.design-quick-q').forEach(q => { q.dataset.ovFocus = String(onQ); });
+    quick.querySelectorAll('.design-quick-star[data-state]').forEach(st => {
+      const seg = st.closest('.design-quick-seg[data-design-id]');
+      if (seg) quickStarState(st, seg.dataset.designId, st.dataset.state === 'on');
+    });
   }
   function goSlide(i) {
     const it = visibleIteration();
@@ -960,6 +964,20 @@ returns — the single-design page is untouched.
     const cur = overviewOf(it)?.querySelector('.design-ov-slide[data-pos="cur"]');
     return !!cur && cur.dataset.designId === id;
   }
+  // Frozen round: the favourite is read-only (toggleFavorite refuses too).
+  const quickFrozen = () => !isLive(visibleIteration()) || body.classList.contains('viewing-frozen');
+  // The focused chip's star names its F hotkey, like the overlay ☆; on a
+  // frozen round it is aria-disabled. Other chips' stars just open the variant.
+  function quickStarState(st, id, on) {
+    const tip = on ? L.favUnset : L.favSet;
+    const focused = quickChipFocused(id);
+    const ro = focused && quickFrozen();
+    st.setAttribute('aria-label', tip);
+    st.dataset.tip = tip;
+    if (focused) { st.dataset.tipKey = 'F'; st.setAttribute('aria-keyshortcuts', 'F'); }
+    else { delete st.dataset.tipKey; st.removeAttribute('aria-keyshortcuts'); }
+    if (ro) st.setAttribute('aria-disabled', 'true'); else st.removeAttribute('aria-disabled');
+  }
   function quickSeg(m, named, u, fav) {
     const seg = el('button', 'design-quick-seg');
     seg.type = 'button';
@@ -979,13 +997,14 @@ returns — the single-design page is untouched.
       st.dataset.state = on ? 'on' : 'off';
       st.setAttribute('role', 'button');
       st.setAttribute('aria-pressed', String(on));
-      st.setAttribute('aria-label', on ? L.favUnset : L.favSet);
-      st.setAttribute('data-tip', on ? L.favUnset : L.favSet);
+      st.dataset.tipTier = 'info';
+      quickStarState(st, m.id, on);
       // Only the focused variant's star toggles. On any other chip the ★ just
       // marks the favourite: a click opens that variant and keeps the star.
       st.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
-        if (quickChipFocused(m.id)) toggleFavorite(m.id); else showDesignAligned(m.id);
+        if (!quickChipFocused(m.id)) showDesignAligned(m.id);
+        else if (!quickFrozen()) toggleFavorite(m.id);
       });
       seg.appendChild(st);
     }
@@ -1146,7 +1165,7 @@ returns — the single-design page is untouched.
   let quickKey = '';
   let quickMd = '';
   function quickShape(it, md, d, fav, qs) {
-    return [it.id || '', md, d ? d.dataset.design : '', quickLevel, fav || '', favOn(it) ? 'f' : '', quickNarrow(),
+    return [it.id || '', md, d ? d.dataset.design : '', quickLevel, fav || '', favOn(it) ? 'f' : '', quickNarrow(), quickFrozen(),
       metas.map(m => m.id).join(','), d ? [...d.querySelectorAll('section[data-screen][id]')].map(s => s.id).join(',') : '',
       qs.map(q => q.id + ':' + q.done).join(',')].join('|');
   }

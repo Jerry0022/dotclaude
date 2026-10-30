@@ -269,6 +269,9 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
 .design-quick-seg[data-ov-focus="true"] .design-quick-star[data-state="off"],
 .design-quick-group .design-quick-seg .design-quick-star[data-state="off"] { display: inline; opacity: 0.8; }
 .design-quick-star:hover { opacity: 1; }
+.design-quick-star[aria-disabled="true"],
+.design-quick-seg .design-quick-star[aria-disabled="true"][data-state],
+.design-quick-group .design-quick-seg .design-quick-star[aria-disabled="true"] { opacity: 0.55; cursor: default; }
 /* The active design: its pages fan out of its own segment. */
 .design-quick-group {
   display: inline-flex; align-items: center; gap: 2px; flex: none; padding-right: 3px;

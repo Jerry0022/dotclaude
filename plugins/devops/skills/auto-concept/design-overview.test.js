@@ -822,6 +822,34 @@ describe("quick-nav star on a variant chip", () => {
     expect(window.collectDecisions("iterate").favorite, "focused chip: toggles on").toBe("d2b");
   }, BOOT_TIMEOUT);
 
+  test("the focused chip's star names the F hotkey; other chips' stars do not", async () => {
+    const { window, document } = await boot(page(3));
+    window.showDesign("d2");
+    expect(star(document, "d2").dataset.tipKey, "focused: F keycap").toBe("F");
+    expect(star(document, "d2").getAttribute("aria-keyshortcuts")).toBe("F");
+    expect(star(document, "d2").dataset.tip).toBeTruthy();
+    window.showDesign("d2b");
+    expect(star(document, "d2b").dataset.tipKey).toBe("F");
+    expect(star(document, "d2").dataset.tipKey, "no longer focused").toBeUndefined();
+  }, BOOT_TIMEOUT);
+
+  test("on a frozen round the chip star is aria-disabled and does not change the favourite", async () => {
+    let html = build({ rounds: 2, entries: 4, mode: "design", mapping: true, locale: "de", designs: 2, out: "" });
+    const blob = { general: { text: "", attachments: [] }, favorite: "d1b", userPins: [] };
+    html = html.replace(/(<section id="iter-1"[^>]*>)/, `$1<script type="application/json" data-frozen-feedback>${JSON.stringify(blob)}</script>`);
+    const { window, document } = await boot(html);
+    document.querySelector('.iteration-tab[data-iteration="1"]').click();
+    await tick(); await tick();
+    window.showDesign("d1b");
+    const s = star(document, "d1b");
+    expect(s.dataset.state).toBe("on");
+    expect(s.getAttribute("aria-disabled")).toBe("true");
+    s.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true, cancelable: true }));
+    s.click();
+    expect(star(document, "d1b").dataset.state, "frozen favourite unchanged").toBe("on");
+    expect(star(document, "d1b").getAttribute("aria-disabled")).toBe("true");
+  }, BOOT_TIMEOUT);
+
   test("pressing the star never turns the page of the active design", async () => {
     const { window, document } = await boot(page(3));
     window.showDesign("d2");
