@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.15.0
+ * @version 0.16.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
@@ -51,6 +51,13 @@
  *   ~/.claude/output-styles/quiet.md — only when that copy exists and equals a
  *   shipped version; a customized copy gets one stderr note instead
  *   (../lib/output-style-sync.js).
+ *
+ *   DESKTOP COPY: the Desktop app loads plugins from its claude.ai account
+ *   marketplace copy (<Claude-Data>/rpm/…), not from the CLI cache this hook
+ *   rebuilds. When the running copy is such an rpm copy and trails the local
+ *   marketplace clone, a notice names both versions and the sync step — also on
+ *   the cooldown skip path, so it repeats every session until synced
+ *   (../lib/desktop-copy.js).
  */
 
 require('../lib/plugin-guard');
@@ -63,6 +70,7 @@ const { latestVisible, readChannelPin } = require('../lib/channels');
 const { runOnce, releaseOnce } = require('../lib/run-once');
 const { syncQuietStyle, customizedTarget, isTempClone } = require('../lib/output-style-sync');
 const { pinToTag } = require('../lib/channel-pin');
+const { desktopCopyLag } = require('../lib/desktop-copy');
 const {
   DEFER_DELAY_MS,
   cacheBroken,
@@ -85,6 +93,8 @@ const DICT = {
     style_synced: '- **Quiet output style**: synced to the shipped version (active from the next session)',
     dk_reread: 'Deep-knowledge index may have changed — re-read INDEX.md on next relevant task.',
     show_asis: 'Show the user this restart notice verbatim.',
+    desktop_lag: '⚠ **The Desktop app runs {name} {running} (claude.ai marketplace "{marketplace}", synced {synced}), but {latest} is available.** Sync the "{marketplace}" marketplace in the claude.ai plugin settings, then restart the Desktop app.',
+    desktop_lag_show: 'Show the user this notice verbatim, once.',
   },
   de: {
     header: 'Plugin-Updates angewendet (Workaround für claude-code#14061):',
@@ -92,6 +102,8 @@ const DICT = {
     style_synced: '- **Quiet-Ausgabestil**: auf die ausgelieferte Version synchronisiert (aktiv ab der nächsten Session)',
     dk_reread: 'Deep-Knowledge-Index hat sich evtl. geändert — INDEX.md beim nächsten relevanten Task neu lesen.',
     show_asis: 'Dem User diese Restart-Notice verbatim zeigen.',
+    desktop_lag: '⚠ **Die Desktop-App nutzt {name} {running} (claude.ai-Marketplace „{marketplace}“, synchronisiert {synced}), verfügbar ist {latest}.** Den Marketplace „{marketplace}“ in den claude.ai-Plugin-Einstellungen synchronisieren, dann die Desktop-App neu starten.',
+    desktop_lag_show: 'Dem User diese Notice einmal verbatim zeigen.',
   },
 };
 
@@ -161,6 +173,26 @@ function clearSentinel() {
   try { fs.unlinkSync(sentinelFile); } catch { /* ignore */ }
 }
 
+/**
+ * Notice lines when this hook runs from a Desktop rpm copy that trails the
+ * local marketplace clone; [] otherwise. Pure fs — safe on the cooldown path.
+ */
+function desktopLagLines() {
+  const lag = desktopCopyLag({ pluginRoot: path.resolve(__dirname, '..', '..'), marketplacesDir });
+  if (!lag) return [];
+  const synced = lag.updatedAt ? String(lag.updatedAt).slice(0, 10) : '?';
+  return [
+    t('desktop_lag', lang, DICT)
+      .replace('{name}', lag.name)
+      .replace('{running}', lag.running)
+      .replace('{latest}', lag.latest)
+      .replace(/\{marketplace\}/g, lag.marketplace)
+      .replace('{synced}', synced),
+    t('desktop_lag_show', lang, DICT),
+    '',
+  ];
+}
+
 // If the marketplaces directory is missing, there are no updates to run.
 if (!fs.existsSync(marketplacesDir)) {
   clearSentinel();
@@ -213,6 +245,8 @@ if (integrity.broken) {
 
 if (!FORCE && !integrity.broken && !runOnce('ss-plugin-update', null, { cooldownMs: COOLDOWN_MS })) {
   clearSentinel();
+  const lagLines = desktopLagLines();
+  if (lagLines.length) process.stdout.write(lagLines.join('\n'));
   process.exit(0);
 }
 
@@ -490,9 +524,14 @@ if (customized) {
 // three-line block at the top of every session ("1.0.0 → 1.0.0 [cache repair]").
 // Version changes and failures still surface: those are real.
 const reportable = updated.filter(u => !u.verified || u.from !== u.to);
-if (reportable.length === 0 && !styleSynced) process.exit(0);
+// After the loop: the clone now sits on the channel-resolved version.
+const lagLines = desktopLagLines();
+if (reportable.length === 0 && !styleSynced) {
+  if (lagLines.length) process.stdout.write(lagLines.join('\n'));
+  process.exit(0);
+}
 
-const lines = [t('header', lang, DICT)];
+const lines = [...lagLines, t('header', lang, DICT)];
 lines.push('');
 for (const u of reportable) {
   const status = u.verified ? '✓ cache rebuilt' : `⚠ ${u.error}`;

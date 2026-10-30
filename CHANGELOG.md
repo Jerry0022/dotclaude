@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.335.1] — 2026-10-30
+
+### Fixed
+- **Plugin update**: a Desktop session whose claude.ai marketplace copy trails the released version now gets a notice with both versions and the sync step, every session until it is synced — before, the Desktop app silently ran an old plugin while only the CLI cache was updated.
+
 ## [0.335.0] — 2026-10-30
 
 ### Added
