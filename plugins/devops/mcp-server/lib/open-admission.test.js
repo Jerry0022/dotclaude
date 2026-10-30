@@ -20,6 +20,21 @@ describe("refuseInScopeFindings (#920)", () => {
 });
 
 describe("dropNextStepOpenItems", () => {
+  test("drops an item whose reply is a promote command: the Promote buttons own it", () => {
+    const r = dropNextStepOpenItems([
+      { text: "Promotion nach beta (alpha 0.335.5, beta 0.335.0) — vom Run bewusst nicht gemacht", reply: "promote beta 0.335.5" },
+      { text: "Nach beta heben?", reply: "promote beta 0.335.5" },
+      { text: "Legacy-Route entfernen?", reply: "Ja, entfernen." },
+    ]);
+    expect(r.dropped).toBe(2);
+    expect(r.open).toEqual([{ text: "Legacy-Route entfernen?", reply: "Ja, entfernen." }]);
+  });
+
+  test("a promotion notice without a command reply stays (guard error, skipped soak)", () => {
+    expect(isNextStep("Beta übersprungen — v1.2.3 ging direkt alpha→stable, ohne Beta-Phase")).toBe(false);
+    expect(isNextStep("Promotion auf beta ausgesetzt — unbeaufsichtigter Lauf")).toBe(false);
+  });
+
   test("drops the routine next step (German)", () => {
     const r = dropNextStepOpenItems(["Version ausgeben, nach main pushen und Discord-Post senden"]);
     expect(r).toEqual({ open: [], dropped: 1 });

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.335.7] — 2026-10-30
+
+### Fixed
+- **Completion card**: a promotion never lands in the Nachbessern button — the card's Promote buttons offer it; queue/lockout ships no longer list a skipped promotion as an open point.
+
 ## [0.335.6] — 2026-10-30
 
 ### Fixed

@@ -56,6 +56,11 @@ function shownText(it) {
 function isNextStep(it) {
   const text = shownText(it).trim();
   if (!text) return false;
+  // An item whose reply is a promote command offers what the card's Promote
+  // buttons already offer, question or not — "promote beta 0.335.5" rode on
+  // Nachbessern beside them (2026-10-30).
+  const cmd = it && typeof it === 'object' && typeof it.reply === 'string' ? it.reply.trim() : '';
+  if (/^\/?promote\b/i.test(cmd)) return true;
   // A question anywhere, also one followed by a hint ("… behalten? (empfohlen: löschen)").
   if (/[?？]["')\]*_`]*(?:\s|$)/.test(text)) return false;
   const reply = it && typeof it === 'object' && typeof it.reply === 'string' ? it.reply : '';

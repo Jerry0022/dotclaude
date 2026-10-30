@@ -47,7 +47,7 @@ A ship always lands on **alpha**. Naming a higher channel means "ship if anythin
 | yes | beta / stable | the ship below, then Step 5d promotes the version just shipped; ONE `released` card |
 | no | beta / stable / bare `promote` | **promotion only**: Pre-Step A, then `modes/promote.md` Steps 0–4 |
 
-**Promotion stays a user decision.** The channel word the user typed IS that decision. Never promote on a channel that did not come from the user: orchestrator arguments (`--queued`, `--cwd`, `/do-run backlog`) and any `$SHIP_LOCKOUT` run skip the promotion and name it as an `open` item. All `ship_promote` guards stay final (monotonicity, ancestry, immutability).
+**Promotion stays a user decision.** The channel word the user typed IS that decision. Never promote on a channel that did not come from the user: orchestrator arguments (`--queued`, `--cwd`, `/do-run backlog`) and any `$SHIP_LOCKOUT` run skip the promotion; the card's Promote buttons offer it — never an `open` item (its reply would ride on Nachbessern; `lib/open-admission.js` drops it). All `ship_promote` guards stay final (monotonicity, ancestry, immutability).
 
 ## Composed ships — `--cwd`, `--keep`, `--queued`, the queue marker
 
