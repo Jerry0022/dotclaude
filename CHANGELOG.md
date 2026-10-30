@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.335.4] — 2026-10-30
+
+### Fixed
+- **Ship / Codex review**: the review prompt is passed to Codex as a file on stdin, so large diffs are reviewed instead of failing with "argument list too long"; a Codex that cannot start now has its own exit code (69) and falls back to the opt-in Claude API review instead of being treated as switched off (#978).
+
 ## [0.335.3] — 2026-10-30
 
 ### Fixed
