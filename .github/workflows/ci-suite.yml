@@ -20,14 +20,44 @@ on:
 
 permissions:
   contents: read
+  checks: read
 
 concurrency:
   group: ci-suite-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # A ship pushes its release commit (version + CHANGELOG) onto a PR whose
+  # feature commit already ran the suite. When that push only touches release
+  # files and the previous head's `suite` is green, the shards are skipped and
+  # `suite` passes on the earlier run. Fails open: anything else runs the suite.
+  # Logic + tests: .github/scripts/release-only-gate.js
+  gate:
+    name: release-only gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      skip: ${{ steps.gate.outputs.skip }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Decide
+        id: gate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_ACTION: ${{ github.event.action }}
+        run: node .github/scripts/release-only-gate.js
+
   shards:
     name: suite (shard ${{ matrix.shard }}/4)
+    needs: gate
+    # A failed gate job never blocks the suite: only an explicit skip=true does.
+    if: ${{ !cancelled() && needs.gate.outputs.skip != 'true' }}
     runs-on: windows-latest
     timeout-minutes: 15
     strategy:
@@ -65,7 +95,7 @@ jobs:
 
   suite:
     name: suite
-    needs: shards
+    needs: [gate, shards]
     # always(): a skipped/cancelled/failed shard must turn this red, not skip it.
     if: ${{ always() }}
     runs-on: ubuntu-latest
@@ -73,6 +103,10 @@ jobs:
     steps:
       - name: All shards green
         run: |
+          if [ "${{ needs.gate.outputs.skip }}" = "true" ] && [ "${{ needs.shards.result }}" = "skipped" ]; then
+            echo "release-only push on a green head - suite reused from the previous run"
+            exit 0
+          fi
           if [ "${{ needs.shards.result }}" != "success" ]; then
             echo "suite shards: ${{ needs.shards.result }}"
             exit 1

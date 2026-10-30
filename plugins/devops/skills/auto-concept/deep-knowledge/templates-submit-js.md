@@ -30,8 +30,7 @@ document.addEventListener('input', _markUserInteracted, true);
 document.addEventListener('iteration:changed', () => { _userInteracted = false; });
 
 const _emptyConfirmKey = {
-  iterate: 'panel.empty_iterate_confirm',
-  implement: 'panel.empty_implement_confirm'
+  iterate: 'panel.empty_iterate_confirm'
 };
 
 function wireSubmit(btnId, action) {
@@ -46,16 +45,14 @@ async function submitWithAction(action, extra) {
   // _submittedAt to 0, so this only blocks while we're actually waiting.
   if (_submitInFlight || _submittedAt) return;
 
-  // Empty-submit guard: if the user clicks submit without having modified
-  // any field in the active iteration, ask before sending. Avoids burning
-  // a Claude turn on accidental clicks. A changed page implements without a
-  // dialog: the implement button already sits behind its own second step
-  // (the journey's 🔒 unlock, the split button's caret menu).
-  if (!_userInteracted) {
-    const msg = (action === 'implement')
-      ? '{{panel.empty_implement_confirm}}'
-      : '{{panel.empty_iterate_confirm}}';
-    if (!window.confirm(msg)) return;
+  // Empty-submit guard (iterate only): if the user clicks "next round" without
+  // having modified any field in the active iteration, ask before sending.
+  // Avoids burning a Claude turn on accidental clicks. Implement never asks:
+  // its button already sits behind its own second step (the journey's 🔒
+  // unlock, the split button's caret menu), and accepting every
+  // recommendation unchanged is a normal implement order, not an accident.
+  if (!_userInteracted && action !== 'implement') {
+    if (!window.confirm('{{panel.empty_iterate_confirm}}')) return;
   }
 
   _submitInFlight = true;

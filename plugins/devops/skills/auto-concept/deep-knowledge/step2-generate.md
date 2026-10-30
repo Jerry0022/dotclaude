@@ -259,7 +259,7 @@ action from the menu and confirms.
 |---|---|---|---|
 | Primary (`#submit-iterate-btn`) | "Zur nächsten Runde" / "Next round" | `action: "iterate"` — Claude processes the feedback and appends a new iteration section (no code changes) | Fills the row, accent color; its hint is the `title` tooltip |
 | Caret (`#submit-menu-btn`) | ▾ | Opens `#submit-menu` (`role="menu"`, `aria-expanded`); Escape / outside click closes it | Same accent pill, right end |
-| Secondary (`#submit-implement-btn`, inside the menu) | "Mit Feedback implementieren" / "Implement with feedback" | `action: "implement"` — Claude applies the selections as actual code/file changes, without a browser dialog (the caret menu / 🔒 unlock is the second step; only an unchanged page asks via `panel.empty_implement_confirm`) | Warning-colored border + ⚠ icon, one level deeper behind the caret |
+| Secondary (`#submit-implement-btn`, inside the menu) | "Mit Feedback implementieren" / "Implement with feedback" | `action: "implement"` — Claude applies the selections as actual code/file changes, never behind a browser dialog, also on an unchanged page (the caret menu / 🔒 unlock is the second step) | Warning-colored border + ⚠ icon, one level deeper behind the caret |
 
 The click-away handler in the feedback dock does NOT apply to these buttons
 — they are explicit commits. The misclick barrier is colour + border + the

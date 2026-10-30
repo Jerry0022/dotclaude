@@ -8,6 +8,9 @@ import {
   describeScrapeFailure,
   pickNewestVersionScript,
   STALE_BARS_MAX_AGE_MIN,
+  SWR_MAX_AGE_MS,
+  swrEligible,
+  ageSnapshot,
 } from "./usage-freshness.js";
 
 const NOW = Date.parse("2026-07-04T10:00:00.000Z");
@@ -114,5 +117,35 @@ describe("pickNewestVersionScript — runtime scraper resolution survives plugin
   test("no candidates → null (caller falls back to its baked path)", () => {
     expect(pickNewestVersionScript(base, ["scripts", "refresh-usage-headless.js"])).toBeNull();
     expect(pickNewestVersionScript(join(base, "does-not-exist"), ["scripts", "x.js"])).toBeNull();
+  });
+});
+
+describe("swrEligible / ageSnapshot — the card never waits on a usage fetch", () => {
+  const WARM = 60_000;
+  const snap = (m, extra = {}) => ({
+    timestamp: minutesAgo(m), session: { pct: 10, resetInMinutes: 120 }, weekly: { pct: 50, resetInMinutes: 3000 }, ...extra,
+  });
+
+  test("past the warm window, inside the SWR window → served at once", () => {
+    expect(swrEligible(snap(5), NOW, WARM)).toBe(true);
+    expect(swrEligible(snap(SWR_MAX_AGE_MS / 60_000), NOW, WARM)).toBe(true);
+  });
+
+  test("warm, too old, cache-served or unreadable → not eligible", () => {
+    expect(swrEligible(snap(0.5), NOW, WARM)).toBe(false);
+    expect(swrEligible(snap(SWR_MAX_AGE_MS / 60_000 + 1), NOW, WARM)).toBe(false);
+    expect(swrEligible(snap(5, { _cached: true }), NOW, WARM)).toBe(false);
+    expect(swrEligible({ session: { pct: 1 } }, NOW, WARM)).toBe(false);
+    expect(swrEligible(null, NOW, WARM)).toBe(false);
+  });
+
+  test("ageSnapshot moves the reset countdowns on and records the age, input untouched", () => {
+    const s = snap(12);
+    const aged = ageSnapshot(s, NOW);
+    expect(aged._swrAgeMinutes).toBe(12);
+    expect(aged.session.resetInMinutes).toBe(108);
+    expect(aged.weekly.resetInMinutes).toBe(2988);
+    expect(s.session.resetInMinutes).toBe(120);
+    expect(ageSnapshot(snap(200), NOW).session.resetInMinutes).toBe(0);
   });
 });

@@ -30,6 +30,12 @@ import { execFileSync } from "node:child_process";
 export const LOCK_NAME = "devops-landing.lock";
 export const DEFAULT_WAIT_MS = 10 * 60_000;
 export const DEFAULT_MAX_HOLD_MS = 25 * 60_000;
+// ship_release's values: the holder beats every 30 s; a lock whose heartbeat is
+// older than 150 s (≈ 2 min plus one blocking 60 s git/gh call) is stale. The
+// pid check cannot see a dead ship call — the pid is the session's long-lived
+// MCP server — so the heartbeat is what frees the lock.
+export const LANDING_LOCK_HEARTBEAT_MS = 30_000;
+export const LANDING_LOCK_TTL_MS = 150_000;
 const GUARD_STALE_MS = 30_000;
 const YOUNG_UNREADABLE_MS = 10_000;
 
@@ -89,7 +95,7 @@ function staleReason(o, { now, pidAlive }) {
  * @returns {Promise<{ outcome, waitedMs, reason?, held, refresh(), release() }>}
  */
 export async function acquireLandingLock(cwd, {
-  branch = null, worktree = cwd, ttlMs = 10 * 60_000, maxHoldMs = DEFAULT_MAX_HOLD_MS,
+  branch = null, worktree = cwd, ttlMs = 10 * 60_000, heartbeatMs = 0, maxHoldMs = DEFAULT_MAX_HOLD_MS,
   waitMs = DEFAULT_WAIT_MS, pollMs = 1_000, maxPollMs = 15_000, enabled = true,
   now = () => Date.now(), pidAlive = pidAliveDefault,
   sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
@@ -110,7 +116,11 @@ export async function acquireLandingLock(cwd, {
   const handle = (outcome) => {
     held.set(path, token);
     hookExit();
-    return {
+    // heartbeatMs > 0: beat on a timer while held; unref'd, so it never keeps
+    // the process alive, and stopped on release or once the lock is lost.
+    let beat = null;
+    const stopBeat = () => { if (beat) { clearInterval(beat); beat = null; } };
+    const h = {
       outcome, waitedMs: now() - start, held: true,
       refresh() {
         try {
@@ -125,8 +135,13 @@ export async function acquireLandingLock(cwd, {
           return !!after && after.token === token;
         } catch { return false; }
       },
-      release() { held.delete(path); return removeIfOwner(path, (o) => o.token === token); },
+      release() { stopBeat(); held.delete(path); return removeIfOwner(path, (o) => o.token === token); },
     };
+    if (heartbeatMs > 0) {
+      beat = setInterval(() => { if (!h.refresh()) stopBeat(); }, heartbeatMs);
+      if (typeof beat.unref === "function") beat.unref();
+    }
+    return h;
   };
 
   const tryCreate = () => {

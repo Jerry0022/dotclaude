@@ -132,6 +132,27 @@ describe("landing-lock", () => {
     expect(readdirSync(dirname(lockPath(cwd))).some((f) => f.endsWith(".hb"))).toBe(false);
   });
 
+  it("heartbeatMs beats on a timer while held and stops on release", async () => {
+    const cwd = repo();
+    const a = await acquireLandingLock(cwd, { branch: "a", heartbeatMs: 20, ...fast });
+    const first = JSON.parse(readFileSync(lockPath(cwd), "utf8")).heartbeatAt;
+    await new Promise((r) => setTimeout(r, 120));
+    const later = JSON.parse(readFileSync(lockPath(cwd), "utf8")).heartbeatAt;
+    expect(Date.parse(later)).toBeGreaterThan(Date.parse(first));
+    expect(a.release()).toBe(true);
+    await new Promise((r) => setTimeout(r, 60));
+    expect(existsSync(lockPath(cwd))).toBe(false); // a late beat never recreates it
+  });
+
+  it("a dead ship call in a living server frees the lock once the short ttl passes", async () => {
+    const cwd = repo();
+    // Holder pid alive (the session's MCP server), heartbeat stopped 3 min ago.
+    plant(cwd, { pid: process.pid, heartbeatAt: new Date(Date.now() - 180_000).toISOString(), ttlMs: 150_000 });
+    const b = await acquireLandingLock(cwd, { branch: "b", worktree: "/b", ...fast });
+    expect(b.outcome).toBe("stolen-stale");
+    b.release();
+  });
+
   it("is per repo: another repo is never blocked", async () => {
     const r1 = repo();
     const r2 = repo();

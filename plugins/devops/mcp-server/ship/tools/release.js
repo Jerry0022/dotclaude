@@ -7,7 +7,7 @@ import { z } from "zod";
 import { execFileSync } from "node:child_process";
 import { gitArgs, gitTry, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf, detectDefaultBranch, NETWORK_TIMEOUT } from "../lib/git.js";
 import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch, markPRReady } from "../lib/github.js";
-import { acquireLandingLock } from "../lib/landing-lock.js";
+import { acquireLandingLock, LANDING_LOCK_TTL_MS, LANDING_LOCK_HEARTBEAT_MS } from "../lib/landing-lock.js";
 import { channelFields } from "../lib/channel-state.js";
 import { classifyFailedChecks } from "../lib/ci-account-limits.js";
 import { restoreWorkflows, stillCovered, resumedLine } from "../lib/ci-workflow-guard.js";
@@ -480,12 +480,18 @@ export async function handler(params) {
 
     // Landing lock (per repo, fail-open): ships of this repo queue here so the
     // one that lands first does not invalidate the CI run of the next. Held to
-    // the end of this call (finally), refreshed around the CI wait.
+    // the end of this call (finally). The lock's own heartbeat (every
+    // LANDING_LOCK_HEARTBEAT_MS) keeps it alive, and the explicit refreshes
+    // around the blocking git/gh calls and the CI wait cover the stretches the
+    // timer cannot fire in. A ship call that dies while the session's MCP
+    // server lives on (its pid stays alive) frees the lock after
+    // LANDING_LOCK_TTL_MS instead of the whole CI timeout.
     const checksMs = (checksTimeoutSec ?? 600) * 1000;
     lock = await acquireLandingLock(cwd, {
       branch, worktree: cwd, enabled: params.landingLock !== false,
       waitMs: (params.landingLockWaitSec ?? 600) * 1000,
-      ttlMs: checksMs + 5 * 60_000, maxHoldMs: Math.max(25 * 60_000, checksMs + 10 * 60_000),
+      ttlMs: LANDING_LOCK_TTL_MS, heartbeatMs: LANDING_LOCK_HEARTBEAT_MS,
+      maxHoldMs: Math.max(25 * 60_000, checksMs + 10 * 60_000),
     });
     result.landingLock = { waitedMs: lock.waitedMs, outcome: lock.outcome, ...(lock.reason && { reason: lock.reason }) };
 
@@ -535,7 +541,9 @@ export async function handler(params) {
     // now, so this ship's CI runs normally and gates the merge. A failed enable
     // keeps the record as pending-enable (retried by the next ship / sweep).
     reenableRecordedWorkflows(cwd, result, { revoking: params.quotaDecision === "revoke" });
+    lock.refresh(); // fetch + rebase above blocked the heartbeat timer
     gitArgs(["push", "-u", "origin", branch, leaseArg], { cwd, timeout: 60_000 });
+    lock.refresh();
     result.pushed = true;
 
     // Check for existing open PR before creating a new one

@@ -41,6 +41,42 @@ export function isLiveSnapshot(data) {
   return !!(data && data.session && !data._cached);
 }
 
+// The completion card serves a live snapshot up to this old at once and
+// refreshes in the background (stale-while-revalidate); only an older one
+// still blocks the card on a synchronous fetch.
+export const SWR_MAX_AGE_MS = 30 * 60_000;
+
+/**
+ * May the card show this snapshot right away while a background fetch runs?
+ * Only a live (not cache-served) snapshot past the warm window and inside the
+ * SWR window qualifies — a fresh one needs no refresh, an older one blocks.
+ * @param {object|null} data  parsed usage-live.json
+ * @param {number} nowMs
+ * @param {number} warmMaxAgeMs
+ */
+export function swrEligible(data, nowMs, warmMaxAgeMs) {
+  if (!isLiveSnapshot(data)) return false;
+  const ts = data.timestamp ? Date.parse(data.timestamp) : NaN;
+  if (!Number.isFinite(ts)) return false;
+  const age = nowMs - ts;
+  return age > warmMaxAgeMs && age <= SWR_MAX_AGE_MS;
+}
+
+/**
+ * A copy of an SWR-served snapshot as of `nowMs`: the reset countdowns move
+ * on by the snapshot's age (they were relative to its timestamp), and
+ * `_swrAgeMinutes` lets the card say "Stand vor X min". The input is untouched.
+ * @param {object} data
+ * @param {number} nowMs
+ */
+export function ageSnapshot(data, nowMs) {
+  const ageMin = Math.max(0, Math.round((nowMs - Date.parse(data.timestamp)) / 60_000));
+  const shift = (w) => (w && w.resetInMinutes != null
+    ? { ...w, resetInMinutes: Math.max(0, w.resetInMinutes - ageMin) }
+    : w);
+  return { ...data, session: shift(data.session), weekly: shift(data.weekly), _swrAgeMinutes: ageMin };
+}
+
 /**
  * Map an execSync error (or exit code) from the scraper to a reason string.
  * Covers the undocumented failure classes too: exit 1 (node-level crash, e.g.
