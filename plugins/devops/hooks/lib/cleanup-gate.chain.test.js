@@ -105,3 +105,37 @@ describe("hasLanded — sub-agent branches of a squash-merged integration branch
     expect(gate.hasLanded(g, { kind: "branch", target: "agent/ok" }, { cwd: dir, mergedHeads: headOf, deadline: Date.now() - 1 })).toBe(false);
   });
 });
+
+describe("hasLanded — agent change superseded inside a squash-merged head (#983)", () => {
+  let dir, g;
+  const commit = (files, msg) => {
+    for (const [f, c] of Object.entries(files)) fs.writeFileSync(path.join(dir, f), c);
+    git(dir, "add", "-A");
+    git(dir, "commit", "-q", "-m", msg);
+  };
+
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "cleanup-gate-superseded-"));
+    git(dir, "init", "-q", "-b", "main");
+    git(dir, "config", "user.email", "t@example.com");
+    git(dir, "config", "user.name", "t");
+    git(dir, "config", "commit.gpgsign", "false");
+    commit({ "a.txt": "0\n" }, "c0");
+    git(dir, "checkout", "-q", "-b", "agent/edited", "main");
+    commit({ "a.txt": "agent\n" }, "agent edit");
+    git(dir, "checkout", "-q", "-b", "feat", "main");
+    git(dir, "merge", "-q", "--no-ff", "-m", "merge agent", "agent/edited");
+    commit({ "a.txt": "feature\n" }, "feature edits the same file later");
+    git(dir, "checkout", "-q", "main");
+    commit({ "a.txt": "feature\n" }, "squash of feat");
+    git(dir, "update-ref", "refs/remotes/origin/main", "HEAD");
+    git(dir, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+    g = gitFor(dir);
+  });
+  afterAll(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } });
+
+  test("tip inside a merged head whose tree equals main → landed, although the file changed again", () => {
+    const heads = () => new Set([git(dir, "rev-parse", "feat")]);
+    expect(gate.hasLanded(g, { kind: "branch", target: "agent/edited" }, { cwd: dir, mergedHeads: heads })).toBe(true);
+  });
+});
