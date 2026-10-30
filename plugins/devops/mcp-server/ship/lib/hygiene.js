@@ -453,8 +453,23 @@ export function landedVia(sha, branch, ctx) {
       if (gitOk(["merge-base", "--is-ancestor", sha, head], ctx.cwd)) return "pr";
     }
   }
-  if (ctx.merged && ctx.viaMerged && ctx.viaMerged.has(sha) && chainLanded(sha, ctx)) return "chain";
+  if (ctx.merged && ctx.viaMerged && ctx.viaMerged.has(sha)) {
+    if (supersededByHead(sha, ctx)) return "superseded";
+    if (chainLanded(sha, ctx)) return "chain";
+  }
   return contentInBase(ctx.cwd, sha, ctx.baseRef, { maxFiles: TREE_CHECK_MAX_FILES }).landed ? "tree" : null;
+}
+
+/** `sha` sits under a merged PR head whose tree equals the base tree (#983). */
+function supersededByHead(sha, ctx) {
+  const baseTree = gitOut(["rev-parse", `${ctx.baseRef}^{tree}`], ctx.cwd);
+  if (!baseTree) return false;
+  const cache = ctx.headTrees || (ctx.headTrees = new Map());
+  for (const head of ctx.merged.bySha) {
+    if (!cache.has(head)) cache.set(head, gitOut(["rev-parse", "-q", "--verify", `${head}^{tree}`], ctx.cwd));
+    if (cache.get(head) === baseTree && gitOk(["merge-base", "--is-ancestor", sha, head], ctx.cwd)) return true;
+  }
+  return false;
 }
 
 /**
