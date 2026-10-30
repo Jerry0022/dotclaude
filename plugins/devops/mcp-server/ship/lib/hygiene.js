@@ -1017,6 +1017,7 @@ export function classifyUnits(scan, io) {
  * (`autoCleanGateDays` / `autoCleanMinAgeDays`), count (all but the
  * `autoCleanKeepNewest` newest) and disk (kept session worktrees above
  * `autoCleanMaxGB` lose their checkout, oldest first, the branch stays).
+ * A removable sub-agent worktree (`agent-*`) goes at once, past age and count.
  * 0 switches the count or the disk trigger off. The at-risk check ignores
  * age: unpushed work is worth a warning on the day it is abandoned.
  * @param {{units:object[], defaultBranch:string}} scan
@@ -1044,6 +1045,8 @@ export function planAutoClean(scan, settings, io) {
   };
   // abandoned temp worktrees (evals, parity builds) go as soon as nothing holds them
   for (const u of removable) if (u.temp && !u.session) pick(u, "temp");
+  // a landed, clean sub-agent worktree has no follow-up value: no age gate, no "keep N newest" (#982)
+  for (const u of removable) if (u.agent && !u.archive) pick(u, "agent");
   const newestFirst = [...removable].filter((u) => !picked.has(u.key)).sort((a, b) => a.ageDays - b.ageDays);
   if (removable.some((u) => u.ageDays > gate)) {
     for (const u of removable) if (u.ageDays > minAge) pick(u, "age");

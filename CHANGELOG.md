@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.335.3] — 2026-10-30
+
+### Fixed
+- **Ship hygiene**: landed, clean sub-agent worktrees and their branches are removed right after a ship instead of piling up until they are three days old (#982).
+
 ## [0.335.2] — 2026-10-30
 
 ### Fixed
