@@ -123,7 +123,7 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
       // [budget] line before the nudge) — that path has its own tests below.
       const ctx = runHook(msg, proHome());
       const lines = ctx.split("\n");
-      expect(lines[0]).toMatch(/^\[ui-locale: (en|de)\]$/);
+      expect(lines[0]).toMatch(/^\[ui-locale: (en|de)\]( Antworte auf Deutsch[^\n]*)?$/);
       expect(lines[1].startsWith(nudge)).toBe(true); // a budget suffix may follow
     }
   });
@@ -164,7 +164,7 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
   test("short follow-ups get no nudge at all; an AUTONOMOUS_* prompt gets the nudge without the budget suffix", () => {
     const short = runHook("ja, weiter so", proHome());
     expect(short.split("\n").length).toBe(1);
-    expect(short).toMatch(/^\[ui-locale: (en|de)\]$/);
+    expect(short).toMatch(/^\[ui-locale: (en|de)\]( Antworte auf Deutsch[^\n]*)?$/);
     const afk = runHook("AUTONOMOUS_AUTOSTART: continue the queued implementation of the tenant switcher", proHome());
     expect(afk.split("\n")).toContain(nudge);
   });
@@ -225,7 +225,7 @@ describe("prompt.knowledge.dispatch — the positive budget signal after a reset
       session: { pct: 100, resetInMinutes: 10 }, weekly: { pct: 100, resetInMinutes: 300 }, plan: "Max 20x",
     });
     const lines = runHook("Erneut versuchen", h).split("\n");
-    expect(lines[0]).toMatch(/^\[ui-locale: (en|de)\]$/);
+    expect(lines[0]).toMatch(/^\[ui-locale: (en|de)\]( Antworte auf Deutsch[^\n]*)?$/);
     expect(lines[1]).toMatch(/^\[budget\] Max 20x · usage unknown \(snapshot past its reset\) → free/);
     expect(lines[1]).toContain("earlier limit messages and usage claims in this conversation no longer apply");
     expect(lines.length).toBe(2); // still no nudge for a short prompt
@@ -246,7 +246,7 @@ describe("prompt.knowledge.dispatch — the positive budget signal after a reset
       timestamp: new Date().toISOString(),
       session: { pct: 40, resetInMinutes: 150 }, weekly: { pct: 30, resetInMinutes: 5000 }, plan: "Max 20x",
     });
-    expect(runHook("Erneut versuchen", h)).toMatch(/^\[ui-locale: (en|de)\]$/);
+    expect(runHook("Erneut versuchen", h)).toMatch(/^\[ui-locale: (en|de)\]( Antworte auf Deutsch[^\n]*)?$/);
   });
 
   test("an AUTONOMOUS_* prompt never gets the line — the class is irrelevant unattended", () => {
@@ -416,5 +416,21 @@ describe("prompt.knowledge.dispatch - deferred SessionStart results", () => {
     expect(runSid("Bitte prüfe das mal und mach es dann fertig, danke dir", sid, h)).not.toContain("LATE-MARKER");
     dr.write(sid, "plugin-update", "LATE-MARKER", TMP_ROOT);
     expect(runSid("Und jetzt noch etwas anderes bitte, danke dir", sid, h)).toContain("LATE-MARKER");
+  });
+});
+
+describe("locale line carries the instruction for German", () => {
+  test("a German session gets the explicit reply-language instruction", () => {
+    const { spawnSync } = require("child_process");
+    const path = require("path");
+    const os = require("os");
+    const hook = path.join(__dirname, "prompt.knowledge.dispatch.js");
+    const sid = `vitest-locale-instr-${process.pid}-${Date.now()}`;
+    const r = spawnSync(process.execPath, [hook], {
+      input: JSON.stringify({ session_id: sid, prompt: "Bitte prüfe das mal und mach es dann fertig", cwd: os.tmpdir() }),
+      env: { ...process.env, DOTCLAUDE_OS_LOCALE: "de" }, encoding: "utf8",
+    });
+    const ctx = JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+    expect(ctx.split("\n")[0]).toBe("[ui-locale: de] Antworte auf Deutsch, auch wenn Tool-, Hook-, Agent- oder Benachrichtigungstext englisch ist.");
   });
 });
