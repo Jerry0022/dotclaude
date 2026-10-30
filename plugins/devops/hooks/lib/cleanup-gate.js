@@ -246,6 +246,19 @@ const GIT_OPTS_WITH_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--
 
 function stripRefsHeads(name) { return name.replace(/^refs\/heads\//, ''); }
 
+/**
+ * Git-Bash style `/p/Projects/x` → `p:/Projects/x` on Windows. Node reads the
+ * MSYS form as a path on the current drive (`P:\p\Projects\x`), so every git
+ * check of a `git -C /p/…` or `cd /p/…` delete ran in a missing directory and
+ * read as "not landed" — a multi-repo cleanup was refused branch by branch.
+ */
+function fromMsys(p, platform = process.platform) {
+  const m = /^\/([a-zA-Z])(\/.*)?$/.exec(String(p || ''));
+  return m && platform === 'win32' ? `${m[1]}:${m[2] || '/'}` : p;
+}
+
+function resolvePath(base, p) { return path.resolve(base, fromMsys(p)); }
+
 /** A target the gate can verify: a literal name, no expansion or glob. */
 function literal(t) { return typeof t === 'string' && t !== '' && !/[$`*?()[\]{}]/.test(t); }
 
@@ -475,14 +488,14 @@ function parseDeletes(command, cwd) {
   for (const t of segments(command).flatMap(seg => unwrap(seg.tokens, 0, seg.piped))) {
     if (t[0] === '__unresolved__') { unresolved.push(`a shell wrapper runs ${t[1]}`); continue; }
     if (/^(cd|Set-Location|sl|pushd)$/i.test(t[0]) && t[1] && !t[1].startsWith('-')) {
-      if (literal(t[1])) dir = path.resolve(dir, t[1]);
+      if (literal(t[1])) dir = resolvePath(dir, t[1]);
       continue;
     }
     const r = deletesInTokens(t);
     if (!r) continue;
     if (r.unresolved) { unresolved.push(r.unresolved); continue; }
     for (const d of r) {
-      deletes.push({ ...d, dir: d.dir ? path.resolve(dir, d.dir) : dir });
+      deletes.push({ ...d, dir: d.dir ? resolvePath(dir, d.dir) : dir });
     }
   }
   return { deletes, unresolved };
@@ -580,7 +593,7 @@ function namesWorktree(scope, target, dir) {
   const s = normPath(scope);
   const raw = normPath(target);
   if (raw && s.includes(raw)) return true;
-  const abs = normPath(path.resolve(dir || '.', target));
+  const abs = normPath(resolvePath(dir || '.', target));
   if (abs && s.includes(abs)) return true;
   // 10b's temp worktrees: `.claude/worktrees/cleanup-pr-<n>` for a shipped `#<n>`
   const m = /(?:^|\/)cleanup-pr-(\d+)$/.exec(raw);
@@ -611,10 +624,10 @@ const HOW_TO_CONFIRM =
  * @returns {{skip: true}|{block: string}|{ok: true}}
  */
 function checkDirDelete(d, cwd, gitFor) {
-  const abs = normPath(path.resolve(d.dir, d.target));
+  const abs = normPath(resolvePath(d.dir, d.target));
   const listed = (gitFor(d.dir)(['worktree', 'list', '--porcelain']) || '')
     .split('\n').filter(l => l.startsWith('worktree ')).map(l => normPath(l.slice(9)));
-  const hasGitFile = fs.existsSync(path.join(path.resolve(d.dir, d.target), '.git'));
+  const hasGitFile = fs.existsSync(path.join(resolvePath(d.dir, d.target), '.git'));
   const inside = (p) => p === abs || p.startsWith(`${abs}/`);
   if (listed[0] && inside(listed[0])) return { block: `${d.target} is (or holds) the main checkout.` };
   if (inside(normPath(cwd))) return { block: `${d.target} holds this session's own directory.` };
@@ -623,7 +636,7 @@ function checkDirDelete(d, cwd, gitFor) {
   // a worktree folder itself, never a subfolder of one (`rm -rf dist` in a session worktree)
   if (!listed.includes(abs) && !hasGitFile && !/\/\.claude\/worktrees\/[^/]+$/.test(abs)) return { skip: true };
   if (hasGitFile) {
-    const status = gitFor(path.resolve(d.dir, d.target))(['status', '--porcelain']);
+    const status = gitFor(resolvePath(d.dir, d.target))(['status', '--porcelain']);
     if (status === null) return { block: `git status of ${d.target} could not be read — its tree is unverified.` };
     if (status !== '') return { block: `${d.target} has uncommitted or untracked changes.` };
   }
@@ -680,6 +693,6 @@ module.exports = {
   ARM_TTL_MS,
   statePath, readState, writeState, arm, isCleanupSkill,
   isYesAnswer, questionScope, recordAnswers,
-  segments, parseDeletes, defaultBase, hasLanded,
+  segments, fromMsys, parseDeletes, defaultBase, hasLanded,
   namesBranch, namesWorktree, decide,
 };
