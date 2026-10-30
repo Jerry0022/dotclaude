@@ -103,8 +103,22 @@ describe("parseDeletes — every delete form, with the directory git runs in", (
   test("the eval's forms: -C <path>, cd <path> && …, chained commands", () => {
     const a = one('git -C "C:/Temp/ab-case" branch -D feat/merged');
     expect(a.deletes[0]).toMatchObject({ kind: "branch", target: "feat/merged", dir: path.resolve(cwd, "C:/Temp/ab-case") });
-    const b = one('cd "/x/repo" && git branch -d feat/merged; echo ---; git push origin --delete feat/merged');
-    expect(b.deletes.map((d) => [d.kind, d.dir])).toEqual([["branch", path.resolve("/x/repo")], ["remote", path.resolve("/x/repo")]]);
+    const b = one('cd "/work/other" && git branch -d feat/merged; echo ---; git push origin --delete feat/merged');
+    expect(b.deletes.map((d) => [d.kind, d.dir])).toEqual([["branch", path.resolve("/work/other")], ["remote", path.resolve("/work/other")]]);
+  });
+
+  test("Git-Bash /p/… paths name the Windows drive, not a folder on the current one", () => {
+    expect(gate.fromMsys("/p/Projects/x", "win32")).toBe("p:/Projects/x");
+    expect(gate.fromMsys("/c", "win32")).toBe("c:/");
+    expect(gate.fromMsys("/p/Projects/x", "linux")).toBe("/p/Projects/x");
+    expect(gate.fromMsys("/tmp/x", "win32")).toBe("/tmp/x");
+  });
+
+  test.runIf(process.platform === "win32")("-C and cd with a Git-Bash path run git in that repo (Windows)", () => {
+    const a = one("git -C /p/Projects/other branch -D feat/a");
+    expect(a.deletes[0].dir).toBe(path.resolve("p:/Projects/other"));
+    const b = one("cd /p/Projects/other && git push origin --delete feat/a");
+    expect(b.deletes[0].dir).toBe(path.resolve("p:/Projects/other"));
   });
 
   test.each([

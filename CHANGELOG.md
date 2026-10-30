@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.335.6] — 2026-10-30
+
+### Fixed
+- **Repo cleanup**: the deletion gate understands Git-Bash paths (`git -C /p/Projects/x`, `cd /p/…`), so cleaning up branches in another repo is no longer refused as "unmerged work" for branches that already landed.
+
 ## [0.335.5] — 2026-10-30
 
 ### Fixed
