@@ -1,6 +1,10 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import { createRequire } from "node:module";
 
+// No real waiting for the CI `suite` check to register; tests that cover it opt in.
+process.env.DEVOPS_SHIP_SUITE_REGISTER_GRACE_MS = "0";
+process.env.DEVOPS_SHIP_SUITE_REGISTER_INTERVAL_MS = "1";
+
 // zod is a runtime dependency of the MCP server (installed where the server
 // runs); the repo's devDependency copy serves the issues contract tests.
 // The handler never invokes the schema — only the MCP registration does —
@@ -1847,6 +1851,60 @@ describe("full-suite merge gate (M6)", () => {
     const res = await handler(params({ fullSuiteVia: "ci" }));
     expect(res.success).toBe(true);
     expect(res.fullSuiteLocal.treeHash).toBe("T1");
+  });
+
+  describe("release waits for the CI suite instead of a local full run", () => {
+    const lint = { name: "lint", bucket: "pass" };
+    const suiteGreen = [lint, { name: "suite", bucket: "pass" }];
+    const ok = (checks) => ({ status: "passed", checks, failed: [], pending: [] });
+    beforeEach(() => { withSuite(true); process.env.DEVOPS_SHIP_SUITE_REGISTER_GRACE_MS = "5000"; });
+    afterEach(() => { withSuite(false); process.env.DEVOPS_SHIP_SUITE_REGISTER_GRACE_MS = "0"; });
+
+    test("suite not yet registered on first read -> keeps watching, merges once green, no local run", async () => {
+      ghLib.mergePR.mockClear();
+      testResults.findFullGreen.mockClear();
+      ghLib.watchPRChecks.mockReturnValueOnce(ok([lint])).mockReturnValueOnce(ok(suiteGreen));
+      const res = await handler(params({ fullSuiteVia: "ci" }));
+      expect(res.success).toBe(true);
+      expect(res.fullSuiteCi).toEqual({ check: "suite", passed: true });
+      expect(ghLib.watchPRChecks).toHaveBeenCalledTimes(2);
+      expect(testResults.findFullGreen).not.toHaveBeenCalled();
+    });
+
+    test("suite green on first read -> single watch, no local run", async () => {
+      testResults.findFullGreen.mockClear();
+      ghLib.watchPRChecks.mockClear();
+      ghLib.watchPRChecks.mockReturnValueOnce(ok(suiteGreen));
+      const res = await handler(params({ fullSuiteVia: "ci" }));
+      expect(res.success).toBe(true);
+      expect(ghLib.watchPRChecks).toHaveBeenCalledTimes(1);
+      expect(testResults.findFullGreen).not.toHaveBeenCalled();
+    });
+
+    test("suite never appears within the grace -> local fallback as before (full-suite-required)", async () => {
+      process.env.DEVOPS_SHIP_SUITE_REGISTER_GRACE_MS = "20";
+      ghLib.mergePR.mockClear();
+      ghLib.watchPRChecks.mockReturnValue(ok([lint]));
+      const res = await handler(params({ fullSuiteVia: "ci" }));
+      expect(res.reason).toBe("full-suite-required");
+      expect(ghLib.mergePR).not.toHaveBeenCalled();
+    });
+
+    test("no CI suite workflow in the repo -> no waiting, local semantics unchanged", async () => {
+      withSuite(false);
+      ghLib.watchPRChecks.mockClear();
+      ghLib.watchPRChecks.mockReturnValueOnce(ok([lint]));
+      await handler(params({ fullSuiteVia: "local" }));
+      expect(ghLib.watchPRChecks).toHaveBeenCalledTimes(1);
+    });
+
+    test("suite skipped (bucket skipping) -> no waiting, existing fallback", async () => {
+      ghLib.watchPRChecks.mockClear();
+      ghLib.watchPRChecks.mockReturnValueOnce(ok([{ name: "suite", bucket: "skipping" }]));
+      const res = await handler(params({ fullSuiteVia: "ci" }));
+      expect(res.reason).toBe("full-suite-required");
+      expect(ghLib.watchPRChecks).toHaveBeenCalledTimes(1);
+    });
   });
 
   test("REGRESSION (review): fullSuiteVia unknown + CI suite in the repo → treated as ci, never a merge without evidence", async () => {

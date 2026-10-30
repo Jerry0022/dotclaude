@@ -42,6 +42,10 @@ jobs + the aggregate `suite`) or a local full run recorded for that tree.
 - CI suite declared + Actions quota not exhausted: `ship_build` runs lint + only the
   tests related to the diff and returns `testScope: "related"`, `fullSuiteVia: "ci"`;
   the PR's `suite` check is the full-suite gate.
+  `ship_release` then waits for the `suite` check, including its registration right after a
+  draft goes ready (grace `DEVOPS_SHIP_SUITE_REGISTER_GRACE_MS`, default 180s, within
+  `checksTimeoutSec`); it never starts a local full run while that check is pending or not yet
+  reported. The local fallback applies only if it never appears, is skipped, or quota blocks.
 - No CI suite, quota exhausted (GitHub Actions minutes ran out — it happens regularly),
   or the diff touches package.json / lockfiles / vitest config: `ship_build` runs the full
   suite locally (`testScope: "full"`, `fullSuiteVia: "local"`) and records it.
