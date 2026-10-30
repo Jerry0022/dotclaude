@@ -82,7 +82,6 @@ must see their own language. The locale hint is authoritative.
 | `panel.disconnected_title` | Not connected — your input stays saved and is sent on reconnect | Nicht verbunden — deine Eingaben bleiben gespeichert und gehen beim Verbinden raus |
 | `panel.btn_cache_hint`         | cached — sent on reconnect     | gecached — wird beim Verbinden gesendet |
 | `panel.empty_iterate_confirm` | Nothing was changed. Submit "Next round" anyway? | Du hast nichts geändert. Trotzdem "Zur nächsten Runde" absenden? |
-| `panel.empty_implement_confirm` | Nothing was changed. Implement with feedback anyway? Code will still be written. | Du hast nichts geändert. Trotzdem mit Feedback implementieren? Dann wird Code geschrieben. |
 | `panel.toggle_open`            | Open decisions                 | Entscheidungen öffnen |
 | `panel.toggle_close`           | Close decisions                | Entscheidungen schliessen |
 | `panel.close`                  | Close                          | Schliessen |

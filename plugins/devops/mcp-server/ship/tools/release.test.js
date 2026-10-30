@@ -69,6 +69,8 @@ vi.mock("../lib/github.js", () => ({
 const lockStub = { refresh: vi.fn(() => true), release: vi.fn(() => true) };
 vi.mock("../lib/landing-lock.js", () => ({
   acquireLandingLock: vi.fn(async () => ({ outcome: "acquired", waitedMs: 0, held: true, refresh: lockStub.refresh, release: lockStub.release })),
+  LANDING_LOCK_TTL_MS: 150_000,
+  LANDING_LOCK_HEARTBEAT_MS: 30_000,
 }));
 
 // M6: the full-suite lookup. findFullGreen is the export the test-scope change adds.

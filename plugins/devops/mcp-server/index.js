@@ -52,7 +52,7 @@
 // CLI — then runs on a bare node with no third-party module in the graph, which
 // is exactly what the CLI fallback exists for: the session where the MCP server
 // itself never came up.
-import { execSync, execFileSync } from "node:child_process";
+import { execSync, execFileSync, spawn } from "node:child_process";
 import { readFileSync, writeFileSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
@@ -80,6 +80,8 @@ import {
   isLiveSnapshot,
   describeScrapeFailure,
   pickNewestVersionScript,
+  swrEligible,
+  ageSnapshot,
 } from "./lib/usage-freshness.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1056,9 +1058,17 @@ const BUDGET_TOOLTIP = {
   de: (pct, reset) => pct + '% verbraucht · Reset in ' + reset,
   en: (pct, reset) => pct + '% used · resets in ' + reset,
 };
+/** Tail for a stale-while-revalidate snapshot: how old the numbers are. */
+const BUDGET_AGE_TAIL = {
+  de: (min) => ' · Stand vor ' + min + ' min',
+  en: (min) => ' · as of ' + min + ' min ago',
+};
 
 function buildBudgetModel(usageData, delta5h, deltaWk, healthLine, lang = 'de') {
-  const tooltipFor = BUDGET_TOOLTIP[lang] || BUDGET_TOOLTIP.de;
+  const baseTooltip = BUDGET_TOOLTIP[lang] || BUDGET_TOOLTIP.de;
+  const ageMin = usageData && usageData._swrAgeMinutes;
+  const ageTail = ageMin >= 1 ? (BUDGET_AGE_TAIL[lang] || BUDGET_AGE_TAIL.de)(ageMin) : '';
+  const tooltipFor = (pct, reset) => baseTooltip(pct, reset) + ageTail;
   if (!usageData || !usageData.session) return null;
   const freshness = assessFreshness(usageData, Date.now());
   if (freshness.expired) {
@@ -2265,7 +2275,46 @@ function usageAgeMs(d) {
   return d?.timestamp ? Date.now() - new Date(d.timestamp).getTime() : Infinity;
 }
 
-function refreshUsage() {
+// Background usage fetch for the card's stale-while-revalidate path. Single
+// flight per process (one child at a time) and across servers (a stamp file:
+// no new fetch within BG_REFRESH_MIN_GAP_MS of the last start), detached and
+// unref'd so the card never waits on it; the child writes usage-live.json and
+// the next card serves the fresh numbers.
+const BG_REFRESH_STAMP = join(tmpdir(), 'dotclaude-usage-refresh.stamp');
+const BG_REFRESH_MIN_GAP_MS = 90_000;
+const BG_REFRESH_KILL_MS = 90_000;
+let _bgRefreshChild = null;
+
+function startBackgroundUsageRefresh() {
+  if (_bgRefreshChild) return false;
+  try {
+    if (Date.now() - statSync(BG_REFRESH_STAMP).mtimeMs < BG_REFRESH_MIN_GAP_MS) return false;
+  } catch { /* no stamp yet */ }
+  const script = resolveScraperScript();
+  if (!script) return false;
+  try {
+    writeFileSync(BG_REFRESH_STAMP, String(Date.now()));
+    const child = spawn(process.execPath, [script, '--quiet', '--no-login'], {
+      detached: true, stdio: 'ignore', windowsHide: true,
+    });
+    _bgRefreshChild = child;
+    const done = () => { if (_bgRefreshChild === child) _bgRefreshChild = null; };
+    child.on('exit', done);
+    child.on('error', done);
+    setTimeout(() => { try { child.kill(); } catch { /* already exited */ } done(); }, BG_REFRESH_KILL_MS).unref();
+    child.unref();
+    return true;
+  } catch (err) {
+    console.error('[dotclaude-mcp] Background usage refresh failed to start:', err.message);
+    return false;
+  }
+}
+
+// `swr` — the card path: a live snapshot up to SWR_MAX_AGE_MS old is served at
+// once (reset countdowns aged, no deltas, baseline untouched) while a
+// background fetch refreshes it. get_usage keeps the blocking fetch: there the
+// caller asked for current numbers.
+function refreshUsage({ swr = false } = {}) {
   // Escape hatch — no usage at all: no file read, no baseline write, no
   // headless fetch. Set in tests (so the card renderer never spawns Edge) and
   // usable offline/CI. The card still renders; it just omits the usage meter
@@ -2299,6 +2348,12 @@ function refreshUsage() {
   const warm = readUsageJson();
   if (isLiveSnapshot(warm) && usageAgeMs(warm) <= WARM_MAX_AGE_MS) {
     return finish(warm);
+  }
+
+  // 1b. Stale-while-revalidate (card only) — never block the card on Edge.
+  if (swr && swrEligible(warm, Date.now(), WARM_MAX_AGE_MS)) {
+    startBackgroundUsageRefresh();
+    return { success: true, data: ageSnapshot(warm, Date.now()), delta5h: null, deltaWk: null };
   }
 
   // 2. Fallback — headless in-page API fetch via the dedicated Edge profile,
@@ -2612,7 +2667,7 @@ function buildCompletionCard(params) {
   }
 
   // 1. Fetch fresh usage data
-  const usageResult = refreshUsage();
+  const usageResult = refreshUsage({ swr: true });
   const usageData = usageResult.success ? usageResult.data : null;
   const delta5h = usageResult.delta5h ?? null;
   const deltaWk = usageResult.deltaWk ?? null;
