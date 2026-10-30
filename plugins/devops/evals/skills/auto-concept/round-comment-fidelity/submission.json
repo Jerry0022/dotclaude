@@ -1,0 +1,19 @@
+{
+  "template": "decision",
+  "action": "iterate",
+  "decisions": [
+    { "id": "variant-json", "label": "JSON-Datei", "evaluation": "include", "rating": 3 },
+    { "id": "variant-sqlite", "label": "SQLite", "evaluation": "include", "rating": 4 },
+    { "id": "variant-markdown", "label": "Markdown-Dateien", "evaluation": "include", "rating": 4 }
+  ],
+  "comments": {
+    "general": { "text": "Die Notizen müssen mit git diff lesbar bleiben – das ist für mich eine harte Bedingung.", "attachments": [] },
+    "items": [
+      { "id": "variant-json-note", "text": "Was passiert bei gleichzeitigen Schreibzugriffen aus zwei Terminals?", "attachments": [] },
+      { "id": "variant-sqlite-note", "text": "Wie sieht es mit Volltextsuche aus? Ich suche sehr viel in meinen Notizen – vergleich FTS5 mit einem simplen grep.", "attachments": [] },
+      { "id": "variant-markdown-note", "text": "Front Matter für Tags – zeig mir, wie eine einzelne Notiz-Datei konkret aussehen würde.", "attachments": [] }
+    ]
+  },
+  "userPins": [],
+  "mappings": []
+}

@@ -1,0 +1,15 @@
+{
+  "template": "decision",
+  "action": "iterate",
+  "decisions": [
+    { "id": "variant-json", "label": "JSON-Datei", "evaluation": "discard", "rating": 2 },
+    { "id": "variant-sqlite", "label": "SQLite", "evaluation": "discard", "rating": 2 },
+    { "id": "variant-markdown", "label": "Markdown-Dateien", "evaluation": "discard", "rating": 2 }
+  ],
+  "comments": {
+    "general": { "text": "Keine der drei überzeugt mich. Bevor wir irgendwas eingrenzen: zeig mir mindestens zwei grundlegend andere Richtungen, an die ich noch nicht gedacht habe – nicht wieder Varianten von Datei vs. Datenbank.", "attachments": [] },
+    "items": []
+  },
+  "userPins": [],
+  "mappings": []
+}

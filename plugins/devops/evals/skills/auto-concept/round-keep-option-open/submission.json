@@ -1,0 +1,18 @@
+{
+  "template": "decision",
+  "action": "iterate",
+  "decisions": [
+    { "id": "variant-json", "label": "JSON-Datei", "evaluation": "discard", "rating": 1 },
+    { "id": "variant-sqlite", "label": "SQLite", "evaluation": "include", "rating": 5 },
+    { "id": "variant-markdown", "label": "Markdown-Dateien", "evaluation": "include", "rating": 3 }
+  ],
+  "comments": {
+    "general": { "text": "", "attachments": [] },
+    "items": [
+      { "id": "variant-sqlite-note", "text": "Klarer Favorit bisher.", "attachments": [] },
+      { "id": "variant-markdown-note", "text": "Noch nicht streichen – vergleich das mit SQLite beim Sync zwischen meinen zwei Laptops.", "attachments": [] }
+    ]
+  },
+  "userPins": [],
+  "mappings": []
+}
