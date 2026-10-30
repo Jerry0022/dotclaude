@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.335.5] — 2026-10-30
+
+### Fixed
+- **Concept pages**: the favourite star on the focused design's quick-nav chip names its F hotkey, and on a frozen round it is shown read-only instead of silently doing nothing (#980).
+
 ## [0.335.4] — 2026-10-30
 
 ### Fixed
