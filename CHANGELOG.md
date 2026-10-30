@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.335.2] — 2026-10-30
+
+### Fixed
+- **Ship hygiene**: agent branches that sit inside a squash-merged feature branch now count as landed and are offered for cleanup, instead of raising a false "unpushed work" risk on the ship card (#983).
+
 ## [0.335.1] — 2026-10-30
 
 ### Fixed

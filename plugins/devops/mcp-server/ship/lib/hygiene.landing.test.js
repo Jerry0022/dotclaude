@@ -102,4 +102,36 @@ describe("landingState", () => {
     expect(res.atRisk).toEqual([expect.objectContaining({ branch: "feat", state: "partial", filesIn: 1, filesTotal: 2 })]);
     expect(res.card.risk.text).toContain("1/2 Dateien gelandet");
   });
+
+  /** agent branch → merged into feat, which edits the same file again; feat is squashed into main */
+  function superseded(dir, squashFiles) {
+    git(dir, "checkout", "-q", "-b", "feat", "main");
+    git(dir, "checkout", "-q", "-b", "worktree-agent-1");
+    const tip = write(dir, { "s.txt": "agent\n" }, "agent");
+    git(dir, "checkout", "-q", "feat");
+    git(dir, "merge", "-q", "--no-ff", "-m", "merge agent", "worktree-agent-1");
+    const head = write(dir, { "s.txt": "agent\nlater\n", "g.txt": "g\n" }, "later edit");
+    git(dir, "checkout", "-q", "main");
+    advance(dir, squashFiles);
+    return { tip, head };
+  }
+  const mergedCtx = (dir, head) => ({
+    ...ctxOf(dir), merged: { bySha: new Set([head]), byName: new Map([["feat", [head]]]) }, viaMerged: new Set(),
+  });
+
+  test("agent tip under a squash-merged head with the base tree → landed via superseded", () => {
+    const dir = repo();
+    const { tip, head } = superseded(dir, { "s.txt": "agent\nlater\n", "g.txt": "g\n" });
+    const ctx = mergedCtx(dir, head);
+    ctx.viaMerged = new Set([tip]);
+    expect(landingState(tip, "worktree-agent-1", ctx)).toMatchObject({ state: "landed", via: "superseded" });
+  });
+
+  test("same, but the head tree differs from the base (PR dropped a change) → not landed", () => {
+    const dir = repo();
+    const { tip, head } = superseded(dir, { "s.txt": "other\n", "g.txt": "g\n" });
+    const ctx = mergedCtx(dir, head);
+    ctx.viaMerged = new Set([tip]);
+    expect(landingState(tip, "worktree-agent-1", ctx).state).not.toBe("landed");
+  });
 });

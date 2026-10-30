@@ -545,7 +545,9 @@ function landedBySquashChain(git, ref, base, opts = {}) {
     if (!cache.has(key)) cache.set(key, (opts.mergedHeads || defaultMergedHeads)(opts.cwd, baseBranch, opts.deadline));
     const heads = cache.get(key);
     if (!heads || heads.size === 0) return false;
-    return require('../../scripts/lib/chain-landed').chainLanded(sha, { cwd: opts.cwd, baseRef: base, heads, deadline: opts.deadline });
+    const chain = require('../../scripts/lib/chain-landed');
+    const ctx = { cwd: opts.cwd, baseRef: base, heads, deadline: opts.deadline };
+    return chain.supersededByHead(sha, ctx) || chain.chainLanded(sha, ctx);
   } catch {
     return false;
   }

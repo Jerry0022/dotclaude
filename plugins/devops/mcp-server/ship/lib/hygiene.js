@@ -81,7 +81,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const { contentInBase } = require("../../../scripts/lib/content-landed.js");
-const { chainLanded: chainLandedShared, filesInBase: filesInBaseShared } = require("../../../scripts/lib/chain-landed.js");
+const { chainLanded: chainLandedShared, supersededByHead: supersededByHeadShared, filesInBase: filesInBaseShared } = require("../../../scripts/lib/chain-landed.js");
 const { isParked, coveringRef } = require("../../../hooks/lib/park-register.js");
 const { clearStaleLocks } = require("../../../scripts/lib/stale-git-locks.js");
 
@@ -453,8 +453,17 @@ export function landedVia(sha, branch, ctx) {
       if (gitOk(["merge-base", "--is-ancestor", sha, head], ctx.cwd)) return "pr";
     }
   }
-  if (ctx.merged && ctx.viaMerged && ctx.viaMerged.has(sha) && chainLanded(sha, ctx)) return "chain";
+  if (ctx.merged && ctx.viaMerged && ctx.viaMerged.has(sha)) {
+    if (supersededByHead(sha, ctx)) return "superseded";
+    if (chainLanded(sha, ctx)) return "chain";
+  }
   return contentInBase(ctx.cwd, sha, ctx.baseRef, { maxFiles: TREE_CHECK_MAX_FILES }).landed ? "tree" : null;
+}
+
+/** `sha` sits under a merged PR head whose tree equals the base tree (#983). */
+function supersededByHead(sha, ctx) {
+  if (!ctx.headTrees) ctx.headTrees = new Map();
+  return supersededByHeadShared(sha, { cwd: ctx.cwd, baseRef: ctx.baseRef, heads: ctx.merged.bySha, headTrees: ctx.headTrees });
 }
 
 /**
