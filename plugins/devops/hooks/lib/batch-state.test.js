@@ -784,6 +784,17 @@ describe("marker suggestions", () => {
       expect(startsWithMarker("google das mal", m)).toBe(false);
     }
   });
+
+  test("the default marker takes `go` as an English alias, only when punctuation or the line end follows", () => {
+    const m = DEFAULTS.marker;
+    expect(startsWithMarker("go", m)).toBe(true);
+    expect(startsWithMarker("Go!", m)).toBe(true);
+    expect(startsWithMarker("go\nplus this", m)).toBe(true);
+    expect(stripMarker("go, skip B3", m)).toBe("skip B3");
+    expect(startsWithMarker("go to settings and fix it", m)).toBe(false);
+    expect(startsWithMarker("google it", m)).toBe(false);
+    expect(startsWithMarker("go", ">>")).toBe(false);
+  });
 });
 
 describe("mode summary — one block, three places", () => {
