@@ -228,7 +228,7 @@ On success, **start Step 2.5 in the background now**, before the Codex gate — 
 
 **MUST run** whenever codex-plugin-cc is installed — mandatory, never skipped for time or context.
 
-1. Invoke Codex via Bash with hard timeout: `bash "{PLUGIN_ROOT}/scripts/codex-safe.sh" "<review prompt containing git diff>"`. Do NOT use the `/codex:rescue` Agent tool.
+1. Invoke Codex via Bash with hard timeout: write the review prompt (instructions + `git diff -U25 origin/<base>...HEAD`; tell Codex to judge from the diff and context lines only, not to run commands) to a scratch file and pass it on stdin: `bash "{PLUGIN_ROOT}/scripts/codex-safe.sh" - < <file>` — never as an argument (Windows caps the command line at ~32K chars; a real diff exceeds it). Do NOT use the `/codex:rescue` Agent tool.
 2. Evaluate by exit code (see `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` "Hard Timeout & Failure-Tolerance"):
    - **rc=0, no findings / clean** → continue to Step 3
    - **rc=0, auto-fixable** (typos, missing imports, style) → fix inline, continue
@@ -236,9 +236,10 @@ On success, **start Step 2.5 in the background now**, before the Codex gate — 
    - **rc=75** (Codex usage limit) → continue to Step 3 immediately; the card line and the reset: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/codex-gate.md` § rc 75. Do NOT retry.
    - **rc=124** (timeout, 5 min) → log "Codex review timed out — proceeding without review" in the ship log, continue to Step 3. Do NOT retry, do NOT block the ship.
    - **rc=126** (`DEVOPS_DISABLE_CODEX=1`) or **rc=127** (codex CLI missing) → skip silently
+   - **rc=69** (Codex could not be executed — spawn/exec failure, not a disable) → surface the stderr line, continue to Step 3, then the Claude API fallback (step 4). Do NOT retry.
    - **other non-zero** → surface first line of stderr, continue to Step 3
 3. If codex-plugin-cc not installed → skip silently
-4. **Claude API fallback (opt-in):** when Codex gave rc 75 / 124 / 127 (or is not installed), read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/codex-gate.md` § Claude API fallback and run it once. Never retry.
+4. **Claude API fallback (opt-in):** on every failing Codex rc except 126 (deliberate disable) — 75, 124, 127, 69 and any other non-zero (or Codex not installed), and when rc 0 returns no verdict (Codex says it could not inspect), read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/codex-gate.md` § Claude API fallback and run it once. Never retry.
 5. **Finding triage — every reviewer (#920).** The same triage covers Codex, the Claude-API fallback and harden/polish/QA findings on the shipped diff. A finding that is a defect in the diff's own topic (logic bug, wrong behaviour, missing callback — code this branch introduced) is **fixed before the merge, with a regression test** (the build reruns after the fix commit). When the fix needs a decision → ask (`status: "decision"`; a delegated ship returns it), under `$SHIP_LOCKOUT` **BLOCK** (`ship-blocked`). Such a finding is **never** parked as an `open` point on a `ship-successful` card (`render_completion_card` refuses an `open` item tagged `finding: "in-scope"`). Only a finding outside the diff's topic or requirement may become an `open` item, tagged `finding: "out-of-scope"`. A pre-existing error that breaks the ship's own build or type-check is in scope for the ship.
 
 ## Step 2.5 — Deploy-Parity Build

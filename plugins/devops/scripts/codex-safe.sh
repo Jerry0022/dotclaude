@@ -7,6 +7,8 @@
 #   codex-safe.sh "<prompt>"
 #   codex-safe.sh --model gpt-5.3-codex "<prompt>"
 #   echo "$PROMPT" | codex-safe.sh -
+#   codex-safe.sh - < prompt-file   (large prompts: never as an argument —
+#                                    the Windows command line caps at ~32K chars)
 #   codex-safe.sh --reset-limit     forget a stored usage limit (plan bought)
 #   codex-safe.sh --limit-status    show the stored usage limit
 #
@@ -23,6 +25,9 @@
 #   124  Timeout — caller MUST continue WITHOUT Codex findings
 #   126  Disabled via DEVOPS_DISABLE_CODEX=1 — skip silently
 #   127  `codex` CLI not installed — skip silently
+#   69   Codex could not be executed (spawn/exec failure: the child or `timeout`
+#        returned 126/127 although `codex` is on PATH) — NOT a deliberate
+#        disable; the caller may fall back to another reviewer
 #   *    Codex error (auth, other) — surface stderr, continue
 #
 # Usage limit: when Codex reports "You've hit your usage limit … try again
@@ -64,7 +69,9 @@ fi
 if ! command -v timeout >/dev/null 2>&1; then
   echo "codex-safe: GNU \`timeout\` not available — running without ceiling." >&2
   codex "${SUBCOMMAND}" "$@"
-  exit $?
+  rc=$?
+  [[ $rc -eq 126 || $rc -eq 127 ]] && { echo "codex-safe: could not execute codex (rc ${rc})." >&2; exit 69; }
+  exit $rc
 fi
 
 tmp="$(mktemp -d 2>/dev/null || mktemp -d -t codex-safe)"
@@ -105,6 +112,11 @@ fi
 if [[ $rc -eq 124 || $rc -eq 137 ]]; then
   echo "codex-safe: Codex exceeded ${TIMEOUT_SECONDS}s — aborted, continue without Codex findings." >&2
   exit 124
+fi
+
+if [[ $rc -eq 126 || $rc -eq 127 ]]; then
+  echo "codex-safe: could not execute codex (rc ${rc}) — not a deliberate disable." >&2
+  exit 69
 fi
 
 exit $rc

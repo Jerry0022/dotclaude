@@ -62,6 +62,7 @@ describe("do-ship driver — ship_run", () => {
 
   test("Codex gate stays mandatory and model-side", () => {
     expect(F).toContain('bash "{PLUGIN_ROOT}/scripts/codex-safe.sh"');
+    expect(F).toContain('- < <prompt file>');
     expect(F).toMatch(/never `\/codex:rescue`/);
     expect(F).toMatch(/never retry/);
   });

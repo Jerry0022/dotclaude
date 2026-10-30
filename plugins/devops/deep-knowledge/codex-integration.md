@@ -41,6 +41,7 @@ The wrapper enforces a **5-minute** default ceiling
 | 124  | Timeout exceeded                 | **Continue without Codex findings.** Log "Codex timed out — proceeding without review." Do NOT retry. |
 | 126  | `DEVOPS_DISABLE_CODEX=1`         | Skip silently                                                   |
 | 127  | `codex` CLI missing              | Skip silently (graceful unavailability)                         |
+| 69   | `codex` could not be executed (spawn/exec failure, not a disable) | Surface stderr, continue; Claude API fallback if enabled |
 | *    | Codex error (auth, quota, etc.)  | Skip Codex findings, note stderr briefly, continue              |
 
 ### Usage limit memory (rc=75)
@@ -81,7 +82,7 @@ If not (rc 127, limit stored) → skip silently, proceed with normal workflow
 ### Claude API fallback (opt-in)
 
 When the user turned on `apiCredit.enabled` (`api-credits.md`), a Codex call
-that ends in rc **75**, **124** or **127** (or Codex not installed) is
+that ends in rc **75**, **124**, **127** or **69** (or Codex not installed) is
 followed by ONE call of the same prompt through
 `node "{PLUGIN_ROOT}/scripts/claude-api-safe.js" -` (prompt on stdin). It
 runs on the plan's monthly API credit, not on the plan's usage limits.

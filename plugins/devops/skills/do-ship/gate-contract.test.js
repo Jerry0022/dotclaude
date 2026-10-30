@@ -272,9 +272,11 @@ describe("do-ship gate contract — safety", () => {
     const codex = section("### Codex Review Gate", "## Step 2.5");
     expect(codex).toContain('bash "{PLUGIN_ROOT}/scripts/codex-safe.sh"');
     expect(codex).toMatch(/Do NOT use the `\/codex:rescue` Agent tool/);
-    for (const rc of ["rc=0", "rc=75", "rc=124", "rc=126", "rc=127", "other non-zero"]) expect(codex, rc).toContain(rc);
+    for (const rc of ["rc=0", "rc=75", "rc=124", "rc=126", "rc=127", "rc=69", "other non-zero"]) expect(codex, rc).toContain(rc);
     expect(codex).toMatch(/rc=124\*\*.*Do NOT retry, do NOT block the ship/);
     expect(codex).toMatch(/rc=75\*\*.*Do NOT retry/);
+    expect(codex).toContain('codex-safe.sh" - < <file>');
+    expect(codex).toContain('git diff -U25');
   });
 
   test("#920: the fix/ask/block triage covers every reviewer incl. the Claude-API fallback", () => {

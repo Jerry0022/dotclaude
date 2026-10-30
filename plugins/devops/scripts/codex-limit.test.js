@@ -109,11 +109,11 @@ const writeFakeCodex = (body) => {
   fs.writeFileSync(f, `#!/usr/bin/env bash\n${body}\n`);
   fs.chmodSync(f, 0o755);
 };
-const runSafe = (args = ["review this"], extraEnv = {}) => {
+const runSafe = (args = ["review this"], extraEnv = {}, input = "") => {
   const sep = process.platform === "win32" ? ";" : ":";
   return spawnSync("bash", [SAFE, ...args], {
     encoding: "utf8",
-    input: "",
+    input,
     timeout: 30000,
     env: { ...process.env, CODEX_LIMIT_FILE: STATE, PATH: `${fakeBin}${sep}${process.env.PATH}`, ...extraEnv },
   });
@@ -131,6 +131,26 @@ describe.skipIf(!bashOk)("codex-safe.sh — usage limit is remembered", () => {
     expect(r.stderr).toMatch(/skipping Codex until/);
     expect(JSON.parse(fs.readFileSync(STATE, "utf8")).resetKnown).toBe(true);
   }, 30000);
+
+  test("a prompt on stdin reaches codex (large prompts never ride on argv)", () => {
+    writeFakeCodex(`cat`);
+    const big = "diff line\n".repeat(5000);
+    const r = runSafe(["-"], {}, big);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe(big);
+  });
+
+  test.each([126, 127])("a child exec failure (rc %i) maps to 69, never the deliberate 126", (code) => {
+    writeFakeCodex(`exit ${code}`);
+    const r = runSafe();
+    expect(r.status).toBe(69);
+    expect(r.stderr).toMatch(/could not execute codex/);
+  });
+
+  test("DEVOPS_DISABLE_CODEX=1 stays rc 126", () => {
+    writeFakeCodex("echo ok");
+    expect(runSafe(["x"], { DEVOPS_DISABLE_CODEX: "1" }).status).toBe(126);
+  });
 
   test("a stored limit skips Codex instantly without invoking it", () => {
     lim.recordFromText("ERROR: You've hit your usage limit or try again in 2 days.");
