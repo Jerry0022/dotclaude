@@ -925,9 +925,15 @@ function validateMarker(raw) {
  * or place-name continuation ("los geht", "los gehts", "los geht's", "Los
  * Angeles", see NOT_MARKER_CONTINUATION), nor on "lose Enden" (word boundary).
  * Those prompts are collected as notes.
+ *
+ * The default marker also has an English alias, `go`, for users who do not
+ * write German. It is stricter than `los`: it fires only when punctuation or
+ * the end of the line follows (`go`, `go!`, `go, skip B3`), never on a plain
+ * sentence such as "go to settings and …", which stays a note.
  */
 const NOT_MARKER_CONTINUATION = /^\s+(?:geht(?:['’]?s)?|ging(?:s|['’]s)?|angeles)(?![\p{L}\p{N}_])/iu;
 const MARKER_TAIL = /[:;,.!?]+$/;
+const DEFAULT_MARKER_ALIAS = /^\s*go(?![\p{L}\p{N}_])(?:\s*[:;,.!?]+|[^\S\n]*(?=\n|$))/iu;
 
 function markerMatch(text, marker) {
   if (typeof text !== 'string' || !text) return null;
@@ -941,6 +947,7 @@ function markerMatch(text, marker) {
   const m = new RegExp(`^\\s*${escaped}${boundary}${tail}`, 'iu').exec(text);
   if (m && stem.toLowerCase() === 'los' && m[0].trim().toLowerCase() === 'los'
     && NOT_MARKER_CONTINUATION.test(text.slice(m[0].length))) return null;
+  if (!m && stem.toLowerCase() === DEFAULTS.marker) return DEFAULT_MARKER_ALIAS.exec(text);
   return m;
 }
 
@@ -1057,7 +1064,7 @@ function renderCommandLines(p = {}) {
   const max = p.maxNotes ?? DEFAULTS.maxNotes;
   const I = PANEL_ICONS;
   return [
-    `${I.fire} Umsetzen:  "${marker} <text>" oder /do-batch go (merged main, plant EINE Umsetzung)`,
+    `${I.fire} Umsetzen:  "${marker} <text>"${marker.toLowerCase() === DEFAULTS.marker ? ' / "go"' : ''} oder /do-batch go (merged main, plant EINE Umsetzung)`,
     `${I.stop} Stoppen:   /do-batch off (Notizen bleiben) · /do-batch on sammelt weiter`,
     `${I.autoEnd} Auto-Ende: ${hours} h oder ${max} Notizen · /do-batch status · marker · help`,
   ].join('\n');

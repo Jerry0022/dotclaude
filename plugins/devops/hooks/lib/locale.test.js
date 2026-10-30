@@ -28,10 +28,20 @@ const TEST_SESSION_BASE = "vitest-locale-" + process.pid + "-" + Date.now();
 // tmpdir env at a fresh directory isolates every read and write of this
 // suite without touching a live user's i18n cache.
 const ISOLATED_TMP = fs.mkdtempSync(path.join(os.tmpdir(), "locale-test-"));
-const SAVED_ENV = { TMPDIR: process.env.TMPDIR, TMP: process.env.TMP, TEMP: process.env.TEMP };
+// The machine's own Claude Code `language` setting and OS locale outrank the
+// heuristic, so a developer with `"language": "german"` or a German Windows
+// failed the heuristic tests: home and OS locale are isolated too.
+const SAVED_ENV = {
+  TMPDIR: process.env.TMPDIR, TMP: process.env.TMP, TEMP: process.env.TEMP,
+  HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE,
+  DOTCLAUDE_OS_LOCALE: process.env.DOTCLAUDE_OS_LOCALE,
+};
 process.env.TMPDIR = ISOLATED_TMP;
 process.env.TMP = ISOLATED_TMP;
 process.env.TEMP = ISOLATED_TMP;
+process.env.HOME = ISOLATED_TMP;
+process.env.USERPROFILE = ISOLATED_TMP;
+process.env.DOTCLAUDE_OS_LOCALE = "none";
 
 function purgeLocaleFiles() {
   try {

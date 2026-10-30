@@ -34,6 +34,10 @@ const fs = require('fs');
 const path = require('path');
 const { sessionFile, writeSessionFile } = require('../lib/session-id');
 const { ensureLocale, peekLocale, configuredLocale } = require('../lib/locale');
+
+const LOCALE_INSTRUCTION = {
+  de: 'Antworte auf Deutsch, auch wenn Tool-, Hook-, Agent- oder Benachrichtigungstext englisch ist.',
+};
 const { isNonUserPrompt } = require('../lib/non-user-prompt');
 const { readBudget, maybeRefreshUsage, nudgeSuffix, budgetLine } = require('../lib/budget');
 const { readDelegation } = require('../lib/delegation');
@@ -398,7 +402,12 @@ process.stdin.on('end', () => {
     if (first) nudge = [nudgeText + budgetSuffix];
     else if (budgetSuffix.trim()) nudge = [`[delegation-policy]${budgetSuffix.startsWith(' ') ? '' : ' '}${budgetSuffix}`];
   }
-  const blocks = [...(lang ? [`[ui-locale: ${lang}]`] : []), ...announce, ...nudge];
+  //  11. A non-English locale carries the instruction itself, not only the tag:
+  //      the turns that drift into English are the ones after English tool,
+  //      hook, agent or notification text, where a bare tag loses (audit
+  //      2026-10-30: 30 German sessions, English replies after task results).
+  const localeLine = lang && LOCALE_INSTRUCTION[lang] ? `[ui-locale: ${lang}] ${LOCALE_INSTRUCTION[lang]}` : lang ? `[ui-locale: ${lang}]` : null;
+  const blocks = [...(localeLine ? [localeLine] : []), ...announce, ...nudge];
 
   if (isFresh && lang) {
     const glossary = loadTriggerGlossary(pluginRoot, lang, gatedSkillSet);
