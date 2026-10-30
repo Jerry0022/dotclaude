@@ -103,6 +103,25 @@ function chainLanded(sha, ctx) {
 }
 
 /**
+ * `sha` is an ancestor of a merged PR head whose tree equals the base tree
+ * (#983). What landed is exactly that head, so a later commit on the head
+ * that edited the same files superseded the branch's change on purpose —
+ * the per-file check of chainLanded would call it "not landed". A head whose
+ * tree differs from base keeps the per-file check (#572).
+ * @param {{cwd:string, baseRef:string, heads: Iterable<string>, headTrees?: Map<string,string|null>}} ctx
+ */
+function supersededByHead(sha, ctx) {
+  const baseTree = gitOut(['rev-parse', `${ctx.baseRef}^{tree}`], ctx.cwd);
+  if (!baseTree) return false;
+  const cache = ctx.headTrees || new Map();
+  for (const head of ctx.heads || []) {
+    if (!cache.has(head)) cache.set(head, gitOut(['rev-parse', '-q', '--verify', `${head}^{tree}`], ctx.cwd));
+    if (cache.get(head) === baseTree && gitOk(['merge-base', '--is-ancestor', sha, head], ctx.cwd)) return true;
+  }
+  return false;
+}
+
+/**
  * Head shas of PRs merged into `baseBranch` via gh; null when gh is missing,
  * unauthenticated, offline or slow (callers then treat the chain as unproven).
  */
@@ -116,4 +135,4 @@ function fetchMergedHeadShas(cwd, baseBranch, { limit = 300, timeout = 10_000 } 
   } catch { return null; }
 }
 
-module.exports = { chainLanded, filesInBase, fetchMergedHeadShas, MAX_FILES };
+module.exports = { chainLanded, supersededByHead, filesInBase, fetchMergedHeadShas, MAX_FILES };
