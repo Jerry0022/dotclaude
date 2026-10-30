@@ -56,6 +56,11 @@ export function shipFullSuiteVia(params) {
 /** The CI aggregator job that vouches for the full suite (.github/workflows/ci-suite.yml). */
 export const CI_SUITE_CHECK = "suite";
 
+function envMs(name, dflt) {
+  const n = parseInt(process.env[name] ?? "", 10);
+  return Number.isFinite(n) && n >= 0 ? n : dflt;
+}
+
 /** Did the PR's `suite` check run AND pass? Absent, skipped, neutral or pending all read false. */
 export function ciSuitePassed(checks) {
   return (Array.isArray(checks) ? checks : []).some((c) => c && c.name === CI_SUITE_CHECK && c.bucket === "pass");
@@ -603,6 +608,26 @@ export async function handler(params) {
         checkResult = watchPRChecks(pr.number, opts, { timeoutSec: checksTimeoutSec });
       }
       lock.refresh();
+      // The build left the full suite to CI: a verdict from the OTHER checks alone
+      // is not one. Right after a draft goes ready (or a push) the `suite` check may
+      // not be registered yet, so the list can read all-green without it. Wait for it
+      // to appear (then watch it) instead of falling through to a local full run.
+      if (hasCiSuite(cwd) && (shipFullSuiteVia(params) === "ci" || !shipFullSuiteVia(params))) {
+        const graceMs = envMs("DEVOPS_SHIP_SUITE_REGISTER_GRACE_MS", 180_000);
+        const stepMs = Math.max(1, envMs("DEVOPS_SHIP_SUITE_REGISTER_INTERVAL_MS", 10_000));
+        const deadline = Math.min(checksStartedAt + graceMs, checksStartedAt + checksTimeoutSec * 1000);
+        const suiteMissing = (r) => (r.status === "passed" || r.status === "no-checks") &&
+          !(r.checks || []).some((c) => c && c.name === CI_SUITE_CHECK);
+        let waitedForSuite = false;
+        while (suiteMissing(checkResult) && Date.now() < deadline) {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(stepMs, Math.max(1, deadline - Date.now())));
+          waitedForSuite = true;
+          lock.refresh();
+          const left = Math.max(30, Math.ceil((checksStartedAt + checksTimeoutSec * 1000 - Date.now()) / 1000));
+          checkResult = watchPRChecks(pr.number, opts, { timeoutSec: left, noChecksGraceMs: 0 });
+        }
+        if (waitedForSuite) result.suiteRegistrationWaitMs = Date.now() - checksStartedAt;
+      }
       // A red check caused by a GitHub account limit (Actions minutes,
       // artifact storage quota) says nothing about the code. ci-account-limits
       // (#768) is the single detector; #752 only persists what it reports.
