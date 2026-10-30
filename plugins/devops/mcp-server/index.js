@@ -1548,6 +1548,11 @@ function normalizeOpenItems(items) {
   }).filter(it => it.text);
 }
 
+/** An open point about promoting: its text or reply names a promotion. */
+function isPromotionPoint(it) {
+  return /^\/?promote\b/i.test(String(it.reply || '').trim()) || /\bpromot(?:e|en|es|ion|ing)\b/i.test(it.text);
+}
+
 const OPEN_REPLY_FALLBACK = {
   de: { question: (t) => t + ' Ja, bitte.', point: (t) => t + ' — bitte angehen.' },
   en: { question: (t) => t + ' Yes, please.', point: (t) => t + ' — please tackle it.' },
@@ -1557,11 +1562,13 @@ const OPEN_REPLY_FALLBACK = {
  * The prepared answer per open point, in card order — what the widget's
  * conclude button puts into the composer (card-widget.js#conclusionPrompt).
  * A point without its own `reply` gets a plain "yes" to its text: the card
- * assumes the user wants every point tackled.
+ * assumes the user wants every point tackled. A promotion point (a skipped
+ * promotion, a guard error, a promote reply) adds nothing: the card's Promote
+ * buttons are the way to act on it, never Nachbessern (2026-10-30).
  */
 function openReplies(input, lang) {
   const F = OPEN_REPLY_FALLBACK[lang] || OPEN_REPLY_FALLBACK.de;
-  return normalizeOpenItems(input.open).map(it => {
+  return normalizeOpenItems(input.open).filter(it => !isPromotionPoint(it)).map(it => {
     if (it.reply) return it.reply;
     const text = it.text.replace(/\s+$/, '');
     return /\?$/.test(text) ? F.question(text) : F.point(text.replace(/[.!]$/, ''));
@@ -3063,7 +3070,7 @@ server.registerTool(
             reply: z.string().optional().describe("The user's answer if they want this point tackled, written as the user ('Ja, die Änderung bitte auch in X machen.'). For either-or name your recommendation."),
           }),
         ])).optional(),
-      ).describe("Follow-ups that are NOT tests: a decision the user must take, a cleanup, an open question about THIS work. Never another branch, worktree or session (dropped). Never a spawn_task topic (the chip IS the offer). Only what the user deferred or found outside scope - never the obvious next step (ship, push, release, bump), a generic nudge, or a shortfall of this task (that goes in changes/validation). Default: omit. Manual tests stay in userFinalTest."),
+      ).describe("Follow-ups that are NOT tests: a decision the user must take, a cleanup, an open question about THIS work. Never another branch, worktree or session (dropped). Never a spawn_task topic (the chip IS the offer). Only what the user deferred or found outside scope - never the obvious next step (ship, push, release, bump, promote — promotion has its own buttons, as an open point its reply would ride on Nachbessern), a generic nudge, or a shortfall of this task (that goes in changes/validation). Default: omit. Manual tests stay in userFinalTest."),
       pending: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([

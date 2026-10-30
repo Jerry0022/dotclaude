@@ -44,7 +44,7 @@ A ship always lands on **alpha**. Naming a higher channel means "ship if anythin
 | no | beta / stable / bare `promote` | **promotion only**: Pre-Step A, then `modes/promote.md` Steps 0–4 — no preflight, no build, no passes |
 | no | none / alpha | the pipeline below (preflight reports "nothing to ship", as before) |
 
-**Promotion stays a user decision.** The channel word the user typed IS that decision — no extra confirmation. Never promote on a channel that did not come from the user: arguments an orchestrator passes (`--queued`, `--cwd`, `/do-run backlog`, auto-cleanup) and any `$SHIP_LOCKOUT` run skip the promotion and name it as an `open` item. A bare "promote" (no channel) asks which promotion (`modes/promote.md` Step 2). All `ship_promote` guards stay final (monotonicity, ancestry, immutability — `modes/promote.md` Step 3).
+**Promotion stays a user decision.** The channel word the user typed IS that decision — no extra confirmation. Never promote on a channel that did not come from the user: arguments an orchestrator passes (`--queued`, `--cwd`, `/do-run backlog`, auto-cleanup) and any `$SHIP_LOCKOUT` run skip the promotion; the card's Promote buttons offer it — never an `open` item (its reply would ride on Nachbessern). A bare "promote" (no channel) asks which promotion (`modes/promote.md` Step 2). All `ship_promote` guards stay final (monotonicity, ancestry, immutability — `modes/promote.md` Step 3).
 
 ## Composed ships — `--cwd`, `--keep`, `--queued`, the queue marker
 

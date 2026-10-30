@@ -1750,6 +1750,20 @@ describe("render_completion_card — test card's Nachbessern only when something
     expect(await labels(d, lang)).toEqual(["Ship"]);
   });
 
+  test("a promotion point never reaches Nachbessern — the Promote buttons own it", async () => {
+    const mod = await import("./index.js");
+    const input = {
+      variant: "test", summary: "x",
+      open: [
+        { text: "Promotion auf beta ausgesetzt — unbeaufsichtigter Lauf", reply: "promote beta 1.2.3" },
+        "Beta übersprungen — v1.2.3 nach stable promoten ohne Beta-Phase",
+      ],
+    };
+    const d = mod.buildDecisionBlock(input, "de", "test", {}, state);
+    expect(d.replies).toEqual([]);
+    expect(await labels(d)).not.toContain("Nachbessern");
+  });
+
   test("a partial requirement becomes the button's prompt", async () => {
     const mod = await import("./index.js");
     const input = {
